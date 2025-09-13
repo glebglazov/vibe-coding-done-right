@@ -21,10 +21,10 @@
         }
 
         #mainBtn {
-            padding: 20px 40px;
+            padding: 20px;
             font-size: 18px;
             border: none;
-            border-radius: 50px;
+            border-radius: 50%;
             cursor: pointer;
             margin: 20px 0;
             transition: all 0.3s ease;
@@ -32,7 +32,8 @@
             align-items: center;
             justify-content: center;
             gap: 10px;
-            min-width: 200px;
+            width: 200px;
+            height: 200px;
         }
 
         .btn-start {
@@ -105,7 +106,7 @@
         <h1>Voice to Claude</h1>
         <p>Click the button or press <strong>Spacebar</strong> to start recording. Press <strong>Spacebar</strong> again to stop. Your speech will be automatically sent to Claude Code.</p>
 
-        <div style="text-align: center;">
+        <div style="display: flex; justify-content: center; align-items: center; min-height: 200px;">
             <button id="mainBtn" class="btn-start">
                 <span class="icon">▶️</span>
                 <span id="btnText">Start Recording</span>
@@ -114,7 +115,7 @@
 
         <div id="status" class="status-ready">Ready to record</div>
 
-        <div id="result"></div>
+        <div id="result" class="hidden"></div>
     </div>
 
     <script>
@@ -165,6 +166,7 @@
                 mediaRecorder.start();
                 isRecording = true;
 
+                result.classList.add('hidden');
                 mainBtn.className = 'btn-stop';
                 mainBtn.querySelector('.icon').textContent = '⏹️';
                 btnText.textContent = 'Stop Recording';
@@ -207,6 +209,7 @@
 
                 const data = await response.json();
 
+                result.classList.remove('hidden');
                 result.innerHTML = `
                     <strong>Transcription (auto-sent to Claude):</strong>
                     <br>${data.transcription}
@@ -216,6 +219,7 @@
 
             } catch (error) {
                 console.error('Error transcribing:', error);
+                result.classList.remove('hidden');
                 result.innerHTML = `<strong>Error:</strong> Failed to transcribe audio. Make sure the server is running.`;
                 status.textContent = 'Transcription failed - click to try again';
                 status.className = 'status-processing';
