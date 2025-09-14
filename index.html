@@ -144,6 +144,11 @@
             color: #2e7d32;
         }
 
+        .status-error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+
         .status-processing {
             background-color: #fff3e0;
             color: #ef6c00;
@@ -331,12 +336,23 @@
                 const data = await response.json();
 
                 result.classList.remove('hidden');
-                result.innerHTML = `
-                    <strong>Transcription (auto-sent to Claude):</strong>
-                    <br>${data.transcription}
-                `;
-                status.textContent = 'Sent to Claude! Click to record again.';
-                status.className = 'status-ready';
+
+                if (data.sent_to_claude) {
+                    result.innerHTML = `
+                        <strong>Transcription (sent to ${data.session}):</strong>
+                        <br>${data.transcription}
+                    `;
+                    status.textContent = 'Sent to Claude! Click to record again.';
+                    status.className = 'status-ready';
+                } else {
+                    result.innerHTML = `
+                        <strong>Transcription:</strong>
+                        <br>${data.transcription}
+                        <br><br><strong style="color: #ff6b6b;">Error:</strong> ${data.error}
+                    `;
+                    status.textContent = 'Error: Claude not found. Click to try again.';
+                    status.className = 'status-error';
+                }
 
             } catch (error) {
                 console.error('Error transcribing:', error);
