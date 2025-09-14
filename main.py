@@ -62,24 +62,51 @@ def find_claude_session():
             return active_pane_target
 
         # Step 3: Search only current session for Claude processes
-        result = subprocess.run(['tmux', 'list-panes', '-t', current_session, '-F', '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'],
+        result = subprocess.run(['tmux', 'list-panes', '-t', current_session, '-F', '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid} #{pane_active}'],
                               capture_output=True, text=True, check=True)
+
+        claude_panes = []
+        focused_claude_pane = None
 
         for line in result.stdout.strip().split('\n'):
             parts = line.split()
-            if len(parts) >= 3:
+            if len(parts) >= 4:
                 pane_target = parts[0]
-                pane_pid = parts[-1]
+                pane_pid = parts[-2]  # Second to last is PID
+                pane_active = parts[-1]  # Last is active status (1 or 0)
+
+                is_claude = False
 
                 # Check title first (legacy method)
                 if 'Claude' in line or 'claude' in line:
-                    print(f"Found Claude pane by title in session {current_session}: {pane_target}")
-                    return pane_target
-
+                    is_claude = True
+                    claude_type = "title"
                 # Check process tree
-                if has_claude_process(pane_pid):
-                    print(f"Found Claude pane by process in session {current_session}: {pane_target}")
-                    return pane_target
+                elif has_claude_process(pane_pid):
+                    is_claude = True
+                    claude_type = "process"
+
+                if is_claude:
+                    pane_info = {
+                        'target': pane_target,
+                        'type': claude_type,
+                        'active': pane_active == '1'
+                    }
+                    claude_panes.append(pane_info)
+
+                    # If this is the focused/active pane, remember it
+                    if pane_active == '1':
+                        focused_claude_pane = pane_info
+
+        # Step 4: Choose the best Claude pane
+        if focused_claude_pane:
+            print(f"Found focused Claude pane by {focused_claude_pane['type']} in session {current_session}: {focused_claude_pane['target']}")
+            return focused_claude_pane['target']
+        elif claude_panes:
+            # If no focused Claude pane, return the first one found
+            chosen = claude_panes[0]
+            print(f"Found Claude pane by {chosen['type']} in session {current_session}: {chosen['target']} (not focused)")
+            return chosen['target']
 
         # No Claude found in current session
         print(f"ERROR: No Claude Code session found in current tmux session '{current_session}'")
