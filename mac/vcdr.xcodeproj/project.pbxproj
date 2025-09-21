@@ -1,0 +1,608 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E51328102E8065F100ACE8A6 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = E513280F2E8065F100ACE8A6 /* WhisperKit */; };
+		E51328122E8065F100ACE8A6 /* whisperkit-cli in Frameworks */ = {isa = PBXBuildFile; productRef = E51328112E8065F100ACE8A6 /* whisperkit-cli */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E552CAF12E804A0700B35224 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E552CADB2E804A0500B35224 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E552CAE22E804A0500B35224;
+			remoteInfo = vcdr;
+		};
+		E552CAFB2E804A0700B35224 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E552CADB2E804A0500B35224 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E552CAE22E804A0500B35224;
+			remoteInfo = vcdr;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		E552CAE32E804A0500B35224 /* vcdr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = vcdr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E552CAF02E804A0700B35224 /* vcdrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = vcdrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E552CAFA2E804A0700B35224 /* vcdrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = vcdrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		E552CAE52E804A0500B35224 /* vcdr */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = vcdr;
+			sourceTree = "<group>";
+		};
+		E552CAF32E804A0700B35224 /* vcdrTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = vcdrTests;
+			sourceTree = "<group>";
+		};
+		E552CAFD2E804A0700B35224 /* vcdrUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = vcdrUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E552CAE02E804A0500B35224 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E51328102E8065F100ACE8A6 /* WhisperKit in Frameworks */,
+				E51328122E8065F100ACE8A6 /* whisperkit-cli in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E552CAED2E804A0700B35224 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E552CAF72E804A0700B35224 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E552CADA2E804A0500B35224 = {
+			isa = PBXGroup;
+			children = (
+				E552CAE52E804A0500B35224 /* vcdr */,
+				E552CAF32E804A0700B35224 /* vcdrTests */,
+				E552CAFD2E804A0700B35224 /* vcdrUITests */,
+				E552CAE42E804A0500B35224 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E552CAE42E804A0500B35224 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E552CAE32E804A0500B35224 /* vcdr.app */,
+				E552CAF02E804A0700B35224 /* vcdrTests.xctest */,
+				E552CAFA2E804A0700B35224 /* vcdrUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E552CAE22E804A0500B35224 /* vcdr */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E552CB042E804A0700B35224 /* Build configuration list for PBXNativeTarget "vcdr" */;
+			buildPhases = (
+				E552CADF2E804A0500B35224 /* Sources */,
+				E552CAE02E804A0500B35224 /* Frameworks */,
+				E552CAE12E804A0500B35224 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E552CAE52E804A0500B35224 /* vcdr */,
+			);
+			name = vcdr;
+			packageProductDependencies = (
+				E513280F2E8065F100ACE8A6 /* WhisperKit */,
+				E51328112E8065F100ACE8A6 /* whisperkit-cli */,
+			);
+			productName = vcdr;
+			productReference = E552CAE32E804A0500B35224 /* vcdr.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E552CAEF2E804A0700B35224 /* vcdrTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E552CB072E804A0700B35224 /* Build configuration list for PBXNativeTarget "vcdrTests" */;
+			buildPhases = (
+				E552CAEC2E804A0700B35224 /* Sources */,
+				E552CAED2E804A0700B35224 /* Frameworks */,
+				E552CAEE2E804A0700B35224 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E552CAF22E804A0700B35224 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E552CAF32E804A0700B35224 /* vcdrTests */,
+			);
+			name = vcdrTests;
+			packageProductDependencies = (
+			);
+			productName = vcdrTests;
+			productReference = E552CAF02E804A0700B35224 /* vcdrTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E552CAF92E804A0700B35224 /* vcdrUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E552CB0A2E804A0700B35224 /* Build configuration list for PBXNativeTarget "vcdrUITests" */;
+			buildPhases = (
+				E552CAF62E804A0700B35224 /* Sources */,
+				E552CAF72E804A0700B35224 /* Frameworks */,
+				E552CAF82E804A0700B35224 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E552CAFC2E804A0700B35224 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E552CAFD2E804A0700B35224 /* vcdrUITests */,
+			);
+			name = vcdrUITests;
+			packageProductDependencies = (
+			);
+			productName = vcdrUITests;
+			productReference = E552CAFA2E804A0700B35224 /* vcdrUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E552CADB2E804A0500B35224 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					E552CAE22E804A0500B35224 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					E552CAEF2E804A0700B35224 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = E552CAE22E804A0500B35224;
+					};
+					E552CAF92E804A0700B35224 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = E552CAE22E804A0500B35224;
+					};
+				};
+			};
+			buildConfigurationList = E552CADE2E804A0500B35224 /* Build configuration list for PBXProject "vcdr" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E552CADA2E804A0500B35224;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E513280E2E8065F100ACE8A6 /* XCRemoteSwiftPackageReference "whisperkit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E552CAE42E804A0500B35224 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E552CAE22E804A0500B35224 /* vcdr */,
+				E552CAEF2E804A0700B35224 /* vcdrTests */,
+				E552CAF92E804A0700B35224 /* vcdrUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E552CAE12E804A0500B35224 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E552CAEE2E804A0700B35224 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E552CAF82E804A0700B35224 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E552CADF2E804A0500B35224 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E552CAEC2E804A0700B35224 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E552CAF62E804A0700B35224 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E552CAF22E804A0700B35224 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E552CAE22E804A0500B35224 /* vcdr */;
+			targetProxy = E552CAF12E804A0700B35224 /* PBXContainerItemProxy */;
+		};
+		E552CAFC2E804A0700B35224 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E552CAE22E804A0500B35224 /* vcdr */;
+			targetProxy = E552CAFB2E804A0700B35224 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		E552CB022E804A0700B35224 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E552CB032E804A0700B35224 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		E552CB052E804A0700B35224 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record voice input for transcription and sending to Claude Code.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = glebglazov.vcdr;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E552CB062E804A0700B35224 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record voice input for transcription and sending to Claude Code.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = glebglazov.vcdr;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E552CB082E804A0700B35224 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = glebglazov.vcdrTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vcdr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vcdr";
+			};
+			name = Debug;
+		};
+		E552CB092E804A0700B35224 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = glebglazov.vcdrTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vcdr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vcdr";
+			};
+			name = Release;
+		};
+		E552CB0B2E804A0700B35224 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = glebglazov.vcdrUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = vcdr;
+			};
+			name = Debug;
+		};
+		E552CB0C2E804A0700B35224 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = glebglazov.vcdrUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = vcdr;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E552CADE2E804A0500B35224 /* Build configuration list for PBXProject "vcdr" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E552CB022E804A0700B35224 /* Debug */,
+				E552CB032E804A0700B35224 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E552CB042E804A0700B35224 /* Build configuration list for PBXNativeTarget "vcdr" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E552CB052E804A0700B35224 /* Debug */,
+				E552CB062E804A0700B35224 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E552CB072E804A0700B35224 /* Build configuration list for PBXNativeTarget "vcdrTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E552CB082E804A0700B35224 /* Debug */,
+				E552CB092E804A0700B35224 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E552CB0A2E804A0700B35224 /* Build configuration list for PBXNativeTarget "vcdrUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E552CB0B2E804A0700B35224 /* Debug */,
+				E552CB0C2E804A0700B35224 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E513280E2E8065F100ACE8A6 /* XCRemoteSwiftPackageReference "whisperkit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/whisperkit";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E513280F2E8065F100ACE8A6 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E513280E2E8065F100ACE8A6 /* XCRemoteSwiftPackageReference "whisperkit" */;
+			productName = WhisperKit;
+		};
+		E51328112E8065F100ACE8A6 /* whisperkit-cli */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E513280E2E8065F100ACE8A6 /* XCRemoteSwiftPackageReference "whisperkit" */;
+			productName = "whisperkit-cli";
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E552CADB2E804A0500B35224 /* Project object */;
+}
