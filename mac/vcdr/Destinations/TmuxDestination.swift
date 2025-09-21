@@ -10,8 +10,31 @@ import Foundation
 class TmuxDestination: TextDestination {
     let name = "Tmux (Claude)"
 
+    private lazy var tmuxPath: String? = {
+        let possiblePaths = [
+            "/opt/homebrew/bin/tmux",  // Apple Silicon Homebrew
+            "/usr/local/bin/tmux",     // Intel Homebrew
+            "/usr/bin/tmux"            // System tmux
+        ]
+
+        for path in possiblePaths {
+            if FileManager.default.fileExists(atPath: path) {
+                print("✅ TmuxDestination: Found tmux at: \(path)")
+                return path
+            }
+        }
+
+        print("❌ TmuxDestination: tmux not found in any standard location")
+        return nil
+    }()
+
     func send(text: String) async throws {
         print("🖥️  TmuxDestination: Looking for Claude session...")
+
+        guard let tmuxPath = tmuxPath else {
+            print("❌ TmuxDestination: tmux executable not found")
+            throw DestinationError.sendFailed("tmux not installed or not in PATH")
+        }
 
         guard let claudeSession = await findClaudeSession() else {
             print("❌ TmuxDestination: No Claude session found")
@@ -22,7 +45,7 @@ class TmuxDestination: TextDestination {
         print("📤 TmuxDestination: Sending text to tmux session...")
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/local/bin/tmux")
+        process.executableURL = URL(fileURLWithPath: tmuxPath)
         process.arguments = ["send-keys", "-t", claudeSession, text]
 
         do {
@@ -55,11 +78,14 @@ class TmuxDestination: TextDestination {
         print("Using most recently active session: \(currentSession)")
 
         // Check active pane info from target session
-        if let activePane = await getActivePaneInfo(session: currentSession),
-           activePane.contains("Claude") || activePane.contains("claude") {
-            let paneTarget = activePane.components(separatedBy: " ").first ?? ""
-            print("Found Claude in active pane by title: \(paneTarget)")
-            return paneTarget
+        if let activePane = await getActivePaneInfo(session: currentSession) {
+            let title = activePane.components(separatedBy: " ").dropFirst().joined(separator: " ")
+            // TODO: fix prefix - ✳ symbol gets converted to _ by tmux when encoding special Unicode characters
+            if title.hasPrefix("Claude") || title.hasPrefix("claude") || title.hasPrefix("✳") || title.hasPrefix("_") {
+                let paneTarget = activePane.components(separatedBy: " ").first ?? ""
+                print("Found Claude in active pane by title: \(paneTarget)")
+                return paneTarget
+            }
         }
 
         // Search for Claude processes in current session
@@ -107,8 +133,10 @@ class TmuxDestination: TextDestination {
             let paneTarget = parts[0]
             let isActive = parts.last == "1"
 
-            // Check title for Claude
-            if line.contains("Claude") || line.contains("claude") {
+            // Check title for Claude (starts with)
+            let titlePart = parts.dropFirst().joined(separator: " ")
+            // TODO: fix prefix - ✳ symbol gets converted to _ by tmux when encoding special Unicode characters
+            if titlePart.hasPrefix("Claude") || titlePart.hasPrefix("claude") || titlePart.hasPrefix("✳") || titlePart.hasPrefix("_") {
                 claudePanes.append((target: paneTarget, isActive: isActive))
             }
             // Could add process checking here if needed
@@ -123,8 +151,14 @@ class TmuxDestination: TextDestination {
 
     private func runTmuxCommand(_ arguments: [String]) async -> String? {
         return await withCheckedContinuation { continuation in
+            guard let tmuxPath = tmuxPath else {
+                print("❌ TmuxDestination: tmux executable not found for command: \(arguments.joined(separator: " "))")
+                continuation.resume(returning: nil)
+                return
+            }
+
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/local/bin/tmux")
+            process.executableURL = URL(fileURLWithPath: tmuxPath)
             process.arguments = arguments
 
             let pipe = Pipe()
