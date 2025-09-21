@@ -14,6 +14,7 @@ class AppSettings: ObservableObject {
 
     @Published var shortcutKeyCode: CGKeyCode = 49 // Space bar
     @Published var shortcutModifiers: CGEventFlags = [.maskCommand, .maskShift] // Cmd+Shift
+    @Published var whisperTask: String = "transcribe" // "transcribe" or "translate"
 
     private let userDefaults = UserDefaults.standard
 
@@ -33,11 +34,14 @@ class AppSettings: ObservableObject {
         } else {
             shortcutModifiers = CGEventFlags(rawValue: UInt64(modifierRawValue))
         }
+
+        whisperTask = userDefaults.string(forKey: "whisperTask") ?? "transcribe"
     }
 
     func saveSettings() {
         userDefaults.set(Int(shortcutKeyCode), forKey: "shortcutKeyCode")
         userDefaults.set(Int(shortcutModifiers.rawValue), forKey: "shortcutModifiers")
+        userDefaults.set(whisperTask, forKey: "whisperTask")
     }
 
     var shortcutDisplayString: String {

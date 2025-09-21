@@ -25,8 +25,8 @@ class MenuBarController: ObservableObject {
     private let audioRecorder = AudioRecorder()
     private let whisperService = WhisperKitService.shared
     private let destinations: [TextDestination] = [
-        TmuxDestination(),
-        ClipboardDestination()
+        ClipboardDestination(),
+        TmuxDestination()
     ]
     private let hotkeyManager = GlobalHotkeyManager()
     private var permissionMonitorTimer: Timer?

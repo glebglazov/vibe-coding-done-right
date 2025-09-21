@@ -37,19 +37,20 @@ class WhisperKitService {
 
         do {
             // Transcribe the audio file with automatic language detection
+            print("🎤 Starting transcription with auto-detect language...")
+
+            // Get task setting from user preferences
+            let settings = AppSettings.shared
+            let task: DecodingTask = settings.whisperTask == "translate" ? .translate : .transcribe
+
+            print("🎛️ Using Whisper task: \(settings.whisperTask)")
+
             let transcriptionResults = try await whisperKit.transcribe(
                 audioPath: audioFileURL.path,
                 decodeOptions: DecodingOptions(
-                    task: .transcribe,
-                    language: nil,  // Auto-detect language (nil = auto-detect)
-                    temperature: 0.0,
-                    topK: 5,
-                    usePrefillPrompt: true,
-                    usePrefillCache: true,
-                    skipSpecialTokens: true,
-                    withoutTimestamps: false,
-                    clipTimestamps: [],
-                    chunkingStrategy: ChunkingStrategy.none
+                    task: task,
+                    language: nil,
+                    detectLanguage: true
                 )
             )
 
@@ -60,16 +61,21 @@ class WhisperKitService {
 
             // Get the first result and extract clean text from segments
             let firstResult = transcriptionResults[0]
+
+            // Log detected language information
+            let detectedLanguage = firstResult.language
+            print("🌍 WhisperKit detected language: \(detectedLanguage)")
+
             let transcription = firstResult.segments.compactMap { $0.text }.joined(separator: " ")
 
-            // Clean up the text by removing SRT formatting and extra whitespace
+            // Clean up the text by removing SRLet's check.T formatting and extra whitespace
             let cleanText = cleanTranscriptionText(transcription)
 
             if cleanText.isEmpty {
                 throw WhisperKitError.emptyResult
             }
 
-            print("WhisperKit transcription: \(cleanText)")
+            print("📝 WhisperKit transcription: \(cleanText)")
             return cleanText
 
         } catch {

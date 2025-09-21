@@ -23,24 +23,6 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Destination submenu
-            Menu("Destination: \(controller.currentDestination.name)") {
-                ForEach(0..<controller.availableDestinations.count, id: \.self) { index in
-                    Button(action: {
-                        controller.selectedDestinationIndex = index
-                    }) {
-                        HStack {
-                            Text(controller.availableDestinations[index])
-                            if index == controller.selectedDestinationIndex {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            }
-
-            Divider()
-
             // Settings
             Button("Settings...") {
                 openWindow(id: "settings")
