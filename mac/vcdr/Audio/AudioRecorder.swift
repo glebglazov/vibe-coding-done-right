@@ -38,13 +38,19 @@ class AudioRecorder: NSObject, ObservableObject {
     }
 
     func startRecording() async -> Bool {
+        print("🎤 AudioRecorder: Starting recording process...")
+
         guard await requestMicrophonePermission() else {
-            print("Microphone permission denied")
+            print("❌ AudioRecorder: Microphone permission denied - check Privacy & Security settings")
             return false
         }
 
+        print("✅ AudioRecorder: Microphone permission granted")
+
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let audioFilename = documentsPath.appendingPathComponent("recording.wav")
+
+        print("📁 AudioRecorder: Recording to: \(audioFilename.path)")
 
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
@@ -55,23 +61,42 @@ class AudioRecorder: NSObject, ObservableObject {
             AVLinearPCMIsBigEndianKey: false
         ]
 
+        print("🎛️ AudioRecorder: Audio settings: \(settings)")
+
         do {
+            print("🔧 AudioRecorder: Creating AVAudioRecorder...")
             audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
             audioRecorder?.delegate = self
+            print("✅ AudioRecorder: AVAudioRecorder created successfully")
 
+            print("▶️ AudioRecorder: Starting recording...")
             if audioRecorder?.record() == true {
+                print("✅ AudioRecorder: Recording started successfully")
                 DispatchQueue.main.async {
                     self.isRecording = true
                     self.recordingTime = 0
                     self.startTimer()
                 }
                 return true
+            } else {
+                print("❌ AudioRecorder: Failed to start recording - record() returned false")
+                print("   This could be due to:")
+                print("   - Audio session conflicts with other apps")
+                print("   - Hardware issues with microphone")
+                print("   - Invalid audio settings")
+                print("   - File system permissions for documents directory")
+                return false
             }
         } catch {
-            print("Failed to start recording: \(error)")
+            print("❌ AudioRecorder: Failed to create AVAudioRecorder: \(error)")
+            print("   Error details: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("   Error domain: \(nsError.domain)")
+                print("   Error code: \(nsError.code)")
+                print("   User info: \(nsError.userInfo)")
+            }
+            return false
         }
-
-        return false
     }
 
     func stopRecording() -> URL? {
