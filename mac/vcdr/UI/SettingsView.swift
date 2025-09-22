@@ -20,11 +20,11 @@ struct SettingsView: View {
                     .font(.system(size: 32))
                     .foregroundColor(.blue)
 
-                Text("VCDR Settings")
+                Text("vcdr settings")
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("Voice to Claude Done Right")
+                Text("vibe coding done right")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
