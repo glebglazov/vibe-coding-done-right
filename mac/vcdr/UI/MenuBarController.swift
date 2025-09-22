@@ -35,6 +35,7 @@ class MenuBarController: ObservableObject {
 
         Task {
             await initializeWhisper()
+            await requestMicrophonePermissionOnStartup()
         }
         setupGlobalHotkeys()
         startPermissionMonitoring()
@@ -124,6 +125,27 @@ class MenuBarController: ObservableObject {
             isInitializing = false
             statusMessage = "Failed to initialize Whisper"
             print("WhisperKit initialization error: \(error)")
+        }
+    }
+
+    private func requestMicrophonePermissionOnStartup() async {
+        print("🎤 MenuBarController: Requesting microphone permission on startup...")
+        let hasPermission = await audioRecorder.requestMicrophonePermission()
+
+        if hasPermission {
+            print("✅ MenuBarController: Microphone permission granted")
+            await MainActor.run {
+                if statusMessage == "Ready to record" {
+                    // Keep the ready message if we're already ready
+                } else if !isInitializing {
+                    statusMessage = "Ready to record"
+                }
+            }
+        } else {
+            print("❌ MenuBarController: Microphone permission denied")
+            await MainActor.run {
+                statusMessage = "Microphone permission needed"
+            }
         }
     }
 

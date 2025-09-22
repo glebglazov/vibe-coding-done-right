@@ -20,6 +20,10 @@ class AudioRecorder: NSObject, ObservableObject {
         super.init()
     }
 
+    func hasMicrophonePermission() -> Bool {
+        return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    }
+
     func requestMicrophonePermission() async -> Bool {
         await withCheckedContinuation { continuation in
             switch AVCaptureDevice.authorizationStatus(for: .audio) {
