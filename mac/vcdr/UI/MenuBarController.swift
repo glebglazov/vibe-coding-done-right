@@ -45,14 +45,12 @@ class MenuBarController: ObservableObject {
         print("🎹 MenuBarController: Setting up global hotkeys...")
         let success = hotkeyManager.registerHotkeys(
             clipboardCallback: { [weak self] in
-                print("🔥 Clipboard hotkey triggered! Recording for clipboard...")
-                self?.currentDestinationType = .clipboard
-                self?.toggleRecording()
+                print("🔥 Clipboard hotkey triggered!")
+                self?.handleShortcutPressed(destinationType: .clipboard)
             },
             tmuxCallback: { [weak self] in
-                print("🔥 Tmux hotkey triggered! Recording for tmux...")
-                self?.currentDestinationType = .tmux
-                self?.toggleRecording()
+                print("🔥 Tmux hotkey triggered!")
+                self?.handleShortcutPressed(destinationType: .tmux)
             }
         )
         if success {
@@ -145,6 +143,21 @@ class MenuBarController: ObservableObject {
             print("❌ MenuBarController: Microphone permission denied")
             await MainActor.run {
                 statusMessage = "Microphone permission needed"
+            }
+        }
+    }
+
+    func handleShortcutPressed(destinationType: DestinationType) {
+        if isRecording {
+            // If recording, stop and set destination based on which shortcut was pressed
+            print("🎯 Stopping recording with destination: \(destinationType)")
+            currentDestinationType = destinationType
+            stopRecording()
+        } else {
+            // If not recording, start recording (destination will be set when stopping)
+            print("🎤 Starting recording (destination to be determined on stop)")
+            Task {
+                await startRecording()
             }
         }
     }

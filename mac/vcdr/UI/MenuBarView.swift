@@ -90,12 +90,8 @@ struct MenuBarView: View {
     }
 
     private var buttonIcon: String {
-        if controller.isInitializing {
-            return "arrow.down.circle"
-        } else if controller.isProcessing {
-            return "hourglass"
-        } else if controller.isRecording {
-            return "stop.fill"
+        if controller.isRecording {
+            return "stop.fill" // Show stop icon during recording
         } else {
             return "mic.fill"
         }
@@ -113,15 +109,4 @@ struct MenuBarView: View {
         }
     }
 
-    private var buttonColor: Color {
-        if controller.isInitializing {
-            return .gray
-        } else if controller.isProcessing {
-            return .orange
-        } else if controller.isRecording {
-            return .red
-        } else {
-            return .green
-        }
-    }
 }
