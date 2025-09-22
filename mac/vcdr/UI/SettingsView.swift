@@ -180,26 +180,6 @@ struct SettingsView: View {
             }
 
 
-            Spacer()
-
-            // Info section
-            VStack(spacing: 8) {
-                Text("Tips:")
-                    .font(.caption)
-                    .fontWeight(.medium)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("• Click each shortcut field and press any key combination to record it")
-                    Text("• Use the clipboard shortcut to record and send to clipboard")
-                    Text("• Use the tmux shortcut to record and send directly to Claude Code")
-                    Text("• Both destinations require accessibility permissions")
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-            }
-            .padding()
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(8)
 
             Spacer()
         }
