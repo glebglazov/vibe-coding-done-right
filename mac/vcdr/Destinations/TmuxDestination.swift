@@ -77,17 +77,6 @@ class TmuxDestination: TextDestination {
 
         print("Using most recently active session: \(currentSession)")
 
-        // Check active pane info from target session
-        if let activePane = await getActivePaneInfo(session: currentSession) {
-            let title = activePane.components(separatedBy: " ").dropFirst().joined(separator: " ")
-            // TODO: fix prefix - ✳ symbol gets converted to _ by tmux when encoding special Unicode characters
-            if title.hasPrefix("Claude") || title.hasPrefix("claude") || title.hasPrefix("✳") || title.hasPrefix("_") {
-                let paneTarget = activePane.components(separatedBy: " ").first ?? ""
-                print("Found Claude in active pane by title: \(paneTarget)")
-                return paneTarget
-            }
-        }
-
         // Search for Claude processes in current session
         if let claudePane = await findClaudePaneInSession(currentSession) {
             print("Found Claude pane: \(claudePane)")
@@ -115,12 +104,8 @@ class TmuxDestination: TextDestination {
         return sortedClients.first?.components(separatedBy: " ").last
     }
 
-    private func getActivePaneInfo(session: String) async -> String? {
-        return await runTmuxCommand(["display-message", "-t", session, "-p", "#{session_name}:#{window_index}.#{pane_index} #{pane_title}"])
-    }
-
     private func findClaudePaneInSession(_ session: String) async -> String? {
-        let result = await runTmuxCommand(["list-panes", "-t", session, "-F", "#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid} #{pane_active}"])
+        let result = await runTmuxCommand(["list-panes", "-t", session, "-F", "#{session_name}:#{window_index}.#{pane_index} #{pane_pid} #{pane_active}"])
         guard let output = result else { return nil }
 
         let lines = output.components(separatedBy: "\n").filter { !$0.isEmpty }
@@ -128,18 +113,16 @@ class TmuxDestination: TextDestination {
 
         for line in lines {
             let parts = line.components(separatedBy: " ")
-            guard parts.count >= 4 else { continue }
+            guard parts.count >= 3 else { continue }
 
             let paneTarget = parts[0]
-            let isActive = parts.last == "1"
+            let panePid = parts[1]
+            let isActive = parts[2] == "1"
 
-            // Check title for Claude (starts with)
-            let titlePart = parts.dropFirst().joined(separator: " ")
-            // TODO: fix prefix - ✳ symbol gets converted to _ by tmux when encoding special Unicode characters
-            if titlePart.hasPrefix("Claude") || titlePart.hasPrefix("claude") || titlePart.hasPrefix("✳") || titlePart.hasPrefix("_") {
+            // Check if this pane has a Claude process running
+            if await hasClaudeProcess(panePid: panePid) {
                 claudePanes.append((target: paneTarget, isActive: isActive))
             }
-            // Could add process checking here if needed
         }
 
         // Return focused Claude pane if available, otherwise first one
@@ -147,6 +130,41 @@ class TmuxDestination: TextDestination {
             return focusedPane.target
         }
         return claudePanes.first?.target
+    }
+
+    private func hasClaudeProcess(panePid: String) async -> Bool {
+        return await withCheckedContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/ps")
+            process.arguments = ["-ef"]
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = Pipe()
+
+            do {
+                try process.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                process.waitUntilExit()
+
+                if process.terminationStatus == 0 {
+                    let lines = output.components(separatedBy: "\n")
+                    for line in lines {
+                        let parts = line.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+                        if parts.count >= 8 && parts[2] == panePid && parts[7].contains("claude") {
+                            continuation.resume(returning: true)
+                            return
+                        }
+                    }
+                }
+
+                continuation.resume(returning: false)
+            } catch {
+                print("❌ TmuxDestination: Failed to check processes: \(error)")
+                continuation.resume(returning: false)
+            }
+        }
     }
 
     private func runTmuxCommand(_ arguments: [String]) async -> String? {
