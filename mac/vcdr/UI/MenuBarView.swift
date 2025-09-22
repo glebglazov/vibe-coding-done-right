@@ -43,12 +43,40 @@ struct MenuBarView: View {
                 Divider()
             }
 
-            // Last transcription (shortened)
+            // Last transcription (clickable to copy)
             if !controller.lastTranscription.isEmpty {
-                Button("Last: \(String(controller.lastTranscription.prefix(30)))\(controller.lastTranscription.count > 30 ? "..." : "")") {
-                    NSPasteboard.general.setString(controller.lastTranscription, forType: .string)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Last transcription:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Button(action: {
+                        print("📋 Copying to clipboard: '\(controller.lastTranscription)'")
+                        let pasteboard = NSPasteboard.general
+                        pasteboard.clearContents()
+                        let success = pasteboard.setString(controller.lastTranscription, forType: .string)
+                        print("📋 Clipboard copy success: \(success)")
+                    }) {
+                        Text(controller.lastTranscription)
+                            .font(.caption)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(4)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Click to copy full transcription to clipboard")
                 }
-                .help("Click to copy full transcription")
+                .padding(.horizontal, 4)
 
                 Divider()
             }
