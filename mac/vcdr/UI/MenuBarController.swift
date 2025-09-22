@@ -8,6 +8,11 @@
 import SwiftUI
 import Combine
 
+enum DestinationType {
+    case clipboard
+    case tmux
+}
+
 @MainActor
 class MenuBarController: ObservableObject {
     @Published var isRecording = false
@@ -15,76 +20,70 @@ class MenuBarController: ObservableObject {
     @Published var isInitializing = true
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
-    @Published var selectedDestinationIndex = 0 {
-        didSet {
-            UserDefaults.standard.set(selectedDestinationIndex, forKey: "selectedDestinationIndex")
-            print("🎯 Destination changed to: \(destinations[selectedDestinationIndex].name) (index: \(selectedDestinationIndex))")
-        }
-    }
+    @Published var currentDestinationType: DestinationType = .clipboard
 
     private let audioRecorder = AudioRecorder()
     private let whisperService = WhisperKitService.shared
-    private let destinations: [TextDestination] = [
-        ClipboardDestination(),
-        TmuxDestination()
-    ]
+    private let clipboardDestination = ClipboardDestination()
+    private let tmuxDestination = TmuxDestination()
     private let hotkeyManager = GlobalHotkeyManager()
     private var permissionMonitorTimer: Timer?
 
     init() {
         print("📱 MenuBarController: Initializing...")
-        print("🎯 Available destinations: \(destinations.map { $0.name })")
-
-        // Load saved destination index
-        let savedIndex = UserDefaults.standard.integer(forKey: "selectedDestinationIndex")
-        if savedIndex < destinations.count {
-            selectedDestinationIndex = savedIndex
-        }
-
-        print("🎯 Selected destination: \(destinations[selectedDestinationIndex].name) (index: \(selectedDestinationIndex))")
+        print("🎯 Available destinations: Clipboard, Tmux")
 
         Task {
             await initializeWhisper()
         }
-        setupGlobalHotkey()
+        setupGlobalHotkeys()
         startPermissionMonitoring()
     }
 
-    private func setupGlobalHotkey() {
-        print("🎹 MenuBarController: Setting up global hotkey...")
-        let success = hotkeyManager.registerHotkey { [weak self] in
-            print("🔥 Global hotkey triggered! Toggling recording...")
-            self?.toggleRecording()
-        }
+    private func setupGlobalHotkeys() {
+        print("🎹 MenuBarController: Setting up global hotkeys...")
+        let success = hotkeyManager.registerHotkeys(
+            clipboardCallback: { [weak self] in
+                print("🔥 Clipboard hotkey triggered! Recording for clipboard...")
+                self?.currentDestinationType = .clipboard
+                self?.toggleRecording()
+            },
+            tmuxCallback: { [weak self] in
+                print("🔥 Tmux hotkey triggered! Recording for tmux...")
+                self?.currentDestinationType = .tmux
+                self?.toggleRecording()
+            }
+        )
         if success {
-            print("✅ MenuBarController: Global hotkey setup completed successfully")
+            print("✅ MenuBarController: Global hotkeys setup completed successfully")
         } else {
-            print("❌ MenuBarController: Failed to register global hotkey - accessibility permissions may be needed")
+            print("❌ MenuBarController: Failed to register global hotkeys - accessibility permissions may be needed")
         }
-    }
-
-    var availableDestinations: [String] {
-        return destinations.map { $0.name }
     }
 
     var currentDestination: TextDestination {
-        let destination = destinations[selectedDestinationIndex]
-        print("🎯 Current destination: \(destination.name) (index: \(selectedDestinationIndex))")
-        return destination
-    }
-
-    func updateGlobalShortcut() {
-        let success = hotkeyManager.updateHotkey()
-        if success {
-            print("Global shortcut updated to: \(AppSettings.shared.shortcutDisplayString)")
-        } else {
-            print("Failed to update global shortcut")
+        switch currentDestinationType {
+        case .clipboard:
+            print("🎯 Current destination: Clipboard")
+            return clipboardDestination
+        case .tmux:
+            print("🎯 Current destination: Tmux")
+            return tmuxDestination
         }
     }
 
-    func retryGlobalShortcut() {
-        print("🔄 Manually retrying global shortcut registration...")
-        setupGlobalHotkey()
+    func updateGlobalShortcuts() {
+        let success = hotkeyManager.updateHotkeys()
+        if success {
+            print("Global shortcuts updated")
+        } else {
+            print("Failed to update global shortcuts")
+        }
+    }
+
+    func retryGlobalShortcuts() {
+        print("🔄 Manually retrying global shortcuts registration...")
+        setupGlobalHotkeys()
     }
 
     private func startPermissionMonitoring() {
@@ -102,12 +101,12 @@ class MenuBarController: ObservableObject {
 
             // Check if permissions state changed from denied to granted
             if hasPermissions && !(self?.hotkeyManager.isHotkeyRegistered() ?? false) {
-                print("🎉 Accessibility permissions granted! Re-registering global hotkey...")
-                self?.setupGlobalHotkey()
+                print("🎉 Accessibility permissions granted! Re-registering global hotkeys...")
+                self?.setupGlobalHotkeys()
 
                 // Stop monitoring once successful
                 if self?.hotkeyManager.isHotkeyRegistered() ?? false {
-                    print("✋ Stopping permission monitoring - hotkey successfully registered")
+                    print("✋ Stopping permission monitoring - hotkeys successfully registered")
                     self?.permissionMonitorTimer?.invalidate()
                     self?.permissionMonitorTimer = nil
                 }
@@ -176,7 +175,7 @@ class MenuBarController: ObservableObject {
         let destination = currentDestination
 
         print("📝 Transcription completed: \"\(transcription)\"")
-        print("🎯 Selected destination: \(destination.name) (index: \(selectedDestinationIndex))")
+        print("🎯 Selected destination: \(destination.name) (\(currentDestinationType))")
         print("📤 Sending text to \(destination.name)...")
 
         statusMessage = "Sending to \(destination.name)..."

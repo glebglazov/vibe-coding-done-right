@@ -32,45 +32,95 @@ struct SettingsView: View {
 
             Divider()
 
-            // Destination Section
+            // Global Shortcuts Section
             VStack(alignment: .leading, spacing: 16) {
+                Text("Global Shortcuts")
+                    .font(.headline)
+
+                // Clipboard shortcut
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Output Destination")
-                        .font(.headline)
-
-                    VStack(spacing: 8) {
-                        ForEach(0..<controller.availableDestinations.count, id: \.self) { index in
-                            let destination = controller.availableDestinations[index]
-
-                            HStack {
-                                Button(action: {
-                                    controller.selectedDestinationIndex = index
-                                }) {
-                                    HStack {
-                                        Image(systemName: controller.selectedDestinationIndex == index ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(controller.selectedDestinationIndex == index ? .blue : .gray)
-                                        Text(destination)
-                                            .font(.subheadline)
-                                        Spacer()
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-
-                            if destination == "Clipboard (Auto-paste)" {
-                                Text("Copy text and automatically paste with Cmd+V")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(.leading, 28)
-                            } else if destination == "Tmux (Claude)" {
-                                Text("Send directly to Claude Code session in tmux")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(.leading, 28)
-                            }
-                        }
+                    HStack {
+                        Image(systemName: "doc.on.clipboard")
+                            .foregroundColor(.blue)
+                        Text("Clipboard (Auto-paste)")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
                     }
-                    .padding(.vertical, 8)
+
+                    Text("Copy text and automatically paste with Cmd+V")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 24)
+
+                    HStack {
+                        ShortcutRecorderView(
+                            keyCode: $settings.clipboardShortcutKeyCode,
+                            modifiers: $settings.clipboardShortcutModifiers
+                        )
+                        .onChange(of: settings.clipboardShortcutKeyCode) { _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcuts()
+                        }
+                        .onChange(of: settings.clipboardShortcutModifiers) { _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcuts()
+                        }
+
+                        Button(action: {
+                            settings.resetClipboardShortcut()
+                            controller.updateGlobalShortcuts()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 16))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Reset clipboard shortcut")
+                    }
+                    .padding(.leading, 24)
+                }
+
+                // Tmux shortcut
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "terminal")
+                            .foregroundColor(.green)
+                        Text("Tmux (Claude)")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+
+                    Text("Send directly to Claude Code session in tmux")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 24)
+
+                    HStack {
+                        ShortcutRecorderView(
+                            keyCode: $settings.tmuxShortcutKeyCode,
+                            modifiers: $settings.tmuxShortcutModifiers
+                        )
+                        .onChange(of: settings.tmuxShortcutKeyCode) { _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcuts()
+                        }
+                        .onChange(of: settings.tmuxShortcutModifiers) { _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcuts()
+                        }
+
+                        Button(action: {
+                            settings.resetTmuxShortcut()
+                            controller.updateGlobalShortcuts()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 16))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Reset tmux shortcut")
+                    }
+                    .padding(.leading, 24)
                 }
             }
 
@@ -129,29 +179,6 @@ struct SettingsView: View {
                 }
             }
 
-            Divider()
-
-            // Global Shortcut Section
-            VStack(alignment: .leading, spacing: 16) {
-                ShortcutRecorderView(
-                    keyCode: Binding(
-                        get: { settings.shortcutKeyCode },
-                        set: { newValue in
-                            settings.shortcutKeyCode = newValue
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-                    ),
-                    modifiers: Binding(
-                        get: { settings.shortcutModifiers },
-                        set: { newValue in
-                            settings.shortcutModifiers = newValue
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-                    )
-                )
-            }
 
             Spacer()
 
@@ -162,10 +189,10 @@ struct SettingsView: View {
                     .fontWeight(.medium)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("• Click the shortcut field and press any key combination to record it")
-                    Text("• Use the global shortcut to start/stop recording from anywhere")
-                    Text("• Clipboard destination requires accessibility permissions for auto-paste")
-                    Text("• Tmux destination sends directly to Claude Code sessions")
+                    Text("• Click each shortcut field and press any key combination to record it")
+                    Text("• Use the clipboard shortcut to record and send to clipboard")
+                    Text("• Use the tmux shortcut to record and send directly to Claude Code")
+                    Text("• Both destinations require accessibility permissions")
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
