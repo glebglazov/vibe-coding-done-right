@@ -17,7 +17,7 @@ struct vcdrApp: App {
                 .environmentObject(menuBarController)
         }
         .menuBarExtraStyle(.menu)
-
+        
         Window("VCDR Settings", id: "settings") {
             SettingsView()
                 .environmentObject(menuBarController)
@@ -26,8 +26,8 @@ struct vcdrApp: App {
         .windowResizability(.contentSize)
         .defaultSize(width: 400, height: 300)
         .windowLevel(.floating)
-
-
+        
+        
         Window("Recording", id: "recording-overlay") {
             ZStack {
                 if menuBarController.isRecording {
@@ -85,10 +85,10 @@ struct vcdrApp: App {
         .defaultPosition(.center)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Stop and Send to Clipboard") {
+                Button("Paste into current program") {
                     menuBarController.stopAndSendToClipboard()
                 }
-                .keyboardShortcut("c", modifiers: .command)
+                .keyboardShortcut("v", modifiers: .command)
 
                 Button("Stop and Send to Tmux") {
                     menuBarController.stopAndSendToTmux()

@@ -9,7 +9,7 @@ import Foundation
 
 protocol TextDestination {
     var name: String { get }
-    func send(text: String) async throws
+    func send(text: String, onPrepareSend: (() async -> Void)?) async throws
     func isAvailable() async -> Bool
 }
 

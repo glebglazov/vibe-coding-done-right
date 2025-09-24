@@ -28,7 +28,7 @@ class TmuxDestination: TextDestination {
         return nil
     }()
 
-    func send(text: String) async throws {
+    func send(text: String, onPrepareSend: (() async -> Void)? = nil) async throws {
         print("🖥️  TmuxDestination: Looking for Claude session...")
 
         guard let tmuxPath = tmuxPath else {
@@ -42,6 +42,13 @@ class TmuxDestination: TextDestination {
         }
 
         print("✅ TmuxDestination: Found Claude session: \(claudeSession)")
+
+        // Call preparation callback if provided (though tmux might not need it)
+        if let onPrepareSend = onPrepareSend {
+            print("🎯 TmuxDestination: Running preparation callback...")
+            await onPrepareSend()
+        }
+
         print("📤 TmuxDestination: Sending text to tmux session...")
 
         let process = Process()

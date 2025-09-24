@@ -31,7 +31,7 @@ struct RecordingOverlay: View {
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("Press ⌘C for Clipboard, ⌘T for Tmux, or Esc to cancel")
+                Text("Press ⌘V to paste, ⌘T for Tmux, or Esc to cancel")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -55,7 +55,7 @@ struct RecordingOverlay: View {
                 HStack {
                     Image(systemName: "doc.on.clipboard.fill")
                         .foregroundColor(.blue)
-                    Text("Press ⌘C to send to Clipboard")
+                    Text("Press ⌘V to paste into current program")
                         .font(.caption)
                     Spacer()
                 }

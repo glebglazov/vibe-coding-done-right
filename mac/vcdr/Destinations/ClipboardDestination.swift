@@ -12,7 +12,7 @@ import ApplicationServices
 class ClipboardDestination: TextDestination {
     let name = "Clipboard (Auto-paste)"
 
-    func send(text: String) async throws {
+    func send(text: String, onPrepareSend: (() async -> Void)? = nil) async throws {
         print("📋 ClipboardDestination: Copying text to clipboard...")
 
         // Copy text to clipboard
@@ -41,6 +41,12 @@ class ClipboardDestination: TextDestination {
         // Verify clipboard contents before pasting
         let clipboardText = pasteboard.string(forType: .string) ?? ""
         print("🔍 ClipboardDestination: Clipboard contents before paste: \"\(clipboardText)\"")
+
+        // Call preparation callback (e.g., focus restoration) before pasting
+        if let onPrepareSend = onPrepareSend {
+            print("🎯 ClipboardDestination: Running preparation callback...")
+            await onPrepareSend()
+        }
 
         print("📤 ClipboardDestination: Simulating Cmd+V paste...")
 

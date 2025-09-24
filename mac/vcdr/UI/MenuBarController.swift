@@ -290,7 +290,9 @@ class MenuBarController: ObservableObject {
         }
 
         do {
-            try await destination.send(text: transcription)
+            try await destination.send(text: transcription, onPrepareSend: {
+                await self.restorePreviousAppFocus()
+            })
             print("✅ Successfully sent to \(destination.name)")
 
             await MainActor.run {
@@ -298,8 +300,7 @@ class MenuBarController: ObservableObject {
                 isProcessing = false
             }
 
-            // Restore focus to previously active app
-            await restorePreviousAppFocus()
+            // Focus restoration already happened in onPrepareSend callback
 
             // Reset status after a delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
