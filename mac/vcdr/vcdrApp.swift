@@ -44,6 +44,24 @@ struct vcdrApp: App {
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     if let window = NSApp.windows.first(where: { $0.title == "Recording" }) {
+                        // Make window movable by dragging anywhere
+                        window.isMovableByWindowBackground = true
+
+                        // Make window truly borderless
+                        window.styleMask.insert(.borderless)
+                        window.styleMask.remove(.titled)
+                        window.titlebarAppearsTransparent = true
+                        window.titleVisibility = .hidden
+
+                        // Add rounded corners to both window and content
+                        window.backgroundColor = NSColor.clear
+                        window.isOpaque = false
+
+                        window.contentView?.wantsLayer = true
+                        window.contentView?.layer?.cornerRadius = 16
+                        window.contentView?.layer?.masksToBounds = true
+
+                        // Focus the window
                         window.makeKeyAndOrderFront(nil)
                         NSApp.activate(ignoringOtherApps: true)
                     }
