@@ -76,6 +76,7 @@ struct vcdrApp: App {
                     window.contentView?.layer?.masksToBounds = true
                     window.acceptsMouseMovedEvents = true
                     window.level = .floating
+                    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
                 }
             }
         }
