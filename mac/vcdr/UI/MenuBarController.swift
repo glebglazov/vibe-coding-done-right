@@ -145,7 +145,7 @@ class MenuBarController: ObservableObject {
         stopRecordingAndSendTo(.tmux)
     }
 
-    private var previousActiveApp: NSRunningApplication?
+    private(set) var previousActiveApp: NSRunningApplication?
 
     private func stopRecordingAndSendTo(_ destination: DestinationType) {
         guard isRecording else { return }
@@ -219,10 +219,87 @@ class MenuBarController: ObservableObject {
                 isRecording = true
                 statusMessage = "Recording... Tap to stop"
                 print("✅ MenuBarController: Recording started, overlay should be visible")
+
+                // Position recording window immediately since we don't need window size for top-left positioning
+                positionRecordingWindow()
             } else {
                 statusMessage = "Failed to start recording"
             }
         }
+    }
+
+    private func positionRecordingWindow() {
+        // Find the recording window
+        guard let recordingWindow = NSApp.windows.first(where: { $0.title == "Recording" }) else {
+            print("❌ MenuBarController: Could not find recording window to position")
+            return
+        }
+
+        // Try to get the screen where the active application is located
+        var targetScreen: NSScreen?
+
+        // Method 1: Get screen from previously active application's main window
+        if let activeApp = previousActiveApp {
+            // Get the frontmost window of the active app using Core Graphics
+            if let windowList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] {
+                for windowInfo in windowList {
+                    if let windowOwnerPID = windowInfo[kCGWindowOwnerPID as String] as? Int32,
+                       windowOwnerPID == activeApp.processIdentifier,
+                       let windowLayer = windowInfo[kCGWindowLayer as String] as? Int,
+                       windowLayer == 0, // Normal window layer
+                       let boundsDict = windowInfo[kCGWindowBounds as String] as? [String: Any],
+                       let x = boundsDict["X"] as? CGFloat,
+                       let y = boundsDict["Y"] as? CGFloat,
+                       let width = boundsDict["Width"] as? CGFloat,
+                       let height = boundsDict["Height"] as? CGFloat {
+
+                        let windowFrame = CGRect(x: x, y: y, width: width, height: height)
+
+                        // Find which screen contains this window
+                        targetScreen = NSScreen.screens.first { screen in
+                            screen.frame.intersects(windowFrame)
+                        }
+
+                        if targetScreen != nil {
+                            print("🎯 MenuBarController: Found active app window on screen")
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        // Method 2: Fall back to screen with cursor
+        if targetScreen == nil {
+            let mouseLocation = NSEvent.mouseLocation
+            targetScreen = NSScreen.screens.first { screen in
+                screen.frame.contains(mouseLocation)
+            }
+            print("🖱️ MenuBarController: Using cursor position as fallback")
+        }
+
+        // Method 3: Fall back to main screen
+        if targetScreen == nil {
+            targetScreen = NSScreen.main
+            print("🖥️ MenuBarController: Using main screen as final fallback")
+        }
+
+        guard let screen = targetScreen else { return }
+
+        // Position the recording window in top-left corner of the target screen
+        let screenFrame = screen.frame
+        let margin: CGFloat = 20 // Distance from screen edge
+
+        print("📍 MenuBarController: Positioning recording window on screen: \(screen.localizedName)")
+
+        // Position in top-left corner with margin
+        let windowX = screenFrame.minX + margin
+        let windowY = screenFrame.maxY - margin // maxY is top, position slightly below top edge
+
+        // Set just the origin since we don't need to know window size for top-left positioning
+        recordingWindow.setFrameOrigin(NSPoint(x: windowX, y: windowY))
+
+        print("✅ Window positioned at: \(recordingWindow.frame)")
     }
 
     private func stopRecording() {

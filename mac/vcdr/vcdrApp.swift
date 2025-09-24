@@ -41,7 +41,8 @@ struct vcdrApp: App {
                         onCancel: {
                             menuBarController.cancelRecording()
                         },
-                        audioRecorder: menuBarController.audioRecorder
+                        audioRecorder: menuBarController.audioRecorder,
+                        previousActiveApp: menuBarController.previousActiveApp
                     )
                     .onAppear {
                         print("👁️ RecordingOverlay: Appeared - should be visible")
@@ -76,14 +77,15 @@ struct vcdrApp: App {
                     window.contentView?.layer?.masksToBounds = true
                     window.acceptsMouseMovedEvents = true
                     window.level = .floating
-                    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+                    window.collectionBehavior = [.moveToActiveSpace]
+
                 }
             }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .windowLevel(.floating)
-        .defaultPosition(.center)
+        .defaultPosition(.bottomTrailing)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Paste into current program") {

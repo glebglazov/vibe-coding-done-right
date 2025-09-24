@@ -13,6 +13,7 @@ struct RecordingOverlay: View {
     let onStopAndSendToTmux: () -> Void
     let onCancel: () -> Void
     @ObservedObject var audioRecorder: AudioRecorder
+    let previousActiveApp: NSRunningApplication?
 
     @State private var audioLevels: [CGFloat] = Array(repeating: 0.1, count: 50)
     @State private var animationTimer: Timer?
@@ -121,6 +122,7 @@ struct RecordingOverlay: View {
         let newLevel = max(0.1, min(1.0, normalizedLevel + variation))
         audioLevels.append(newLevel)
     }
+
 }
 
 #Preview {
@@ -128,6 +130,7 @@ struct RecordingOverlay: View {
         onStopAndSendToClipboard: { },
         onStopAndSendToTmux: { },
         onCancel: { },
-        audioRecorder: AudioRecorder()
+        audioRecorder: AudioRecorder(),
+        previousActiveApp: nil
     )
 }
