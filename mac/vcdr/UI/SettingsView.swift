@@ -32,93 +32,49 @@ struct SettingsView: View {
 
             Divider()
 
-            // Global Shortcuts Section
+            // Global Shortcut Section
             VStack(alignment: .leading, spacing: 16) {
-                Text("Global Shortcuts")
+                Text("Recording Shortcut")
                     .font(.headline)
 
-                // Clipboard shortcut
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Image(systemName: "doc.on.clipboard")
+                        Image(systemName: "mic.fill")
                             .foregroundColor(.blue)
-                        Text("Clipboard (Auto-paste)")
+                        Text("Start/Stop Recording")
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
 
-                    Text("Copy text and automatically paste with Cmd+V")
+                    Text("Press once to start recording, press again to stop and choose destination")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.leading, 24)
 
                     HStack {
                         ShortcutRecorderView(
-                            keyCode: $settings.clipboardShortcutKeyCode,
-                            modifiers: $settings.clipboardShortcutModifiers
+                            keyCode: $settings.recordingShortcutKeyCode,
+                            modifiers: $settings.recordingShortcutModifiers
                         )
-                        .onChange(of: settings.clipboardShortcutKeyCode) { _ in
+                        .onChange(of: settings.recordingShortcutKeyCode) { _ in
                             settings.saveSettings()
-                            controller.updateGlobalShortcuts()
+                            controller.updateGlobalShortcut()
                         }
-                        .onChange(of: settings.clipboardShortcutModifiers) { _ in
+                        .onChange(of: settings.recordingShortcutModifiers) { _ in
                             settings.saveSettings()
-                            controller.updateGlobalShortcuts()
+                            controller.updateGlobalShortcut()
                         }
 
                         Button(action: {
-                            settings.resetClipboardShortcut()
-                            controller.updateGlobalShortcuts()
+                            settings.resetRecordingShortcut()
+                            controller.updateGlobalShortcut()
                         }) {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundColor(.secondary)
                                 .font(.system(size: 16))
                         }
                         .buttonStyle(PlainButtonStyle())
-                        .help("Reset clipboard shortcut")
-                    }
-                    .padding(.leading, 24)
-                }
-
-                // Tmux shortcut
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "terminal")
-                            .foregroundColor(.green)
-                        Text("Tmux (Claude)")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-
-                    Text("Send directly to Claude Code session in tmux")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 24)
-
-                    HStack {
-                        ShortcutRecorderView(
-                            keyCode: $settings.tmuxShortcutKeyCode,
-                            modifiers: $settings.tmuxShortcutModifiers
-                        )
-                        .onChange(of: settings.tmuxShortcutKeyCode) { _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcuts()
-                        }
-                        .onChange(of: settings.tmuxShortcutModifiers) { _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcuts()
-                        }
-
-                        Button(action: {
-                            settings.resetTmuxShortcut()
-                            controller.updateGlobalShortcuts()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 16))
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .help("Reset tmux shortcut")
+                        .help("Reset recording shortcut")
                     }
                     .padding(.leading, 24)
                 }

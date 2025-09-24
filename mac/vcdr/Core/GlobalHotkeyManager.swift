@@ -12,23 +12,20 @@ import ApplicationServices
 class GlobalHotkeyManager {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var clipboardCallback: (() -> Void)?
-    private var tmuxCallback: (() -> Void)?
+    private var recordingCallback: (() -> Void)?
     private let settings = AppSettings.shared
 
-    func registerHotkeys(clipboardCallback: @escaping () -> Void, tmuxCallback: @escaping () -> Void) -> Bool {
-        self.clipboardCallback = clipboardCallback
-        self.tmuxCallback = tmuxCallback
+    func registerHotkey(callback: @escaping () -> Void) -> Bool {
+        self.recordingCallback = callback
 
         // Log current shortcut configuration
-        print("🔧 Registering global hotkeys:")
-        print("   Clipboard - \(settings.clipboardShortcutDisplayString)")
-        print("   Tmux - \(settings.tmuxShortcutDisplayString)")
+        print("🔧 Registering global hotkey:")
+        print("   Recording - \(settings.recordingShortcutDisplayString)")
 
-        // Check if at least one shortcut is set
-        if !settings.isClipboardShortcutSet && !settings.isTmuxShortcutSet {
-            print("⚠️ No shortcuts are set - skipping hotkey registration")
-            return true // Don't fail if no shortcuts are set
+        // Check if shortcut is set
+        if !settings.isRecordingShortcutSet {
+            print("⚠️ No recording shortcut is set - skipping hotkey registration")
+            return true // Don't fail if no shortcut is set
         }
 
         // Check for accessibility permissions
@@ -71,17 +68,12 @@ class GlobalHotkeyManager {
         // Enable the event tap
         CGEvent.tapEnable(tap: eventTap, enable: true)
 
-        print("✅ Global hotkeys registered successfully!")
-        if settings.isClipboardShortcutSet {
-            print("   Listening for clipboard: \(settings.clipboardShortcutDisplayString)")
-        }
-        if settings.isTmuxShortcutSet {
-            print("   Listening for tmux: \(settings.tmuxShortcutDisplayString)")
-        }
+        print("✅ Global hotkey registered successfully!")
+        print("   Listening for: \(settings.recordingShortcutDisplayString)")
         return true
     }
 
-    func unregisterHotkeys() {
+    func unregisterHotkey() {
         if let eventTap = eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
 
@@ -91,9 +83,8 @@ class GlobalHotkeyManager {
             }
 
             self.eventTap = nil
-            self.clipboardCallback = nil
-            self.tmuxCallback = nil
-            print("Global hotkeys unregistered")
+            self.recordingCallback = nil
+            print("Global hotkey unregistered")
         }
     }
 
@@ -113,25 +104,13 @@ class GlobalHotkeyManager {
             let flags = event.flags
             let relevantFlags = flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
 
-            // Check clipboard shortcut (only if set)
-            if settings.isClipboardShortcutSet &&
-               keyCode == settings.clipboardShortcutKeyCode &&
-               relevantFlags == settings.clipboardShortcutModifiers {
-                print("Clipboard hotkey matched! Triggering clipboard callback...")
+            // Check recording shortcut (only if set)
+            if settings.isRecordingShortcutSet &&
+               keyCode == settings.recordingShortcutKeyCode &&
+               relevantFlags == settings.recordingShortcutModifiers {
+                print("Recording hotkey matched! Triggering recording callback...")
                 DispatchQueue.main.async {
-                    self.clipboardCallback?()
-                }
-                // Consume the event (don't pass it through)
-                return nil
-            }
-
-            // Check tmux shortcut (only if set)
-            if settings.isTmuxShortcutSet &&
-               keyCode == settings.tmuxShortcutKeyCode &&
-               relevantFlags == settings.tmuxShortcutModifiers {
-                print("Tmux hotkey matched! Triggering tmux callback...")
-                DispatchQueue.main.async {
-                    self.tmuxCallback?()
+                    self.recordingCallback?()
                 }
                 // Consume the event (don't pass it through)
                 return nil
@@ -147,24 +126,23 @@ class GlobalHotkeyManager {
         AXIsProcessTrustedWithOptions(options)
     }
 
-    func updateHotkeys() -> Bool {
-        if let clipboardCallback = self.clipboardCallback, let tmuxCallback = self.tmuxCallback {
-            unregisterHotkeys()
-            return registerHotkeys(clipboardCallback: clipboardCallback, tmuxCallback: tmuxCallback)
+    func updateHotkey() -> Bool {
+        if let recordingCallback = self.recordingCallback {
+            unregisterHotkey()
+            return registerHotkey(callback: recordingCallback)
         }
         return false
     }
 
     func isHotkeyRegistered() -> Bool {
-        // Consider registered if event tap is active and at least one shortcut is set
         let hasEventTap = eventTap != nil
-        let hasAtLeastOneShortcut = settings.isClipboardShortcutSet || settings.isTmuxShortcutSet
-        let hasCallbacks = clipboardCallback != nil && tmuxCallback != nil
+        let hasShortcut = settings.isRecordingShortcutSet
+        let hasCallback = recordingCallback != nil
 
-        return hasEventTap && hasAtLeastOneShortcut && hasCallbacks
+        return hasEventTap && hasShortcut && hasCallback
     }
 
     deinit {
-        unregisterHotkeys()
+        unregisterHotkey()
     }
 }

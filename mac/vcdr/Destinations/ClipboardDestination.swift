@@ -38,12 +38,16 @@ class ClipboardDestination: TextDestination {
         // Small delay to ensure clipboard is set
         try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
 
+        // Verify clipboard contents before pasting
+        let clipboardText = pasteboard.string(forType: .string) ?? ""
+        print("🔍 ClipboardDestination: Clipboard contents before paste: \"\(clipboardText)\"")
+
         print("📤 ClipboardDestination: Simulating Cmd+V paste...")
 
         // Simulate Cmd+V to paste
         await simulatePaste()
 
-        print("✅ ClipboardDestination: Text copied to clipboard and auto-pasted: \"\(text)\"")
+        print("✅ ClipboardDestination: Text copied to clipboard and auto-pasted: \"\(clipboardText)\"")
     }
 
     func isAvailable() async -> Bool {

@@ -20,9 +20,10 @@ class MenuBarController: ObservableObject {
     @Published var isInitializing = true
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
-    @Published var currentDestinationType: DestinationType = .clipboard
+    @Published var showRecordingOverlay = false
+    private var intendedDestination: DestinationType?
 
-    private let audioRecorder = AudioRecorder()
+    let audioRecorder = AudioRecorder()
     private let whisperService = WhisperKitService.shared
     private let clipboardDestination = ClipboardDestination()
     private let tmuxDestination = TmuxDestination()
@@ -37,52 +38,35 @@ class MenuBarController: ObservableObject {
             await initializeWhisper()
             await requestMicrophonePermissionOnStartup()
         }
-        setupGlobalHotkeys()
+        setupGlobalHotkey()
         startPermissionMonitoring()
     }
 
-    private func setupGlobalHotkeys() {
-        print("🎹 MenuBarController: Setting up global hotkeys...")
-        let success = hotkeyManager.registerHotkeys(
-            clipboardCallback: { [weak self] in
-                print("🔥 Clipboard hotkey triggered!")
-                self?.handleShortcutPressed(destinationType: .clipboard)
-            },
-            tmuxCallback: { [weak self] in
-                print("🔥 Tmux hotkey triggered!")
-                self?.handleShortcutPressed(destinationType: .tmux)
-            }
-        )
+    private func setupGlobalHotkey() {
+        print("🎹 MenuBarController: Setting up global hotkey...")
+        let success = hotkeyManager.registerHotkey { [weak self] in
+            print("🔥 Recording hotkey triggered!")
+            self?.toggleRecording()
+        }
         if success {
-            print("✅ MenuBarController: Global hotkeys setup completed successfully")
+            print("✅ MenuBarController: Global hotkey setup completed successfully")
         } else {
-            print("❌ MenuBarController: Failed to register global hotkeys - accessibility permissions may be needed")
+            print("❌ MenuBarController: Failed to register global hotkey - accessibility permissions may be needed")
         }
     }
 
-    var currentDestination: TextDestination {
-        switch currentDestinationType {
-        case .clipboard:
-            print("🎯 Current destination: Clipboard")
-            return clipboardDestination
-        case .tmux:
-            print("🎯 Current destination: Tmux")
-            return tmuxDestination
-        }
-    }
-
-    func updateGlobalShortcuts() {
-        let success = hotkeyManager.updateHotkeys()
+    func updateGlobalShortcut() {
+        let success = hotkeyManager.updateHotkey()
         if success {
-            print("Global shortcuts updated")
+            print("Global shortcut updated")
         } else {
-            print("Failed to update global shortcuts")
+            print("Failed to update global shortcut")
         }
     }
 
-    func retryGlobalShortcuts() {
-        print("🔄 Manually retrying global shortcuts registration...")
-        setupGlobalHotkeys()
+    func retryGlobalShortcut() {
+        print("🔄 Manually retrying global shortcut registration...")
+        setupGlobalHotkey()
     }
 
     private func startPermissionMonitoring() {
@@ -100,12 +84,12 @@ class MenuBarController: ObservableObject {
 
             // Check if permissions state changed from denied to granted
             if hasPermissions && !(self?.hotkeyManager.isHotkeyRegistered() ?? false) {
-                print("🎉 Accessibility permissions granted! Re-registering global hotkeys...")
-                self?.setupGlobalHotkeys()
+                print("🎉 Accessibility permissions granted! Re-registering global hotkey...")
+                self?.setupGlobalHotkey()
 
                 // Stop monitoring once successful
                 if self?.hotkeyManager.isHotkeyRegistered() ?? false {
-                    print("✋ Stopping permission monitoring - hotkeys successfully registered")
+                    print("✋ Stopping permission monitoring - hotkey successfully registered")
                     self?.permissionMonitorTimer?.invalidate()
                     self?.permissionMonitorTimer = nil
                 }
@@ -147,18 +131,55 @@ class MenuBarController: ObservableObject {
         }
     }
 
-    func handleShortcutPressed(destinationType: DestinationType) {
-        if isRecording {
-            // If recording, stop and set destination based on which shortcut was pressed
-            print("🎯 Stopping recording with destination: \(destinationType)")
-            currentDestinationType = destinationType
-            stopRecording()
-        } else {
-            // If not recording, start recording (destination will be set when stopping)
-            print("🎤 Starting recording (destination to be determined on stop)")
-            Task {
-                await startRecording()
+
+    func stopAndSendToClipboard() {
+        stopRecordingAndSendTo(.clipboard)
+    }
+
+    func stopAndSendToTmux() {
+        stopRecordingAndSendTo(.tmux)
+    }
+
+    private func stopRecordingAndSendTo(_ destination: DestinationType) {
+        guard isRecording else { return }
+        intendedDestination = destination
+
+        // Stop recording and let the transcription flow handle sending to destination
+        guard let audioURL = audioRecorder.stopRecording() else {
+            showRecordingOverlay = false
+            statusMessage = "Recording failed"
+            return
+        }
+
+        Task {
+            await MainActor.run {
+                isRecording = false
+                isProcessing = true
+                showRecordingOverlay = false
+                statusMessage = "Transcribing..."
             }
+
+            do {
+                let transcription = try await whisperService.transcribe(audioFileURL: audioURL)
+                await handleTranscriptionResult(transcription)
+
+                // Clean up the audio file
+                try? FileManager.default.removeItem(at: audioURL)
+            } catch {
+                await handleTranscriptionError(error)
+            }
+        }
+    }
+
+    func cancelRecording() {
+        guard isRecording else { return }
+        showRecordingOverlay = false
+        _ = audioRecorder.stopRecording()
+        isRecording = false
+        statusMessage = "Recording cancelled"
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            self.statusMessage = "Ready to record"
         }
     }
 
@@ -177,6 +198,9 @@ class MenuBarController: ObservableObject {
         if success {
             isRecording = true
             statusMessage = "Recording... Tap to stop"
+            await MainActor.run {
+                showRecordingOverlay = true
+            }
         } else {
             statusMessage = "Failed to start recording"
         }
@@ -207,36 +231,66 @@ class MenuBarController: ObservableObject {
 
     private func handleTranscriptionResult(_ transcription: String) async {
         lastTranscription = transcription
-        let destination = currentDestination
 
-        print("📝 Transcription completed: \"\(transcription)\"")
-        print("🎯 Selected destination: \(destination.name) (\(currentDestinationType))")
+        if let destination = intendedDestination {
+            // Direct send to intended destination
+            let destinationService: TextDestination
+            switch destination {
+            case .clipboard:
+                destinationService = clipboardDestination
+            case .tmux:
+                destinationService = tmuxDestination
+            }
+
+            await sendTranscriptionToDestination(transcription, destination: destinationService)
+            intendedDestination = nil
+        } else {
+            // Manual stop - just finish processing without showing picker
+            await MainActor.run {
+                statusMessage = "Transcription complete"
+                isProcessing = false
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                self.statusMessage = "Ready to record"
+            }
+        }
+    }
+
+    private func sendTranscriptionToDestination(_ transcription: String, destination: TextDestination) async {
         print("📤 Sending text to \(destination.name)...")
 
-        statusMessage = "Sending to \(destination.name)..."
+        await MainActor.run {
+            statusMessage = "Sending to \(destination.name)..."
+        }
 
         do {
             try await destination.send(text: transcription)
             print("✅ Successfully sent to \(destination.name)")
-            statusMessage = "Sent to \(destination.name)!"
+
+            await MainActor.run {
+                statusMessage = "Sent to \(destination.name)!"
+                isProcessing = false
+            }
 
             // Reset status after a delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 self.statusMessage = "Ready to record"
-                self.isProcessing = false
             }
         } catch {
             print("❌ Failed to send to \(destination.name): \(error)")
-            if let destError = error as? DestinationError {
-                print("   Destination error details: \(destError.localizedDescription)")
-                statusMessage = destError.localizedDescription
-            } else {
-                print("   Generic error: \(error.localizedDescription)")
-                statusMessage = "Failed to send to \(destination.name)"
+
+            await MainActor.run {
+                if let destError = error as? DestinationError {
+                    statusMessage = destError.localizedDescription
+                } else {
+                    statusMessage = "Failed to send to \(destination.name)"
+                }
+                isProcessing = false
             }
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 self.statusMessage = "Ready to record"
-                self.isProcessing = false
             }
         }
     }

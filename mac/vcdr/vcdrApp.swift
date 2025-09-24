@@ -13,7 +13,7 @@ struct vcdrApp: App {
 
     var body: some Scene {
         MenuBarExtra("VCDR", systemImage: "mic") {
-            MenuBarView()
+            AppCoordinatorView()
                 .environmentObject(menuBarController)
         }
         .menuBarExtraStyle(.menu)
@@ -26,5 +26,33 @@ struct vcdrApp: App {
         .windowResizability(.contentSize)
         .defaultSize(width: 400, height: 300)
         .windowLevel(.floating)
+
+
+        Window("Recording", id: "recording-overlay") {
+            RecordingOverlay(
+                onStopAndSendToClipboard: {
+                    menuBarController.stopAndSendToClipboard()
+                },
+                onStopAndSendToTmux: {
+                    menuBarController.stopAndSendToTmux()
+                },
+                onCancel: {
+                    menuBarController.cancelRecording()
+                },
+                audioRecorder: menuBarController.audioRecorder
+            )
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    if let window = NSApp.windows.first(where: { $0.title == "Recording" }) {
+                        window.makeKeyAndOrderFront(nil)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                }
+            }
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .windowLevel(.floating)
+        .defaultPosition(.center)
     }
 }

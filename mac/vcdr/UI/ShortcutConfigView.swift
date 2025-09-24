@@ -30,14 +30,9 @@ struct ShortcutConfigView: View {
                 .font(.headline)
                 .padding(.top)
 
-            VStack {
-                Text("Clipboard shortcut: \(settings.clipboardShortcutDisplayString)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Text("Tmux shortcut: \(settings.tmuxShortcutDisplayString)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
+            Text("Recording shortcut: \(settings.recordingShortcutDisplayString)")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Choose a preset:")
@@ -90,20 +85,17 @@ struct ShortcutConfigView: View {
     }
 
     private func isCurrentShortcut(_ preset: (name: String, keyCode: CGKeyCode, modifiers: CGEventFlags)) -> Bool {
-        return (settings.clipboardShortcutKeyCode == preset.keyCode &&
-                settings.clipboardShortcutModifiers == preset.modifiers) ||
-               (settings.tmuxShortcutKeyCode == preset.keyCode &&
-                settings.tmuxShortcutModifiers == preset.modifiers)
+        return settings.recordingShortcutKeyCode == preset.keyCode &&
+               settings.recordingShortcutModifiers == preset.modifiers
     }
 
     private func selectPreset(_ preset: (name: String, keyCode: CGKeyCode, modifiers: CGEventFlags)) {
-        // For now, apply to clipboard shortcut - this view might need reworking
-        settings.clipboardShortcutKeyCode = preset.keyCode
-        settings.clipboardShortcutModifiers = preset.modifiers
+        settings.recordingShortcutKeyCode = preset.keyCode
+        settings.recordingShortcutModifiers = preset.modifiers
     }
 
     private func applySettings() {
         settings.saveSettings()
-        controller.updateGlobalShortcuts()
+        controller.updateGlobalShortcut()
     }
 }

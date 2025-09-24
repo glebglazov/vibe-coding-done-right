@@ -12,13 +12,9 @@ import Combine
 class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
-    // Clipboard destination shortcut
-    @Published var clipboardShortcutKeyCode: CGKeyCode = 49 // Space bar
-    @Published var clipboardShortcutModifiers: CGEventFlags = [.maskCommand, .maskShift] // Cmd+Shift
-
-    // Tmux destination shortcut
-    @Published var tmuxShortcutKeyCode: CGKeyCode = 50 // Backtick (`)
-    @Published var tmuxShortcutModifiers: CGEventFlags = [.maskCommand, .maskShift] // Cmd+Shift
+    // Single recording shortcut
+    @Published var recordingShortcutKeyCode: CGKeyCode = 49 // Space bar
+    @Published var recordingShortcutModifiers: CGEventFlags = [.maskCommand, .maskShift] // Cmd+Shift
 
     @Published var whisperTask: String = "transcribe" // "transcribe" or "translate"
 
@@ -29,72 +25,41 @@ class AppSettings: ObservableObject {
     }
 
     func loadSettings() {
-        // Load clipboard shortcut
-        let clipboardKeyCode = userDefaults.integer(forKey: "clipboardShortcutKeyCode")
-        if clipboardKeyCode == 0 && userDefaults.object(forKey: "clipboardShortcutKeyCode") == nil {
+        // Load recording shortcut
+        let recordingKeyCode = userDefaults.integer(forKey: "recordingShortcutKeyCode")
+        if recordingKeyCode == 0 && userDefaults.object(forKey: "recordingShortcutKeyCode") == nil {
             // First time launch - set default
-            clipboardShortcutKeyCode = 49 // Default to Space
-            clipboardShortcutModifiers = [.maskCommand, .maskShift]
+            recordingShortcutKeyCode = 49 // Default to Space
+            recordingShortcutModifiers = [.maskCommand, .maskShift]
         } else {
-            clipboardShortcutKeyCode = CGKeyCode(clipboardKeyCode)
-            let clipboardModifierRawValue = userDefaults.integer(forKey: "clipboardShortcutModifiers")
-            clipboardShortcutModifiers = CGEventFlags(rawValue: UInt64(clipboardModifierRawValue))
-        }
-
-        // Load tmux shortcut
-        let tmuxKeyCode = userDefaults.integer(forKey: "tmuxShortcutKeyCode")
-        if tmuxKeyCode == 0 && userDefaults.object(forKey: "tmuxShortcutKeyCode") == nil {
-            // First time launch - set default
-            tmuxShortcutKeyCode = 50 // Default to Backtick
-            tmuxShortcutModifiers = [.maskCommand, .maskShift]
-        } else {
-            tmuxShortcutKeyCode = CGKeyCode(tmuxKeyCode)
-            let tmuxModifierRawValue = userDefaults.integer(forKey: "tmuxShortcutModifiers")
-            tmuxShortcutModifiers = CGEventFlags(rawValue: UInt64(tmuxModifierRawValue))
+            recordingShortcutKeyCode = CGKeyCode(recordingKeyCode)
+            let recordingModifierRawValue = userDefaults.integer(forKey: "recordingShortcutModifiers")
+            recordingShortcutModifiers = CGEventFlags(rawValue: UInt64(recordingModifierRawValue))
         }
 
         whisperTask = userDefaults.string(forKey: "whisperTask") ?? "transcribe"
     }
 
     func saveSettings() {
-        userDefaults.set(Int(clipboardShortcutKeyCode), forKey: "clipboardShortcutKeyCode")
-        userDefaults.set(Int(clipboardShortcutModifiers.rawValue), forKey: "clipboardShortcutModifiers")
-        userDefaults.set(Int(tmuxShortcutKeyCode), forKey: "tmuxShortcutKeyCode")
-        userDefaults.set(Int(tmuxShortcutModifiers.rawValue), forKey: "tmuxShortcutModifiers")
+        userDefaults.set(Int(recordingShortcutKeyCode), forKey: "recordingShortcutKeyCode")
+        userDefaults.set(Int(recordingShortcutModifiers.rawValue), forKey: "recordingShortcutModifiers")
         userDefaults.set(whisperTask, forKey: "whisperTask")
     }
 
-    var clipboardShortcutDisplayString: String {
-        if clipboardShortcutKeyCode == 0 {
+    var recordingShortcutDisplayString: String {
+        if recordingShortcutKeyCode == 0 {
             return "Not set"
         }
-        return shortcutDisplayString(keyCode: clipboardShortcutKeyCode, modifiers: clipboardShortcutModifiers)
+        return shortcutDisplayString(keyCode: recordingShortcutKeyCode, modifiers: recordingShortcutModifiers)
     }
 
-    var tmuxShortcutDisplayString: String {
-        if tmuxShortcutKeyCode == 0 {
-            return "Not set"
-        }
-        return shortcutDisplayString(keyCode: tmuxShortcutKeyCode, modifiers: tmuxShortcutModifiers)
+    var isRecordingShortcutSet: Bool {
+        return recordingShortcutKeyCode != 0
     }
 
-    var isClipboardShortcutSet: Bool {
-        return clipboardShortcutKeyCode != 0
-    }
-
-    var isTmuxShortcutSet: Bool {
-        return tmuxShortcutKeyCode != 0
-    }
-
-    func resetClipboardShortcut() {
-        clipboardShortcutKeyCode = 0
-        clipboardShortcutModifiers = []
-        saveSettings()
-    }
-
-    func resetTmuxShortcut() {
-        tmuxShortcutKeyCode = 0
-        tmuxShortcutModifiers = []
+    func resetRecordingShortcut() {
+        recordingShortcutKeyCode = 0
+        recordingShortcutModifiers = []
         saveSettings()
     }
 

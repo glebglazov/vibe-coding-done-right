@@ -14,7 +14,9 @@ class AudioRecorder: NSObject, ObservableObject {
 
     @Published var isRecording = false
     @Published var recordingTime: TimeInterval = 0
+    @Published var audioLevel: Float = 0.0
     private var recordingTimer: Timer?
+    private var levelTimer: Timer?
 
     override init() {
         super.init()
@@ -42,19 +44,12 @@ class AudioRecorder: NSObject, ObservableObject {
     }
 
     func startRecording() async -> Bool {
-        print("🎤 AudioRecorder: Starting recording process...")
-
         guard await requestMicrophonePermission() else {
-            print("❌ AudioRecorder: Microphone permission denied - check Privacy & Security settings")
             return false
         }
 
-        print("✅ AudioRecorder: Microphone permission granted")
-
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let audioFilename = documentsPath.appendingPathComponent("recording.wav")
-
-        print("📁 AudioRecorder: Recording to: \(audioFilename.path)")
 
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
@@ -65,40 +60,23 @@ class AudioRecorder: NSObject, ObservableObject {
             AVLinearPCMIsBigEndianKey: false
         ]
 
-        print("🎛️ AudioRecorder: Audio settings: \(settings)")
-
         do {
-            print("🔧 AudioRecorder: Creating AVAudioRecorder...")
             audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
             audioRecorder?.delegate = self
-            print("✅ AudioRecorder: AVAudioRecorder created successfully")
+            audioRecorder?.isMeteringEnabled = true
 
-            print("▶️ AudioRecorder: Starting recording...")
             if audioRecorder?.record() == true {
-                print("✅ AudioRecorder: Recording started successfully")
                 DispatchQueue.main.async {
                     self.isRecording = true
                     self.recordingTime = 0
                     self.startTimer()
+                    self.startLevelMonitoring()
                 }
                 return true
             } else {
-                print("❌ AudioRecorder: Failed to start recording - record() returned false")
-                print("   This could be due to:")
-                print("   - Audio session conflicts with other apps")
-                print("   - Hardware issues with microphone")
-                print("   - Invalid audio settings")
-                print("   - File system permissions for documents directory")
                 return false
             }
         } catch {
-            print("❌ AudioRecorder: Failed to create AVAudioRecorder: \(error)")
-            print("   Error details: \(error.localizedDescription)")
-            if let nsError = error as NSError? {
-                print("   Error domain: \(nsError.domain)")
-                print("   Error code: \(nsError.code)")
-                print("   User info: \(nsError.userInfo)")
-            }
             return false
         }
     }
@@ -106,9 +84,11 @@ class AudioRecorder: NSObject, ObservableObject {
     func stopRecording() -> URL? {
         audioRecorder?.stop()
         stopTimer()
+        stopLevelMonitoring()
 
         DispatchQueue.main.async {
             self.isRecording = false
+            self.audioLevel = 0.0
         }
 
         return audioRecorder?.url
@@ -125,6 +105,27 @@ class AudioRecorder: NSObject, ObservableObject {
     private func stopTimer() {
         recordingTimer?.invalidate()
         recordingTimer = nil
+    }
+
+    private func startLevelMonitoring() {
+        levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+            guard let recorder = self.audioRecorder, recorder.isRecording else { return }
+
+            recorder.updateMeters()
+            let averagePower = recorder.averagePower(forChannel: 0)
+
+            // Convert dB to 0-1 range (dB range is typically -160 to 0)
+            let normalizedLevel = max(0.0, (averagePower + 60) / 60)
+
+            DispatchQueue.main.async {
+                self.audioLevel = normalizedLevel
+            }
+        }
+    }
+
+    private func stopLevelMonitoring() {
+        levelTimer?.invalidate()
+        levelTimer = nil
     }
 }
 
