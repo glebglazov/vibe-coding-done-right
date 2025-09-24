@@ -29,7 +29,7 @@ struct vcdrApp: App {
 
 
         Window("Recording", id: "recording-overlay") {
-            Group {
+            ZStack {
                 if menuBarController.isRecording {
                     RecordingOverlay(
                         onStopAndSendToClipboard: {
@@ -43,8 +43,6 @@ struct vcdrApp: App {
                         },
                         audioRecorder: menuBarController.audioRecorder
                     )
-                    .focusable()
-                    .focusEffectDisabled()
                     .onAppear {
                         print("👁️ RecordingOverlay: Appeared - should be visible")
                     }
@@ -60,51 +58,24 @@ struct vcdrApp: App {
                         }
                 }
             }
-            .background(
-                // Persistent invisible buttons for keyboard shortcuts at window level
-                HStack {
-                    Button("", action: { menuBarController.stopAndSendToClipboard() })
-                        .keyboardShortcut("c", modifiers: .command)
-                        .opacity(0)
-
-                    Button("", action: { menuBarController.stopAndSendToTmux() })
-                        .keyboardShortcut("t", modifiers: .command)
-                        .opacity(0)
-
-                    Button("", action: { menuBarController.cancelRecording() })
-                        .keyboardShortcut(.escape)
-                        .opacity(0)
-                }
-            )
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    if let window = NSApp.windows.first(where: { $0.title == "Recording" }) {
-                        // Make window movable by dragging anywhere
-                        window.isMovableByWindowBackground = true
-
-                        // Make window truly borderless
-                        window.styleMask.insert(.borderless)
-                        window.styleMask.remove(.titled)
-                        window.titlebarAppearsTransparent = true
-                        window.titleVisibility = .hidden
-
-                        // Add rounded corners to both window and content
-                        window.backgroundColor = NSColor.clear
-                        window.isOpaque = false
-
-                        window.contentView?.wantsLayer = true
-                        window.contentView?.layer?.cornerRadius = 16
-                        window.contentView?.layer?.masksToBounds = true
-
-                        // Ensure window can always receive keyboard input
-                        window.acceptsMouseMovedEvents = true
-                        window.level = .floating
-
-                        // Focus the window and ensure it becomes key
-                        window.makeKeyAndOrderFront(nil)
-                        window.orderFrontRegardless()
-                        NSApp.activate(ignoringOtherApps: true)
-                    }
+            .focusable()
+            .focusEffectDisabled()
+            .task {
+                // Configure window styling once when created
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                if let window = NSApp.windows.first(where: { $0.title == "Recording" }) {
+                    window.isMovableByWindowBackground = true
+                    window.styleMask.insert(.borderless)
+                    window.styleMask.remove(.titled)
+                    window.titlebarAppearsTransparent = true
+                    window.titleVisibility = .hidden
+                    window.backgroundColor = NSColor.clear
+                    window.isOpaque = false
+                    window.contentView?.wantsLayer = true
+                    window.contentView?.layer?.cornerRadius = 16
+                    window.contentView?.layer?.masksToBounds = true
+                    window.acceptsMouseMovedEvents = true
+                    window.level = .floating
                 }
             }
         }
@@ -112,5 +83,23 @@ struct vcdrApp: App {
         .windowResizability(.contentSize)
         .windowLevel(.floating)
         .defaultPosition(.center)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Stop and Send to Clipboard") {
+                    menuBarController.stopAndSendToClipboard()
+                }
+                .keyboardShortcut("c", modifiers: .command)
+
+                Button("Stop and Send to Tmux") {
+                    menuBarController.stopAndSendToTmux()
+                }
+                .keyboardShortcut("t", modifiers: .command)
+
+                Button("Cancel Recording") {
+                    menuBarController.cancelRecording()
+                }
+                .keyboardShortcut(.escape)
+            }
+        }
     }
 }
