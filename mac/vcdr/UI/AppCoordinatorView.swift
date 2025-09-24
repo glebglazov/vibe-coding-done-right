@@ -19,12 +19,20 @@ struct AppCoordinatorView: View {
             .onAppear {
                 hasAppeared = true
             }
-            .onReceive(controller.$showRecordingOverlay) { isShowing in
-                // Only respond to changes after the view has appeared
-                guard hasAppeared else { return }
+            .onReceive(controller.$isRecording) { isRecording in
+                print("📡 AppCoordinatorView: Received isRecording change: \(isRecording)")
 
-                if isShowing {
+                // Only respond to changes after the view has appeared
+                guard hasAppeared else {
+                    print("⏸️ AppCoordinatorView: Ignoring change - view hasn't appeared yet")
+                    return
+                }
+
+                if isRecording {
+                    print("🪟 AppCoordinatorView: Opening recording overlay window")
                     openWindow(id: "recording-overlay")
+                } else {
+                    print("🫥 AppCoordinatorView: Recording stopped - overlay should hide")
                 }
                 // Don't dismiss - let window content handle visibility
             }

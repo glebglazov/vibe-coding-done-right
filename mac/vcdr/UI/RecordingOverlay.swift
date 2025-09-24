@@ -83,22 +83,6 @@ struct RecordingOverlay: View {
         .background(.regularMaterial)
         .cornerRadius(16)
         .shadow(radius: 20)
-        .background(
-            // Invisible buttons for keyboard shortcuts
-            HStack {
-                Button("", action: onStopAndSendToClipboard)
-                    .keyboardShortcut("c", modifiers: .command)
-                    .opacity(0)
-
-                Button("", action: onStopAndSendToTmux)
-                    .keyboardShortcut("t", modifiers: .command)
-                    .opacity(0)
-
-                Button("", action: onCancel)
-                    .keyboardShortcut(.escape)
-                    .opacity(0)
-            }
-        )
         .onAppear {
             startSoundwaveAnimation()
             NSApp.activate(ignoringOtherApps: true)

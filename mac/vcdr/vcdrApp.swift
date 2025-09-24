@@ -30,7 +30,7 @@ struct vcdrApp: App {
 
         Window("Recording", id: "recording-overlay") {
             Group {
-                if menuBarController.showRecordingOverlay {
+                if menuBarController.isRecording {
                     RecordingOverlay(
                         onStopAndSendToClipboard: {
                             menuBarController.stopAndSendToClipboard()
@@ -45,12 +45,37 @@ struct vcdrApp: App {
                     )
                     .focusable()
                     .focusEffectDisabled()
+                    .onAppear {
+                        print("👁️ RecordingOverlay: Appeared - should be visible")
+                    }
+                    .onDisappear {
+                        print("👻 RecordingOverlay: Disappeared - should be hidden")
+                    }
                 } else {
                     Color.clear
                         .frame(width: 1, height: 1)
                         .opacity(0)
+                        .onAppear {
+                            print("🫥 Transparent view: Appeared - overlay should be hidden")
+                        }
                 }
             }
+            .background(
+                // Persistent invisible buttons for keyboard shortcuts at window level
+                HStack {
+                    Button("", action: { menuBarController.stopAndSendToClipboard() })
+                        .keyboardShortcut("c", modifiers: .command)
+                        .opacity(0)
+
+                    Button("", action: { menuBarController.stopAndSendToTmux() })
+                        .keyboardShortcut("t", modifiers: .command)
+                        .opacity(0)
+
+                    Button("", action: { menuBarController.cancelRecording() })
+                        .keyboardShortcut(.escape)
+                        .opacity(0)
+                }
+            )
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     if let window = NSApp.windows.first(where: { $0.title == "Recording" }) {

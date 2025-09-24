@@ -20,7 +20,6 @@ class MenuBarController: ObservableObject {
     @Published var isInitializing = true
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
-    @Published var showRecordingOverlay = false
     private var intendedDestination: DestinationType?
 
     let audioRecorder = AudioRecorder()
@@ -99,13 +98,19 @@ class MenuBarController: ObservableObject {
 
     private func initializeWhisper() async {
         do {
-            statusMessage = "Downloading and initializing Whisper model..."
+            await MainActor.run {
+                statusMessage = "Downloading and initializing Whisper model..."
+            }
             try await whisperService.initialize()
-            isInitializing = false
-            statusMessage = "Ready to record"
+            await MainActor.run {
+                isInitializing = false
+                statusMessage = "Ready to record"
+            }
         } catch {
-            isInitializing = false
-            statusMessage = "Failed to initialize Whisper"
+            await MainActor.run {
+                isInitializing = false
+                statusMessage = "Failed to initialize Whisper"
+            }
             print("WhisperKit initialization error: \(error)")
         }
     }
@@ -150,8 +155,12 @@ class MenuBarController: ObservableObject {
 
         // Stop recording and let the transcription flow handle sending to destination
         guard let audioURL = audioRecorder.stopRecording() else {
-            showRecordingOverlay = false
-            statusMessage = "Recording failed"
+            Task {
+                await MainActor.run {
+                    isRecording = false
+                    statusMessage = "Recording failed"
+                }
+            }
             return
         }
 
@@ -159,7 +168,6 @@ class MenuBarController: ObservableObject {
             await MainActor.run {
                 isRecording = false
                 isProcessing = true
-                showRecordingOverlay = false
                 statusMessage = "Transcribing..."
             }
 
@@ -177,10 +185,14 @@ class MenuBarController: ObservableObject {
 
     func cancelRecording() {
         guard isRecording else { return }
-        showRecordingOverlay = false
         _ = audioRecorder.stopRecording()
-        isRecording = false
-        statusMessage = "Recording cancelled"
+
+        Task {
+            await MainActor.run {
+                isRecording = false
+                statusMessage = "Recording cancelled"
+            }
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             self.statusMessage = "Ready to record"
@@ -202,28 +214,34 @@ class MenuBarController: ObservableObject {
         previousActiveApp = NSWorkspace.shared.frontmostApplication
 
         let success = await audioRecorder.startRecording()
-        if success {
-            isRecording = true
-            statusMessage = "Recording... Tap to stop"
-            await MainActor.run {
-                showRecordingOverlay = true
+        await MainActor.run {
+            if success {
+                isRecording = true
+                statusMessage = "Recording... Tap to stop"
+                print("✅ MenuBarController: Recording started, overlay should be visible")
+            } else {
+                statusMessage = "Failed to start recording"
             }
-        } else {
-            statusMessage = "Failed to start recording"
         }
     }
 
     private func stopRecording() {
         guard let audioURL = audioRecorder.stopRecording() else {
-            statusMessage = "Recording failed"
+            Task {
+                await MainActor.run {
+                    statusMessage = "Recording failed"
+                }
+            }
             return
         }
 
-        isRecording = false
-        isProcessing = true
-        statusMessage = "Transcribing..."
-
         Task {
+            await MainActor.run {
+                isRecording = false
+                isProcessing = true
+                statusMessage = "Transcribing..."
+            }
+
             do {
                 let transcription = try await whisperService.transcribe(audioFileURL: audioURL)
                 await handleTranscriptionResult(transcription)
