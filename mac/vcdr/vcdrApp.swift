@@ -29,18 +29,28 @@ struct vcdrApp: App {
 
 
         Window("Recording", id: "recording-overlay") {
-            RecordingOverlay(
-                onStopAndSendToClipboard: {
-                    menuBarController.stopAndSendToClipboard()
-                },
-                onStopAndSendToTmux: {
-                    menuBarController.stopAndSendToTmux()
-                },
-                onCancel: {
-                    menuBarController.cancelRecording()
-                },
-                audioRecorder: menuBarController.audioRecorder
-            )
+            Group {
+                if menuBarController.showRecordingOverlay {
+                    RecordingOverlay(
+                        onStopAndSendToClipboard: {
+                            menuBarController.stopAndSendToClipboard()
+                        },
+                        onStopAndSendToTmux: {
+                            menuBarController.stopAndSendToTmux()
+                        },
+                        onCancel: {
+                            menuBarController.cancelRecording()
+                        },
+                        audioRecorder: menuBarController.audioRecorder
+                    )
+                    .focusable()
+                    .focusEffectDisabled()
+                } else {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .opacity(0)
+                }
+            }
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     if let window = NSApp.windows.first(where: { $0.title == "Recording" }) {
@@ -61,8 +71,13 @@ struct vcdrApp: App {
                         window.contentView?.layer?.cornerRadius = 16
                         window.contentView?.layer?.masksToBounds = true
 
-                        // Focus the window
+                        // Ensure window can always receive keyboard input
+                        window.acceptsMouseMovedEvents = true
+                        window.level = .floating
+
+                        // Focus the window and ensure it becomes key
                         window.makeKeyAndOrderFront(nil)
+                        window.orderFrontRegardless()
                         NSApp.activate(ignoringOtherApps: true)
                     }
                 }

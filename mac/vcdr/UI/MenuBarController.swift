@@ -140,9 +140,13 @@ class MenuBarController: ObservableObject {
         stopRecordingAndSendTo(.tmux)
     }
 
+    private var previousActiveApp: NSRunningApplication?
+
     private func stopRecordingAndSendTo(_ destination: DestinationType) {
         guard isRecording else { return }
         intendedDestination = destination
+
+        // previousActiveApp was already stored when recording started
 
         // Stop recording and let the transcription flow handle sending to destination
         guard let audioURL = audioRecorder.stopRecording() else {
@@ -194,6 +198,9 @@ class MenuBarController: ObservableObject {
     }
 
     private func startRecording() async {
+        // Store the currently active app BEFORE showing recording overlay
+        previousActiveApp = NSWorkspace.shared.frontmostApplication
+
         let success = await audioRecorder.startRecording()
         if success {
             isRecording = true
@@ -273,6 +280,9 @@ class MenuBarController: ObservableObject {
                 isProcessing = false
             }
 
+            // Restore focus to previously active app
+            await restorePreviousAppFocus()
+
             // Reset status after a delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 self.statusMessage = "Ready to record"
@@ -307,6 +317,21 @@ class MenuBarController: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             self.statusMessage = "Ready to record"
             self.isProcessing = false
+        }
+    }
+
+    private func restorePreviousAppFocus() async {
+        guard let previousApp = previousActiveApp else {
+            print("❌ No previous app to restore focus to")
+            return
+        }
+
+        print("🎯 Restoring focus to: \(previousApp.localizedName ?? "Unknown app")")
+
+        await MainActor.run {
+            let success = previousApp.activate(options: [.activateIgnoringOtherApps])
+            print(success ? "✅ Focus restored successfully" : "❌ Failed to restore focus")
+            previousActiveApp = nil // Clear after use
         }
     }
 }
