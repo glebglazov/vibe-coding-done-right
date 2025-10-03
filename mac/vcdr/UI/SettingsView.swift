@@ -56,11 +56,11 @@ struct SettingsView: View {
                             keyCode: $settings.recordingShortcutKeyCode,
                             modifiers: $settings.recordingShortcutModifiers
                         )
-                        .onChange(of: settings.recordingShortcutKeyCode) { _ in
+                        .onChange(of: settings.recordingShortcutKeyCode) { _, _ in
                             settings.saveSettings()
                             controller.updateGlobalShortcut()
                         }
-                        .onChange(of: settings.recordingShortcutModifiers) { _ in
+                        .onChange(of: settings.recordingShortcutModifiers) { _, _ in
                             settings.saveSettings()
                             controller.updateGlobalShortcut()
                         }

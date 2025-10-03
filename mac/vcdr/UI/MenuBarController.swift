@@ -36,9 +36,11 @@ class MenuBarController: ObservableObject {
         Task {
             await initializeWhisper()
             await requestMicrophonePermissionOnStartup()
+            await MainActor.run {
+                setupGlobalHotkey()
+                startPermissionMonitoring()
+            }
         }
-        setupGlobalHotkey()
-        startPermissionMonitoring()
     }
 
     private func setupGlobalHotkey() {
@@ -79,18 +81,24 @@ class MenuBarController: ObservableObject {
 
         // Check every 2 seconds for permission changes
         permissionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
-            let hasPermissions = AXIsProcessTrusted()
+            guard let self = self else { return }
 
-            // Check if permissions state changed from denied to granted
-            if hasPermissions && !(self?.hotkeyManager.isHotkeyRegistered() ?? false) {
-                print("🎉 Accessibility permissions granted! Re-registering global hotkey...")
-                self?.setupGlobalHotkey()
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
 
-                // Stop monitoring once successful
-                if self?.hotkeyManager.isHotkeyRegistered() ?? false {
-                    print("✋ Stopping permission monitoring - hotkey successfully registered")
-                    self?.permissionMonitorTimer?.invalidate()
-                    self?.permissionMonitorTimer = nil
+                let hasPermissions = AXIsProcessTrusted()
+
+                // Check if permissions state changed from denied to granted
+                if hasPermissions && !self.hotkeyManager.isHotkeyRegistered() {
+                    print("🎉 Accessibility permissions granted! Re-registering global hotkey...")
+                    self.setupGlobalHotkey()
+
+                    // Stop monitoring once successful
+                    if self.hotkeyManager.isHotkeyRegistered() {
+                        print("✋ Stopping permission monitoring - hotkey successfully registered")
+                        self.permissionMonitorTimer?.invalidate()
+                        self.permissionMonitorTimer = nil
+                    }
                 }
             }
         }
@@ -425,7 +433,7 @@ class MenuBarController: ObservableObject {
         print("🎯 Restoring focus to: \(previousApp.localizedName ?? "Unknown app")")
 
         await MainActor.run {
-            let success = previousApp.activate(options: [.activateIgnoringOtherApps])
+            let success = previousApp.activate()
             print(success ? "✅ Focus restored successfully" : "❌ Failed to restore focus")
             previousActiveApp = nil // Clear after use
         }

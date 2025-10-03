@@ -91,7 +91,7 @@ struct RecordingOverlay: View {
         .onDisappear {
             stopSoundwaveAnimation()
         }
-        .onChange(of: audioRecorder.audioLevel) { level in
+        .onChange(of: audioRecorder.audioLevel) { _, level in
             currentLevel = level
         }
     }
