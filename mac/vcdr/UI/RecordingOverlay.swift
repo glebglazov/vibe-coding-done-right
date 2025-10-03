@@ -72,7 +72,7 @@ struct RecordingOverlay: View {
                 HStack {
                     Image(systemName: "xmark")
                         .foregroundColor(.red)
-                    Text("Press Esc to cancel")
+                    Text("Press ⌘S to cancel")
                         .font(.caption)
                     Spacer()
                 }

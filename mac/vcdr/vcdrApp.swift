@@ -101,7 +101,7 @@ struct vcdrApp: App {
                 Button("Cancel Recording") {
                     menuBarController.cancelRecording()
                 }
-                .keyboardShortcut(.escape)
+                .keyboardShortcut("s", modifiers: .command)
             }
         }
     }
