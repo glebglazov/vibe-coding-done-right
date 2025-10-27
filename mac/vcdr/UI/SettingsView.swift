@@ -172,41 +172,14 @@ struct SettingsView: View {
                         Divider()
                             .padding(.vertical, 4)
 
-                        // Mode Selection
-                        Text("Active Mode")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .padding(.top, 4)
-
-                        VStack(spacing: 8) {
-                            ForEach(modeManager.availableModes, id: \.id) { mode in
-                                Button(action: {
-                                    modeManager.setMode(mode)
-                                    settings.activeModeName = mode.name
-                                    settings.saveSettings()
-                                }) {
-                                    HStack {
-                                        Image(systemName: modeManager.activeMode?.id == mode.id ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(modeManager.activeMode?.id == mode.id ? .purple : .gray)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(mode.name)
-                                                .font(.subheadline)
-                                            Text(mode.description)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        Spacer()
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .padding(.leading, 12)
-                            }
+                        HStack {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(.secondary)
+                            Text("Select mode in recording overlay")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
-                        .padding(.vertical, 4)
-
-                        // LLM Provider Info
-                        Divider()
-                            .padding(.vertical, 4)
+                        .padding(.leading, 12)
 
                         HStack {
                             Image(systemName: "cpu")
