@@ -21,6 +21,7 @@ class MenuBarController: ObservableObject {
     @Published var isInitializing = true
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
+    @Published var lastToolResponse = "" // Stores the processed text after mode processing
     private var intendedDestination: DestinationType?
     private var capturedSelectedText: String?
 
@@ -490,6 +491,11 @@ class MenuBarController: ObservableObject {
 
             // Show error for longer so user can read it
             try? await Task.sleep(nanoseconds: 5_000_000_000)
+        }
+
+        // Store the processed text for preview window
+        await MainActor.run {
+            lastToolResponse = processedText
         }
 
         if let destination = intendedDestination {

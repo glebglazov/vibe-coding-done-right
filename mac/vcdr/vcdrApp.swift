@@ -26,8 +26,16 @@ struct vcdrApp: App {
         .windowResizability(.contentSize)
         .defaultSize(width: 400, height: 300)
         .windowLevel(.floating)
-        
-        
+
+        Window("Tool Response Preview", id: "preview") {
+            PreviewWindow()
+                .environmentObject(menuBarController)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultSize(width: 600, height: 400)
+        .windowLevel(.floating)
+
         Window("Recording", id: "recording-overlay") {
             ZStack {
                 if menuBarController.isRecording {

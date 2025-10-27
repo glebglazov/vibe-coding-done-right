@@ -17,6 +17,7 @@ struct RecordingOverlay: View {
     let previousActiveApp: NSRunningApplication?
 
     @ObservedObject var modeManager = ModeManager.shared
+    @Environment(\.openWindow) private var openWindow
     @State private var audioLevels: [CGFloat] = Array(repeating: 0.1, count: 50)
     @State private var animationTimer: Timer?
     @State private var currentLevel: Float = 0.0
@@ -137,6 +138,14 @@ struct RecordingOverlay: View {
                 }
 
                 HStack {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .foregroundColor(.orange)
+                    Text("Press ⌘O to open preview window")
+                        .font(.caption)
+                    Spacer()
+                }
+
+                HStack {
                     Image(systemName: "xmark")
                         .foregroundColor(.red)
                     Text("Press ⌘S to cancel")
@@ -145,6 +154,17 @@ struct RecordingOverlay: View {
                 }
             }
             .padding(.horizontal)
+            // Hidden button for Command+O shortcut
+            Button(action: {
+                openWindow(id: "preview")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut("o", modifiers: .command)
+            .hidden()
         }
         .padding(24)
         .frame(width: 350)
