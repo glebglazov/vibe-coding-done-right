@@ -166,6 +166,22 @@ class MenuBarController: ObservableObject {
         stopRecordingAndSendTo(.tmux)
     }
 
+    func switchToDisabledMode() {
+        modeManager.setMode(named: "Disabled")
+        let settings = AppSettings.shared
+        settings.activeModeName = "Disabled"
+        settings.saveSettings()
+        print("🔄 Switched to Disabled mode")
+    }
+
+    func switchToAssistantMode() {
+        modeManager.setMode(named: "Assistant")
+        let settings = AppSettings.shared
+        settings.activeModeName = "Assistant"
+        settings.saveSettings()
+        print("🔄 Switched to Assistant mode")
+    }
+
     private(set) var previousActiveApp: NSRunningApplication?
 
     private func stopRecordingAndSendTo(_ destination: DestinationType) {

@@ -106,6 +106,20 @@ struct vcdrApp: App {
                 }
                 .keyboardShortcut("t", modifiers: .command)
 
+                Divider()
+
+                Button("Switch to Disabled mode") {
+                    menuBarController.switchToDisabledMode()
+                }
+                .keyboardShortcut("x", modifiers: [])
+
+                Button("Switch to Assistant mode") {
+                    menuBarController.switchToAssistantMode()
+                }
+                .keyboardShortcut("a", modifiers: [])
+
+                Divider()
+
                 Button("Cancel Recording") {
                     menuBarController.cancelRecording()
                 }

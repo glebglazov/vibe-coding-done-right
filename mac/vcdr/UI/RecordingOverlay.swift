@@ -34,7 +34,7 @@ struct RecordingOverlay: View {
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("Press ⌘V to paste, ⌘T for Tmux, or Esc to cancel")
+                Text("X: Disabled • A: Assistant")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
