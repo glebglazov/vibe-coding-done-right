@@ -9,7 +9,8 @@ import SwiftUI
 import Combine
 
 struct RecordingOverlay: View {
-    let onStopAndSendToClipboard: () -> Void
+    let onStopAndPaste: () -> Void
+    let onStopAndCopyToClipboard: () -> Void
     let onStopAndSendToTmux: () -> Void
     let onCancel: () -> Void
     @ObservedObject var audioRecorder: AudioRecorder
@@ -99,8 +100,16 @@ struct RecordingOverlay: View {
             // Keyboard shortcuts
             VStack(spacing: 8) {
                 HStack {
-                    Image(systemName: "doc.on.clipboard.fill")
+                    Image(systemName: "doc.on.clipboard")
                         .foregroundColor(.blue)
+                    Text("Press ⌘C to copy to clipboard")
+                        .font(.caption)
+                    Spacer()
+                }
+
+                HStack {
+                    Image(systemName: "doc.on.clipboard.fill")
+                        .foregroundColor(.purple)
                     Text("Press ⌘V to paste into current program")
                         .font(.caption)
                     Spacer()
@@ -172,7 +181,8 @@ struct RecordingOverlay: View {
 
 #Preview {
     RecordingOverlay(
-        onStopAndSendToClipboard: { },
+        onStopAndPaste: { },
+        onStopAndCopyToClipboard: { },
         onStopAndSendToTmux: { },
         onCancel: { },
         audioRecorder: AudioRecorder(),

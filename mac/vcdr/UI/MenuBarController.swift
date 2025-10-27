@@ -9,7 +9,8 @@ import SwiftUI
 import Combine
 
 enum DestinationType {
-    case clipboard
+    case paste
+    case copy
     case tmux
 }
 
@@ -26,7 +27,8 @@ class MenuBarController: ObservableObject {
     let audioRecorder = AudioRecorder()
     private let whisperService = WhisperKitService.shared
     private let modeManager = ModeManager.shared
-    private let clipboardDestination = ClipboardDestination()
+    private let pasteDestination = PasteDestination()
+    private let copyDestination = CopyDestination()
     private let tmuxDestination = TmuxDestination()
     private let hotkeyManager = GlobalHotkeyManager()
     private var permissionMonitorTimer: Timer?
@@ -152,8 +154,12 @@ class MenuBarController: ObservableObject {
     }
 
 
-    func stopAndSendToClipboard() {
-        stopRecordingAndSendTo(.clipboard)
+    func stopAndPaste() {
+        stopRecordingAndSendTo(.paste)
+    }
+
+    func stopAndCopyToClipboard() {
+        stopRecordingAndSendTo(.copy)
     }
 
     func stopAndSendToTmux() {
@@ -460,8 +466,10 @@ class MenuBarController: ObservableObject {
             // Direct send to intended destination
             let destinationService: TextDestination
             switch destination {
-            case .clipboard:
-                destinationService = clipboardDestination
+            case .paste:
+                destinationService = pasteDestination
+            case .copy:
+                destinationService = copyDestination
             case .tmux:
                 destinationService = tmuxDestination
             }

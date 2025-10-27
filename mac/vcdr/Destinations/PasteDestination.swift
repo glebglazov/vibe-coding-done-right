@@ -1,5 +1,5 @@
 //
-//  ClipboardDestination.swift
+//  PasteDestination.swift
 //  vcdr
 //
 //  Created by Gleb Glazov on 21/9/25.
@@ -9,51 +9,51 @@ import Foundation
 import AppKit
 import ApplicationServices
 
-class ClipboardDestination: TextDestination {
-    let name = "Clipboard (Auto-paste)"
+class PasteDestination: TextDestination {
+    let name = "Paste"
 
     func send(text: String, onPrepareSend: (() async -> Void)? = nil) async throws {
-        print("📋 ClipboardDestination: Copying text to clipboard...")
+        print("📋 PasteDestination: Copying text to clipboard...")
 
         // Copy text to clipboard
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        print("✅ ClipboardDestination: Text copied to clipboard")
+        print("✅ PasteDestination: Text copied to clipboard")
 
         // Check if we have accessibility permissions
         let hasPermissions = await hasAccessibilityPermissions()
-        print("🔐 ClipboardDestination: Accessibility permissions check: \(hasPermissions)")
+        print("🔐 PasteDestination: Accessibility permissions check: \(hasPermissions)")
 
         guard hasPermissions else {
-            print("❌ ClipboardDestination: No accessibility permissions for auto-paste")
+            print("❌ PasteDestination: No accessibility permissions for auto-paste")
             print("💡 Requesting accessibility permissions...")
             await requestAccessibilityPermissionsAsync()
             throw DestinationError.sendFailed("Accessibility permissions required for auto-paste. Please enable in System Settings > Privacy & Security > Accessibility")
         }
 
-        print("✅ ClipboardDestination: Accessibility permissions available")
+        print("✅ PasteDestination: Accessibility permissions available")
 
         // Small delay to ensure clipboard is set
         try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
 
         // Verify clipboard contents before pasting
         let clipboardText = pasteboard.string(forType: .string) ?? ""
-        print("🔍 ClipboardDestination: Clipboard contents before paste: \"\(clipboardText)\"")
+        print("🔍 PasteDestination: Clipboard contents before paste: \"\(clipboardText)\"")
 
         // Call preparation callback (e.g., focus restoration) before pasting
         if let onPrepareSend = onPrepareSend {
-            print("🎯 ClipboardDestination: Running preparation callback...")
+            print("🎯 PasteDestination: Running preparation callback...")
             await onPrepareSend()
         }
 
-        print("📤 ClipboardDestination: Simulating Cmd+V paste...")
+        print("📤 PasteDestination: Simulating Cmd+V paste...")
 
         // Simulate Cmd+V to paste
         await simulatePaste()
 
-        print("✅ ClipboardDestination: Text copied to clipboard and auto-pasted: \"\(clipboardText)\"")
+        print("✅ PasteDestination: Text copied to clipboard and auto-pasted: \"\(clipboardText)\"")
     }
 
     func isAvailable() async -> Bool {

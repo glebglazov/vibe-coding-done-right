@@ -32,8 +32,11 @@ struct vcdrApp: App {
             ZStack {
                 if menuBarController.isRecording {
                     RecordingOverlay(
-                        onStopAndSendToClipboard: {
-                            menuBarController.stopAndSendToClipboard()
+                        onStopAndPaste: {
+                            menuBarController.stopAndPaste()
+                        },
+                        onStopAndCopyToClipboard: {
+                            menuBarController.stopAndCopyToClipboard()
                         },
                         onStopAndSendToTmux: {
                             menuBarController.stopAndSendToTmux()
@@ -88,8 +91,13 @@ struct vcdrApp: App {
         .defaultPosition(.bottomTrailing)
         .commands {
             CommandGroup(replacing: .newItem) {
+                Button("Copy to clipboard") {
+                    menuBarController.stopAndCopyToClipboard()
+                }
+                .keyboardShortcut("c", modifiers: .command)
+
                 Button("Paste into current program") {
-                    menuBarController.stopAndSendToClipboard()
+                    menuBarController.stopAndPaste()
                 }
                 .keyboardShortcut("v", modifiers: .command)
 
