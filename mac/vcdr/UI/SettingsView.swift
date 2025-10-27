@@ -11,6 +11,7 @@ import Carbon
 struct SettingsView: View {
     @EnvironmentObject var controller: MenuBarController
     @ObservedObject var settings = AppSettings.shared
+    @ObservedObject var modeManager = ModeManager.shared
 
     var body: some View {
         VStack(spacing: 20) {
@@ -135,7 +136,90 @@ struct SettingsView: View {
                 }
             }
 
+            Divider()
 
+            // Mode System Section
+            VStack(alignment: .leading, spacing: 16) {
+                Text("AI Mode")
+                    .font(.headline)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    // Enable/Disable Toggle
+                    Toggle(isOn: Binding(
+                        get: { modeManager.isEnabled },
+                        set: { newValue in
+                            modeManager.isEnabled = newValue
+                            settings.isModeEnabled = newValue
+                            settings.saveSettings()
+                        }
+                    )) {
+                        HStack {
+                            Image(systemName: "sparkles")
+                                .foregroundColor(.purple)
+                            Text("Enable AI Processing")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                    }
+                    .toggleStyle(SwitchToggleStyle())
+
+                    Text("Process transcribed text with AI before sending to destination")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 28)
+
+                    if modeManager.isEnabled {
+                        Divider()
+                            .padding(.vertical, 4)
+
+                        // Mode Selection
+                        Text("Active Mode")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .padding(.top, 4)
+
+                        VStack(spacing: 8) {
+                            ForEach(modeManager.availableModes, id: \.id) { mode in
+                                Button(action: {
+                                    modeManager.setMode(mode)
+                                    settings.activeModeName = mode.name
+                                    settings.saveSettings()
+                                }) {
+                                    HStack {
+                                        Image(systemName: modeManager.activeMode?.id == mode.id ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(modeManager.activeMode?.id == mode.id ? .purple : .gray)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(mode.name)
+                                                .font(.subheadline)
+                                            Text(mode.description)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .padding(.leading, 12)
+                            }
+                        }
+                        .padding(.vertical, 4)
+
+                        // LLM Provider Info
+                        Divider()
+                            .padding(.vertical, 4)
+
+                        HStack {
+                            Image(systemName: "cpu")
+                                .foregroundColor(.secondary)
+                            Text("Provider: \(modeManager.activeLLMProvider.name)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.leading, 12)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
 
             Spacer()
         }

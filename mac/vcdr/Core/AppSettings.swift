@@ -18,6 +18,10 @@ class AppSettings: ObservableObject {
 
     @Published var whisperTask: String = "transcribe" // "transcribe" or "translate"
 
+    // Mode settings
+    @Published var isModeEnabled: Bool = true
+    @Published var activeModeName: String = "Pass Through" // Name of the active mode
+
     private let userDefaults = UserDefaults.standard
 
     private init() {
@@ -38,12 +42,25 @@ class AppSettings: ObservableObject {
         }
 
         whisperTask = userDefaults.string(forKey: "whisperTask") ?? "transcribe"
+
+        // Load mode settings
+        if userDefaults.object(forKey: "isModeEnabled") == nil {
+            // First time launch - default to enabled
+            isModeEnabled = true
+        } else {
+            isModeEnabled = userDefaults.bool(forKey: "isModeEnabled")
+        }
+        activeModeName = userDefaults.string(forKey: "activeModeName") ?? "Pass Through"
     }
 
     func saveSettings() {
         userDefaults.set(Int(recordingShortcutKeyCode), forKey: "recordingShortcutKeyCode")
         userDefaults.set(Int(recordingShortcutModifiers.rawValue), forKey: "recordingShortcutModifiers")
         userDefaults.set(whisperTask, forKey: "whisperTask")
+
+        // Save mode settings
+        userDefaults.set(isModeEnabled, forKey: "isModeEnabled")
+        userDefaults.set(activeModeName, forKey: "activeModeName")
     }
 
     var recordingShortcutDisplayString: String {

@@ -24,6 +24,7 @@ class MenuBarController: ObservableObject {
 
     let audioRecorder = AudioRecorder()
     private let whisperService = WhisperKitService.shared
+    private let modeManager = ModeManager.shared
     private let clipboardDestination = ClipboardDestination()
     private let tmuxDestination = TmuxDestination()
     private let hotkeyManager = GlobalHotkeyManager()
@@ -32,6 +33,11 @@ class MenuBarController: ObservableObject {
     init() {
         print("📱 MenuBarController: Initializing...")
         print("🎯 Available destinations: Clipboard, Tmux")
+
+        // Sync mode manager with app settings
+        let settings = AppSettings.shared
+        modeManager.isEnabled = settings.isModeEnabled
+        modeManager.setMode(named: settings.activeModeName)
 
         Task {
             await initializeWhisper()
@@ -342,6 +348,32 @@ class MenuBarController: ObservableObject {
     private func handleTranscriptionResult(_ transcription: String) async {
         lastTranscription = transcription
 
+        // Process through mode system
+        let processedText: String
+        do {
+            await MainActor.run {
+                if modeManager.isEnabled && !(modeManager.activeMode is PassThroughMode) {
+                    statusMessage = "Processing with \(modeManager.activeMode?.name ?? "mode")..."
+                }
+            }
+
+            processedText = try await modeManager.processText(transcription)
+        } catch {
+            print("❌ Mode processing error: \(error)")
+            await MainActor.run {
+                if let localizedError = error as? LocalizedError,
+                   let errorDescription = localizedError.errorDescription {
+                    statusMessage = errorDescription
+                } else {
+                    statusMessage = "Mode processing failed: \(error.localizedDescription)"
+                }
+            }
+            processedText = transcription // Fallback to raw transcription on error
+
+            // Show error for longer so user can read it
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+        }
+
         if let destination = intendedDestination {
             // Direct send to intended destination
             let destinationService: TextDestination
@@ -352,7 +384,7 @@ class MenuBarController: ObservableObject {
                 destinationService = tmuxDestination
             }
 
-            await sendTranscriptionToDestination(transcription, destination: destinationService)
+            await sendTranscriptionToDestination(processedText, destination: destinationService)
             intendedDestination = nil
         } else {
             // Manual stop - just finish processing without showing picker

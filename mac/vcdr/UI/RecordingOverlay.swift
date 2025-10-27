@@ -15,6 +15,7 @@ struct RecordingOverlay: View {
     @ObservedObject var audioRecorder: AudioRecorder
     let previousActiveApp: NSRunningApplication?
 
+    @ObservedObject var modeManager = ModeManager.shared
     @State private var audioLevels: [CGFloat] = Array(repeating: 0.1, count: 50)
     @State private var animationTimer: Timer?
     @State private var currentLevel: Float = 0.0
@@ -49,6 +50,50 @@ struct RecordingOverlay: View {
             }
             .frame(height: 80)
             .background(Color.gray.opacity(0.1))
+            .cornerRadius(8)
+
+            // Mode Selection
+            VStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "sparkles")
+                        .foregroundColor(.purple)
+                        .font(.caption)
+                    Text("AI Mode:")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    ForEach(modeManager.availableModes, id: \.id) { mode in
+                        Button(action: {
+                            modeManager.setMode(mode)
+                            let settings = AppSettings.shared
+                            settings.activeModeName = mode.name
+                            settings.saveSettings()
+                        }) {
+                            Text(mode.name)
+                                .font(.caption)
+                                .fontWeight(modeManager.activeMode?.id == mode.id ? .semibold : .regular)
+                                .foregroundColor(modeManager.activeMode?.id == mode.id ? .white : .primary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    modeManager.activeMode?.id == mode.id
+                                    ? Color.purple
+                                    : Color.gray.opacity(0.2)
+                                )
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    Spacer()
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color.purple.opacity(0.05))
             .cornerRadius(8)
 
             // Keyboard shortcuts
