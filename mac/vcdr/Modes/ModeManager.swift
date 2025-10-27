@@ -25,7 +25,8 @@ class ModeManager: ObservableObject {
     private init() {
         // Initialize built-in modes
         availableModes = [
-            PassThroughMode(),
+            DisabledMode(),
+            AssistantMode(),
             MarketingEmailMode()
         ]
 
@@ -37,7 +38,7 @@ class ModeManager: ObservableObject {
 
         // Set defaults
         activeLLMProvider = foundationModelsProvider
-        activeMode = availableModes.first // PassThroughMode by default
+        activeMode = availableModes.first // DisabledMode by default
     }
 
     /// Process text through the active mode
@@ -54,8 +55,8 @@ class ModeManager: ObservableObject {
             return text
         }
 
-        // If PassThroughMode, no processing needed
-        if mode is PassThroughMode {
+        // If DisabledMode, no processing needed
+        if mode is DisabledMode {
             return text
         }
 

@@ -20,7 +20,7 @@ class AppSettings: ObservableObject {
 
     // Mode settings
     @Published var isModeEnabled: Bool = true
-    @Published var activeModeName: String = "Pass Through" // Name of the active mode
+    @Published var activeModeName: String = "Disabled" // Name of the active mode
 
     private let userDefaults = UserDefaults.standard
 
@@ -50,7 +50,7 @@ class AppSettings: ObservableObject {
         } else {
             isModeEnabled = userDefaults.bool(forKey: "isModeEnabled")
         }
-        activeModeName = userDefaults.string(forKey: "activeModeName") ?? "Pass Through"
+        activeModeName = userDefaults.string(forKey: "activeModeName") ?? "Disabled"
     }
 
     func saveSettings() {

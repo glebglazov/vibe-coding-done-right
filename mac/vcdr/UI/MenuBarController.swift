@@ -21,6 +21,7 @@ class MenuBarController: ObservableObject {
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
     private var intendedDestination: DestinationType?
+    private var capturedSelectedText: String?
 
     let audioRecorder = AudioRecorder()
     private let whisperService = WhisperKitService.shared
@@ -201,6 +202,9 @@ class MenuBarController: ObservableObject {
         guard isRecording else { return }
         _ = audioRecorder.stopRecording()
 
+        // Clear captured text on cancel
+        capturedSelectedText = nil
+
         Task {
             await MainActor.run {
                 isRecording = false
@@ -227,6 +231,12 @@ class MenuBarController: ObservableObject {
         // Store the currently active app BEFORE showing recording overlay
         previousActiveApp = NSWorkspace.shared.frontmostApplication
 
+        // Capture any selected text before showing recording overlay
+        capturedSelectedText = await captureSelectedText()
+        if let captured = capturedSelectedText {
+            print("📋 Captured selected text: \(captured.prefix(50))...")
+        }
+
         let success = await audioRecorder.startRecording()
         await MainActor.run {
             if success {
@@ -240,6 +250,64 @@ class MenuBarController: ObservableObject {
                 statusMessage = "Failed to start recording"
             }
         }
+    }
+
+    private func captureSelectedText() async -> String? {
+        // Get current clipboard content to restore later
+        let pasteboard = NSPasteboard.general
+        let savedChangeCount = pasteboard.changeCount
+        let savedContent = pasteboard.string(forType: .string)
+
+        print("📋 === Clipboard State ===")
+        print("Current clipboard content: \(savedContent ?? "[empty]")")
+        print("Change count: \(savedChangeCount)")
+        print("=========================")
+
+        // Give a tiny delay to ensure app is focused
+        try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+
+        // Simulate Cmd+C to copy selected text
+        let source = CGEventSource(stateID: .hidSystemState)
+
+        // Key down for Cmd+C
+        let keyDownEvent = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true) // C key
+        keyDownEvent?.flags = .maskCommand
+        keyDownEvent?.post(tap: .cghidEventTap)
+
+        // Key up for Cmd+C
+        let keyUpEvent = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false)
+        keyUpEvent?.flags = .maskCommand
+        keyUpEvent?.post(tap: .cghidEventTap)
+
+        // Wait a bit for clipboard to update
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+        // Check if clipboard changed (meaning text was selected)
+        let newChangeCount = pasteboard.changeCount
+        let capturedText: String?
+
+        print("📋 === After Cmd+C ===")
+        print("New change count: \(newChangeCount)")
+
+        if newChangeCount != savedChangeCount {
+            // Clipboard changed, get the new content
+            capturedText = pasteboard.string(forType: .string)
+            print("✅ Captured selected text: \(capturedText ?? "[empty]")")
+
+            // Restore original clipboard content
+            pasteboard.clearContents()
+            if let savedContent = savedContent {
+                pasteboard.setString(savedContent, forType: .string)
+            }
+            print("♻️ Restored original clipboard")
+        } else {
+            // No text was selected
+            capturedText = nil
+            print("ℹ️ No text was selected (clipboard unchanged)")
+        }
+        print("=====================")
+
+        return capturedText
     }
 
     private func positionRecordingWindow() {
@@ -348,16 +416,30 @@ class MenuBarController: ObservableObject {
     private func handleTranscriptionResult(_ transcription: String) async {
         lastTranscription = transcription
 
+        // Prepend captured selected text if available
+        var textToProcess = transcription
+        if let captured = capturedSelectedText, !captured.isEmpty {
+            textToProcess = """
+            \(transcription)
+            
+            \(captured)
+            """
+            print("📝 Prepended selected text to transcription")
+        }
+
+        // Clear captured text after use
+        capturedSelectedText = nil
+
         // Process through mode system
         let processedText: String
         do {
             await MainActor.run {
-                if modeManager.isEnabled && !(modeManager.activeMode is PassThroughMode) {
+                if modeManager.isEnabled && !(modeManager.activeMode is DisabledMode) {
                     statusMessage = "Processing with \(modeManager.activeMode?.name ?? "mode")..."
                 }
             }
 
-            processedText = try await modeManager.processText(transcription)
+            processedText = try await modeManager.processText(textToProcess)
         } catch {
             print("❌ Mode processing error: \(error)")
             await MainActor.run {

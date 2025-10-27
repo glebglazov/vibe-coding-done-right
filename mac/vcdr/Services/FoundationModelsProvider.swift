@@ -21,9 +21,20 @@ class FoundationModelsProvider: LLMProvider {
     }
 
     func generate(prompt: String, systemPrompt: String?) async throws -> String {
+        // Log what we're sending to the AI
+        print("🤖 ==================== AI Request ====================")
+        if let systemPrompt = systemPrompt {
+            print("📋 System Prompt:")
+            print(systemPrompt)
+            print("---")
+        }
+        print("💬 User Prompt:")
+        print(prompt)
+        print("======================================================")
+
         // Check availability first and provide detailed error
         let availabilityStatus = model.availability
-
+        
         switch availabilityStatus {
         case .available:
             break
@@ -49,6 +60,12 @@ class FoundationModelsProvider: LLMProvider {
 
         // Generate response
         let response = try await session.respond(to: prompt)
+
+        // Log the response
+        print("🤖 ==================== AI Response ====================")
+        print(response.content)
+        print("=======================================================")
+
         return response.content
     }
 }

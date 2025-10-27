@@ -140,7 +140,7 @@ struct SettingsView: View {
 
             // Mode System Section
             VStack(alignment: .leading, spacing: 16) {
-                Text("AI Mode")
+                Text("AI Processing")
                     .font(.headline)
 
                 VStack(alignment: .leading, spacing: 8) {

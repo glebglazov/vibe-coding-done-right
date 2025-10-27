@@ -58,7 +58,7 @@ struct RecordingOverlay: View {
                     Image(systemName: "sparkles")
                         .foregroundColor(.purple)
                         .font(.caption)
-                    Text("AI Mode:")
+                    Text("AI Processing:")
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(.secondary)
