@@ -118,6 +118,11 @@ struct vcdrApp: App {
                 }
                 .keyboardShortcut("a", modifiers: [])
 
+                Button("Cycle Custom Modes") {
+                    menuBarController.cycleCustomModes()
+                }
+                .keyboardShortcut("c", modifiers: [])
+
                 Divider()
 
                 Button("Cancel Recording") {

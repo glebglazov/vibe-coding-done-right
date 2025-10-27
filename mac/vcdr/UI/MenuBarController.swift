@@ -182,6 +182,16 @@ class MenuBarController: ObservableObject {
         print("🔄 Switched to Assistant mode")
     }
 
+    func cycleCustomModes() {
+        modeManager.cycleCustomMode()
+        // Save the active mode name to settings
+        if let activeMode = modeManager.activeMode {
+            let settings = AppSettings.shared
+            settings.activeModeName = activeMode.name
+            settings.saveSettings()
+        }
+    }
+
     private(set) var previousActiveApp: NSRunningApplication?
 
     private func stopRecordingAndSendTo(_ destination: DestinationType) {

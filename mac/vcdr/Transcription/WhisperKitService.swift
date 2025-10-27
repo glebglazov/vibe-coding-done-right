@@ -67,12 +67,32 @@ class WhisperKitService {
             print("🌍 WhisperKit detected language: \(detectedLanguage)")
 
             let transcription = firstResult.segments.compactMap { $0.text }.joined(separator: " ")
+            print("🔍 Raw transcription before cleaning: \"\(transcription)\"")
 
-            // Clean up the text by removing SRLet's check.T formatting and extra whitespace
+            // Clean up the text by removing SRT formatting and extra whitespace
             let cleanText = cleanTranscriptionText(transcription)
 
+            // If cleaning resulted in empty text, return a placeholder or raw text
             if cleanText.isEmpty {
-                throw WhisperKitError.emptyResult
+                print("⚠️ Clean text is empty, checking segments...")
+
+                // If we have segments with text, return the raw transcription
+                if !transcription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    print("📝 Returning raw transcription: \(transcription)")
+                    return transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+
+                // If even raw transcription is empty but we got segments, log them
+                if !firstResult.segments.isEmpty {
+                    print("📊 Segments count: \(firstResult.segments.count)")
+                    for (index, segment) in firstResult.segments.prefix(3).enumerated() {
+                        print("  Segment \(index): \"\(segment.text)\" (prob: \(segment.avgLogprob))")
+                    }
+                }
+
+                // Return a helpful message instead of throwing
+                print("⚠️ Transcription appears to be silence or unclear audio")
+                return "[No speech detected]"
             }
 
             print("📝 WhisperKit transcription: \(cleanText)")

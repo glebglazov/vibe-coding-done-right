@@ -194,6 +194,11 @@ struct SettingsView: View {
                 .padding(.vertical, 8)
             }
 
+            Divider()
+
+            // Custom Modes Section
+            CustomModesSection()
+
             Spacer()
         }
         .padding()

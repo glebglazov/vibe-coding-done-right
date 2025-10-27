@@ -34,7 +34,7 @@ struct RecordingOverlay: View {
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("X: Disabled • A: Assistant")
+                Text("X: Disabled • A: Assistant • C: Custom")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -67,28 +67,41 @@ struct RecordingOverlay: View {
                 }
 
                 HStack(spacing: 8) {
-                    ForEach(modeManager.availableModes, id: \.id) { mode in
-                        Button(action: {
-                            modeManager.setMode(mode)
-                            let settings = AppSettings.shared
-                            settings.activeModeName = mode.name
-                            settings.saveSettings()
-                        }) {
-                            Text(mode.name)
-                                .font(.caption)
-                                .fontWeight(modeManager.activeMode?.id == mode.id ? .semibold : .regular)
-                                .foregroundColor(modeManager.activeMode?.id == mode.id ? .white : .primary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    modeManager.activeMode?.id == mode.id
-                                    ? Color.purple
-                                    : Color.gray.opacity(0.2)
-                                )
-                                .cornerRadius(8)
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                    // Disabled mode (X)
+                    if let disabledMode = modeManager.builtInModes.first(where: { $0.name == "Disabled" }) {
+                        ModeButton(
+                            mode: disabledMode,
+                            isActive: modeManager.activeMode?.id == disabledMode.id,
+                            onTap: {
+                                modeManager.setMode(disabledMode)
+                                let settings = AppSettings.shared
+                                settings.activeModeName = disabledMode.name
+                                settings.saveSettings()
+                            }
+                        )
                     }
+
+                    // Assistant mode (A)
+                    if let assistantMode = modeManager.builtInModes.first(where: { $0.name == "Assistant" }) {
+                        ModeButton(
+                            mode: assistantMode,
+                            isActive: modeManager.activeMode?.id == assistantMode.id,
+                            onTap: {
+                                modeManager.setMode(assistantMode)
+                                let settings = AppSettings.shared
+                                settings.activeModeName = assistantMode.name
+                                settings.saveSettings()
+                            }
+                        )
+                    }
+
+                    // Custom mode slot (C) - shows current custom mode or placeholder
+                    CustomModeSlot(
+                        modeManager: modeManager,
+                        currentCustomMode: modeManager.activeMode as? CustomMode ?? modeManager.lastUsedCustomMode ?? modeManager.customModes.first,
+                        isActive: modeManager.activeMode is CustomMode
+                    )
+
                     Spacer()
                 }
             }
@@ -177,6 +190,61 @@ struct RecordingOverlay: View {
         audioLevels.append(newLevel)
     }
 
+}
+
+// MARK: - Helper Views
+
+struct ModeButton: View {
+    let mode: any Mode
+    let isActive: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            Text(mode.name)
+                .font(.caption)
+                .fontWeight(isActive ? .semibold : .regular)
+                .foregroundColor(isActive ? .white : .primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    isActive ? Color.purple : Color.gray.opacity(0.2)
+                )
+                .cornerRadius(8)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct CustomModeSlot: View {
+    @ObservedObject var modeManager: ModeManager
+    let currentCustomMode: CustomMode?
+    let isActive: Bool
+
+    var body: some View {
+        Button(action: {
+            // Cycle through custom modes when clicked
+            modeManager.cycleCustomMode()
+            if let activeMode = modeManager.activeMode {
+                let settings = AppSettings.shared
+                settings.activeModeName = activeMode.name
+                settings.saveSettings()
+            }
+        }) {
+            Text(currentCustomMode?.name ?? "No Custom")
+                .font(.caption)
+                .fontWeight(isActive ? .semibold : .regular)
+                .foregroundColor(isActive ? .white : (currentCustomMode == nil ? .secondary : .primary))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    isActive ? Color.purple : Color.gray.opacity(0.2)
+                )
+                .cornerRadius(8)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(modeManager.customModes.isEmpty)
+    }
 }
 
 #Preview {
