@@ -427,7 +427,7 @@ class MenuBarController: ObservableObject {
         if let captured = capturedSelectedText, !captured.isEmpty {
             textToProcess = """
             \(transcription)
-            
+
             \(captured)
             """
             print("📝 Prepended selected text to transcription")
@@ -435,6 +435,10 @@ class MenuBarController: ObservableObject {
 
         // Clear captured text after use
         capturedSelectedText = nil
+
+        // Restore focus to previous app BEFORE LLM processing
+        // This allows user to continue working while AI processes
+        await restorePreviousAppFocus()
 
         // Process through mode system
         let processedText: String
@@ -497,9 +501,8 @@ class MenuBarController: ObservableObject {
         }
 
         do {
-            try await destination.send(text: transcription, onPrepareSend: {
-                await self.restorePreviousAppFocus()
-            })
+            // Focus already restored early, so no need for onPrepareSend callback
+            try await destination.send(text: transcription, onPrepareSend: nil)
             print("✅ Successfully sent to \(destination.name)")
 
             await MainActor.run {
