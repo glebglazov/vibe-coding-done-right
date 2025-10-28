@@ -12,19 +12,19 @@ import ApplicationServices
 class GlobalHotkeyManager {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var recordingCallback: (() -> Void)?
+    private var capturingCallback: (() -> Void)?
     private let settings = AppSettings.shared
 
     func registerHotkey(callback: @escaping () -> Void) -> Bool {
-        self.recordingCallback = callback
+        self.capturingCallback = callback
 
         // Log current shortcut configuration
         print("🔧 Registering global hotkey:")
-        print("   Recording - \(settings.recordingShortcutDisplayString)")
+        print("   Capturing - \(settings.capturingShortcutDisplayString)")
 
         // Check if shortcut is set
-        if !settings.isRecordingShortcutSet {
-            print("⚠️ No recording shortcut is set - skipping hotkey registration")
+        if !settings.isCapturingShortcutSet {
+            print("⚠️ No capturing shortcut is set - skipping hotkey registration")
             return true // Don't fail if no shortcut is set
         }
 
@@ -69,7 +69,7 @@ class GlobalHotkeyManager {
         CGEvent.tapEnable(tap: eventTap, enable: true)
 
         print("✅ Global hotkey registered successfully!")
-        print("   Listening for: \(settings.recordingShortcutDisplayString)")
+        print("   Listening for: \(settings.capturingShortcutDisplayString)")
         return true
     }
 
@@ -83,7 +83,7 @@ class GlobalHotkeyManager {
             }
 
             self.eventTap = nil
-            self.recordingCallback = nil
+            self.capturingCallback = nil
             print("Global hotkey unregistered")
         }
     }
@@ -104,13 +104,13 @@ class GlobalHotkeyManager {
             let flags = event.flags
             let relevantFlags = flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
 
-            // Check recording shortcut (only if set)
-            if settings.isRecordingShortcutSet &&
-               keyCode == settings.recordingShortcutKeyCode &&
-               relevantFlags == settings.recordingShortcutModifiers {
-                print("Recording hotkey matched! Triggering recording callback...")
+            // Check capturing shortcut (only if set)
+            if settings.isCapturingShortcutSet &&
+               keyCode == settings.capturingShortcutKeyCode &&
+               relevantFlags == settings.capturingShortcutModifiers {
+                print("Capturing hotkey matched! Triggering capturing callback...")
                 DispatchQueue.main.async {
-                    self.recordingCallback?()
+                    self.capturingCallback?()
                 }
                 // Consume the event (don't pass it through)
                 return nil
@@ -127,17 +127,17 @@ class GlobalHotkeyManager {
     }
 
     func updateHotkey() -> Bool {
-        if let recordingCallback = self.recordingCallback {
+        if let capturingCallback = self.capturingCallback {
             unregisterHotkey()
-            return registerHotkey(callback: recordingCallback)
+            return registerHotkey(callback: capturingCallback)
         }
         return false
     }
 
     func isHotkeyRegistered() -> Bool {
         let hasEventTap = eventTap != nil
-        let hasShortcut = settings.isRecordingShortcutSet
-        let hasCallback = recordingCallback != nil
+        let hasShortcut = settings.isCapturingShortcutSet
+        let hasCallback = capturingCallback != nil
 
         return hasEventTap && hasShortcut && hasCallback
     }

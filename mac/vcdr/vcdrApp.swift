@@ -28,10 +28,10 @@ struct vcdrApp: App {
         .windowLevel(.floating)
         
         
-        Window("Recording", id: "recording-overlay") {
+        Window("Capturing", id: "capturing-overlay") {
             ZStack {
-                if menuBarController.isRecording {
-                    RecordingOverlay(
+                if menuBarController.isOverlayVisible {
+                    CapturingOverlay(
                         onStopAndPaste: {
                             menuBarController.stopAndPaste()
                         },
@@ -44,14 +44,18 @@ struct vcdrApp: App {
                         onCancel: {
                             menuBarController.cancelRecording()
                         },
+                        onToggleRecording: {
+                            menuBarController.toggleRecordingInOverlay()
+                        },
                         audioRecorder: menuBarController.audioRecorder,
+                        controller: menuBarController,
                         previousActiveApp: menuBarController.previousActiveApp
                     )
                     .onAppear {
-                        print("👁️ RecordingOverlay: Appeared - should be visible")
+                        print("👁️ CapturingOverlay: Appeared - should be visible")
                     }
                     .onDisappear {
-                        print("👻 RecordingOverlay: Disappeared - should be hidden")
+                        print("👻 CapturingOverlay: Disappeared - should be hidden")
                     }
                 } else {
                     Color.clear
@@ -67,7 +71,7 @@ struct vcdrApp: App {
             .task {
                 // Configure window styling once when created
                 try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
-                if let window = NSApp.windows.first(where: { $0.title == "Recording" }) {
+                if let window = NSApp.windows.first(where: { $0.title == "Capturing" }) {
                     window.isMovableByWindowBackground = true
                     window.styleMask.insert(.borderless)
                     window.styleMask.remove(.titled)
@@ -91,6 +95,13 @@ struct vcdrApp: App {
         .defaultPosition(.bottomTrailing)
         .commands {
             CommandGroup(replacing: .newItem) {
+                Button("Toggle Recording") {
+                    menuBarController.toggleRecordingInOverlay()
+                }
+                .keyboardShortcut("r", modifiers: [])
+
+                Divider()
+
                 Button("Copy to clipboard") {
                     menuBarController.stopAndCopyToClipboard()
                 }

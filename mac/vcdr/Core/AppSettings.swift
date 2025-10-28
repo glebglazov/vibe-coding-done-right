@@ -12,9 +12,9 @@ import Combine
 class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
-    // Single recording shortcut
-    @Published var recordingShortcutKeyCode: CGKeyCode = 49 // Space bar
-    @Published var recordingShortcutModifiers: CGEventFlags = [.maskCommand, .maskShift] // Cmd+Shift
+    // Single capturing shortcut
+    @Published var capturingShortcutKeyCode: CGKeyCode = 49 // Space bar
+    @Published var capturingShortcutModifiers: CGEventFlags = [.maskCommand, .maskShift] // Cmd+Shift
 
     @Published var whisperTask: String = "transcribe" // "transcribe" or "translate"
 
@@ -29,16 +29,16 @@ class AppSettings: ObservableObject {
     }
 
     func loadSettings() {
-        // Load recording shortcut
-        let recordingKeyCode = userDefaults.integer(forKey: "recordingShortcutKeyCode")
-        if recordingKeyCode == 0 && userDefaults.object(forKey: "recordingShortcutKeyCode") == nil {
+        // Load capturing shortcut (keeping UserDefaults key as "recording" for backwards compatibility)
+        let capturingKeyCode = userDefaults.integer(forKey: "recordingShortcutKeyCode")
+        if capturingKeyCode == 0 && userDefaults.object(forKey: "recordingShortcutKeyCode") == nil {
             // First time launch - set default
-            recordingShortcutKeyCode = 49 // Default to Space
-            recordingShortcutModifiers = [.maskCommand, .maskShift]
+            capturingShortcutKeyCode = 49 // Default to Space
+            capturingShortcutModifiers = [.maskCommand, .maskShift]
         } else {
-            recordingShortcutKeyCode = CGKeyCode(recordingKeyCode)
-            let recordingModifierRawValue = userDefaults.integer(forKey: "recordingShortcutModifiers")
-            recordingShortcutModifiers = CGEventFlags(rawValue: UInt64(recordingModifierRawValue))
+            capturingShortcutKeyCode = CGKeyCode(capturingKeyCode)
+            let capturingModifierRawValue = userDefaults.integer(forKey: "recordingShortcutModifiers")
+            capturingShortcutModifiers = CGEventFlags(rawValue: UInt64(capturingModifierRawValue))
         }
 
         whisperTask = userDefaults.string(forKey: "whisperTask") ?? "transcribe"
@@ -54,8 +54,8 @@ class AppSettings: ObservableObject {
     }
 
     func saveSettings() {
-        userDefaults.set(Int(recordingShortcutKeyCode), forKey: "recordingShortcutKeyCode")
-        userDefaults.set(Int(recordingShortcutModifiers.rawValue), forKey: "recordingShortcutModifiers")
+        userDefaults.set(Int(capturingShortcutKeyCode), forKey: "recordingShortcutKeyCode")
+        userDefaults.set(Int(capturingShortcutModifiers.rawValue), forKey: "recordingShortcutModifiers")
         userDefaults.set(whisperTask, forKey: "whisperTask")
 
         // Save mode settings
@@ -63,20 +63,20 @@ class AppSettings: ObservableObject {
         userDefaults.set(activeModeName, forKey: "activeModeName")
     }
 
-    var recordingShortcutDisplayString: String {
-        if recordingShortcutKeyCode == 0 {
+    var capturingShortcutDisplayString: String {
+        if capturingShortcutKeyCode == 0 {
             return "Not set"
         }
-        return shortcutDisplayString(keyCode: recordingShortcutKeyCode, modifiers: recordingShortcutModifiers)
+        return shortcutDisplayString(keyCode: capturingShortcutKeyCode, modifiers: capturingShortcutModifiers)
     }
 
-    var isRecordingShortcutSet: Bool {
-        return recordingShortcutKeyCode != 0
+    var isCapturingShortcutSet: Bool {
+        return capturingShortcutKeyCode != 0
     }
 
-    func resetRecordingShortcut() {
-        recordingShortcutKeyCode = 0
-        recordingShortcutModifiers = []
+    func resetCapturingShortcut() {
+        capturingShortcutKeyCode = 0
+        capturingShortcutModifiers = []
         saveSettings()
     }
 

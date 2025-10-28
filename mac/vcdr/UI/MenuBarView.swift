@@ -13,9 +13,9 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Start/Stop Recording
+            // Start/Stop Capturing
             Button(action: {
-                controller.toggleRecording()
+                controller.toggleOverlay()
             }) {
                 Label(buttonText, systemImage: buttonIcon)
             }
@@ -35,7 +35,7 @@ struct MenuBarView: View {
             Divider()
 
             // Status (if not ready)
-            if !controller.statusMessage.isEmpty && controller.statusMessage != "Ready to record" {
+            if !controller.statusMessage.isEmpty && !["Ready to record", "Ready to capture"].contains(controller.statusMessage) {
                 Text(controller.statusMessage)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -90,8 +90,8 @@ struct MenuBarView: View {
     }
 
     private var buttonIcon: String {
-        if controller.isRecording {
-            return "stop.fill" // Show stop icon during recording
+        if controller.isOverlayVisible {
+            return "stop.fill" // Show stop icon when overlay is open
         } else {
             return "mic.fill"
         }
@@ -102,10 +102,10 @@ struct MenuBarView: View {
             return "Initializing..."
         } else if controller.isProcessing {
             return "Processing..."
-        } else if controller.isRecording {
-            return "Stop Recording"
+        } else if controller.isOverlayVisible {
+            return "Stop Capturing"
         } else {
-            return "Start Recording"
+            return "Start Capturing"
         }
     }
 

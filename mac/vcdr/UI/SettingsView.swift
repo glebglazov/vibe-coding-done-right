@@ -42,32 +42,32 @@ struct SettingsView: View {
                     HStack {
                         Image(systemName: "mic.fill")
                             .foregroundColor(.blue)
-                        Text("Start/Stop Recording")
+                        Text("Start/Stop Capturing")
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
 
-                    Text("Press once to start recording, press again to stop and choose destination")
+                    Text("Press once to start capturing, press again to close")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.leading, 24)
 
                     HStack {
                         ShortcutRecorderView(
-                            keyCode: $settings.recordingShortcutKeyCode,
-                            modifiers: $settings.recordingShortcutModifiers
+                            keyCode: $settings.capturingShortcutKeyCode,
+                            modifiers: $settings.capturingShortcutModifiers
                         )
-                        .onChange(of: settings.recordingShortcutKeyCode) { _, _ in
+                        .onChange(of: settings.capturingShortcutKeyCode) { _, _ in
                             settings.saveSettings()
                             controller.updateGlobalShortcut()
                         }
-                        .onChange(of: settings.recordingShortcutModifiers) { _, _ in
+                        .onChange(of: settings.capturingShortcutModifiers) { _, _ in
                             settings.saveSettings()
                             controller.updateGlobalShortcut()
                         }
 
                         Button(action: {
-                            settings.resetRecordingShortcut()
+                            settings.resetCapturingShortcut()
                             controller.updateGlobalShortcut()
                         }) {
                             Image(systemName: "xmark.circle.fill")
@@ -75,7 +75,7 @@ struct SettingsView: View {
                                 .font(.system(size: 16))
                         }
                         .buttonStyle(PlainButtonStyle())
-                        .help("Reset recording shortcut")
+                        .help("Reset capturing shortcut")
                     }
                     .padding(.leading, 24)
                 }
@@ -175,7 +175,7 @@ struct SettingsView: View {
                         HStack {
                             Image(systemName: "info.circle")
                                 .foregroundColor(.secondary)
-                            Text("Select mode in recording overlay")
+                            Text("Select mode in capturing overlay")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }

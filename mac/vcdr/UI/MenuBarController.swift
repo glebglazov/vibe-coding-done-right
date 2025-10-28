@@ -16,11 +16,13 @@ enum DestinationType {
 
 @MainActor
 class MenuBarController: ObservableObject {
+    @Published var isOverlayVisible = false
     @Published var isRecording = false
     @Published var isProcessing = false
     @Published var isInitializing = true
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
+    @Published var capturedText = ""
     private var intendedDestination: DestinationType?
     private var capturedSelectedText: String?
 
@@ -56,7 +58,7 @@ class MenuBarController: ObservableObject {
         print("🎹 MenuBarController: Setting up global hotkey...")
         let success = hotkeyManager.registerHotkey { [weak self] in
             print("🔥 Recording hotkey triggered!")
-            self?.toggleRecording()
+            self?.toggleOverlay()
         }
         if success {
             print("✅ MenuBarController: Global hotkey setup completed successfully")
@@ -121,7 +123,7 @@ class MenuBarController: ObservableObject {
             try await whisperService.initialize()
             await MainActor.run {
                 isInitializing = false
-                statusMessage = "Ready to record"
+                statusMessage = "Ready to capture"
             }
         } catch {
             await MainActor.run {
@@ -139,10 +141,10 @@ class MenuBarController: ObservableObject {
         if hasPermission {
             print("✅ MenuBarController: Microphone permission granted")
             await MainActor.run {
-                if statusMessage == "Ready to record" {
+                if statusMessage == "Ready to capture" || statusMessage == "Ready to record" {
                     // Keep the ready message if we're already ready
                 } else if !isInitializing {
-                    statusMessage = "Ready to record"
+                    statusMessage = "Ready to capture"
                 }
             }
         } else {
@@ -195,17 +197,176 @@ class MenuBarController: ObservableObject {
     private(set) var previousActiveApp: NSRunningApplication?
 
     private func stopRecordingAndSendTo(_ destination: DestinationType) {
-        guard isRecording else { return }
-        intendedDestination = destination
+        finishAndSendTo(destination)
+    }
 
-        // previousActiveApp was already stored when recording started
+    private func finishAndSendTo(_ destination: DestinationType) {
+        // If still recording, stop it first
+        if isRecording {
+            stopRecordingInOverlay()
+        }
 
-        // Stop recording and let the transcription flow handle sending to destination
+        // Wait a bit if processing
+        if isProcessing {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.finishAndSendTo(destination)
+            }
+            return
+        }
+
+        // Use captured text
+        var textToProcess = capturedText
+
+        // Prepend captured selected text if available
+        if let captured = capturedSelectedText, !captured.isEmpty {
+            textToProcess = """
+            \(textToProcess)
+
+            \(captured)
+            """
+            print("📝 Prepended selected text to captured text")
+        }
+
+        // If no captured text, just send captured selected text
+        if textToProcess.isEmpty, let captured = capturedSelectedText {
+            textToProcess = captured
+        }
+
+        Task {
+            await MainActor.run {
+                isProcessing = true
+                statusMessage = "Processing..."
+            }
+
+            // Restore focus to previous app BEFORE LLM processing
+            await restorePreviousAppFocus()
+
+            // Process through mode system
+            let processedText: String
+            do {
+                await MainActor.run {
+                    if modeManager.isEnabled && !(modeManager.activeMode is DisabledMode) {
+                        statusMessage = "Processing with \(modeManager.activeMode?.name ?? "mode")..."
+                    }
+                }
+
+                processedText = try await modeManager.processText(textToProcess)
+            } catch {
+                print("❌ Mode processing error: \(error)")
+                await MainActor.run {
+                    if let localizedError = error as? LocalizedError,
+                       let errorDescription = localizedError.errorDescription {
+                        statusMessage = errorDescription
+                    } else {
+                        statusMessage = "Mode processing failed: \(error.localizedDescription)"
+                    }
+                }
+                processedText = textToProcess // Fallback to raw text on error
+
+                // Show error for longer so user can read it
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+
+            // Send to destination
+            let destinationService: TextDestination
+            switch destination {
+            case .paste:
+                destinationService = pasteDestination
+            case .copy:
+                destinationService = copyDestination
+            case .tmux:
+                destinationService = tmuxDestination
+            }
+
+            await sendTranscriptionToDestination(processedText, destination: destinationService)
+
+            // Close overlay
+            await MainActor.run {
+                closeOverlay()
+            }
+        }
+    }
+
+    func cancelRecording() {
+        closeOverlay()
+    }
+
+    func toggleOverlay() {
+        if isOverlayVisible {
+            closeOverlay()
+        } else {
+            showOverlay()
+        }
+    }
+
+    private func showOverlay() {
+        // Store the currently active app BEFORE showing overlay
+        previousActiveApp = NSWorkspace.shared.frontmostApplication
+
+        Task {
+            // Capture any selected text before showing overlay
+            capturedSelectedText = await captureSelectedText()
+            if let captured = capturedSelectedText {
+                print("📋 Captured selected text: \(captured.prefix(50))...")
+            }
+
+            await MainActor.run {
+                isOverlayVisible = true
+                statusMessage = "Press R to start recording"
+                print("✅ MenuBarController: Overlay shown")
+
+                // Position overlay window
+                positionCapturingWindow()
+            }
+        }
+    }
+
+    private func closeOverlay() {
+        // Stop recording if active
+        if isRecording {
+            _ = audioRecorder.stopRecording()
+        }
+
+        // Clear captured text
+        capturedText = ""
+        capturedSelectedText = nil
+
+        isOverlayVisible = false
+        isRecording = false
+        isProcessing = false
+        statusMessage = "Ready to capture"
+        print("✅ MenuBarController: Overlay closed")
+    }
+
+    func toggleRecordingInOverlay() {
+        if isRecording {
+            stopRecordingInOverlay()
+        } else {
+            Task {
+                await startRecordingInOverlay()
+            }
+        }
+    }
+
+    private func startRecordingInOverlay() async {
+        let success = await audioRecorder.startRecording()
+        await MainActor.run {
+            if success {
+                isRecording = true
+                statusMessage = "Recording... Press R to stop"
+                print("✅ MenuBarController: Recording started in overlay")
+            } else {
+                statusMessage = "Failed to start recording"
+            }
+        }
+    }
+
+    private func stopRecordingInOverlay() {
         guard let audioURL = audioRecorder.stopRecording() else {
             Task {
                 await MainActor.run {
-                    isRecording = false
                     statusMessage = "Recording failed"
+                    isRecording = false
                 }
             }
             return
@@ -220,7 +381,7 @@ class MenuBarController: ObservableObject {
 
             do {
                 let transcription = try await whisperService.transcribe(audioFileURL: audioURL)
-                await handleTranscriptionResult(transcription)
+                await handleTranscriptionForAccumulation(transcription)
 
                 // Clean up the audio file
                 try? FileManager.default.removeItem(at: audioURL)
@@ -230,57 +391,31 @@ class MenuBarController: ObservableObject {
         }
     }
 
-    func cancelRecording() {
-        guard isRecording else { return }
-        _ = audioRecorder.stopRecording()
+    private func handleTranscriptionForAccumulation(_ transcription: String) async {
+        lastTranscription = transcription
 
-        // Clear captured text on cancel
-        capturedSelectedText = nil
-
-        Task {
+        // Skip empty or whitespace-only transcriptions
+        let trimmedTranscription = transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTranscription.isEmpty else {
+            print("⚠️ Skipping empty transcription")
             await MainActor.run {
-                isRecording = false
-                statusMessage = "Recording cancelled"
+                isProcessing = false
+                statusMessage = "No speech detected. Press R to try again"
             }
+            return
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            self.statusMessage = "Ready to record"
-        }
-    }
-
-    func toggleRecording() {
-        if isRecording {
-            stopRecording()
-        } else {
-            Task {
-                await startRecording()
-            }
-        }
-    }
-
-    private func startRecording() async {
-        // Store the currently active app BEFORE showing recording overlay
-        previousActiveApp = NSWorkspace.shared.frontmostApplication
-
-        // Capture any selected text before showing recording overlay
-        capturedSelectedText = await captureSelectedText()
-        if let captured = capturedSelectedText {
-            print("📋 Captured selected text: \(captured.prefix(50))...")
-        }
-
-        let success = await audioRecorder.startRecording()
+        // Append to captured text
         await MainActor.run {
-            if success {
-                isRecording = true
-                statusMessage = "Recording... Tap to stop"
-                print("✅ MenuBarController: Recording started, overlay should be visible")
-
-                // Position recording window immediately since we don't need window size for top-left positioning
-                positionRecordingWindow()
+            if !capturedText.isEmpty {
+                capturedText += " " + trimmedTranscription
             } else {
-                statusMessage = "Failed to start recording"
+                capturedText = trimmedTranscription
             }
+
+            isProcessing = false
+            statusMessage = "Press R to record more, or ⌘C/V/T to finish"
+            print("📝 Captured text: \(capturedText.prefix(100))...")
         }
     }
 
@@ -342,10 +477,10 @@ class MenuBarController: ObservableObject {
         return capturedText
     }
 
-    private func positionRecordingWindow() {
-        // Find the recording window
-        guard let recordingWindow = NSApp.windows.first(where: { $0.title == "Recording" }) else {
-            print("❌ MenuBarController: Could not find recording window to position")
+    private func positionCapturingWindow() {
+        // Find the capturing window
+        guard let capturingWindow = NSApp.windows.first(where: { $0.title == "Capturing" }) else {
+            print("❌ MenuBarController: Could not find capturing window to position")
             return
         }
 
@@ -400,123 +535,20 @@ class MenuBarController: ObservableObject {
 
         guard let screen = targetScreen else { return }
 
-        // Position the recording window in top-left corner of the target screen
+        // Position the capturing window in top-left corner of the target screen
         let screenFrame = screen.frame
         let margin: CGFloat = 20 // Distance from screen edge
 
-        print("📍 MenuBarController: Positioning recording window on screen: \(screen.localizedName)")
+        print("📍 MenuBarController: Positioning capturing window on screen: \(screen.localizedName)")
 
         // Position in top-left corner with margin
         let windowX = screenFrame.minX + margin
         let windowY = screenFrame.maxY - margin // maxY is top, position slightly below top edge
 
         // Set just the origin since we don't need to know window size for top-left positioning
-        recordingWindow.setFrameOrigin(NSPoint(x: windowX, y: windowY))
+        capturingWindow.setFrameOrigin(NSPoint(x: windowX, y: windowY))
 
-        print("✅ Window positioned at: \(recordingWindow.frame)")
-    }
-
-    private func stopRecording() {
-        guard let audioURL = audioRecorder.stopRecording() else {
-            Task {
-                await MainActor.run {
-                    statusMessage = "Recording failed"
-                }
-            }
-            return
-        }
-
-        Task {
-            await MainActor.run {
-                isRecording = false
-                isProcessing = true
-                statusMessage = "Transcribing..."
-            }
-
-            do {
-                let transcription = try await whisperService.transcribe(audioFileURL: audioURL)
-                await handleTranscriptionResult(transcription)
-
-                // Clean up the audio file
-                try? FileManager.default.removeItem(at: audioURL)
-            } catch {
-                await handleTranscriptionError(error)
-            }
-        }
-    }
-
-    private func handleTranscriptionResult(_ transcription: String) async {
-        lastTranscription = transcription
-
-        // Prepend captured selected text if available
-        var textToProcess = transcription
-        if let captured = capturedSelectedText, !captured.isEmpty {
-            textToProcess = """
-            \(transcription)
-
-            \(captured)
-            """
-            print("📝 Prepended selected text to transcription")
-        }
-
-        // Clear captured text after use
-        capturedSelectedText = nil
-
-        // Restore focus to previous app BEFORE LLM processing
-        // This allows user to continue working while AI processes
-        await restorePreviousAppFocus()
-
-        // Process through mode system
-        let processedText: String
-        do {
-            await MainActor.run {
-                if modeManager.isEnabled && !(modeManager.activeMode is DisabledMode) {
-                    statusMessage = "Processing with \(modeManager.activeMode?.name ?? "mode")..."
-                }
-            }
-
-            processedText = try await modeManager.processText(textToProcess)
-        } catch {
-            print("❌ Mode processing error: \(error)")
-            await MainActor.run {
-                if let localizedError = error as? LocalizedError,
-                   let errorDescription = localizedError.errorDescription {
-                    statusMessage = errorDescription
-                } else {
-                    statusMessage = "Mode processing failed: \(error.localizedDescription)"
-                }
-            }
-            processedText = transcription // Fallback to raw transcription on error
-
-            // Show error for longer so user can read it
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-        }
-
-        if let destination = intendedDestination {
-            // Direct send to intended destination
-            let destinationService: TextDestination
-            switch destination {
-            case .paste:
-                destinationService = pasteDestination
-            case .copy:
-                destinationService = copyDestination
-            case .tmux:
-                destinationService = tmuxDestination
-            }
-
-            await sendTranscriptionToDestination(processedText, destination: destinationService)
-            intendedDestination = nil
-        } else {
-            // Manual stop - just finish processing without showing picker
-            await MainActor.run {
-                statusMessage = "Transcription complete"
-                isProcessing = false
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                self.statusMessage = "Ready to record"
-            }
-        }
+        print("✅ Window positioned at: \(capturingWindow.frame)")
     }
 
     private func sendTranscriptionToDestination(_ transcription: String, destination: TextDestination) async {
@@ -540,7 +572,7 @@ class MenuBarController: ObservableObject {
 
             // Reset status after a delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                self.statusMessage = "Ready to record"
+                self.statusMessage = "Ready to capture"
             }
         } catch {
             print("❌ Failed to send to \(destination.name): \(error)")
