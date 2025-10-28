@@ -49,13 +49,25 @@ class ModeManager: ObservableObject {
 
         // Initialize LLM providers
         let foundationModelsProvider = FoundationModelsProvider()
+        let ollamaProvider = OllamaProvider(modelName: "llama3.2:3b")
         availableProviders = [
-            foundationModelsProvider
+            foundationModelsProvider,
+            ollamaProvider
         ]
 
-        // Set defaults
+        // Set defaults (prefer Ollama if available, fallback to Foundation Models)
         activeLLMProvider = foundationModelsProvider
         activeMode = availableModes.first // DisabledMode by default
+
+        // Check if Ollama is available and switch to it
+        Task {
+            if await ollamaProvider.isAvailable {
+                await MainActor.run {
+                    activeLLMProvider = ollamaProvider
+                    print("✅ Using Ollama as default LLM provider")
+                }
+            }
+        }
     }
 
     /// Process text through the active mode
