@@ -35,6 +35,20 @@ class MenuBarController: ObservableObject {
     private let hotkeyManager = GlobalHotkeyManager()
     private var permissionMonitorTimer: Timer?
 
+    // HUD notification manager (injected from app)
+    weak var hudManager: HUDNotificationManager?
+
+    // Dynamic menu bar icon based on state
+    var menuBarIcon: String {
+        if isRecording {
+            return "record.circle.fill"
+        } else if isProcessing {
+            return "waveform.circle"
+        } else {
+            return "mic.fill"
+        }
+    }
+
     init() {
         print("📱 MenuBarController: Initializing...")
         print("🎯 Available destinations: Clipboard, Tmux")
@@ -174,6 +188,9 @@ class MenuBarController: ObservableObject {
         settings.activeModeName = "Disabled"
         settings.saveSettings()
         print("🔄 Switched to Disabled mode")
+
+        // Show HUD notification
+        hudManager?.showModeChanged(to: "Disabled Mode", isRecording: isRecording)
     }
 
     func switchToAssistantMode() {
@@ -182,6 +199,9 @@ class MenuBarController: ObservableObject {
         settings.activeModeName = "Assistant"
         settings.saveSettings()
         print("🔄 Switched to Assistant mode")
+
+        // Show HUD notification
+        hudManager?.showModeChanged(to: "Assistant Mode", isRecording: isRecording)
     }
 
     func cycleCustomModes() {
@@ -191,6 +211,9 @@ class MenuBarController: ObservableObject {
             let settings = AppSettings.shared
             settings.activeModeName = activeMode.name
             settings.saveSettings()
+
+            // Show HUD notification
+            hudManager?.showModeChanged(to: activeMode.name, isRecording: isRecording)
         }
     }
 
@@ -315,6 +338,10 @@ class MenuBarController: ObservableObject {
                 statusMessage = "Press R to start recording"
                 print("✅ MenuBarController: Overlay shown")
 
+                // Show HUD notification for capturing session start
+                let modeName = modeManager.activeMode?.name ?? "Unknown"
+                hudManager?.showCapturingStarted(mode: modeName)
+
                 // Position overlay window
                 positionCapturingWindow()
             }
@@ -355,6 +382,10 @@ class MenuBarController: ObservableObject {
                 isRecording = true
                 statusMessage = "Recording... Press R to stop"
                 print("✅ MenuBarController: Recording started in overlay")
+
+                // Show HUD notification
+                let modeName = modeManager.activeMode?.name ?? "Unknown"
+                hudManager?.showRecordingStarted(mode: modeName)
             } else {
                 statusMessage = "Failed to start recording"
             }
@@ -377,6 +408,10 @@ class MenuBarController: ObservableObject {
                 isRecording = false
                 isProcessing = true
                 statusMessage = "Transcribing..."
+
+                // Show HUD notification
+                let modeName = modeManager.activeMode?.name ?? "Unknown"
+                hudManager?.showRecordingStopped(mode: modeName)
             }
 
             do {
