@@ -97,14 +97,26 @@ struct vcdrApp: App {
                 if menuBarController.isCapturing {
                     MinimizedOverlay(
                         isRecording: menuBarController.isRecording,
-                        audioRecorder: menuBarController.audioRecorder
+                        audioRecorder: menuBarController.audioRecorder,
+                        onToggleRecording: {
+                            menuBarController.toggleRecordingInOverlay()
+                        },
+                        onAddClipboard: {
+                            menuBarController.addClipboardToCapture()
+                        },
+                        onPreview: {
+                            menuBarController.openPreview()
+                        },
+                        onStopCapture: {
+                            menuBarController.toggleCapture()
+                        }
                     )
                 } else {
                     Color.clear
-                        .frame(width: 150, height: 32)
+                        .frame(width: 200, height: 32)
                 }
             }
-            .frame(width: 150, height: 32)
+            .frame(width: 200, height: 32)
             .ignoresSafeArea()
             .task {
                 // Configure minimized overlay window styling
@@ -116,13 +128,13 @@ struct vcdrApp: App {
                     window.level = .statusBar
                     window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
                     window.isMovable = false
-                    window.ignoresMouseEvents = true
+                    window.ignoresMouseEvents = false // Enable mouse events for buttons
 
                     // Position in bottom center with margin
                     if let screen = NSScreen.main {
                         let screenFrame = screen.frame
-                        let windowSize = CGSize(width: 150, height: 32)
-                        let margin: CGFloat = 20
+                        let windowSize = CGSize(width: 200, height: 32)
+                        let margin: CGFloat = 40
                         let origin = CGPoint(
                             x: screenFrame.midX - windowSize.width / 2,
                             y: screenFrame.minY + margin
@@ -134,7 +146,7 @@ struct vcdrApp: App {
         }
         .windowStyle(.plain)
         .windowResizability(.contentSize)
-        .defaultSize(width: 150, height: 32)
+        .defaultSize(width: 200, height: 32)
         
 
         Window("Results", id: "results-overlay") {

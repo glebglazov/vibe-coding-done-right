@@ -115,7 +115,7 @@ class MenuBarController: ObservableObject {
                 modifiers: settings.addClipboardShortcutModifiers,
                 callback: { [weak self] in
                     print("📋 Add clipboard hotkey triggered!")
-                    self?.handleAddClipboardShortcut()
+                    self?.copySelectionAndAddToCapture()
                 }
             ))
         }
@@ -173,7 +173,7 @@ class MenuBarController: ObservableObject {
                 keyCode: settings.addClipboardShortcutKeyCode,
                 modifiers: settings.addClipboardShortcutModifiers,
                 callback: { [weak self] in
-                    self?.handleAddClipboardShortcut()
+                    self?.copySelectionAndAddToCapture()
                 }
             ))
         }
@@ -471,6 +471,29 @@ class MenuBarController: ObservableObject {
         toggleRecordingInOverlay()
     }
 
+    func openPreview() {
+        handlePreviewShortcut()
+    }
+
+    func addClipboardToCapture() {
+        // Only work if capture is active
+        guard isCapturing else {
+            print("⚠️ Add clipboard ignored - no active capture")
+            return
+        }
+
+        // Get text from clipboard and add to capture (reads existing clipboard)
+        let pasteboard = NSPasteboard.general
+        if let clipboardText = pasteboard.string(forType: .string), !clipboardText.isEmpty {
+            let action = CaptureAction(source: .clipboard, text: clipboardText)
+            captureActions.append(action)
+            hudManager?.showClipboardAdded()
+            print("📋 Added clipboard text to capture: \(clipboardText.prefix(50))...")
+        } else {
+            print("⚠️ Clipboard is empty")
+        }
+    }
+
     private func handlePreviewShortcut() {
         // Only work if capture is active
         guard isCapturing else {
@@ -489,15 +512,15 @@ class MenuBarController: ObservableObject {
         }
     }
 
-    private func handleAddClipboardShortcut() {
+    private func copySelectionAndAddToCapture() {
         // Only work if capture is active
         guard isCapturing else {
-            print("⚠️ Add clipboard shortcut ignored - no active capture")
+            print("⚠️ Copy selection shortcut ignored - no active capture")
             return
         }
 
         Task {
-            // Trigger copy and capture the selected text
+            // Simulate Cmd+C to copy selected text, then add to capture
             if let copiedText = await copySelectedText(), !copiedText.isEmpty {
                 await MainActor.run {
                     // Create capture action for clipboard

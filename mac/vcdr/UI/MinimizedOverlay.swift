@@ -12,6 +12,10 @@ import SwiftUI
 struct MinimizedOverlay: View {
     let isRecording: Bool
     @ObservedObject var audioRecorder: AudioRecorder
+    let onToggleRecording: () -> Void
+    let onAddClipboard: () -> Void
+    let onPreview: () -> Void
+    let onStopCapture: () -> Void
 
     @State private var audioLevels: [CGFloat] = Array(repeating: 0.1, count: 15)
     @State private var animationTimer: Timer?
@@ -19,23 +23,62 @@ struct MinimizedOverlay: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Recording indicator
-            Circle()
-                .fill(isRecording ? Color.red : Color.gray.opacity(0.5))
-                .frame(width: 8, height: 8)
-                .overlay(
+            // Add from clipboard button
+            Button(action: onAddClipboard) {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.green)
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Add clipboard to capture")
+
+            // Toggle recording button
+            Button(action: onToggleRecording) {
+                ZStack {
                     Circle()
-                        .stroke(isRecording ? Color.red.opacity(0.3) : Color.clear, lineWidth: 4)
-                        .scaleEffect(isRecording ? 1.5 : 1.0)
-                        .opacity(isRecording ? 0 : 1)
-                        .animation(
-                            isRecording ? .easeInOut(duration: 1.0).repeatForever(autoreverses: false) : .default,
-                            value: isRecording
-                        )
-                )
+                        .fill(isRecording ? Color.red : Color.gray.opacity(0.5))
+                        .frame(width: 16, height: 16)
+
+                    if isRecording {
+                        // Stop icon (square)
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.white)
+                            .frame(width: 6, height: 6)
+                    } else {
+                        // Play icon (triangle)
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 6))
+                            .foregroundColor(.white)
+                            .offset(x: 0.5)
+                    }
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help(isRecording ? "Stop recording" : "Start recording")
 
             // Mini soundwave
             miniSoundwaveView
+
+            // Preview button
+            Button(action: onPreview) {
+                Image(systemName: "list.bullet.rectangle")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.purple)
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Preview capture")
+
+            // Stop capture button
+            Button(action: onStopCapture) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.gray)
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Stop capture")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -94,9 +137,22 @@ struct MinimizedOverlay: View {
 
 #Preview {
     VStack(spacing: 20) {
-        MinimizedOverlay(isRecording: true, audioRecorder: AudioRecorder())
-        MinimizedOverlay(isRecording: false, audioRecorder: AudioRecorder())
-        MinimizedOverlay(isRecording: true, audioRecorder: AudioRecorder())
+        MinimizedOverlay(
+            isRecording: true,
+            audioRecorder: AudioRecorder(),
+            onToggleRecording: {},
+            onAddClipboard: {},
+            onPreview: {},
+            onStopCapture: {}
+        )
+        MinimizedOverlay(
+            isRecording: false,
+            audioRecorder: AudioRecorder(),
+            onToggleRecording: {},
+            onAddClipboard: {},
+            onPreview: {},
+            onStopCapture: {}
+        )
     }
     .padding()
     .frame(maxWidth: .infinity, maxHeight: .infinity)

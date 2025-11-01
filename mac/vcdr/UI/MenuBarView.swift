@@ -36,13 +36,7 @@ struct MenuBarView: View {
                 .disabled(controller.isProcessing)
 
                 Button(action: {
-                    // Get text from clipboard and add to capture
-                    let pasteboard = NSPasteboard.general
-                    if let clipboardText = pasteboard.string(forType: .string), !clipboardText.isEmpty {
-                        let action = CaptureAction(source: .clipboard, text: clipboardText)
-                        controller.captureActions.append(action)
-                        controller.hudManager?.showClipboardAdded()
-                    }
+                    controller.addClipboardToCapture()
                 }) {
                     Label("Add Clipboard", systemImage: "doc.on.clipboard")
                 }
