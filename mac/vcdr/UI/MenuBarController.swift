@@ -31,7 +31,7 @@ class MenuBarController: ObservableObject {
     }
 
     let audioRecorder = AudioRecorder()
-    private let whisperService = WhisperKitService.shared
+    private let transcriptionProvider: any TranscriptionProvider = WhisperKitService.shared
     private let modeManager = ModeManager.shared
     private let pasteDestination = PasteDestination()
     private let copyDestination = CopyDestination()
@@ -239,9 +239,9 @@ class MenuBarController: ObservableObject {
     private func initializeWhisper() async {
         do {
             await MainActor.run {
-                statusMessage = "Downloading and initializing Whisper model..."
+                statusMessage = "Downloading and initializing transcription model..."
             }
-            try await whisperService.initialize()
+            try await transcriptionProvider.initialize()
             await MainActor.run {
                 isInitializing = false
                 statusMessage = "Ready to capture"
@@ -249,9 +249,9 @@ class MenuBarController: ObservableObject {
         } catch {
             await MainActor.run {
                 isInitializing = false
-                statusMessage = "Failed to initialize Whisper"
+                statusMessage = "Failed to initialize transcription"
             }
-            print("WhisperKit initialization error: \(error)")
+            print("Transcription provider initialization error: \(error)")
         }
     }
 
@@ -653,7 +653,7 @@ class MenuBarController: ObservableObject {
             }
 
             do {
-                let transcription = try await whisperService.transcribe(audioFileURL: audioURL)
+                let transcription = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
                 await handleTranscriptionForAccumulation(transcription, audioURL: audioURL)
             } catch {
                 await handleTranscriptionError(error)
@@ -869,8 +869,8 @@ class MenuBarController: ObservableObject {
     private func handleTranscriptionError(_ error: Error) async {
         print("Transcription error: \(error)")
 
-        if let whisperKitError = error as? WhisperKitError {
-            statusMessage = whisperKitError.localizedDescription
+        if let transcriptionError = error as? TranscriptionError {
+            statusMessage = transcriptionError.localizedDescription ?? "Transcription failed"
         } else {
             statusMessage = "Transcription failed"
         }

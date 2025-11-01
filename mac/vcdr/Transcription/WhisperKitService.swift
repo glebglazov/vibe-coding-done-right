@@ -8,8 +8,19 @@
 import Foundation
 import WhisperKit
 
-class WhisperKitService {
+class WhisperKitService: TranscriptionProvider {
     static let shared = WhisperKitService()
+
+    // TranscriptionProvider conformance
+    let id = UUID()
+    let name = "WhisperKit"
+
+    var isAvailable: Bool {
+        get async {
+            // WhisperKit is always available on macOS with CoreML
+            return true
+        }
+    }
 
     private var whisperKit: WhisperKit?
     private var isInitialized = false
@@ -26,13 +37,13 @@ class WhisperKitService {
             print("WhisperKit initialized successfully with small model")
         } catch {
             print("Failed to initialize WhisperKit: \(error)")
-            throw WhisperKitError.initializationFailed(error.localizedDescription)
+            throw TranscriptionError.initializationFailed(error.localizedDescription)
         }
     }
 
     func transcribe(audioFileURL: URL) async throws -> String {
         guard isInitialized, let whisperKit = whisperKit else {
-            throw WhisperKitError.notInitialized
+            throw TranscriptionError.transcriptionFailed("WhisperKit not initialized")
         }
 
         do {
@@ -56,7 +67,7 @@ class WhisperKitService {
 
             // Extract text from all segments
             guard !transcriptionResults.isEmpty else {
-                throw WhisperKitError.emptyResult
+                throw TranscriptionError.transcriptionFailed("Empty transcription result")
             }
 
             // Get the first result and extract clean text from segments
@@ -100,7 +111,7 @@ class WhisperKitService {
 
         } catch {
             print("WhisperKit transcription error: \(error)")
-            throw WhisperKitError.transcriptionFailed(error.localizedDescription)
+            throw TranscriptionError.transcriptionFailed(error.localizedDescription)
         }
     }
 
@@ -124,25 +135,5 @@ class WhisperKitService {
         cleanText = cleanText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return cleanText
-    }
-}
-
-enum WhisperKitError: Error {
-    case notInitialized
-    case initializationFailed(String)
-    case emptyResult
-    case transcriptionFailed(String)
-
-    var localizedDescription: String {
-        switch self {
-        case .notInitialized:
-            return "WhisperKit not initialized. Call initialize() first."
-        case .initializationFailed(let error):
-            return "Failed to initialize WhisperKit: \(error)"
-        case .emptyResult:
-            return "Transcription returned empty result"
-        case .transcriptionFailed(let error):
-            return "Transcription failed: \(error)"
-        }
     }
 }
