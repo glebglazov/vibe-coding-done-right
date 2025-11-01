@@ -1,469 +1,233 @@
-# AGENTS.md - VCDR Architecture
+# AGENTS.md
 
-This document describes the architecture and key components (agents) of the VCDR (Voice Coding Done Right) macOS application.
+This file provides guidance to AI coding agents (Claude Code, Cursor, GitHub Copilot, etc.) when working with code in this repository.
 
-## Overview
+## Project Overview
 
-VCDR is a modular voice coding assistant that follows a pipeline architecture:
+VCDR (Voice Coding Done Right) is a macOS menu bar application that records voice, transcribes it using WhisperKit (Apple's native Swift implementation of Whisper), processes it through configurable modes with LLMs, and sends the result to various destinations (tmux/Claude Code, clipboard with auto-paste).
 
-```
-Voice Input → Transcription → Mode Processing → Destination Output
-```
+## Build and Development Commands
 
-The system is designed with extensibility in mind, using protocol-based abstractions for modes, LLM providers, and destinations.
+### Building the Application
 
-## Core Architecture
+```bash
+# Open in Xcode
+open vcdr.xcodeproj
 
-### Main Orchestrator
+# Build from command line
+xcodebuild -project vcdr.xcodeproj -scheme vcdr build
 
-**MenuBarController** (`vcdr/UI/MenuBarController.swift`)
-- Central coordinator managing the entire voice-to-text-to-output pipeline
-- Handles recording lifecycle, transcription flow, and destination routing
-- Manages global hotkey integration and app focus restoration
-- Key responsibilities:
-  - Recording state management (start/stop/cancel)
-  - Whisper service initialization and transcription
-  - Selected text capture (for context-aware AI assistance)
-  - Mode processing coordination
-  - Destination selection and routing
-  - UI state updates
-
-### Audio & Transcription Layer
-
-**AudioRecorder** (`vcdr/Audio/AudioRecorder.swift`)
-- Handles microphone recording using AVFoundation
-- Manages audio permissions
-- Records to temporary audio files
-
-**WhisperKitService** (`vcdr/Transcription/WhisperKitService.swift`)
-- Native Swift implementation using Apple's WhisperKit
-- Converts audio files to text transcriptions
-- Handles model downloading and initialization
-- Singleton service for app-wide transcription
-
-### Input Management
-
-**GlobalHotkeyManager** (`vcdr/Core/GlobalHotkeyManager.swift`)
-- Registers system-wide keyboard shortcuts (default: Cmd+Shift+Space)
-- Monitors accessibility permissions and auto-retries registration
-- Allows hotkey customization through app settings
-
-**AppSettings** (`vcdr/Core/AppSettings.swift`)
-- Persists user preferences (active mode, hotkey configuration, etc.)
-- Syncs with ModeManager and other components
-
-## Mode System (Text Processing Agents)
-
-The mode system provides an extensible framework for AI-powered text transformation.
-
-### Mode Protocol
-
-**Location:** `vcdr/Modes/Mode.swift`
-
-```swift
-protocol Mode: Identifiable {
-    var id: UUID { get }
-    var name: String { get }
-    var description: String { get }
-    func process(text: String, using provider: any LLMProvider) async throws -> String
-}
+# Run in Xcode
+# Press Cmd+R in Xcode
 ```
 
-### ModeManager
+### Testing
 
-**Location:** `vcdr/Modes/ModeManager.swift`
+```bash
+# Run tests from command line
+xcodebuild test -project vcdr.xcodeproj -scheme vcdr
 
-Singleton manager responsible for:
-- Mode registration and lifecycle
-- Active mode selection
-- LLM provider management
-- Text processing coordination
-
-**Key Features:**
-- Enable/disable mode processing globally
-- Select active mode at runtime
-- Switch between LLM providers
-- Graceful fallback to raw transcription on errors
-
-### Built-in Modes
-
-#### 1. DisabledMode (`vcdr/Modes/DisabledMode.swift`)
-- **Purpose:** Pass-through mode with no text transformation
-- **Use Case:** When you want raw Whisper transcription without AI processing
-- **Processing:** Returns input text unchanged
-
-#### 2. AssistantMode (`vcdr/Modes/AssistantMode.swift`)
-- **Purpose:** General-purpose AI assistant
-- **Use Case:** Question answering, text transformation, coding assistance
-- **Features:**
-  - Supports selected text as context (captured before recording)
-  - Concise, direct responses
-  - Follows natural conversation flow
-
-**System Prompt Strategy:**
-```
-You are a helpful AI assistant. The user will provide you with text and possibly some context.
-Respond naturally and helpfully to their requests or questions.
-
-If the user provides "Selected text:" followed by their response, use the selected text as
-context for your answer.
-
-Be concise, clear, and helpful. Provide direct answers without unnecessary preamble.
+# Or use Cmd+U in Xcode
 ```
 
-#### 3. MarketingEmailMode (`vcdr/Modes/MarketingEmailMode.swift`)
-- **Purpose:** Transform dictated speech into professional marketing emails
-- **Use Case:** Rapid email composition using voice input
-- **Features:**
-  - Professional structure (greeting, body, closing)
-  - Persuasive yet friendly tone
-  - Grammar correction from speech-to-text artifacts
-  - Proper formatting and paragraph breaks
+## Architecture
 
-**System Prompt Strategy:**
-```
-You are a professional marketing email writer. Your task is to take the user's spoken input
-and transform it into a well-structured, professional marketing email.
+### Core Flow: Capture → Record → Transcribe → Process → Send
 
-Guidelines:
-- Keep the core message and intent from the user's input
-- Add appropriate professional structure (greeting, body, closing)
-- Use persuasive but friendly language
-- Maintain a professional yet warm tone
-- Ensure proper formatting and paragraph breaks
-- Keep it concise and focused
-- Fix any grammatical issues from speech-to-text
+1. **Capture Session**: User triggers global hotkey (default: Cmd+Option+/) to start a capture session
+2. **Multi-Source Input**: Within a session, user can:
+   - Record voice (transcribed via WhisperKit)
+   - Add selected text from other apps
+   - Add clipboard content
+3. **Mode Processing**: Combined text is processed through the active Mode (Disabled, Assistant, or custom)
+4. **Destination**: Processed text is sent to chosen destination (tmux, paste, or clipboard)
 
-Output ONLY the email text, without any meta-commentary or explanations.
-```
+### Key Architectural Components
 
-### Adding Custom Modes
+#### MenuBarController (UI/MenuBarController.swift)
+- Central coordinator managing the entire capture/process/send flow
+- Owns and coordinates: AudioRecorder, TranscriptionProvider, ModeManager, Destinations, and HUDNotificationManager
+- Manages state machine: idle → capturing → recording → processing → sending
+- Handles global hotkeys and window positioning
+- **Important**: Captures the previously active app (`previousActiveApp`) before showing overlay, then restores focus before LLM processing to ensure paste works in the correct app
 
-To create a new mode:
+#### Mode System (Modes/)
+- **Mode Protocol**: Defines interface for processing transcribed text with an LLM
+- **ModeManager**: Singleton that manages mode lifecycle, switching, and text processing
+- **Built-in Modes**:
+  - `DisabledMode`: Pass-through, no LLM processing
+  - `AssistantMode`: Processes text with helpful context
+- **CustomMode**: User-created modes with custom system prompts, stored via CustomModesStorage
+- **Mode Selection**: Users can switch modes during capture with keyboard shortcuts (x=Disabled, a=Assistant, c=cycle custom)
 
-1. **Create a new Swift file** implementing the `Mode` protocol:
-   ```swift
-   class CustomMode: Mode {
-       let id = UUID()
-       let name = "Your Mode Name"
-       let description = "What your mode does"
+#### LLM Provider System (LLMProviders/)
+- **LLMProvider Protocol**: Abstraction over different LLM backends
+- **FoundationModelsProvider**: Uses Apple's Foundation Models (requires macOS 15.1+)
+- **OllamaProvider**: Uses local Ollama server (preferred if available)
+- ModeManager automatically prefers Ollama if available, falls back to Foundation Models
 
-       private let systemPrompt = """
-       Your custom system instructions...
-       """
+#### Transcription Provider System (Transcription/)
+- **TranscriptionProvider Protocol**: Abstraction over different speech-to-text backends
+- **WhisperKitService**: Uses WhisperKit (Apple's native Swift implementation of Whisper)
+- Models download automatically on first run and are cached locally
+- Supports both "transcribe" and "translate" tasks (configurable in settings)
+- Easy to swap in other providers (Deepgram, AssemblyAI, etc.) by implementing the protocol
 
-       func process(text: String, using provider: any LLMProvider) async throws -> String {
-           return try await provider.generate(prompt: text, systemPrompt: systemPrompt)
-       }
-   }
-   ```
+#### Destination System (Destinations/)
+- **TextDestination Protocol**: Abstraction for where processed text goes
+- **TmuxDestination**: Finds Claude Code session in tmux and sends text directly
+- **PasteDestination**: Uses clipboard + CGEvent to paste into the previously active app
+- **CopyDestination**: Simply copies to clipboard
+- All destinations implement `send(text:onPrepareSend:)` for async handling
 
-2. **Register in ModeManager** (`vcdr/Modes/ModeManager.swift:27`):
-   ```swift
-   availableModes = [
-       DisabledMode(),
-       AssistantMode(),
-       MarketingEmailMode(),
-       CustomMode() // Add your mode here
-   ]
-   ```
+#### Capture Actions (Core/CaptureAction.swift)
+- Represents a single piece of captured content within a session
+- Sources: `.recording` (voice), `.selectedText`, `.clipboard`
+- Multiple actions accumulate during a capture session
+- Combined text = all action texts joined with newlines
 
-## LLM Provider System
+#### Window Management (vcdrApp.swift)
+- **MenuBar**: Main menu dropdown
+- **MinimizedOverlay**: Shows recording status during capture (bottom-center, always visible)
+- **ResultsOverlay**: Shows after capture for action selection (floating, keyboard-driven)
+- **HUD**: Transient notifications for mode switches, events (center screen, auto-dismiss)
+- **CapturePreview**: Preview window for viewing accumulated capture content
+- All windows are styled with custom frames, transparency, and positioning
 
-The LLM provider system abstracts the AI model backend, allowing easy integration of different LLM services.
+### State Management
 
-### LLMProvider Protocol
+The app uses @Published properties in MenuBarController for reactive UI updates:
+- `isCapturing`: Whether a capture session is active (shows minimized overlay)
+- `isRecording`: Whether currently recording audio
+- `isProcessing`: Whether transcribing or processing with LLM
+- `showResultsOverlay`: Whether to show the results overlay
+- `captureActions`: Array of accumulated captures in the current session
+- `statusMessage`: Current status shown to user
 
-**Location:** `vcdr/Services/LLMProvider.swift`
+### Global Hotkeys (Core/GlobalHotkeyManager.swift)
 
-```swift
-protocol LLMProvider: Identifiable {
-    var id: UUID { get }
-    var name: String { get }
-    var requiresAPIKey: Bool { get }
-    var isAvailable: Bool { get async }
-    func generate(prompt: String, systemPrompt: String?) async throws -> String
-}
-```
+Implemented using Carbon Event Manager with Accessibility permissions:
+- **Capture Toggle** (Cmd+Option+/): Start/finish capture session
+- **Toggle Recording** (Cmd+Option+R): Start/stop voice recording (only during capture)
+- **Add Clipboard** (Cmd+Option+C): Add clipboard content (only during capture)
+- **Preview** (Cmd+Option+P): Show capture preview window (only during capture)
 
-### Built-in Providers
+Settings stored in AppSettings, reconfigurable via SettingsView.
 
-#### FoundationModelsProvider (`vcdr/Services/FoundationModelsProvider.swift`)
-- **Backend:** Apple's on-device Foundation Models (Apple Intelligence)
-- **Requirements:**
-  - Apple Silicon Mac
-  - macOS 15.1+ with Apple Intelligence enabled
-  - Supported system language
-- **Features:**
-  - No API key required
-  - Completely on-device processing (privacy-preserving)
-  - Session management with prewarming
-  - Detailed availability error messages
-- **Limitations:**
-  - Device and language restrictions
-  - Smaller context window than cloud models
+### Permissions Required
 
-### Adding Custom Providers
+1. **Microphone**: For audio recording (NSMicrophoneUsageDescription in Info.plist)
+2. **Accessibility**: For global hotkeys and auto-paste functionality
+3. **No App Sandbox**: Disabled to allow Python execution for WhisperKit
 
-To integrate a new LLM provider (e.g., Ollama, Anthropic, OpenAI):
+## Important Implementation Details
 
-1. **Create provider implementation:**
-   ```swift
-   class OllamaProvider: LLMProvider {
-       let id = UUID()
-       let name = "Ollama"
-       let requiresAPIKey = false
+### Focus Management
+When finishing a capture and sending to paste destination:
+1. `previousActiveApp` is captured at the START of the capture session (before overlay shows)
+2. Results overlay shows, user selects action
+3. **CRITICAL**: Focus is restored to `previousActiveApp` BEFORE LLM processing starts
+4. This ensures paste happens in the correct app, even if LLM takes time
 
-       var isAvailable: Bool {
-           get async {
-               // Check if Ollama is running locally
-           }
-       }
+### Audio File Cleanup
+Recording actions store temporary audio files (`audioFileURL`). These are cleaned up:
+- When capture session is closed/cancelled
+- When transcription fails
+- Files are NOT cleaned up while in `captureActions` until session ends
 
-       func generate(prompt: String, systemPrompt: String?) async throws -> String {
-           // Call Ollama API
-       }
-   }
-   ```
+### Mode Processing Error Handling
+If mode processing fails (e.g., Ollama unavailable):
+- Error is caught and displayed to user
+- Falls back to raw transcribed text
+- Still sends to destination (degraded experience, not total failure)
 
-2. **Register in ModeManager** (`vcdr/Modes/ModeManager.swift:34`):
-   ```swift
-   availableProviders = [
-       foundationModelsProvider,
-       OllamaProvider()
-   ]
-   ```
+### HUD Notifications (Core/HUDNotificationManager.swift)
+Non-intrusive, center-screen notifications for:
+- Capture session started (shows active mode)
+- Recording started/stopped
+- Mode switched
+- Clipboard added
+- Processing complete
 
-## Destination System (Output Agents)
+## Common Development Scenarios
 
-The destination system defines where processed text is sent after transcription and mode processing.
+### Adding a New Destination
+1. Create class conforming to `TextDestination` protocol
+2. Implement `name`, `send(text:onPrepareSend:)`, and `isAvailable()`
+3. Add instance to MenuBarController
+4. Add button in ResultsOverlay for the new destination
+5. Add corresponding method in MenuBarController (e.g., `stopAndSendToNewDestination()`)
 
-### TextDestination Protocol
+### Adding a New LLM Provider
+1. Create class conforming to `LLMProvider` protocol in `LLMProviders/`
+2. Implement `name`, `requiresAPIKey`, `isAvailable`, and `generate(prompt:systemPrompt:)`
+3. Add to `availableProviders` in ModeManager
+4. Add UI in SettingsView to select the provider
 
-**Location:** `vcdr/Destinations/DestinationProtocol.swift`
+### Adding a New Transcription Provider
+1. Create class conforming to `TranscriptionProvider` protocol in `Transcription/`
+2. Implement `name`, `isAvailable`, `initialize()`, and `transcribe(audioFileURL:)`
+3. Update MenuBarController to conditionally use the new provider (e.g., based on AppSettings)
+4. Add UI in SettingsView to select between transcription providers
 
-```swift
-protocol TextDestination {
-    var name: String { get }
-    func send(text: String, onPrepareSend: (() async -> Void)?) async throws
-    func isAvailable() async -> Bool
-}
-```
+### Adding a New Built-in Mode
+1. Create class conforming to `Mode` protocol
+2. Implement `name`, `description`, and `process(text:using:)`
+3. Add to `builtInModes` in ModeManager
+4. Add keyboard shortcut if desired (in vcdrApp.swift commands)
 
-The `onPrepareSend` callback allows destinations to restore app focus before sending text, enabling seamless workflow integration.
+### Modifying Global Shortcuts
+1. Update AppSettings to add new shortcut properties
+2. Add shortcut registration in MenuBarController.setupGlobalHotkey()
+3. Add callback handler method in MenuBarController
+4. Add UI in SettingsView for configuring the shortcut
+5. Ensure callbacks check appropriate state (e.g., `isCapturing` for in-capture shortcuts)
 
-### Built-in Destinations
-
-#### 1. TmuxDestination (`vcdr/Destinations/TmuxDestination.swift`)
-- **Purpose:** Send text directly to Claude Code running in tmux
-- **Use Case:** Voice-powered Claude Code interactions
-- **Features:**
-  - Finds tmux sessions and panes automatically
-  - Detects Claude Code panes by title
-  - Fallback strategies for pane selection
-  - Handles multi-line text properly
-- **Requirements:** tmux installed at `/usr/local/bin/tmux`
-
-#### 2. PasteDestination (`vcdr/Destinations/PasteDestination.swift`)
-- **Purpose:** Copy text to clipboard and auto-paste into active application
-- **Use Case:** Voice input into any application
-- **Features:**
-  - Automatic clipboard management
-  - Simulates Cmd+V keystroke
-  - App focus restoration before paste
-- **Requirements:** Accessibility permissions
-
-#### 3. CopyDestination (`vcdr/Destinations/CopyDestination.swift`)
-- **Purpose:** Copy text to clipboard without auto-pasting
-- **Use Case:** Manual paste workflows
-- **Features:**
-  - Simple clipboard population
-  - User controls when/where to paste
-
-### Adding Custom Destinations
-
-To create a new destination (e.g., Slack, Discord):
-
-1. **Implement TextDestination protocol:**
-   ```swift
-   class SlackDestination: TextDestination {
-       let name = "Slack"
-
-       func send(text: String, onPrepareSend: (() async -> Void)?) async throws {
-           // Call onPrepareSend to restore focus before sending
-           await onPrepareSend?()
-
-           // Send to Slack via API
-       }
-
-       func isAvailable() async -> Bool {
-           // Check if Slack is configured/running
-       }
-   }
-   ```
-
-2. **Add to MenuBarController** (`vcdr/UI/MenuBarController.swift`):
-   ```swift
-   private let slackDestination = SlackDestination()
-
-   // Add destination type to enum
-   enum DestinationType {
-       case paste
-       case copy
-       case tmux
-       case slack
-   }
-
-   // Add routing logic in stopRecordingAndSendTo
-   ```
-
-## Data Flow
-
-### Complete Pipeline
+## File Organization
 
 ```
-1. User activates recording (hotkey or menu)
-   ↓
-2. MenuBarController captures:
-   - Previous active app (for focus restoration)
-   - Selected text (for context-aware AI)
-   ↓
-3. AudioRecorder captures voice input
-   ↓
-4. WhisperKitService transcribes audio → text
-   ↓
-5. ModeManager processes text:
-   - Selected text prepended if available
-   - Active Mode transforms text using LLM Provider
-   ↓
-6. MenuBarController routes to destination:
-   - Restores previous app focus
-   - Sends processed text via TextDestination
-   ↓
-7. User sees result in target application
+vcdr/
+├── vcdrApp.swift              # App entry point, window definitions
+├── UI/                        # All user interface components
+│   ├── MenuBarController.swift    # Main coordinator/controller
+│   ├── MenuBarView.swift          # Menu bar dropdown UI
+│   ├── ResultsOverlay.swift       # Post-capture action selector
+│   ├── MinimizedOverlay.swift     # In-capture status indicator
+│   ├── SettingsView.swift         # App settings UI
+│   └── ...
+├── Audio/
+│   └── AudioRecorder.swift    # AVFoundation recording
+├── Transcription/             # Speech-to-text providers
+│   ├── TranscriptionProvider.swift # Protocol
+│   └── WhisperKitService.swift # WhisperKit implementation
+├── Modes/                     # Mode system
+│   ├── Mode.swift             # Protocol
+│   ├── ModeManager.swift      # Coordinator
+│   ├── DisabledMode.swift     # Built-in
+│   ├── AssistantMode.swift    # Built-in
+│   ├── CustomMode.swift       # User-defined
+│   └── CustomModesStorage.swift # Persistence
+├── LLMProviders/              # LLM providers
+│   ├── LLMProvider.swift      # Protocol
+│   ├── FoundationModelsProvider.swift
+│   └── OllamaProvider.swift
+├── Destinations/              # Output destinations
+│   ├── DestinationProtocol.swift
+│   ├── TmuxDestination.swift
+│   ├── PasteDestination.swift
+│   └── CopyDestination.swift
+└── Core/                      # Core utilities
+    ├── GlobalHotkeyManager.swift
+    ├── HUDNotificationManager.swift
+    ├── CaptureAction.swift
+    └── AppSettings.swift
 ```
 
-### Context-Aware Assistant Flow
+## tmux Integration Details
 
-The app supports capturing selected text before recording, enabling context-aware AI assistance:
+TmuxDestination finds Claude Code by:
+1. Listing all tmux sessions
+2. Finding panes with "Claude" in the title
+3. Sending text via `tmux send-keys` (bracketed paste mode)
 
-```
-1. User selects text in any app
-   ↓
-2. User triggers recording (Cmd+Shift+Space)
-   ↓
-3. App captures selected text via Cmd+C simulation
-   ↓
-4. User dictates question/request
-   ↓
-5. App prepends selected text to dictation
-   ↓
-6. Mode processes combined input
-   ↓
-7. Result sent to destination
-```
-
-**Example Usage:**
-- Select code snippet → Ask "explain this code"
-- Select email → Say "make this more formal"
-- Select error message → Request "how do I fix this"
-
-## UI Components
-
-### MenuBarView (`vcdr/UI/MenuBarView.swift`)
-- Main menu bar dropdown interface
-- Destination selection
-- Mode selection and status
-- Settings access
-
-### RecordingOverlay (`vcdr/UI/RecordingOverlay.swift`)
-- Floating window displayed during recording
-- Positioned on screen with active app
-- Visual feedback for recording state
-- Quick action buttons (cancel, destination shortcuts)
-
-### SettingsView (`vcdr/UI/SettingsView.swift`)
-- Mode configuration
-- Hotkey customization
-- Provider selection
-- App preferences
-
-## Extension Points Summary
-
-The VCDR architecture is designed for extensibility. You can easily add:
-
-1. **New Modes** - Custom text transformation agents (Code Refactor Mode, Documentation Mode, etc.)
-2. **New LLM Providers** - Additional AI backends (Ollama, Anthropic Claude, OpenAI, etc.)
-3. **New Destinations** - Output targets (Slack, Discord, VS Code, etc.)
-4. **New UI** - Additional interfaces or overlays
-
-Each extension point uses Swift protocols for clean abstraction and easy testing.
-
-## Configuration Files
-
-- **Info.plist** - Contains required permissions (`NSMicrophoneUsageDescription`)
-- **App Sandbox** - Disabled to allow Python/Whisper execution
-- **Entitlements** - Accessibility and audio input permissions
-
-## Error Handling
-
-The app includes comprehensive error handling at each layer:
-
-- **ModeError** - Mode processing failures
-- **FoundationModelsError** - Apple Intelligence availability issues
-- **DestinationError** - Output delivery failures
-- **WhisperKitError** - Transcription problems
-
-All errors surface to the user via `MenuBarController.statusMessage` with actionable guidance.
-
-## Performance Considerations
-
-- **WhisperKit Prewarming** - Models loaded on app startup
-- **Session Prewarm** - Foundation Models sessions prewarmed before generation
-- **Early Focus Restoration** - App focus restored before LLM processing (non-blocking UX)
-- **Async/Await** - All I/O operations use Swift concurrency
-- **Background Processing** - Transcription and AI processing happen off main thread
-
-## Security & Privacy
-
-- **On-device Processing** - FoundationModelsProvider runs entirely on-device
-- **No Cloud Dependencies** - Default configuration doesn't send data externally
-- **Microphone Permission** - Explicit user consent required
-- **Accessibility Permission** - Only for paste functionality
-- **Clipboard Restoration** - Original clipboard content preserved when capturing selected text
-
-## Development Guidelines
-
-### Adding a New Component
-
-1. Define protocol interface (if creating new category)
-2. Implement concrete class
-3. Register with appropriate manager
-4. Update UI if needed
-5. Test availability checks and error paths
-
-### Testing Strategy
-
-- Unit test each protocol implementation
-- Integration test the full pipeline
-- Test permission edge cases
-- Test multi-display scenarios
-- Verify clipboard restoration
-
-## Future Extension Ideas
-
-- **Code Review Mode** - Analyze and suggest improvements for code
-- **Meeting Notes Mode** - Structure dictation into meeting minutes
-- **Translation Mode** - Translate to different languages
-- **Ollama Provider** - Local LLM alternative to Apple Intelligence
-- **VS Code Destination** - Direct integration with VS Code
-- **Custom Hotkeys per Mode** - Different shortcuts for different modes
-- **Voice Commands** - "Send to Slack", "Copy only", etc.
-- **History/Replay** - Review and resend previous transcriptions
-
-## References
-
-- **WhisperKit Documentation**: https://github.com/argmaxinc/WhisperKit
-- **Apple Foundation Models**: https://developer.apple.com/documentation/FoundationModels
-- **tmux Documentation**: https://github.com/tmux/tmux/wiki
-- **Claude Code**: https://claude.com/claude-code
+Requires tmux at `/usr/local/bin/tmux` or in PATH.
