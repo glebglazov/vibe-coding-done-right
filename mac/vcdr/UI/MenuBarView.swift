@@ -23,37 +23,6 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Recording controls (only show when capture is active)
-            if controller.isCapturing {
-                Button(action: {
-                    controller.toggleRecordingInOverlay()
-                }) {
-                    Label(
-                        controller.isRecording ? "Stop Recording" : "Start Recording",
-                        systemImage: controller.isRecording ? "stop.circle.fill" : "record.circle"
-                    )
-                }
-                .disabled(controller.isProcessing)
-
-                Button(action: {
-                    controller.addClipboardToCapture()
-                }) {
-                    Label("Add Clipboard", systemImage: "doc.on.clipboard")
-                }
-
-                Button(action: {
-                    openWindow(id: "capture-preview")
-                    // Activate the app to bring preview window to foreground
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        NSApp.activate(ignoringOtherApps: true)
-                    }
-                }) {
-                    Label("View Capture", systemImage: "list.bullet.rectangle")
-                }
-
-                Divider()
-            }
-
             // Settings
             Button("Settings...") {
                 openWindow(id: "settings")

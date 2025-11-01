@@ -134,7 +134,7 @@ struct vcdrApp: App {
                     if let screen = NSScreen.main {
                         let screenFrame = screen.frame
                         let windowSize = CGSize(width: 200, height: 32)
-                        let margin: CGFloat = 40
+                        let margin: CGFloat = 80
                         let origin = CGPoint(
                             x: screenFrame.midX - windowSize.width / 2,
                             y: screenFrame.minY + margin
