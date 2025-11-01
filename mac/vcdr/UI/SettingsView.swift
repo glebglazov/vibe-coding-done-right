@@ -172,6 +172,52 @@ struct SettingsView: View {
                     }
                     .padding(.leading, 24)
                 }
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                // Preview capture shortcut
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "list.bullet.rectangle")
+                            .foregroundColor(.purple)
+                        Text("Preview Capture")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+
+                    Text("Open preview window to see all capture actions")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 24)
+
+                    HStack {
+                        ShortcutRecorderView(
+                            keyCode: $settings.previewShortcutKeyCode,
+                            modifiers: $settings.previewShortcutModifiers
+                        )
+                        .onChange(of: settings.previewShortcutKeyCode) { _, _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+                        .onChange(of: settings.previewShortcutModifiers) { _, _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+
+                        Button(action: {
+                            settings.resetPreviewShortcut()
+                            controller.updateGlobalShortcut()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 16))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Reset preview shortcut")
+                    }
+                    .padding(.leading, 24)
+                }
             }
 
             Divider()

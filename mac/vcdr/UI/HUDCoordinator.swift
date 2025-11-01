@@ -20,6 +20,11 @@ struct HUDCoordinator: View {
                 // Inject hudManager after initialization
                 menuBarController.hudManager = hudManager
 
+                // Inject openWindow callback
+                menuBarController.openWindowCallback = { windowId in
+                    openWindow(id: windowId)
+                }
+
                 // Open minimized overlay window on startup (it will show/hide based on isOverlayVisible)
                 openWindow(id: "minimized-overlay")
             }

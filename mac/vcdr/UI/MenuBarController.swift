@@ -42,6 +42,9 @@ class MenuBarController: ObservableObject {
     // HUD notification manager (injected from app)
     weak var hudManager: HUDNotificationManager?
 
+    // Callback to open windows (injected from view)
+    var openWindowCallback: ((String) -> Void)?
+
     // Dynamic menu bar icon based on state
     var menuBarIcon: String {
         if isRecording {
@@ -117,6 +120,19 @@ class MenuBarController: ObservableObject {
             ))
         }
 
+        // 4. Preview capture shortcut
+        if settings.isPreviewShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Preview Capture",
+                keyCode: settings.previewShortcutKeyCode,
+                modifiers: settings.previewShortcutModifiers,
+                callback: { [weak self] in
+                    print("👁️ Preview hotkey triggered!")
+                    self?.handlePreviewShortcut()
+                }
+            ))
+        }
+
         let success = hotkeyManager.registerHotkeys(hotkeys: hotkeys)
         if success {
             print("✅ MenuBarController: Global hotkeys setup completed successfully")
@@ -158,6 +174,17 @@ class MenuBarController: ObservableObject {
                 modifiers: settings.addClipboardShortcutModifiers,
                 callback: { [weak self] in
                     self?.handleAddClipboardShortcut()
+                }
+            ))
+        }
+
+        if settings.isPreviewShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Preview Capture",
+                keyCode: settings.previewShortcutKeyCode,
+                modifiers: settings.previewShortcutModifiers,
+                callback: { [weak self] in
+                    self?.handlePreviewShortcut()
                 }
             ))
         }
@@ -444,6 +471,24 @@ class MenuBarController: ObservableObject {
         toggleRecordingInOverlay()
     }
 
+    private func handlePreviewShortcut() {
+        // Only work if capture is active
+        guard isCapturing else {
+            print("⚠️ Preview shortcut ignored - no active capture")
+            return
+        }
+
+        print("👁️ Opening capture preview window")
+
+        // Open the preview window using callback
+        openWindowCallback?("capture-preview")
+
+        // Activate the app to bring window to foreground
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
     private func handleAddClipboardShortcut() {
         // Only work if capture is active
         guard isCapturing else {
@@ -451,43 +496,86 @@ class MenuBarController: ObservableObject {
             return
         }
 
-        // Get text from clipboard
-        let pasteboard = NSPasteboard.general
-        guard let clipboardText = pasteboard.string(forType: .string), !clipboardText.isEmpty else {
-            print("⚠️ No text in clipboard to add")
-            statusMessage = "No text in clipboard"
-            // Reset status message after a delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                if self.isRecording {
-                    self.statusMessage = "Recording... Press R to stop"
-                } else if !self.capturedText.isEmpty {
-                    self.statusMessage = "Press R to record more, or ⌘C/V/T to finish"
-                } else {
-                    self.statusMessage = "Press R to start recording"
+        Task {
+            // Trigger copy and capture the selected text
+            if let copiedText = await copySelectedText(), !copiedText.isEmpty {
+                await MainActor.run {
+                    // Create capture action for clipboard
+                    let action = CaptureAction(source: .clipboard, text: copiedText)
+                    captureActions.append(action)
+
+                    print("📋 Added clipboard text to capture: \(copiedText.prefix(50))...")
+                    statusMessage = "Added clipboard text"
+
+                    // Show HUD notification
+                    hudManager?.showClipboardAdded()
+
+                    // Reset status message after a delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        if self.isRecording {
+                            self.statusMessage = "Recording... Press R to stop"
+                        } else if !self.capturedText.isEmpty {
+                            self.statusMessage = "Press R to record more, or ⌘C/V/T to finish"
+                        } else {
+                            self.statusMessage = "Press R to start recording"
+                        }
+                    }
+                }
+            } else {
+                await MainActor.run {
+                    print("⚠️ No text selected to copy")
+                    statusMessage = "No text selected"
+
+                    // Reset status message after a delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        if self.isRecording {
+                            self.statusMessage = "Recording... Press R to stop"
+                        } else if !self.capturedText.isEmpty {
+                            self.statusMessage = "Press R to record more, or ⌘C/V/T to finish"
+                        } else {
+                            self.statusMessage = "Press R to start recording"
+                        }
+                    }
                 }
             }
-            return
         }
+    }
 
-        // Create capture action for clipboard
-        let action = CaptureAction(source: .clipboard, text: clipboardText)
-        captureActions.append(action)
+    private func copySelectedText() async -> String? {
+        // Get current clipboard content
+        let pasteboard = NSPasteboard.general
+        let savedChangeCount = pasteboard.changeCount
 
-        print("📋 Added clipboard text to capture: \(clipboardText.prefix(50))...")
-        statusMessage = "Added clipboard text"
+        print("📋 Triggering Cmd+C to copy selected text...")
 
-        // Show HUD notification
-        hudManager?.showClipboardAdded()
+        // Simulate Cmd+C to copy selected text
+        let source = CGEventSource(stateID: .hidSystemState)
 
-        // Reset status message after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            if self.isRecording {
-                self.statusMessage = "Recording... Press R to stop"
-            } else if !self.capturedText.isEmpty {
-                self.statusMessage = "Press R to record more, or ⌘C/V/T to finish"
-            } else {
-                self.statusMessage = "Press R to start recording"
-            }
+        // Key down for Cmd+C
+        let keyDownEvent = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true) // C key
+        keyDownEvent?.flags = .maskCommand
+        keyDownEvent?.post(tap: .cghidEventTap)
+
+        // Key up for Cmd+C
+        let keyUpEvent = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false)
+        keyUpEvent?.flags = .maskCommand
+        keyUpEvent?.post(tap: .cghidEventTap)
+
+        // Wait for clipboard to update
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+        // Check if clipboard changed (meaning text was selected)
+        let newChangeCount = pasteboard.changeCount
+
+        if newChangeCount != savedChangeCount {
+            // Clipboard changed, get the new content
+            let copiedText = pasteboard.string(forType: .string)
+            print("✅ Copied selected text: \(copiedText ?? "[empty]")")
+            return copiedText
+        } else {
+            // No text was selected
+            print("ℹ️ No text was selected (clipboard unchanged)")
+            return nil
         }
     }
 

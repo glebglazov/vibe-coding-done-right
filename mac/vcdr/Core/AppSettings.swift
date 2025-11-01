@@ -13,16 +13,20 @@ class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     // Capturing shortcut (toggle overlay)
-    @Published var capturingShortcutKeyCode: CGKeyCode = 49 // Space bar
-    @Published var capturingShortcutModifiers: CGEventFlags = [.maskCommand, .maskShift] // Cmd+Shift
+    @Published var capturingShortcutKeyCode: CGKeyCode = 44 // / key
+    @Published var capturingShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+/
 
     // Toggle recording in capture shortcut
     @Published var toggleRecordingShortcutKeyCode: CGKeyCode = 15 // R key
-    @Published var toggleRecordingShortcutModifiers: CGEventFlags = [.maskCommand, .maskControl] // Cmd+Ctrl+R
+    @Published var toggleRecordingShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+R
 
     // Add clipboard to capture shortcut
     @Published var addClipboardShortcutKeyCode: CGKeyCode = 8 // C key
-    @Published var addClipboardShortcutModifiers: CGEventFlags = [.maskCommand, .maskControl] // Cmd+Ctrl+C
+    @Published var addClipboardShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+C
+
+    // Preview capture shortcut
+    @Published var previewShortcutKeyCode: CGKeyCode = 35 // P key
+    @Published var previewShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+P
 
     @Published var whisperTask: String = "transcribe" // "transcribe" or "translate"
 
@@ -41,8 +45,8 @@ class AppSettings: ObservableObject {
         let capturingKeyCode = userDefaults.integer(forKey: "recordingShortcutKeyCode")
         if capturingKeyCode == 0 && userDefaults.object(forKey: "recordingShortcutKeyCode") == nil {
             // First time launch - set default
-            capturingShortcutKeyCode = 49 // Default to Space
-            capturingShortcutModifiers = [.maskCommand, .maskShift]
+            capturingShortcutKeyCode = 44 // Default to / key
+            capturingShortcutModifiers = [.maskCommand, .maskAlternate]
         } else {
             capturingShortcutKeyCode = CGKeyCode(capturingKeyCode)
             let capturingModifierRawValue = userDefaults.integer(forKey: "recordingShortcutModifiers")
@@ -54,7 +58,7 @@ class AppSettings: ObservableObject {
         if toggleRecordingKeyCode == 0 && userDefaults.object(forKey: "toggleRecordingShortcutKeyCode") == nil {
             // First time launch - set default
             toggleRecordingShortcutKeyCode = 15 // R key
-            toggleRecordingShortcutModifiers = [.maskCommand, .maskControl]
+            toggleRecordingShortcutModifiers = [.maskCommand, .maskAlternate]
         } else {
             toggleRecordingShortcutKeyCode = CGKeyCode(toggleRecordingKeyCode)
             let toggleRecordingModifierRawValue = userDefaults.integer(forKey: "toggleRecordingShortcutModifiers")
@@ -66,11 +70,23 @@ class AppSettings: ObservableObject {
         if addClipboardKeyCode == 0 && userDefaults.object(forKey: "addClipboardShortcutKeyCode") == nil {
             // First time launch - set default
             addClipboardShortcutKeyCode = 8 // C key
-            addClipboardShortcutModifiers = [.maskCommand, .maskControl]
+            addClipboardShortcutModifiers = [.maskCommand, .maskAlternate]
         } else {
             addClipboardShortcutKeyCode = CGKeyCode(addClipboardKeyCode)
             let addClipboardModifierRawValue = userDefaults.integer(forKey: "addClipboardShortcutModifiers")
             addClipboardShortcutModifiers = CGEventFlags(rawValue: UInt64(addClipboardModifierRawValue))
+        }
+
+        // Load preview shortcut
+        let previewKeyCode = userDefaults.integer(forKey: "previewShortcutKeyCode")
+        if previewKeyCode == 0 && userDefaults.object(forKey: "previewShortcutKeyCode") == nil {
+            // First time launch - set default
+            previewShortcutKeyCode = 35 // P key
+            previewShortcutModifiers = [.maskCommand, .maskAlternate]
+        } else {
+            previewShortcutKeyCode = CGKeyCode(previewKeyCode)
+            let previewModifierRawValue = userDefaults.integer(forKey: "previewShortcutModifiers")
+            previewShortcutModifiers = CGEventFlags(rawValue: UInt64(previewModifierRawValue))
         }
 
         whisperTask = userDefaults.string(forKey: "whisperTask") ?? "transcribe"
@@ -94,6 +110,9 @@ class AppSettings: ObservableObject {
 
         userDefaults.set(Int(addClipboardShortcutKeyCode), forKey: "addClipboardShortcutKeyCode")
         userDefaults.set(Int(addClipboardShortcutModifiers.rawValue), forKey: "addClipboardShortcutModifiers")
+
+        userDefaults.set(Int(previewShortcutKeyCode), forKey: "previewShortcutKeyCode")
+        userDefaults.set(Int(previewShortcutModifiers.rawValue), forKey: "previewShortcutModifiers")
 
         userDefaults.set(whisperTask, forKey: "whisperTask")
 
@@ -150,6 +169,23 @@ class AppSettings: ObservableObject {
     func resetAddClipboardShortcut() {
         addClipboardShortcutKeyCode = 0
         addClipboardShortcutModifiers = []
+        saveSettings()
+    }
+
+    var previewShortcutDisplayString: String {
+        if previewShortcutKeyCode == 0 {
+            return "Not set"
+        }
+        return shortcutDisplayString(keyCode: previewShortcutKeyCode, modifiers: previewShortcutModifiers)
+    }
+
+    var isPreviewShortcutSet: Bool {
+        return previewShortcutKeyCode != 0
+    }
+
+    func resetPreviewShortcut() {
+        previewShortcutKeyCode = 0
+        previewShortcutModifiers = []
         saveSettings()
     }
 

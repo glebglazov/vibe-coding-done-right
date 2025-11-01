@@ -67,15 +67,6 @@ struct MinimizedOverlay: View {
         .frame(height: 20)
     }
 
-    private func startSoundwaveAnimation() {
-        // Initialize with base level
-        audioLevels = Array(repeating: 0.1, count: 15)
-
-        // Start continuous animation timer
-        animationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            updateSoundwaveWithLevel(currentLevel)
-        }
-    }
 
     private func stopSoundwaveAnimation() {
         animationTimer?.invalidate()
