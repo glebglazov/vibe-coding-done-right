@@ -165,8 +165,7 @@ struct vcdrApp: App {
             .focusable()
             .focusEffectDisabled()
             .task {
-                // Configure window styling once when created
-                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                // Configure window styling once when created - do this immediately
                 if let window = NSApp.windows.first(where: { $0.title == "Results" }) {
                     window.isMovableByWindowBackground = true
                     window.styleMask.insert(.borderless)
@@ -182,7 +181,7 @@ struct vcdrApp: App {
                     window.level = .floating
                     window.collectionBehavior = [.moveToActiveSpace]
 
-                    // Center on screen
+                    // Center on screen immediately
                     if let screen = NSScreen.main {
                         let screenFrame = screen.frame
                         let windowSize = window.frame.size
@@ -192,17 +191,13 @@ struct vcdrApp: App {
                         )
                         window.setFrameOrigin(origin)
                     }
-
-                    // Activate and focus the window
-                    window.makeKeyAndOrderFront(nil)
-                    NSApp.activate(ignoringOtherApps: true)
                 }
             }
             .onChange(of: menuBarController.showResultsOverlay) { _, newValue in
                 if newValue {
                     // When results overlay shows, activate and focus it
                     Task {
-                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+                        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
                         if let window = NSApp.windows.first(where: { $0.title == "Results" }) {
                             window.makeKeyAndOrderFront(nil)
                             NSApp.activate(ignoringOtherApps: true)

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import AppKit
 
 struct ResultsOverlay: View {
     let onStopAndPaste: () -> Void
@@ -146,6 +147,8 @@ struct ResultsOverlay: View {
         .cornerRadius(8)
     }
 
+    @State private var eventMonitor: Any?
+
     var body: some View {
         VStack(spacing: 20) {
             headerView
@@ -162,7 +165,35 @@ struct ResultsOverlay: View {
         .cornerRadius(16)
         .shadow(radius: 20)
         .onAppear {
-            NSApp.activate(ignoringOtherApps: true)
+            // Set up local event monitor for keyboard events
+            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                // Handle key events
+                let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
+                let hasCommand = event.modifierFlags.contains(.command)
+
+                if event.keyCode == 53 { // Escape key
+                    onCancel()
+                    return nil // Event handled
+                } else if characters == "x" && !hasCommand {
+                    controller.switchToDisabledMode()
+                    return nil
+                } else if characters == "a" && !hasCommand {
+                    controller.switchToAssistantMode()
+                    return nil
+                } else if characters == "c" && !hasCommand {
+                    controller.cycleCustomModes()
+                    return nil
+                }
+
+                return event // Let other events pass through
+            }
+        }
+        .onDisappear {
+            // Clean up event monitor
+            if let monitor = eventMonitor {
+                NSEvent.removeMonitor(monitor)
+                eventMonitor = nil
+            }
         }
     }
 
