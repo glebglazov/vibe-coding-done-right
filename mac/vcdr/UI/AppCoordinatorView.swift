@@ -19,8 +19,8 @@ struct AppCoordinatorView: View {
             .onAppear {
                 hasAppeared = true
             }
-            .onReceive(controller.$isOverlayVisible) { isOverlayVisible in
-                print("📡 AppCoordinatorView: Received isOverlayVisible change: \(isOverlayVisible)")
+            .onReceive(controller.$showResultsOverlay) { showResults in
+                print("📡 AppCoordinatorView: Received showResultsOverlay change: \(showResults)")
 
                 // Only respond to changes after the view has appeared
                 guard hasAppeared else {
@@ -28,13 +28,12 @@ struct AppCoordinatorView: View {
                     return
                 }
 
-                if isOverlayVisible {
-                    print("🪟 AppCoordinatorView: Opening capturing overlay window")
-                    openWindow(id: "capturing-overlay")
+                if showResults {
+                    print("🪟 AppCoordinatorView: Opening results overlay window")
+                    openWindow(id: "results-overlay")
                 } else {
-                    print("🫥 AppCoordinatorView: Overlay hidden")
+                    print("🫥 AppCoordinatorView: Results overlay hidden")
                 }
-                // Don't dismiss - let window content handle visibility
             }
     }
 }

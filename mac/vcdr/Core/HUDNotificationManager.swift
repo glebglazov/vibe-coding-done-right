@@ -77,4 +77,16 @@ class HUDNotificationManager: ObservableObject {
     func showProcessing() {
         show(.processing())
     }
+
+    func showClipboardAdded() {
+        show(.clipboardAdded())
+    }
+
+    func showProcessingStarted(mode: String) {
+        show(.processingStarted(mode: mode))
+    }
+
+    func showSendingComplete(destination: String) {
+        show(.sendingComplete(destination: destination))
+    }
 }

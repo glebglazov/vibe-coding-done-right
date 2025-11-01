@@ -9,23 +9,33 @@ import Foundation
 import Carbon
 import ApplicationServices
 
+struct HotkeyRegistration {
+    let name: String
+    let keyCode: CGKeyCode
+    let modifiers: CGEventFlags
+    let callback: () -> Void
+}
+
 class GlobalHotkeyManager {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var capturingCallback: (() -> Void)?
+    private var hotkeys: [HotkeyRegistration] = []
     private let settings = AppSettings.shared
 
-    func registerHotkey(callback: @escaping () -> Void) -> Bool {
-        self.capturingCallback = callback
+    func registerHotkeys(hotkeys: [HotkeyRegistration]) -> Bool {
+        self.hotkeys = hotkeys
 
         // Log current shortcut configuration
-        print("🔧 Registering global hotkey:")
-        print("   Capturing - \(settings.capturingShortcutDisplayString)")
+        print("🔧 Registering global hotkeys:")
+        for hotkey in hotkeys {
+            let displayString = shortcutDisplayString(keyCode: hotkey.keyCode, modifiers: hotkey.modifiers)
+            print("   \(hotkey.name) - \(displayString)")
+        }
 
-        // Check if shortcut is set
-        if !settings.isCapturingShortcutSet {
-            print("⚠️ No capturing shortcut is set - skipping hotkey registration")
-            return true // Don't fail if no shortcut is set
+        // Check if any shortcuts are set
+        if hotkeys.isEmpty {
+            print("⚠️ No hotkeys to register")
+            return true // Don't fail if no shortcuts are set
         }
 
         // Check for accessibility permissions
@@ -68,12 +78,11 @@ class GlobalHotkeyManager {
         // Enable the event tap
         CGEvent.tapEnable(tap: eventTap, enable: true)
 
-        print("✅ Global hotkey registered successfully!")
-        print("   Listening for: \(settings.capturingShortcutDisplayString)")
+        print("✅ Global hotkeys registered successfully!")
         return true
     }
 
-    func unregisterHotkey() {
+    func unregisterHotkeys() {
         if let eventTap = eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
 
@@ -83,8 +92,8 @@ class GlobalHotkeyManager {
             }
 
             self.eventTap = nil
-            self.capturingCallback = nil
-            print("Global hotkey unregistered")
+            self.hotkeys = []
+            print("Global hotkeys unregistered")
         }
     }
 
@@ -104,16 +113,16 @@ class GlobalHotkeyManager {
             let flags = event.flags
             let relevantFlags = flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
 
-            // Check capturing shortcut (only if set)
-            if settings.isCapturingShortcutSet &&
-               keyCode == settings.capturingShortcutKeyCode &&
-               relevantFlags == settings.capturingShortcutModifiers {
-                print("Capturing hotkey matched! Triggering capturing callback...")
-                DispatchQueue.main.async {
-                    self.capturingCallback?()
+            // Check all registered hotkeys
+            for hotkey in hotkeys {
+                if keyCode == hotkey.keyCode && relevantFlags == hotkey.modifiers {
+                    print("\(hotkey.name) hotkey matched! Triggering callback...")
+                    DispatchQueue.main.async {
+                        hotkey.callback()
+                    }
+                    // Consume the event (don't pass it through)
+                    return nil
                 }
-                // Consume the event (don't pass it through)
-                return nil
             }
         }
 
@@ -126,23 +135,38 @@ class GlobalHotkeyManager {
         AXIsProcessTrustedWithOptions(options)
     }
 
-    func updateHotkey() -> Bool {
-        if let capturingCallback = self.capturingCallback {
-            unregisterHotkey()
-            return registerHotkey(callback: capturingCallback)
-        }
-        return false
+    func updateHotkeys(hotkeys: [HotkeyRegistration]) -> Bool {
+        unregisterHotkeys()
+        return registerHotkeys(hotkeys: hotkeys)
     }
 
     func isHotkeyRegistered() -> Bool {
-        let hasEventTap = eventTap != nil
-        let hasShortcut = settings.isCapturingShortcutSet
-        let hasCallback = capturingCallback != nil
+        return eventTap != nil && !hotkeys.isEmpty
+    }
 
-        return hasEventTap && hasShortcut && hasCallback
+    private func shortcutDisplayString(keyCode: CGKeyCode, modifiers: CGEventFlags) -> String {
+        var components: [String] = []
+
+        if modifiers.contains(.maskCommand) {
+            components.append("⌘")
+        }
+        if modifiers.contains(.maskShift) {
+            components.append("⇧")
+        }
+        if modifiers.contains(.maskAlternate) {
+            components.append("⌥")
+        }
+        if modifiers.contains(.maskControl) {
+            components.append("⌃")
+        }
+
+        // Add the key name
+        components.append(settings.keyNameForKeyCode(keyCode))
+
+        return components.joined()
     }
 
     deinit {
-        unregisterHotkey()
+        unregisterHotkeys()
     }
 }

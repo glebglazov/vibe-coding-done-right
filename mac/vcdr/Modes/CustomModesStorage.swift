@@ -66,12 +66,4 @@ class CustomModesStorage {
         saveCustomModes(modes)
         print("🗑️ Deleted custom mode: \(mode.name)")
     }
-
-    /// Delete a custom mode by ID
-    func deleteCustomMode(withId id: UUID) {
-        var modes = loadCustomModes()
-        modes.removeAll { $0.id == id }
-        saveCustomModes(modes)
-        print("🗑️ Deleted custom mode with ID: \(id)")
-    }
 }

@@ -16,14 +16,14 @@ enum DestinationType {
 
 @MainActor
 class MenuBarController: ObservableObject {
-    @Published var isOverlayVisible = false
+    @Published var isCapturing = false
+    @Published var showResultsOverlay = false
     @Published var isRecording = false
     @Published var isProcessing = false
     @Published var isInitializing = true
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
     @Published var capturedText = ""
-    private var intendedDestination: DestinationType?
     private var capturedSelectedText: String?
 
     let audioRecorder = AudioRecorder()
@@ -69,24 +69,100 @@ class MenuBarController: ObservableObject {
     }
 
     private func setupGlobalHotkey() {
-        print("🎹 MenuBarController: Setting up global hotkey...")
-        let success = hotkeyManager.registerHotkey { [weak self] in
-            print("🔥 Recording hotkey triggered!")
-            self?.toggleOverlay()
+        print("🎹 MenuBarController: Setting up global hotkeys...")
+
+        let settings = AppSettings.shared
+        var hotkeys: [HotkeyRegistration] = []
+
+        // 1. Capturing/toggle overlay shortcut
+        if settings.isCapturingShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Toggle Capture",
+                keyCode: settings.capturingShortcutKeyCode,
+                modifiers: settings.capturingShortcutModifiers,
+                callback: { [weak self] in
+                    print("🔥 Capture hotkey triggered!")
+                    self?.toggleCapture()
+                }
+            ))
         }
+
+        // 2. Toggle recording in capture shortcut
+        if settings.isToggleRecordingShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Toggle Recording",
+                keyCode: settings.toggleRecordingShortcutKeyCode,
+                modifiers: settings.toggleRecordingShortcutModifiers,
+                callback: { [weak self] in
+                    print("🎙️ Toggle recording hotkey triggered!")
+                    self?.handleToggleRecordingShortcut()
+                }
+            ))
+        }
+
+        // 3. Add clipboard to capture shortcut
+        if settings.isAddClipboardShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Add Clipboard",
+                keyCode: settings.addClipboardShortcutKeyCode,
+                modifiers: settings.addClipboardShortcutModifiers,
+                callback: { [weak self] in
+                    print("📋 Add clipboard hotkey triggered!")
+                    self?.handleAddClipboardShortcut()
+                }
+            ))
+        }
+
+        let success = hotkeyManager.registerHotkeys(hotkeys: hotkeys)
         if success {
-            print("✅ MenuBarController: Global hotkey setup completed successfully")
+            print("✅ MenuBarController: Global hotkeys setup completed successfully")
         } else {
-            print("❌ MenuBarController: Failed to register global hotkey - accessibility permissions may be needed")
+            print("❌ MenuBarController: Failed to register global hotkeys - accessibility permissions may be needed")
         }
     }
 
     func updateGlobalShortcut() {
-        let success = hotkeyManager.updateHotkey()
+        let settings = AppSettings.shared
+        var hotkeys: [HotkeyRegistration] = []
+
+        if settings.isCapturingShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Toggle Capture",
+                keyCode: settings.capturingShortcutKeyCode,
+                modifiers: settings.capturingShortcutModifiers,
+                callback: { [weak self] in
+                    self?.toggleCapture()
+                }
+            ))
+        }
+
+        if settings.isToggleRecordingShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Toggle Recording",
+                keyCode: settings.toggleRecordingShortcutKeyCode,
+                modifiers: settings.toggleRecordingShortcutModifiers,
+                callback: { [weak self] in
+                    self?.handleToggleRecordingShortcut()
+                }
+            ))
+        }
+
+        if settings.isAddClipboardShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Add Clipboard",
+                keyCode: settings.addClipboardShortcutKeyCode,
+                modifiers: settings.addClipboardShortcutModifiers,
+                callback: { [weak self] in
+                    self?.handleAddClipboardShortcut()
+                }
+            ))
+        }
+
+        let success = hotkeyManager.updateHotkeys(hotkeys: hotkeys)
         if success {
-            print("Global shortcut updated")
+            print("Global shortcuts updated")
         } else {
-            print("Failed to update global shortcut")
+            print("Failed to update global shortcuts")
         }
     }
 
@@ -237,6 +313,9 @@ class MenuBarController: ObservableObject {
             return
         }
 
+        // Close results overlay immediately
+        showResultsOverlay = false
+
         // Use captured text
         var textToProcess = capturedText
 
@@ -259,6 +338,10 @@ class MenuBarController: ObservableObject {
             await MainActor.run {
                 isProcessing = true
                 statusMessage = "Processing..."
+
+                // Show HUD notification for processing start
+                let modeName = modeManager.activeMode?.name ?? "Disabled"
+                hudManager?.showProcessingStarted(mode: modeName)
             }
 
             // Restore focus to previous app BEFORE LLM processing
@@ -311,18 +394,27 @@ class MenuBarController: ObservableObject {
     }
 
     func cancelRecording() {
+        showResultsOverlay = false
         closeOverlay()
     }
 
-    func toggleOverlay() {
-        if isOverlayVisible {
-            closeOverlay()
+    func toggleCapture() {
+        if isCapturing {
+            // Stop recording if active
+            if isRecording {
+                stopRecordingInOverlay()
+            }
+
+            // Finish capturing: show results overlay and hide minimized overlay
+            showResultsOverlay = true
+            isCapturing = false
         } else {
-            showOverlay()
+            // Start new capture
+            startCapture()
         }
     }
 
-    private func showOverlay() {
+    private func startCapture() {
         // Store the currently active app BEFORE showing overlay
         previousActiveApp = NSWorkspace.shared.frontmostApplication
 
@@ -334,9 +426,9 @@ class MenuBarController: ObservableObject {
             }
 
             await MainActor.run {
-                isOverlayVisible = true
+                isCapturing = true
                 statusMessage = "Press R to start recording"
-                print("✅ MenuBarController: Overlay shown")
+                print("✅ MenuBarController: Capture started")
 
                 // Show HUD notification for capturing session start
                 let modeName = modeManager.activeMode?.name ?? "Unknown"
@@ -344,6 +436,66 @@ class MenuBarController: ObservableObject {
 
                 // Position overlay window
                 positionCapturingWindow()
+            }
+        }
+    }
+
+    private func handleToggleRecordingShortcut() {
+        // Only work if capture is active
+        guard isCapturing else {
+            print("⚠️ Toggle recording shortcut ignored - no active capture")
+            return
+        }
+
+        toggleRecordingInOverlay()
+    }
+
+    private func handleAddClipboardShortcut() {
+        // Only work if capture is active
+        guard isCapturing else {
+            print("⚠️ Add clipboard shortcut ignored - no active capture")
+            return
+        }
+
+        // Get text from clipboard
+        let pasteboard = NSPasteboard.general
+        guard let clipboardText = pasteboard.string(forType: .string), !clipboardText.isEmpty else {
+            print("⚠️ No text in clipboard to add")
+            statusMessage = "No text in clipboard"
+            // Reset status message after a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                if self.isRecording {
+                    self.statusMessage = "Recording... Press R to stop"
+                } else if !self.capturedText.isEmpty {
+                    self.statusMessage = "Press R to record more, or ⌘C/V/T to finish"
+                } else {
+                    self.statusMessage = "Press R to start recording"
+                }
+            }
+            return
+        }
+
+        // Add to captured text
+        if !capturedText.isEmpty {
+            capturedText += "\n\n" + clipboardText
+        } else {
+            capturedText = clipboardText
+        }
+
+        print("📋 Added clipboard text to capture: \(clipboardText.prefix(50))...")
+        statusMessage = "Added clipboard text"
+
+        // Show HUD notification
+        hudManager?.showClipboardAdded()
+
+        // Reset status message after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if self.isRecording {
+                self.statusMessage = "Recording... Press R to stop"
+            } else if !self.capturedText.isEmpty {
+                self.statusMessage = "Press R to record more, or ⌘C/V/T to finish"
+            } else {
+                self.statusMessage = "Press R to start recording"
             }
         }
     }
@@ -358,7 +510,8 @@ class MenuBarController: ObservableObject {
         capturedText = ""
         capturedSelectedText = nil
 
-        isOverlayVisible = false
+        isCapturing = false
+        showResultsOverlay = false
         isRecording = false
         isProcessing = false
         statusMessage = "Ready to capture"
@@ -601,6 +754,9 @@ class MenuBarController: ObservableObject {
             await MainActor.run {
                 statusMessage = "Sent to \(destination.name)!"
                 isProcessing = false
+
+                // Show HUD notification for completion
+                hudManager?.showSendingComplete(destination: destination.name)
             }
 
             // Focus restoration already happened in onPrepareSend callback
@@ -622,7 +778,7 @@ class MenuBarController: ObservableObject {
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                self.statusMessage = "Ready to record"
+                self.statusMessage = "Ready to capture"
             }
         }
     }

@@ -15,13 +15,43 @@ struct MenuBarView: View {
         VStack(spacing: 0) {
             // Start/Stop Capturing
             Button(action: {
-                controller.toggleOverlay()
+                controller.toggleCapture()
             }) {
                 Label(buttonText, systemImage: buttonIcon)
             }
             .disabled(controller.isProcessing || controller.isInitializing)
 
             Divider()
+
+            // Recording controls (only show when capture is active)
+            if controller.isCapturing {
+                Button(action: {
+                    controller.toggleRecordingInOverlay()
+                }) {
+                    Label(
+                        controller.isRecording ? "Stop Recording" : "Start Recording",
+                        systemImage: controller.isRecording ? "stop.circle.fill" : "record.circle"
+                    )
+                }
+                .disabled(controller.isProcessing)
+
+                Button(action: {
+                    // Get text from clipboard and add to capture
+                    let pasteboard = NSPasteboard.general
+                    if let clipboardText = pasteboard.string(forType: .string), !clipboardText.isEmpty {
+                        if !controller.capturedText.isEmpty {
+                            controller.capturedText += "\n\n" + clipboardText
+                        } else {
+                            controller.capturedText = clipboardText
+                        }
+                        controller.hudManager?.showClipboardAdded()
+                    }
+                }) {
+                    Label("Add Clipboard", systemImage: "doc.on.clipboard")
+                }
+
+                Divider()
+            }
 
             // Settings
             Button("Settings...") {
@@ -90,8 +120,8 @@ struct MenuBarView: View {
     }
 
     private var buttonIcon: String {
-        if controller.isOverlayVisible {
-            return "stop.fill" // Show stop icon when overlay is open
+        if controller.isCapturing {
+            return "stop.fill" // Show stop icon when capturing
         } else {
             return "mic.fill"
         }
@@ -102,8 +132,8 @@ struct MenuBarView: View {
             return "Initializing..."
         } else if controller.isProcessing {
             return "Processing..."
-        } else if controller.isOverlayVisible {
-            return "Stop Capturing"
+        } else if controller.isCapturing {
+            return "Finish"
         } else {
             return "Start Capturing"
         }

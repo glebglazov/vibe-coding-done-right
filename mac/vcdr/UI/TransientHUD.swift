@@ -107,6 +107,36 @@ struct HUDNotification {
             duration: 1.5
         )
     }
+
+    static func clipboardAdded() -> HUDNotification {
+        HUDNotification(
+            icon: "doc.on.clipboard",
+            iconColor: .green,
+            title: "📋 Clipboard Added",
+            subtitle: nil,
+            duration: 1.5
+        )
+    }
+
+    static func processingStarted(mode: String) -> HUDNotification {
+        HUDNotification(
+            icon: "gearshape.fill",
+            iconColor: .blue,
+            title: "⚙️ Processing",
+            subtitle: mode,
+            duration: 2.0
+        )
+    }
+
+    static func sendingComplete(destination: String) -> HUDNotification {
+        HUDNotification(
+            icon: "checkmark.circle.fill",
+            iconColor: .green,
+            title: "✅ Sent",
+            subtitle: destination,
+            duration: 2.0
+        )
+    }
 }
 
 #Preview {

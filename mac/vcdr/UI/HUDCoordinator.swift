@@ -19,8 +19,11 @@ struct HUDCoordinator: View {
             .onAppear {
                 // Inject hudManager after initialization
                 menuBarController.hudManager = hudManager
+
+                // Open minimized overlay window on startup (it will show/hide based on isOverlayVisible)
+                openWindow(id: "minimized-overlay")
             }
-            .onChange(of: hudManager.shouldShowWindow) { oldValue, newValue in
+            .onChange(of: hudManager.shouldShowWindow) { _, newValue in
                 if newValue {
                     openWindow(id: "hud-notification")
                 }

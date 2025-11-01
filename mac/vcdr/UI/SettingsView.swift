@@ -35,9 +35,10 @@ struct SettingsView: View {
 
             // Global Shortcut Section
             VStack(alignment: .leading, spacing: 16) {
-                Text("Recording Shortcut")
+                Text("Global Shortcuts")
                     .font(.headline)
 
+                // Capturing shortcut
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Image(systemName: "mic.fill")
@@ -76,6 +77,98 @@ struct SettingsView: View {
                         }
                         .buttonStyle(PlainButtonStyle())
                         .help("Reset capturing shortcut")
+                    }
+                    .padding(.leading, 24)
+                }
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                // Toggle recording shortcut
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "record.circle")
+                            .foregroundColor(.red)
+                        Text("Toggle Recording in Capture")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+
+                    Text("Start/stop recording while capture is active")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 24)
+
+                    HStack {
+                        ShortcutRecorderView(
+                            keyCode: $settings.toggleRecordingShortcutKeyCode,
+                            modifiers: $settings.toggleRecordingShortcutModifiers
+                        )
+                        .onChange(of: settings.toggleRecordingShortcutKeyCode) { _, _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+                        .onChange(of: settings.toggleRecordingShortcutModifiers) { _, _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+
+                        Button(action: {
+                            settings.resetToggleRecordingShortcut()
+                            controller.updateGlobalShortcut()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 16))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Reset toggle recording shortcut")
+                    }
+                    .padding(.leading, 24)
+                }
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                // Add clipboard shortcut
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "doc.on.clipboard")
+                            .foregroundColor(.green)
+                        Text("Add Clipboard to Capture")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+
+                    Text("Add clipboard text to current capture")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 24)
+
+                    HStack {
+                        ShortcutRecorderView(
+                            keyCode: $settings.addClipboardShortcutKeyCode,
+                            modifiers: $settings.addClipboardShortcutModifiers
+                        )
+                        .onChange(of: settings.addClipboardShortcutKeyCode) { _, _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+                        .onChange(of: settings.addClipboardShortcutModifiers) { _, _ in
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+
+                        Button(action: {
+                            settings.resetAddClipboardShortcut()
+                            controller.updateGlobalShortcut()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 16))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Reset add clipboard shortcut")
                     }
                     .padding(.leading, 24)
                 }
