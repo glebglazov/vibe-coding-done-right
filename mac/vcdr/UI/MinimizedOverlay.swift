@@ -68,6 +68,12 @@ struct MinimizedOverlay: View {
     }
 
 
+    private func startSoundwaveAnimation() {
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            updateSoundwaveWithLevel(currentLevel)
+        }
+    }
+
     private func stopSoundwaveAnimation() {
         animationTimer?.invalidate()
         animationTimer = nil
