@@ -47,6 +47,16 @@ struct MenuBarView: View {
                     Label("Add Clipboard", systemImage: "doc.on.clipboard")
                 }
 
+                Button(action: {
+                    openWindow(id: "capture-preview")
+                    // Activate the app to bring preview window to foreground
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                }) {
+                    Label("View Capture", systemImage: "list.bullet.rectangle")
+                }
+
                 Divider()
             }
 

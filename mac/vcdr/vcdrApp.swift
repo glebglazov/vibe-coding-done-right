@@ -32,6 +32,18 @@ struct vcdrApp: App {
         .defaultSize(width: 400, height: 300)
         .windowLevel(.floating)
 
+        // Capture actions preview window
+        Window("Capture Preview", id: "capture-preview") {
+            CaptureActionsPreview(
+                actions: menuBarController.captureActions,
+                title: "Current Capture"
+            )
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultSize(width: 500, height: 400)
+        .windowLevel(.floating)
+
         // Transient HUD notification window
         Window("HUD", id: "hud-notification") {
             ZStack {
