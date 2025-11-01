@@ -39,11 +39,8 @@ struct MenuBarView: View {
                     // Get text from clipboard and add to capture
                     let pasteboard = NSPasteboard.general
                     if let clipboardText = pasteboard.string(forType: .string), !clipboardText.isEmpty {
-                        if !controller.capturedText.isEmpty {
-                            controller.capturedText += "\n\n" + clipboardText
-                        } else {
-                            controller.capturedText = clipboardText
-                        }
+                        let action = CaptureAction(source: .clipboard, text: clipboardText)
+                        controller.captureActions.append(action)
                         controller.hudManager?.showClipboardAdded()
                     }
                 }) {

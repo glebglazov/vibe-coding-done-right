@@ -23,8 +23,12 @@ class MenuBarController: ObservableObject {
     @Published var isInitializing = true
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
-    @Published var capturedText = ""
-    private var capturedSelectedText: String?
+    @Published var captureActions: [CaptureAction] = []
+
+    /// Combined text from all capture actions
+    var capturedText: String {
+        captureActions.map { $0.text }.joined(separator: "\n\n")
+    }
 
     let audioRecorder = AudioRecorder()
     private let whisperService = WhisperKitService.shared
@@ -316,23 +320,8 @@ class MenuBarController: ObservableObject {
         // Close results overlay immediately
         showResultsOverlay = false
 
-        // Use captured text
-        var textToProcess = capturedText
-
-        // Prepend captured selected text if available
-        if let captured = capturedSelectedText, !captured.isEmpty {
-            textToProcess = """
-            \(textToProcess)
-
-            \(captured)
-            """
-            print("📝 Prepended selected text to captured text")
-        }
-
-        // If no captured text, just send captured selected text
-        if textToProcess.isEmpty, let captured = capturedSelectedText {
-            textToProcess = captured
-        }
+        // Use combined text from all capture actions
+        let textToProcess = capturedText
 
         Task {
             await MainActor.run {
@@ -420,9 +409,14 @@ class MenuBarController: ObservableObject {
 
         Task {
             // Capture any selected text before showing overlay
-            capturedSelectedText = await captureSelectedText()
-            if let captured = capturedSelectedText {
-                print("📋 Captured selected text: \(captured.prefix(50))...")
+            if let selectedText = await captureSelectedText(), !selectedText.isEmpty {
+                print("📋 Captured selected text: \(selectedText.prefix(50))...")
+
+                // Create capture action for selected text
+                await MainActor.run {
+                    let action = CaptureAction(source: .selectedText, text: selectedText)
+                    captureActions.append(action)
+                }
             }
 
             await MainActor.run {
@@ -475,12 +469,9 @@ class MenuBarController: ObservableObject {
             return
         }
 
-        // Add to captured text
-        if !capturedText.isEmpty {
-            capturedText += "\n\n" + clipboardText
-        } else {
-            capturedText = clipboardText
-        }
+        // Create capture action for clipboard
+        let action = CaptureAction(source: .clipboard, text: clipboardText)
+        captureActions.append(action)
 
         print("📋 Added clipboard text to capture: \(clipboardText.prefix(50))...")
         statusMessage = "Added clipboard text"
@@ -506,9 +497,15 @@ class MenuBarController: ObservableObject {
             _ = audioRecorder.stopRecording()
         }
 
-        // Clear captured text
-        capturedText = ""
-        capturedSelectedText = nil
+        // Clean up audio files from recording actions
+        for action in captureActions where action.source == .recording {
+            if let audioURL = action.audioFileURL {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+        }
+
+        // Clear capture actions
+        captureActions.removeAll()
 
         isCapturing = false
         showResultsOverlay = false
@@ -569,17 +566,16 @@ class MenuBarController: ObservableObject {
 
             do {
                 let transcription = try await whisperService.transcribe(audioFileURL: audioURL)
-                await handleTranscriptionForAccumulation(transcription)
-
-                // Clean up the audio file
-                try? FileManager.default.removeItem(at: audioURL)
+                await handleTranscriptionForAccumulation(transcription, audioURL: audioURL)
             } catch {
                 await handleTranscriptionError(error)
+                // Clean up the audio file on error
+                try? FileManager.default.removeItem(at: audioURL)
             }
         }
     }
 
-    private func handleTranscriptionForAccumulation(_ transcription: String) async {
+    private func handleTranscriptionForAccumulation(_ transcription: String, audioURL: URL) async {
         lastTranscription = transcription
 
         // Skip empty or whitespace-only transcriptions
@@ -590,16 +586,15 @@ class MenuBarController: ObservableObject {
                 isProcessing = false
                 statusMessage = "No speech detected. Press R to try again"
             }
+            // Clean up the audio file for empty transcription
+            try? FileManager.default.removeItem(at: audioURL)
             return
         }
 
-        // Append to captured text
+        // Create capture action for recording
         await MainActor.run {
-            if !capturedText.isEmpty {
-                capturedText += " " + trimmedTranscription
-            } else {
-                capturedText = trimmedTranscription
-            }
+            let action = CaptureAction(source: .recording, text: trimmedTranscription, audioFileURL: audioURL)
+            captureActions.append(action)
 
             isProcessing = false
             statusMessage = "Press R to record more, or ⌘C/V/T to finish"
