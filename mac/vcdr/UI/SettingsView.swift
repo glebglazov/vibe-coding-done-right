@@ -14,7 +14,7 @@ struct SettingsView: View {
     @ObservedObject var modeManager = ModeManager.shared
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 0) {
             // Header
             VStack(spacing: 8) {
                 Image(systemName: "mic.fill")
@@ -29,321 +29,309 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            .padding(.top)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
 
             Divider()
 
-            // Global Shortcut Section
+            // Tabs
+            TabView {
+                ShortcutsTab(controller: controller, settings: settings)
+                    .tabItem {
+                        Label("Shortcuts", systemImage: "keyboard")
+                    }
+
+                ModesTab(settings: settings, modeManager: modeManager)
+                    .tabItem {
+                        Label("Modes", systemImage: "sparkles")
+                    }
+            }
+            .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Shortcuts Tab
+struct ShortcutsTab: View {
+    @ObservedObject var controller: MenuBarController
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Global Shortcuts")
                     .font(.headline)
+                    .padding(.top, 8)
 
                 // Capturing shortcut
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "mic.fill")
-                            .foregroundColor(.blue)
-                        Text("Start/Stop Capturing")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                ShortcutRow(
+                    icon: "mic.fill",
+                    iconColor: .blue,
+                    title: "Start/Stop Capturing",
+                    description: "Press once to start capturing, press again to close",
+                    keyCode: $settings.capturingShortcutKeyCode,
+                    modifiers: $settings.capturingShortcutModifiers,
+                    onReset: {
+                        settings.resetCapturingShortcut()
+                        controller.updateGlobalShortcut()
+                    },
+                    onChange: {
+                        settings.saveSettings()
+                        controller.updateGlobalShortcut()
                     }
-
-                    Text("Press once to start capturing, press again to close")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 24)
-
-                    HStack {
-                        ShortcutRecorderView(
-                            keyCode: $settings.capturingShortcutKeyCode,
-                            modifiers: $settings.capturingShortcutModifiers
-                        )
-                        .onChange(of: settings.capturingShortcutKeyCode) { _, _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-                        .onChange(of: settings.capturingShortcutModifiers) { _, _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-
-                        Button(action: {
-                            settings.resetCapturingShortcut()
-                            controller.updateGlobalShortcut()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 16))
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .help("Reset capturing shortcut")
-                    }
-                    .padding(.leading, 24)
-                }
+                )
 
                 Divider()
                     .padding(.vertical, 4)
 
                 // Toggle recording shortcut
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "record.circle")
-                            .foregroundColor(.red)
-                        Text("Toggle Recording in Capture")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                ShortcutRow(
+                    icon: "record.circle",
+                    iconColor: .red,
+                    title: "Toggle Recording in Capture",
+                    description: "Start/stop recording while capture is active",
+                    keyCode: $settings.toggleRecordingShortcutKeyCode,
+                    modifiers: $settings.toggleRecordingShortcutModifiers,
+                    onReset: {
+                        settings.resetToggleRecordingShortcut()
+                        controller.updateGlobalShortcut()
+                    },
+                    onChange: {
+                        settings.saveSettings()
+                        controller.updateGlobalShortcut()
                     }
-
-                    Text("Start/stop recording while capture is active")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 24)
-
-                    HStack {
-                        ShortcutRecorderView(
-                            keyCode: $settings.toggleRecordingShortcutKeyCode,
-                            modifiers: $settings.toggleRecordingShortcutModifiers
-                        )
-                        .onChange(of: settings.toggleRecordingShortcutKeyCode) { _, _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-                        .onChange(of: settings.toggleRecordingShortcutModifiers) { _, _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-
-                        Button(action: {
-                            settings.resetToggleRecordingShortcut()
-                            controller.updateGlobalShortcut()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 16))
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .help("Reset toggle recording shortcut")
-                    }
-                    .padding(.leading, 24)
-                }
+                )
 
                 Divider()
                     .padding(.vertical, 4)
 
                 // Add clipboard shortcut
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "doc.on.clipboard")
-                            .foregroundColor(.green)
-                        Text("Add Clipboard to Capture")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                ShortcutRow(
+                    icon: "doc.on.clipboard",
+                    iconColor: .green,
+                    title: "Add Clipboard to Capture",
+                    description: "Add clipboard text to current capture",
+                    keyCode: $settings.addClipboardShortcutKeyCode,
+                    modifiers: $settings.addClipboardShortcutModifiers,
+                    onReset: {
+                        settings.resetAddClipboardShortcut()
+                        controller.updateGlobalShortcut()
+                    },
+                    onChange: {
+                        settings.saveSettings()
+                        controller.updateGlobalShortcut()
                     }
-
-                    Text("Add clipboard text to current capture")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 24)
-
-                    HStack {
-                        ShortcutRecorderView(
-                            keyCode: $settings.addClipboardShortcutKeyCode,
-                            modifiers: $settings.addClipboardShortcutModifiers
-                        )
-                        .onChange(of: settings.addClipboardShortcutKeyCode) { _, _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-                        .onChange(of: settings.addClipboardShortcutModifiers) { _, _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-
-                        Button(action: {
-                            settings.resetAddClipboardShortcut()
-                            controller.updateGlobalShortcut()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 16))
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .help("Reset add clipboard shortcut")
-                    }
-                    .padding(.leading, 24)
-                }
+                )
 
                 Divider()
                     .padding(.vertical, 4)
 
                 // Preview capture shortcut
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "list.bullet.rectangle")
-                            .foregroundColor(.purple)
-                        Text("Preview Capture")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                ShortcutRow(
+                    icon: "list.bullet.rectangle",
+                    iconColor: .purple,
+                    title: "Preview Capture",
+                    description: "Open preview window to see all capture actions",
+                    keyCode: $settings.previewShortcutKeyCode,
+                    modifiers: $settings.previewShortcutModifiers,
+                    onReset: {
+                        settings.resetPreviewShortcut()
+                        controller.updateGlobalShortcut()
+                    },
+                    onChange: {
+                        settings.saveSettings()
+                        controller.updateGlobalShortcut()
                     }
+                )
 
-                    Text("Open preview window to see all capture actions")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 24)
-
-                    HStack {
-                        ShortcutRecorderView(
-                            keyCode: $settings.previewShortcutKeyCode,
-                            modifiers: $settings.previewShortcutModifiers
-                        )
-                        .onChange(of: settings.previewShortcutKeyCode) { _, _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-                        .onChange(of: settings.previewShortcutModifiers) { _, _ in
-                            settings.saveSettings()
-                            controller.updateGlobalShortcut()
-                        }
-
-                        Button(action: {
-                            settings.resetPreviewShortcut()
-                            controller.updateGlobalShortcut()
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 16))
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .help("Reset preview shortcut")
-                    }
-                    .padding(.leading, 24)
-                }
+                Spacer()
             }
+            .padding()
+        }
+    }
+}
 
-            Divider()
+// MARK: - Modes Tab
+struct ModesTab: View {
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var modeManager: ModeManager
 
-            // Whisper Task Section
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Voice Processing")
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Voice Processing Section
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Voice Processing")
+                            .font(.headline)
+
+                        VStack(spacing: 8) {
+                            HStack {
+                                Button(action: {
+                                    settings.whisperTask = "transcribe"
+                                    settings.saveSettings()
+                                }) {
+                                    HStack {
+                                        Image(systemName: settings.whisperTask == "transcribe" ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(settings.whisperTask == "transcribe" ? .blue : .gray)
+                                        Text("Transcribe")
+                                            .font(.subheadline)
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+
+                            Text("Keep original language (Russian → Russian, English → English)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.leading, 28)
+
+                            HStack {
+                                Button(action: {
+                                    settings.whisperTask = "translate"
+                                    settings.saveSettings()
+                                }) {
+                                    HStack {
+                                        Image(systemName: settings.whisperTask == "translate" ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(settings.whisperTask == "translate" ? .blue : .gray)
+                                        Text("Translate")
+                                            .font(.subheadline)
+                                        Spacer()
+                                    }
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+
+                            Text("Translate to English (Russian → English, Spanish → English)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.leading, 28)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+
+                Divider()
+
+                // AI Processing Section
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("AI Processing")
                         .font(.headline)
 
-                    VStack(spacing: 8) {
-                        HStack {
-                            Button(action: {
-                                settings.whisperTask = "transcribe"
+                    VStack(alignment: .leading, spacing: 8) {
+                        // Enable/Disable Toggle
+                        Toggle(isOn: Binding(
+                            get: { modeManager.isEnabled },
+                            set: { newValue in
+                                modeManager.isEnabled = newValue
+                                settings.isModeEnabled = newValue
                                 settings.saveSettings()
-                            }) {
-                                HStack {
-                                    Image(systemName: settings.whisperTask == "transcribe" ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(settings.whisperTask == "transcribe" ? .blue : .gray)
-                                    Text("Transcribe")
-                                        .font(.subheadline)
-                                    Spacer()
-                                }
                             }
-                            .buttonStyle(PlainButtonStyle())
+                        )) {
+                            HStack {
+                                Image(systemName: "sparkles")
+                                    .foregroundColor(.purple)
+                                Text("Enable AI Processing")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
                         }
+                        .toggleStyle(SwitchToggleStyle())
 
-                        Text("Keep original language (Russian → Russian, English → English)")
+                        Text("Process transcribed text with AI before sending to destination")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.leading, 28)
 
-                        HStack {
-                            Button(action: {
-                                settings.whisperTask = "translate"
-                                settings.saveSettings()
-                            }) {
-                                HStack {
-                                    Image(systemName: settings.whisperTask == "translate" ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(settings.whisperTask == "translate" ? .blue : .gray)
-                                    Text("Translate")
-                                        .font(.subheadline)
-                                    Spacer()
-                                }
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
+                        if modeManager.isEnabled {
+                            Divider()
+                                .padding(.vertical, 4)
 
-                        Text("Translate to English (Russian → English, Spanish → English)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.leading, 28)
+                            HStack {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.secondary)
+                                Text("Select mode in capturing overlay")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.leading, 12)
+
+                            HStack {
+                                Image(systemName: "cpu")
+                                    .foregroundColor(.secondary)
+                                Text("Provider: \(modeManager.activeLLMProvider.name)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.leading, 12)
+                        }
                     }
                     .padding(.vertical, 8)
                 }
+
+                Divider()
+
+                // Custom Modes Section
+                CustomModesSection()
+
+                Spacer()
             }
-
-            Divider()
-
-            // Mode System Section
-            VStack(alignment: .leading, spacing: 16) {
-                Text("AI Processing")
-                    .font(.headline)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    // Enable/Disable Toggle
-                    Toggle(isOn: Binding(
-                        get: { modeManager.isEnabled },
-                        set: { newValue in
-                            modeManager.isEnabled = newValue
-                            settings.isModeEnabled = newValue
-                            settings.saveSettings()
-                        }
-                    )) {
-                        HStack {
-                            Image(systemName: "sparkles")
-                                .foregroundColor(.purple)
-                            Text("Enable AI Processing")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                        }
-                    }
-                    .toggleStyle(SwitchToggleStyle())
-
-                    Text("Process transcribed text with AI before sending to destination")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 28)
-
-                    if modeManager.isEnabled {
-                        Divider()
-                            .padding(.vertical, 4)
-
-                        HStack {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(.secondary)
-                            Text("Select mode in capturing overlay")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.leading, 12)
-
-                        HStack {
-                            Image(systemName: "cpu")
-                                .foregroundColor(.secondary)
-                            Text("Provider: \(modeManager.activeLLMProvider.name)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.leading, 12)
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-
-            Divider()
-
-            // Custom Modes Section
-            CustomModesSection()
-
-            Spacer()
+            .padding()
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
 
+// MARK: - Shortcut Row Component
+struct ShortcutRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let description: String
+    @Binding var keyCode: CGKeyCode
+    @Binding var modifiers: CGEventFlags
+    let onReset: () -> Void
+    let onChange: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(iconColor)
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+
+            Text(description)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.leading, 24)
+
+            HStack {
+                ShortcutRecorderView(
+                    keyCode: $keyCode,
+                    modifiers: $modifiers
+                )
+                .onChange(of: keyCode) { _, _ in
+                    onChange()
+                }
+                .onChange(of: modifiers) { _, _ in
+                    onChange()
+                }
+
+                Button(action: onReset) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 16))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Reset shortcut")
+            }
+            .padding(.leading, 24)
+        }
+    }
 }
 
 #Preview {
