@@ -115,10 +115,10 @@ struct vcdrApp: App {
                     )
                 } else {
                     Color.clear
-                        .frame(width: 200, height: 32)
+                        .frame(width: 260, height: 42)
                 }
             }
-            .frame(width: 200, height: 32)
+            .frame(width: 260, height: 42)
             .ignoresSafeArea()
             .task {
                 // Configure minimized overlay window styling
@@ -135,7 +135,7 @@ struct vcdrApp: App {
                     // Position in bottom center with margin
                     if let screen = NSScreen.main {
                         let screenFrame = screen.frame
-                        let windowSize = CGSize(width: 200, height: 32)
+                        let windowSize = CGSize(width: 260, height: 42)
                         let margin: CGFloat = 80
                         let origin = CGPoint(
                             x: screenFrame.midX - windowSize.width / 2,
@@ -148,7 +148,7 @@ struct vcdrApp: App {
         }
         .windowStyle(.plain)
         .windowResizability(.contentSize)
-        .defaultSize(width: 200, height: 32)
+        .defaultSize(width: 260, height: 42)
         
 
         Window("Results", id: "results-overlay") {

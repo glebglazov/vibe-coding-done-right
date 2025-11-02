@@ -23,13 +23,13 @@ struct MinimizedOverlay: View {
     @State private var currentLevel: Float = 0.0
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             // Add from clipboard button
             Button(action: onAddClipboard) {
                 Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.green)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 21, height: 21)
             }
             .buttonStyle(PlainButtonStyle())
             .help("Add clipboard to capture")
@@ -39,17 +39,17 @@ struct MinimizedOverlay: View {
                 ZStack {
                     Circle()
                         .fill(isRecording ? Color.red : Color.gray.opacity(0.5))
-                        .frame(width: 16, height: 16)
+                        .frame(width: 21, height: 21)
 
                     if isRecording {
                         // Stop icon (square)
                         RoundedRectangle(cornerRadius: 1)
                             .fill(Color.white)
-                            .frame(width: 6, height: 6)
+                            .frame(width: 8, height: 8)
                     } else {
                         // Play icon (triangle)
                         Image(systemName: "play.fill")
-                            .font(.system(size: 6))
+                            .font(.system(size: 8))
                             .foregroundColor(.white)
                             .offset(x: 0.5)
                     }
@@ -64,9 +64,9 @@ struct MinimizedOverlay: View {
             // Keyboard input button
             Button(action: onAddKeyboardInput) {
                 Image(systemName: "keyboard")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.blue)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 21, height: 21)
             }
             .buttonStyle(PlainButtonStyle())
             .help("Add keyboard input")
@@ -74,9 +74,9 @@ struct MinimizedOverlay: View {
             // Preview button
             Button(action: onPreview) {
                 Image(systemName: "list.bullet.rectangle")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.purple)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 21, height: 21)
             }
             .buttonStyle(PlainButtonStyle())
             .help("Preview capture")
@@ -84,19 +84,19 @@ struct MinimizedOverlay: View {
             // Stop capture button
             Button(action: onStopCapture) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.gray)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 21, height: 21)
             }
             .buttonStyle(PlainButtonStyle())
             .help("Stop capture")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 16)
                 .fill(Color(nsColor: .windowBackgroundColor).opacity(0.9))
-                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 2)
+                .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 2)
         )
         .onAppear {
             startSoundwaveAnimation()
@@ -110,15 +110,15 @@ struct MinimizedOverlay: View {
     }
 
     private var miniSoundwaveView: some View {
-        HStack(alignment: .center, spacing: 1) {
+        HStack(alignment: .center, spacing: 1.3) {
             ForEach(0..<audioLevels.count, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 0.5)
+                RoundedRectangle(cornerRadius: 0.65)
                     .fill(isRecording ? Color.blue.gradient : Color.gray.opacity(0.3).gradient)
-                    .frame(width: 2, height: max(2, audioLevels[index] * 20))
+                    .frame(width: 3, height: max(3, audioLevels[index] * 26))
                     .animation(.easeInOut(duration: 0.1), value: audioLevels[index])
             }
         }
-        .frame(height: 20)
+        .frame(height: 26)
     }
 
 
