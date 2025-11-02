@@ -14,6 +14,7 @@ struct MinimizedOverlay: View {
     @ObservedObject var audioRecorder: AudioRecorder
     let onToggleRecording: () -> Void
     let onAddClipboard: () -> Void
+    let onAddKeyboardInput: () -> Void
     let onPreview: () -> Void
     let onStopCapture: () -> Void
 
@@ -59,6 +60,16 @@ struct MinimizedOverlay: View {
 
             // Mini soundwave
             miniSoundwaveView
+
+            // Keyboard input button
+            Button(action: onAddKeyboardInput) {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.blue)
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Add keyboard input")
 
             // Preview button
             Button(action: onPreview) {
@@ -142,6 +153,7 @@ struct MinimizedOverlay: View {
             audioRecorder: AudioRecorder(),
             onToggleRecording: {},
             onAddClipboard: {},
+            onAddKeyboardInput: {},
             onPreview: {},
             onStopCapture: {}
         )
@@ -150,6 +162,7 @@ struct MinimizedOverlay: View {
             audioRecorder: AudioRecorder(),
             onToggleRecording: {},
             onAddClipboard: {},
+            onAddKeyboardInput: {},
             onPreview: {},
             onStopCapture: {}
         )

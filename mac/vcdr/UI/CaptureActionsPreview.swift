@@ -130,6 +130,8 @@ struct CaptureActionRow: View {
             return .red
         case .selectedText:
             return .green
+        case .keyboardInput:
+            return .blue
         }
     }
 }

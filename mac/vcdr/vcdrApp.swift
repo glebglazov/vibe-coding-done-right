@@ -103,6 +103,9 @@ struct vcdrApp: App {
                         onAddClipboard: {
                             menuBarController.addClipboardToCapture()
                         },
+                        onAddKeyboardInput: {
+                            menuBarController.openKeyboardInputOverlay()
+                        },
                         onPreview: {
                             menuBarController.openPreview()
                         },
@@ -219,6 +222,20 @@ struct vcdrApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+        .windowLevel(.floating)
+
+        // Keyboard input window
+        Window("Add Keyboard Input", id: "keyboard-input-overlay") {
+            KeyboardInputOverlay(
+                isPresented: $menuBarController.showKeyboardInputOverlay,
+                onSubmit: { text in
+                    menuBarController.addKeyboardInput(text: text)
+                }
+            )
+            .frame(width: 320, height: 160)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 320, height: 160)
         .windowLevel(.floating)
     }
 }

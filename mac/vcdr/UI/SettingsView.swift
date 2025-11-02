@@ -98,6 +98,23 @@ struct GeneralTab: View {
                         }
                     )
 
+                    // Add keyboard input shortcut
+                    ShortcutRow(
+                        icon: "keyboard",
+                        iconColor: .blue,
+                        title: "Add Keyboard Input to Capture",
+                        keyCode: $settings.addKeyboardInputShortcutKeyCode,
+                        modifiers: $settings.addKeyboardInputShortcutModifiers,
+                        onReset: {
+                            settings.resetAddKeyboardInputShortcut()
+                            controller.updateGlobalShortcut()
+                        },
+                        onChange: {
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+                    )
+
                     // Preview capture shortcut
                     ShortcutRow(
                         icon: "list.bullet.rectangle",
@@ -160,6 +177,7 @@ struct GeneralTab: View {
 // MARK: - Provider Global Settings Section
 struct ProviderGlobalSettingsSection: View {
     let onAddOllama: () -> Void
+    let onAddAnthropic: () -> Void
     @State private var ollamaSettings = GlobalProviderSettingsStorage.shared.loadOllamaSettings()
     @State private var anthropicSettings = GlobalProviderSettingsStorage.shared.loadAnthropicSettings()
 
@@ -244,9 +262,7 @@ struct ProviderGlobalSettingsSection: View {
                 .padding(.leading, 28)
 
                 // Add Anthropic Model button
-                Button(action: {
-                    // TODO: Implement add Anthropic model
-                }) {
+                Button(action: onAddAnthropic) {
                     HStack(spacing: 4) {
                         Image(systemName: "plus.circle.fill")
                         Text("Add Model")
@@ -267,7 +283,7 @@ struct ProviderGlobalSettingsSection: View {
 // MARK: - Providers Tab
 struct ProvidersTab: View {
     @ObservedObject var modeManager: ModeManager
-    @State private var showingAddProvider = false
+    @State private var addingProviderType: ProviderType?
     @State private var editingProvider: ProviderConfiguration?
     @State private var providerAvailability: [UUID: Bool] = [:]
 
@@ -275,8 +291,11 @@ struct ProvidersTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // Provider Global Settings
-                ProviderGlobalSettingsSection(onAddOllama: { showingAddProvider = true })
-                    .padding(.top, 8)
+                ProviderGlobalSettingsSection(
+                    onAddOllama: { addingProviderType = .ollama },
+                    onAddAnthropic: { addingProviderType = .anthropic }
+                )
+                .padding(.top, 8)
 
                 Divider()
 
@@ -305,8 +324,15 @@ struct ProvidersTab: View {
             }
             .padding()
         }
-        .sheet(isPresented: $showingAddProvider) {
-            AddProviderSheet(modeManager: modeManager, isPresented: $showingAddProvider)
+        .sheet(item: $addingProviderType) { providerType in
+            AddProviderSheet(
+                providerType: providerType,
+                modeManager: modeManager,
+                isPresented: Binding(
+                    get: { addingProviderType != nil },
+                    set: { if !$0 { addingProviderType = nil } }
+                )
+            )
         }
         .sheet(item: $editingProvider) { config in
             EditProviderSheet(config: config, modeManager: modeManager, isPresented: Binding(
@@ -438,16 +464,26 @@ struct ProviderRow: View {
 
 // MARK: - Add Provider Sheet
 struct AddProviderSheet: View {
+    let providerType: ProviderType
     @ObservedObject var modeManager: ModeManager
     @Binding var isPresented: Bool
 
-    @State private var modelName: String = "llama3.2:3b"
+    @State private var modelName: String = ""
     @State private var baseURL: String = GlobalProviderSettingsStorage.shared.loadOllamaSettings().defaultBaseURL
     @State private var useCustomURL: Bool = false
 
+    init(providerType: ProviderType, modeManager: ModeManager, isPresented: Binding<Bool>) {
+        self.providerType = providerType
+        self.modeManager = modeManager
+        self._isPresented = isPresented
+
+        // Set default model name based on provider type
+        _modelName = State(initialValue: providerType == .ollama ? "llama3.2:3b" : "claude-sonnet-4-5-20250929")
+    }
+
     var body: some View {
         VStack(spacing: 20) {
-            Text("Add Model")
+            Text("Add \(providerType == .ollama ? "Ollama" : "Anthropic") Model")
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 12) {
@@ -455,31 +491,39 @@ struct AddProviderSheet: View {
                     Text("Model Name")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    TextField("e.g., llama3.2:3b", text: $modelName)
+                    TextField(providerType == .ollama ? "e.g., llama3.2:3b" : "e.g., claude-sonnet-4-5-20250929", text: $modelName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
-                    Text("Must be already pulled via 'ollama pull <model>'")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    if providerType == .ollama {
+                        Text("Must be already pulled via 'ollama pull <model>'")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("See available models at docs.anthropic.com")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle(isOn: $useCustomURL) {
-                        Text("Use custom URL")
-                            .font(.caption)
-                    }
+                if providerType == .ollama {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle(isOn: $useCustomURL) {
+                            Text("Use custom URL")
+                                .font(.caption)
+                        }
 
-                    if useCustomURL {
-                        VStack(alignment: .leading, spacing: 4) {
-                            TextField("http://localhost:11434", text: $baseURL)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                            Text("Override default URL for this model")
+                        if useCustomURL {
+                            VStack(alignment: .leading, spacing: 4) {
+                                TextField("http://localhost:11434", text: $baseURL)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                Text("Override default URL for this model")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        } else {
+                            Text("Using default: \(GlobalProviderSettingsStorage.shared.loadOllamaSettings().defaultBaseURL)")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
-                    } else {
-                        Text("Using default: \(GlobalProviderSettingsStorage.shared.loadOllamaSettings().defaultBaseURL)")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
                     }
                 }
             }
@@ -503,15 +547,22 @@ struct AddProviderSheet: View {
                 }
 
                 Button("Add") {
-                    let finalBaseURL = useCustomURL ? baseURL : GlobalProviderSettingsStorage.shared.loadOllamaSettings().defaultBaseURL
-                    let config = ProviderConfiguration.ollama(
-                        modelName: modelName,
-                        baseURL: finalBaseURL
-                    )
+                    let config: ProviderConfiguration
+                    if providerType == .ollama {
+                        let finalBaseURL = useCustomURL ? baseURL : GlobalProviderSettingsStorage.shared.loadOllamaSettings().defaultBaseURL
+                        config = ProviderConfiguration.ollama(
+                            modelName: modelName,
+                            baseURL: finalBaseURL
+                        )
+                    } else {
+                        config = ProviderConfiguration.anthropic(
+                            modelName: modelName
+                        )
+                    }
                     modeManager.addProviderConfiguration(config)
                     isPresented = false
                 }
-                .disabled(modelName.isEmpty || (useCustomURL && baseURL.isEmpty))
+                .disabled(modelName.isEmpty || (providerType == .ollama && useCustomURL && baseURL.isEmpty))
             }
         }
         .padding()
@@ -519,8 +570,13 @@ struct AddProviderSheet: View {
     }
 
     private var previewName: String {
-        let finalBaseURL = useCustomURL ? baseURL : GlobalProviderSettingsStorage.shared.loadOllamaSettings().defaultBaseURL
-        let config = ProviderConfiguration.ollama(modelName: modelName, baseURL: finalBaseURL)
+        let config: ProviderConfiguration
+        if providerType == .ollama {
+            let finalBaseURL = useCustomURL ? baseURL : GlobalProviderSettingsStorage.shared.loadOllamaSettings().defaultBaseURL
+            config = ProviderConfiguration.ollama(modelName: modelName, baseURL: finalBaseURL)
+        } else {
+            config = ProviderConfiguration.anthropic(modelName: modelName)
+        }
         return config.displayName
     }
 }

@@ -18,6 +18,7 @@ enum DestinationType {
 class MenuBarController: ObservableObject {
     @Published var isCapturing = false
     @Published var showResultsOverlay = false
+    @Published var showKeyboardInputOverlay = false
     @Published var isRecording = false
     @Published var isProcessing = false
     @Published var isInitializing = true
@@ -132,6 +133,19 @@ class MenuBarController: ObservableObject {
             ))
         }
 
+        // 5. Add keyboard input to capture shortcut
+        if settings.isAddKeyboardInputShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Add Keyboard Input",
+                keyCode: settings.addKeyboardInputShortcutKeyCode,
+                modifiers: settings.addKeyboardInputShortcutModifiers,
+                callback: { [weak self] in
+                    print("⌨️ Add keyboard input hotkey triggered!")
+                    self?.handleAddKeyboardInputShortcut()
+                }
+            ))
+        }
+
         let success = hotkeyManager.registerHotkeys(hotkeys: hotkeys)
         if success {
             print("✅ MenuBarController: Global hotkeys setup completed successfully")
@@ -184,6 +198,17 @@ class MenuBarController: ObservableObject {
                 modifiers: settings.previewShortcutModifiers,
                 callback: { [weak self] in
                     self?.handlePreviewShortcut()
+                }
+            ))
+        }
+
+        if settings.isAddKeyboardInputShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Add Keyboard Input",
+                keyCode: settings.addKeyboardInputShortcutKeyCode,
+                modifiers: settings.addKeyboardInputShortcutModifiers,
+                callback: { [weak self] in
+                    self?.handleAddKeyboardInputShortcut()
                 }
             ))
         }
@@ -422,6 +447,7 @@ class MenuBarController: ObservableObject {
 
             // Finish capturing: show results overlay and hide minimized overlay
             showResultsOverlay = true
+            showKeyboardInputOverlay = false
             isCapturing = false
         } else {
             // Start new capture
@@ -509,6 +535,45 @@ class MenuBarController: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+
+    private func handleAddKeyboardInputShortcut() {
+        openKeyboardInputOverlay()
+    }
+
+    func openKeyboardInputOverlay() {
+        guard isCapturing else {
+            print("⚠️ Cannot open keyboard input - no active capture")
+            return
+        }
+
+        print("⌨️ Opening keyboard input overlay")
+        showKeyboardInputOverlay = true
+
+        // Open the keyboard input window using callback
+        openWindowCallback?("keyboard-input-overlay")
+
+        // Activate the app to bring window to foreground
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func addKeyboardInput(text: String) {
+        let action = CaptureAction(source: .keyboardInput, text: text)
+        captureActions.append(action)
+
+        // Show HUD notification
+        hudManager?.show(
+            HUDNotification(
+                icon: "keyboard",
+                iconColor: .blue,
+                title: "Keyboard Input Added",
+                subtitle: "\(text.prefix(50))..."
+            )
+        )
+
+        print("⌨️ Added keyboard input to capture: \(text.prefix(50))...")
     }
 
     private func copySelectionAndAddToCapture() {
@@ -619,6 +684,7 @@ class MenuBarController: ObservableObject {
 
         isCapturing = false
         showResultsOverlay = false
+        showKeyboardInputOverlay = false
         isRecording = false
         isProcessing = false
         statusMessage = "Ready to capture"

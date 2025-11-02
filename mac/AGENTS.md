@@ -39,6 +39,7 @@ xcodebuild test -project vcdr.xcodeproj -scheme vcdr
    - Record voice (transcribed via WhisperKit)
    - Add selected text from other apps
    - Add clipboard content
+   - Add keyboard input (direct text entry via overlay)
 3. **Mode Processing**: Combined text is processed through the active Mode (Disabled, Assistant, or custom)
 4. **Destination**: Processed text is sent to chosen destination (tmux, paste, or clipboard)
 
@@ -62,9 +63,27 @@ xcodebuild test -project vcdr.xcodeproj -scheme vcdr
 
 #### LLM Provider System (LLMProviders/)
 - **LLMProvider Protocol**: Abstraction over different LLM backends
-- **FoundationModelsProvider**: Uses Apple's Foundation Models (requires macOS 15.1+)
-- **OllamaProvider**: Uses local Ollama server (preferred if available)
-- ModeManager automatically prefers Ollama if available, falls back to Foundation Models
+  - Defines: `name`, `requiresAPIKey`, `isAvailable`, `generate(prompt:systemPrompt:)`
+- **ProviderConfiguration**: Stores per-provider settings (model names, URLs, etc.)
+  - Auto-generates display names from configuration parameters
+  - Stored persistently via ProvidersStorage
+- **Available Providers**:
+  - **FoundationModelsProvider**: Uses Apple's on-device Foundation Models (requires macOS 15.1+, no configuration needed)
+  - **OllamaProvider**: Uses local Ollama server with configurable models and base URLs
+    - Default base URL: `http://localhost:11434`
+    - Supports custom URLs per model for multiple Ollama instances
+  - **AnthropicProvider**: Uses Anthropic's Claude API with configurable models
+    - Default model: `claude-sonnet-4-5-20250929`
+    - Requires API key (stored in GlobalProviderSettingsStorage)
+    - API key format: `sk-ant-...`
+- **Provider Management**:
+  - User configures and selects default provider in Settings > Providers tab
+  - Multiple instances of same provider type can be configured (e.g., different Ollama models)
+  - Provider availability checked asynchronously, displayed as status indicator in UI
+- **Global Provider Settings**: Type-specific settings stored separately
+  - Ollama: Default base URL for new models
+  - Anthropic: API key (shared across all Anthropic models)
+  - Apple Foundation Models: No configuration needed
 
 #### Transcription Provider System (Transcription/)
 - **TranscriptionProvider Protocol**: Abstraction over different speech-to-text backends
@@ -82,13 +101,14 @@ xcodebuild test -project vcdr.xcodeproj -scheme vcdr
 
 #### Capture Actions (Core/CaptureAction.swift)
 - Represents a single piece of captured content within a session
-- Sources: `.recording` (voice), `.selectedText`, `.clipboard`
+- Sources: `.recording` (voice), `.selectedText`, `.clipboard`, `.keyboardInput`
 - Multiple actions accumulate during a capture session
 - Combined text = all action texts joined with newlines
 
 #### Window Management (vcdrApp.swift)
 - **MenuBar**: Main menu dropdown
 - **MinimizedOverlay**: Shows recording status during capture (bottom-center, always visible)
+- **KeyboardInputOverlay**: Text input overlay for adding keyboard input during capture (center screen, dismissable)
 - **ResultsOverlay**: Shows after capture for action selection (floating, keyboard-driven)
 - **HUD**: Transient notifications for mode switches, events (center screen, auto-dismiss)
 - **CapturePreview**: Preview window for viewing accumulated capture content
@@ -110,6 +130,7 @@ Implemented using Carbon Event Manager with Accessibility permissions:
 - **Capture Toggle** (Cmd+Option+/): Start/finish capture session
 - **Toggle Recording** (Cmd+Option+R): Start/stop voice recording (only during capture)
 - **Add Clipboard** (Cmd+Option+C): Add clipboard content (only during capture)
+- **Add Keyboard Input** (Cmd+Option+I): Open keyboard input overlay to type text (only during capture)
 - **Preview** (Cmd+Option+P): Show capture preview window (only during capture)
 
 Settings stored in AppSettings, reconfigurable via SettingsView.
@@ -159,10 +180,18 @@ Non-intrusive, center-screen notifications for:
 5. Add corresponding method in MenuBarController (e.g., `stopAndSendToNewDestination()`)
 
 ### Adding a New LLM Provider
-1. Create class conforming to `LLMProvider` protocol in `LLMProviders/`
-2. Implement `name`, `requiresAPIKey`, `isAvailable`, and `generate(prompt:systemPrompt:)`
-3. Add to `availableProviders` in ModeManager
-4. Add UI in SettingsView to select the provider
+1. Add new case to `ProviderType` enum in `ProviderConfiguration.swift`
+2. Create class conforming to `LLMProvider` protocol in `LLMProviders/`
+   - Implement `name`, `requiresAPIKey`, `isAvailable`, and `generate(prompt:systemPrompt:)`
+3. (Optional) Create global settings struct in `ProviderGlobalSettings.swift` if provider needs shared config (like API keys)
+4. Update `ProviderConfiguration` to support provider-specific settings (e.g., model names, endpoints)
+   - Add static factory method like `.yourProvider(modelName:...)`
+   - Update `displayName` computed property to generate readable names
+5. Update `ModeManager.createProviderInstance(from:)` to handle the new provider type
+6. Add UI in `SettingsView`:
+   - Add global settings section in `ProviderGlobalSettingsSection` if needed
+   - Update `AddProviderSheet` and `EditProviderSheet` to support the new provider type
+   - Update `ProviderRow` icon mapping in `providerIcon` computed property
 
 ### Adding a New Transcription Provider
 1. Create class conforming to `TranscriptionProvider` protocol in `Transcription/`
@@ -193,6 +222,7 @@ vcdr/
 │   ├── MenuBarView.swift          # Menu bar dropdown UI
 │   ├── ResultsOverlay.swift       # Post-capture action selector
 │   ├── MinimizedOverlay.swift     # In-capture status indicator
+│   ├── KeyboardInputOverlay.swift # Keyboard input text entry overlay
 │   ├── SettingsView.swift         # App settings UI
 │   └── ...
 ├── Audio/
@@ -209,8 +239,11 @@ vcdr/
 │   └── CustomModesStorage.swift # Persistence
 ├── LLMProviders/              # LLM providers
 │   ├── LLMProvider.swift      # Protocol
+│   ├── ProviderConfiguration.swift # Provider config & storage
+│   ├── ProviderGlobalSettings.swift # Global provider settings
 │   ├── FoundationModelsProvider.swift
-│   └── OllamaProvider.swift
+│   ├── OllamaProvider.swift
+│   └── AnthropicProvider.swift
 ├── Destinations/              # Output destinations
 │   ├── DestinationProtocol.swift
 │   ├── TmuxDestination.swift

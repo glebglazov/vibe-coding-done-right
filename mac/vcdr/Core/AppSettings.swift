@@ -28,6 +28,10 @@ class AppSettings: ObservableObject {
     @Published var previewShortcutKeyCode: CGKeyCode = 35 // P key
     @Published var previewShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+P
 
+    // Add keyboard input to capture shortcut
+    @Published var addKeyboardInputShortcutKeyCode: CGKeyCode = 34 // I key
+    @Published var addKeyboardInputShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+I
+
     @Published var whisperTask: String = "transcribe" // "transcribe" or "translate"
 
     // Mode settings
@@ -88,6 +92,18 @@ class AppSettings: ObservableObject {
             previewShortcutModifiers = CGEventFlags(rawValue: UInt64(previewModifierRawValue))
         }
 
+        // Load add keyboard input shortcut
+        let addKeyboardInputKeyCode = userDefaults.integer(forKey: "addKeyboardInputShortcutKeyCode")
+        if addKeyboardInputKeyCode == 0 && userDefaults.object(forKey: "addKeyboardInputShortcutKeyCode") == nil {
+            // First time launch - set default
+            addKeyboardInputShortcutKeyCode = 34 // I key
+            addKeyboardInputShortcutModifiers = [.maskCommand, .maskAlternate]
+        } else {
+            addKeyboardInputShortcutKeyCode = CGKeyCode(addKeyboardInputKeyCode)
+            let addKeyboardInputModifierRawValue = userDefaults.integer(forKey: "addKeyboardInputShortcutModifiers")
+            addKeyboardInputShortcutModifiers = CGEventFlags(rawValue: UInt64(addKeyboardInputModifierRawValue))
+        }
+
         whisperTask = userDefaults.string(forKey: "whisperTask") ?? "transcribe"
 
         // Load mode settings
@@ -106,6 +122,9 @@ class AppSettings: ObservableObject {
 
         userDefaults.set(Int(previewShortcutKeyCode), forKey: "previewShortcutKeyCode")
         userDefaults.set(Int(previewShortcutModifiers.rawValue), forKey: "previewShortcutModifiers")
+
+        userDefaults.set(Int(addKeyboardInputShortcutKeyCode), forKey: "addKeyboardInputShortcutKeyCode")
+        userDefaults.set(Int(addKeyboardInputShortcutModifiers.rawValue), forKey: "addKeyboardInputShortcutModifiers")
 
         userDefaults.set(whisperTask, forKey: "whisperTask")
 
@@ -178,6 +197,23 @@ class AppSettings: ObservableObject {
     func resetPreviewShortcut() {
         previewShortcutKeyCode = 0
         previewShortcutModifiers = []
+        saveSettings()
+    }
+
+    var addKeyboardInputShortcutDisplayString: String {
+        if addKeyboardInputShortcutKeyCode == 0 {
+            return "Not set"
+        }
+        return shortcutDisplayString(keyCode: addKeyboardInputShortcutKeyCode, modifiers: addKeyboardInputShortcutModifiers)
+    }
+
+    var isAddKeyboardInputShortcutSet: Bool {
+        return addKeyboardInputShortcutKeyCode != 0
+    }
+
+    func resetAddKeyboardInputShortcut() {
+        addKeyboardInputShortcutKeyCode = 0
+        addKeyboardInputShortcutModifiers = []
         saveSettings()
     }
 

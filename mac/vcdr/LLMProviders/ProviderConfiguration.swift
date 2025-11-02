@@ -90,10 +90,12 @@ struct ProviderConfiguration: Identifiable, Codable, Equatable {
 }
 
 /// Supported provider types
-enum ProviderType: String, Codable {
+enum ProviderType: String, Codable, Identifiable {
     case appleFoundationModels = "apple"
     case ollama = "ollama"
     case anthropic = "anthropic"
+
+    var id: String { rawValue }
 }
 
 /// Manages persistence of provider configurations

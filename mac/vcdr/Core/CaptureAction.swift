@@ -20,6 +20,7 @@ struct CaptureAction: Identifiable, Codable {
         case clipboard
         case recording
         case selectedText
+        case keyboardInput
     }
 
     init(source: CaptureSource, text: String, audioFileURL: URL? = nil) {
@@ -41,6 +42,8 @@ extension CaptureAction {
             return "Recording"
         case .selectedText:
             return "Selected Text"
+        case .keyboardInput:
+            return "Keyboard Input"
         }
     }
 
@@ -53,6 +56,8 @@ extension CaptureAction {
             return "waveform"
         case .selectedText:
             return "selection.pin.in.out"
+        case .keyboardInput:
+            return "keyboard"
         }
     }
 }
