@@ -62,7 +62,6 @@ class MenuBarController: ObservableObject {
 
         // Sync mode manager with app settings
         let settings = AppSettings.shared
-        modeManager.isEnabled = settings.isModeEnabled
         modeManager.setMode(named: settings.activeModeName)
 
         Task {

@@ -31,7 +31,6 @@ class AppSettings: ObservableObject {
     @Published var whisperTask: String = "transcribe" // "transcribe" or "translate"
 
     // Mode settings
-    @Published var isModeEnabled: Bool = true
     @Published var activeModeName: String = "Disabled" // Name of the active mode
 
     private let userDefaults = UserDefaults.standard
@@ -92,12 +91,6 @@ class AppSettings: ObservableObject {
         whisperTask = userDefaults.string(forKey: "whisperTask") ?? "transcribe"
 
         // Load mode settings
-        if userDefaults.object(forKey: "isModeEnabled") == nil {
-            // First time launch - default to enabled
-            isModeEnabled = true
-        } else {
-            isModeEnabled = userDefaults.bool(forKey: "isModeEnabled")
-        }
         activeModeName = userDefaults.string(forKey: "activeModeName") ?? "Disabled"
     }
 
@@ -117,7 +110,6 @@ class AppSettings: ObservableObject {
         userDefaults.set(whisperTask, forKey: "whisperTask")
 
         // Save mode settings
-        userDefaults.set(isModeEnabled, forKey: "isModeEnabled")
         userDefaults.set(activeModeName, forKey: "activeModeName")
     }
 

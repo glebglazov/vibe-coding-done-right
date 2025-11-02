@@ -36,6 +36,11 @@ struct SettingsView: View {
 
             // Tabs
             TabView {
+                GeneralTab(settings: settings)
+                    .tabItem {
+                        Label("General", systemImage: "gear")
+                    }
+
                 ShortcutsTab(controller: controller, settings: settings)
                     .tabItem {
                         Label("Shortcuts", systemImage: "keyboard")
@@ -152,10 +157,9 @@ struct ShortcutsTab: View {
     }
 }
 
-// MARK: - Modes Tab
-struct ModesTab: View {
+// MARK: - General Tab
+struct GeneralTab: View {
     @ObservedObject var settings: AppSettings
-    @ObservedObject var modeManager: ModeManager
 
     var body: some View {
         ScrollView {
@@ -213,63 +217,40 @@ struct ModesTab: View {
                     }
                 }
 
-                Divider()
+                Spacer()
+            }
+            .padding()
+        }
+    }
+}
 
-                // AI Processing Section
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("AI Processing")
-                        .font(.headline)
+// MARK: - Modes Tab
+struct ModesTab: View {
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var modeManager: ModeManager
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        // Enable/Disable Toggle
-                        Toggle(isOn: Binding(
-                            get: { modeManager.isEnabled },
-                            set: { newValue in
-                                modeManager.isEnabled = newValue
-                                settings.isModeEnabled = newValue
-                                settings.saveSettings()
-                            }
-                        )) {
-                            HStack {
-                                Image(systemName: "sparkles")
-                                    .foregroundColor(.purple)
-                                Text("Enable AI Processing")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                            }
-                        }
-                        .toggleStyle(SwitchToggleStyle())
-
-                        Text("Process transcribed text with AI before sending to destination")
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Info Section
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.secondary)
+                        Text("Select mode in capturing overlay")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                            .padding(.leading, 28)
-
-                        if modeManager.isEnabled {
-                            Divider()
-                                .padding(.vertical, 4)
-
-                            HStack {
-                                Image(systemName: "info.circle")
-                                    .foregroundColor(.secondary)
-                                Text("Select mode in capturing overlay")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.leading, 12)
-
-                            HStack {
-                                Image(systemName: "cpu")
-                                    .foregroundColor(.secondary)
-                                Text("Provider: \(modeManager.activeLLMProvider.name)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.leading, 12)
-                        }
                     }
-                    .padding(.vertical, 8)
+
+                    HStack {
+                        Image(systemName: "cpu")
+                            .foregroundColor(.secondary)
+                        Text("Provider: \(modeManager.activeLLMProvider.name)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
+                .padding(.top, 8)
 
                 Divider()
 
