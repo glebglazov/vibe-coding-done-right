@@ -35,66 +35,51 @@ struct ShortcutRecorderView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Global Shortcut")
-                .font(.headline)
-
-            HStack {
-                Button(action: {
-                    if isRecording {
-                        stopRecording()
-                    } else {
-                        startRecording()
-                    }
-                }) {
-                    HStack {
-                        if isRecording {
-                            Text(temporaryShortcut.isEmpty ? "Press keys..." : temporaryShortcut)
-                                .foregroundColor(.orange)
-                        } else {
-                            Text(currentShortcutDisplay)
-                                .foregroundColor(.primary)
-                        }
-
-                        Spacer()
-
-                        if isRecording {
-                            Image(systemName: "record.circle.fill")
-                                .foregroundColor(.red)
-                        } else {
-                            Image(systemName: "pencil")
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(isRecording ? Color.orange.opacity(0.1) : Color.gray.opacity(0.1))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(isRecording ? Color.orange : Color.gray.opacity(0.3), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
-
+        HStack {
+            Button(action: {
                 if isRecording {
-                    Button("Cancel") {
-                        stopRecording()
-                    }
-                    .buttonStyle(.bordered)
+                    stopRecording()
+                } else {
+                    startRecording()
                 }
+            }) {
+                HStack {
+                    if isRecording {
+                        Text(temporaryShortcut.isEmpty ? "Press keys..." : temporaryShortcut)
+                            .foregroundColor(.orange)
+                    } else {
+                        Text(currentShortcutDisplay)
+                            .foregroundColor(.primary)
+                    }
+
+                    Spacer()
+
+                    if isRecording {
+                        Image(systemName: "record.circle.fill")
+                            .foregroundColor(.red)
+                    } else {
+                        Image(systemName: "pencil")
+                            .foregroundColor(.blue)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isRecording ? Color.orange.opacity(0.1) : Color.gray.opacity(0.1))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isRecording ? Color.orange : Color.gray.opacity(0.3), lineWidth: 1)
+                )
             }
+            .buttonStyle(PlainButtonStyle())
 
             if isRecording {
-                Text("Press any key combination to record it as your shortcut")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else {
-                Text("Click to record a new shortcut")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Button("Cancel") {
+                    stopRecording()
+                }
+                .buttonStyle(.bordered)
             }
         }
         .onAppear {

@@ -23,11 +23,10 @@ struct vcdrApp: App {
         }
         .menuBarExtraStyle(.menu)
         
-        Window("VCDR Settings", id: "settings") {
+        Window("vcdr settings", id: "settings") {
             SettingsView()
                 .environmentObject(menuBarController)
         }
-        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultSize(width: 400, height: 300)
         .windowLevel(.floating)

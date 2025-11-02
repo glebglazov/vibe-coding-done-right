@@ -14,36 +14,10 @@ struct SettingsView: View {
     @ObservedObject var modeManager = ModeManager.shared
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            VStack(spacing: 8) {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 32))
-                    .foregroundColor(.blue)
-
-                Text("vcdr settings")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("vibe coding done right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.top, 20)
-            .padding(.bottom, 16)
-
-            Divider()
-
-            // Tabs
-            TabView {
-                GeneralTab(settings: settings)
+        TabView {
+                GeneralTab(controller: controller, settings: settings)
                     .tabItem {
                         Label("General", systemImage: "gear")
-                    }
-
-                ShortcutsTab(controller: controller, settings: settings)
-                    .tabItem {
-                        Label("Shortcuts", systemImage: "keyboard")
                     }
 
                 ModesTab(settings: settings, modeManager: modeManager)
@@ -57,168 +31,122 @@ struct SettingsView: View {
                     }
             }
             .padding(.top, 8)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-// MARK: - Shortcuts Tab
-struct ShortcutsTab: View {
-    @ObservedObject var controller: MenuBarController
-    @ObservedObject var settings: AppSettings
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Global Shortcuts")
-                    .font(.headline)
-                    .padding(.top, 8)
-
-                // Capturing shortcut
-                ShortcutRow(
-                    icon: "mic.fill",
-                    iconColor: .blue,
-                    title: "Start/Stop Capturing",
-                    description: "Press once to start capturing, press again to close",
-                    keyCode: $settings.capturingShortcutKeyCode,
-                    modifiers: $settings.capturingShortcutModifiers,
-                    onReset: {
-                        settings.resetCapturingShortcut()
-                        controller.updateGlobalShortcut()
-                    },
-                    onChange: {
-                        settings.saveSettings()
-                        controller.updateGlobalShortcut()
-                    }
-                )
-
-                Divider()
-                    .padding(.vertical, 4)
-
-                // Toggle recording shortcut
-                ShortcutRow(
-                    icon: "record.circle",
-                    iconColor: .red,
-                    title: "Toggle Recording in Capture",
-                    description: "Start/stop recording while capture is active",
-                    keyCode: $settings.toggleRecordingShortcutKeyCode,
-                    modifiers: $settings.toggleRecordingShortcutModifiers,
-                    onReset: {
-                        settings.resetToggleRecordingShortcut()
-                        controller.updateGlobalShortcut()
-                    },
-                    onChange: {
-                        settings.saveSettings()
-                        controller.updateGlobalShortcut()
-                    }
-                )
-
-                Divider()
-                    .padding(.vertical, 4)
-
-                // Add clipboard shortcut
-                ShortcutRow(
-                    icon: "doc.on.clipboard",
-                    iconColor: .green,
-                    title: "Add Clipboard to Capture",
-                    description: "Add clipboard text to current capture",
-                    keyCode: $settings.addClipboardShortcutKeyCode,
-                    modifiers: $settings.addClipboardShortcutModifiers,
-                    onReset: {
-                        settings.resetAddClipboardShortcut()
-                        controller.updateGlobalShortcut()
-                    },
-                    onChange: {
-                        settings.saveSettings()
-                        controller.updateGlobalShortcut()
-                    }
-                )
-
-                Divider()
-                    .padding(.vertical, 4)
-
-                // Preview capture shortcut
-                ShortcutRow(
-                    icon: "list.bullet.rectangle",
-                    iconColor: .purple,
-                    title: "Preview Capture",
-                    description: "Open preview window to see all capture actions",
-                    keyCode: $settings.previewShortcutKeyCode,
-                    modifiers: $settings.previewShortcutModifiers,
-                    onReset: {
-                        settings.resetPreviewShortcut()
-                        controller.updateGlobalShortcut()
-                    },
-                    onChange: {
-                        settings.saveSettings()
-                        controller.updateGlobalShortcut()
-                    }
-                )
-
-                Spacer()
-            }
-            .padding()
-        }
     }
 }
 
 // MARK: - General Tab
 struct GeneralTab: View {
+    @ObservedObject var controller: MenuBarController
     @ObservedObject var settings: AppSettings
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Voice Processing Section
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Voice Processing")
-                            .font(.headline)
+                // Shortcuts Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Shortcuts")
+                        .font(.headline)
 
-                        VStack(spacing: 8) {
-                            HStack {
-                                Button(action: {
-                                    settings.whisperTask = "transcribe"
-                                    settings.saveSettings()
-                                }) {
-                                    HStack {
-                                        Image(systemName: settings.whisperTask == "transcribe" ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(settings.whisperTask == "transcribe" ? .blue : .gray)
-                                        Text("Transcribe")
-                                            .font(.subheadline)
-                                        Spacer()
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-
-                            Text("Keep original language (Russian → Russian, English → English)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.leading, 28)
-
-                            HStack {
-                                Button(action: {
-                                    settings.whisperTask = "translate"
-                                    settings.saveSettings()
-                                }) {
-                                    HStack {
-                                        Image(systemName: settings.whisperTask == "translate" ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(settings.whisperTask == "translate" ? .blue : .gray)
-                                        Text("Translate")
-                                            .font(.subheadline)
-                                        Spacer()
-                                    }
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-
-                            Text("Translate to English (Russian → English, Spanish → English)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.leading, 28)
+                    // Capturing shortcut
+                    ShortcutRow(
+                        icon: "mic.fill",
+                        iconColor: .blue,
+                        title: "Start/Stop Capturing",
+                        keyCode: $settings.capturingShortcutKeyCode,
+                        modifiers: $settings.capturingShortcutModifiers,
+                        onReset: {
+                            settings.resetCapturingShortcut()
+                            controller.updateGlobalShortcut()
+                        },
+                        onChange: {
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
                         }
-                        .padding(.vertical, 8)
+                    )
+
+                    // Toggle recording shortcut
+                    ShortcutRow(
+                        icon: "record.circle",
+                        iconColor: .red,
+                        title: "Toggle Recording in Capture",
+                        keyCode: $settings.toggleRecordingShortcutKeyCode,
+                        modifiers: $settings.toggleRecordingShortcutModifiers,
+                        onReset: {
+                            settings.resetToggleRecordingShortcut()
+                            controller.updateGlobalShortcut()
+                        },
+                        onChange: {
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+                    )
+
+                    // Add clipboard shortcut
+                    ShortcutRow(
+                        icon: "doc.on.clipboard",
+                        iconColor: .green,
+                        title: "Add Clipboard to Capture",
+                        keyCode: $settings.addClipboardShortcutKeyCode,
+                        modifiers: $settings.addClipboardShortcutModifiers,
+                        onReset: {
+                            settings.resetAddClipboardShortcut()
+                            controller.updateGlobalShortcut()
+                        },
+                        onChange: {
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+                    )
+
+                    // Preview capture shortcut
+                    ShortcutRow(
+                        icon: "list.bullet.rectangle",
+                        iconColor: .purple,
+                        title: "Preview Capture",
+                        keyCode: $settings.previewShortcutKeyCode,
+                        modifiers: $settings.previewShortcutModifiers,
+                        onReset: {
+                            settings.resetPreviewShortcut()
+                            controller.updateGlobalShortcut()
+                        },
+                        onChange: {
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+                    )
+                }
+
+                Divider()
+
+                // Voice Processing Section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Voice Processing")
+                        .font(.headline)
+
+                    HStack(spacing: 20) {
+                        HStack(spacing: 6) {
+                            Image(systemName: settings.whisperTask == "transcribe" ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(settings.whisperTask == "transcribe" ? .blue : .gray)
+                            Text("Transcribe")
+                                .font(.subheadline)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            settings.whisperTask = "transcribe"
+                            settings.saveSettings()
+                        }
+
+                        HStack(spacing: 6) {
+                            Image(systemName: settings.whisperTask == "translate" ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(settings.whisperTask == "translate" ? .blue : .gray)
+                            Text("Translate")
+                                .font(.subheadline)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            settings.whisperTask = "translate"
+                            settings.saveSettings()
+                        }
                     }
                 }
 
@@ -332,25 +260,6 @@ struct ProviderGlobalSettingsSection: View {
                 .disabled(anthropicSettings.apiKey.isEmpty)
             }
             .padding(.vertical, 8)
-
-            Divider()
-
-            // Apple Foundation Models (no settings)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "apple.logo")
-                        .foregroundColor(.secondary)
-                    Text("Apple Foundation Models")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                }
-
-                Text("No configuration required")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 28)
-            }
-            .padding(.vertical, 8)
         }
     }
 }
@@ -441,6 +350,23 @@ struct ProviderRow: View {
                         Text(config.displayName)
                             .font(.subheadline)
 
+                        // Action buttons right after name
+                        if config.providerType == .ollama || config.providerType == .anthropic {
+                            Button(action: onEdit) {
+                                Image(systemName: "pencil")
+                                    .foregroundColor(.secondary)
+                                    .font(.system(size: 14))
+                            }
+                            .buttonStyle(PlainButtonStyle())
+
+                            Button(action: onDelete) {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                                    .font(.system(size: 14))
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+
                         if isActive {
                             Text("Default")
                                 .font(.caption2)
@@ -490,27 +416,6 @@ struct ProviderRow: View {
                             }
                         }
                         .padding(.leading, 24)
-                    }
-                }
-
-                Spacer()
-
-                // Action buttons
-                HStack(spacing: 12) {
-                    if config.providerType == .ollama || config.providerType == .anthropic {
-                        Button(action: onEdit) {
-                            Image(systemName: "pencil")
-                                .foregroundColor(.secondary)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .help("Edit provider")
-
-                        Button(action: onDelete) {
-                            Image(systemName: "trash")
-                                .foregroundColor(.red)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .help("Delete provider")
                     }
                 }
             }
@@ -774,17 +679,6 @@ struct ModesTab: View {
 
                 Divider()
 
-                // Info Section
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.secondary)
-                    Text("Select mode in capturing overlay using keyboard shortcuts")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Divider()
-
                 // Custom Modes Section
                 CustomModesSection()
 
@@ -800,48 +694,40 @@ struct ShortcutRow: View {
     let icon: String
     let iconColor: Color
     let title: String
-    let description: String
     @Binding var keyCode: CGKeyCode
     @Binding var modifiers: CGEventFlags
     let onReset: () -> Void
     let onChange: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        HStack(spacing: 12) {
+            HStack(spacing: 6) {
                 Image(systemName: icon)
                     .foregroundColor(iconColor)
+                    .frame(width: 20)
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.medium)
             }
+            .frame(width: 220, alignment: .leading)
 
-            Text(description)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.leading, 24)
-
-            HStack {
-                ShortcutRecorderView(
-                    keyCode: $keyCode,
-                    modifiers: $modifiers
-                )
-                .onChange(of: keyCode) { _, _ in
-                    onChange()
-                }
-                .onChange(of: modifiers) { _, _ in
-                    onChange()
-                }
-
-                Button(action: onReset) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 16))
-                }
-                .buttonStyle(PlainButtonStyle())
-                .help("Reset shortcut")
+            ShortcutRecorderView(
+                keyCode: $keyCode,
+                modifiers: $modifiers
+            )
+            .onChange(of: keyCode) { _, _ in
+                onChange()
             }
-            .padding(.leading, 24)
+            .onChange(of: modifiers) { _, _ in
+                onChange()
+            }
+
+            Button(action: onReset) {
+                Image(systemName: "arrow.counterclockwise.circle.fill")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 16))
+            }
+            .buttonStyle(PlainButtonStyle())
         }
     }
 }
