@@ -180,8 +180,17 @@ struct ResultsOverlay: View {
                 } else if characters == "a" && !hasCommand {
                     controller.switchToAssistantMode()
                     return nil
-                } else if characters == "c" && !hasCommand {
+                } else if characters == "c" && !hasCommand && !event.modifierFlags.contains(.command) {
                     controller.cycleCustomModes()
+                    return nil
+                } else if characters == "v" && hasCommand {
+                    onStopAndPaste()
+                    return nil
+                } else if characters == "c" && hasCommand {
+                    onStopAndCopyToClipboard()
+                    return nil
+                } else if characters == "t" && hasCommand {
+                    onStopAndSendToTmux()
                     return nil
                 }
 

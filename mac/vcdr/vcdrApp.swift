@@ -220,48 +220,5 @@ struct vcdrApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .windowLevel(.floating)
-        .commands {
-            // Keyboard shortcuts for results overlay
-            CommandGroup(replacing: .newItem) {
-                Button("Copy to clipboard") {
-                    menuBarController.stopAndCopyToClipboard()
-                }
-                .keyboardShortcut("c", modifiers: .command)
-
-                Button("Paste into current program") {
-                    menuBarController.stopAndPaste()
-                }
-                .keyboardShortcut("v", modifiers: .command)
-
-                Button("Stop and Send to Tmux") {
-                    menuBarController.stopAndSendToTmux()
-                }
-                .keyboardShortcut("t", modifiers: .command)
-
-                Divider()
-
-                Button("Switch to Disabled mode") {
-                    menuBarController.switchToDisabledMode()
-                }
-                .keyboardShortcut("x", modifiers: [])
-
-                Button("Switch to Assistant mode") {
-                    menuBarController.switchToAssistantMode()
-                }
-                .keyboardShortcut("a", modifiers: [])
-
-                Button("Cycle Custom Modes") {
-                    menuBarController.cycleCustomModes()
-                }
-                .keyboardShortcut("c", modifiers: [])
-
-                Divider()
-
-                Button("Cancel") {
-                    menuBarController.cancelRecording()
-                }
-                .keyboardShortcut(.escape, modifiers: [])
-            }
-        }
     }
 }
