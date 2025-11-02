@@ -233,6 +233,7 @@ struct GeneralTab: View {
 struct ProviderGlobalSettingsSection: View {
     let onAddOllama: () -> Void
     @State private var ollamaSettings = GlobalProviderSettingsStorage.shared.loadOllamaSettings()
+    @State private var anthropicSettings = GlobalProviderSettingsStorage.shared.loadAnthropicSettings()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -282,6 +283,53 @@ struct ProviderGlobalSettingsSection: View {
                 .buttonStyle(PlainButtonStyle())
                 .padding(.leading, 28)
                 .padding(.top, 4)
+            }
+            .padding(.vertical, 8)
+
+            Divider()
+
+            // Anthropic Settings
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkle")
+                        .foregroundColor(.secondary)
+                    Text("Anthropic")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("API Key")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    SecureField("sk-ant-...", text: $anthropicSettings.apiKey)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .onChange(of: anthropicSettings.apiKey) { _, _ in
+                            GlobalProviderSettingsStorage.shared.saveAnthropicSettings(anthropicSettings)
+                        }
+
+                    Text("Get your API key from console.anthropic.com")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.leading, 28)
+
+                // Add Anthropic Model button
+                Button(action: {
+                    // TODO: Implement add Anthropic model
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Add Model")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.blue)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .padding(.leading, 28)
+                .padding(.top, 4)
+                .disabled(anthropicSettings.apiKey.isEmpty)
             }
             .padding(.vertical, 8)
 
@@ -433,6 +481,15 @@ struct ProviderRow: View {
                             }
                         }
                         .padding(.leading, 24)
+                    } else if config.providerType == .anthropic {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let modelName = config.anthropicModelName {
+                                Text("Model: \(modelName)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.leading, 24)
                     }
                 }
 
@@ -440,7 +497,7 @@ struct ProviderRow: View {
 
                 // Action buttons
                 HStack(spacing: 12) {
-                    if config.providerType == .ollama {
+                    if config.providerType == .ollama || config.providerType == .anthropic {
                         Button(action: onEdit) {
                             Image(systemName: "pencil")
                                 .foregroundColor(.secondary)
@@ -468,6 +525,8 @@ struct ProviderRow: View {
             return "apple.logo"
         case .ollama:
             return "cpu"
+        case .anthropic:
+            return "sparkle"
         }
     }
 }

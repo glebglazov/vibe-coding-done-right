@@ -10,18 +10,23 @@ struct ProviderConfiguration: Identifiable, Codable, Equatable {
     var ollamaModelName: String?
     var ollamaBaseURL: String?
 
+    // Anthropic-specific settings
+    var anthropicModelName: String?
+
     init(
         id: UUID = UUID(),
         providerType: ProviderType,
         isEnabled: Bool = true,
         ollamaModelName: String? = nil,
-        ollamaBaseURL: String? = nil
+        ollamaBaseURL: String? = nil,
+        anthropicModelName: String? = nil
     ) {
         self.id = id
         self.providerType = providerType
         self.isEnabled = isEnabled
         self.ollamaModelName = ollamaModelName
         self.ollamaBaseURL = ollamaBaseURL
+        self.anthropicModelName = anthropicModelName
     }
 
     /// Auto-generated display name based on provider type and configuration
@@ -51,6 +56,11 @@ struct ProviderConfiguration: Identifiable, Codable, Equatable {
             }
 
             return "Ollama (\(modelName))"
+        case .anthropic:
+            guard let modelName = anthropicModelName else {
+                return "Anthropic"
+            }
+            return "Anthropic (\(modelName))"
         }
     }
 
@@ -69,12 +79,21 @@ struct ProviderConfiguration: Identifiable, Codable, Equatable {
             ollamaBaseURL: baseURL
         )
     }
+
+    /// Create an Anthropic configuration
+    static func anthropic(modelName: String = "claude-sonnet-4-5-20250929") -> ProviderConfiguration {
+        ProviderConfiguration(
+            providerType: .anthropic,
+            anthropicModelName: modelName
+        )
+    }
 }
 
 /// Supported provider types
 enum ProviderType: String, Codable {
     case appleFoundationModels = "apple"
     case ollama = "ollama"
+    case anthropic = "anthropic"
 }
 
 /// Manages persistence of provider configurations
@@ -94,7 +113,9 @@ class ProvidersStorage {
     func loadConfigurations() -> [ProviderConfiguration] {
         guard let data = UserDefaults.standard.data(forKey: storageKey) else {
             print("📦 No provider configurations found, creating defaults")
-            return createDefaultConfigurations()
+            let defaults = createDefaultConfigurations()
+            saveConfigurations(defaults)
+            return defaults
         }
 
         do {
@@ -103,7 +124,9 @@ class ProvidersStorage {
             return configs
         } catch {
             print("❌ Failed to decode provider configurations: \(error)")
-            return createDefaultConfigurations()
+            let defaults = createDefaultConfigurations()
+            saveConfigurations(defaults)
+            return defaults
         }
     }
 

@@ -207,6 +207,14 @@ class ModeManager: ObservableObject {
             let baseURL = config.ollamaBaseURL ?? "http://localhost:11434"
             let provider = OllamaProvider(id: config.id, name: config.displayName, modelName: modelName, baseURL: baseURL)
             return provider
+
+        case .anthropic:
+            guard let modelName = config.anthropicModelName else {
+                print("⚠️ Anthropic config missing model name: \(config.displayName)")
+                return nil
+            }
+            let provider = AnthropicProvider(id: config.id, name: config.displayName, modelName: modelName)
+            return provider
         }
     }
 
@@ -259,6 +267,11 @@ class ModeManager: ObservableObject {
                 if let ollamaProvider = provider as? OllamaProvider {
                     return ollamaProvider.modelName == config.ollamaModelName &&
                            ollamaProvider.baseURL == (config.ollamaBaseURL ?? "http://localhost:11434")
+                }
+                return false
+            case .anthropic:
+                if let anthropicProvider = provider as? AnthropicProvider {
+                    return anthropicProvider.modelName == config.anthropicModelName
                 }
                 return false
             }

@@ -35,6 +35,16 @@ struct OllamaGlobalSettings: ProviderGlobalSettingsProtocol {
     var defaultBaseURL: String = "http://localhost:11434"
 }
 
+// MARK: - Anthropic Settings
+
+struct AnthropicGlobalSettings: ProviderGlobalSettingsProtocol {
+    static let providerType: ProviderType = .anthropic
+    static let displayName = "Anthropic"
+    static let settingsDescription = "API key for Anthropic Claude models."
+
+    var apiKey: String = ""
+}
+
 // MARK: - Storage
 
 /// Manages global provider settings across all provider types
@@ -43,6 +53,7 @@ class GlobalProviderSettingsStorage {
 
     private let ollamaSettingsKey = "com.vcdr.globalSettings.ollama"
     private let appleSettingsKey = "com.vcdr.globalSettings.apple"
+    private let anthropicSettingsKey = "com.vcdr.globalSettings.anthropic"
 
     private let userDefaults = UserDefaults.standard
     private let encoder = JSONEncoder()
@@ -90,6 +101,34 @@ class GlobalProviderSettingsStorage {
     func saveAppleSettings(_ settings: AppleFoundationModelsGlobalSettings) {
         // Nothing to save for Apple Foundation Models
     }
+
+    // MARK: - Anthropic Settings
+
+    func loadAnthropicSettings() -> AnthropicGlobalSettings {
+        guard let data = userDefaults.data(forKey: anthropicSettingsKey) else {
+            print("📦 No Anthropic global settings found, using defaults")
+            return AnthropicGlobalSettings()
+        }
+
+        do {
+            let settings = try decoder.decode(AnthropicGlobalSettings.self, from: data)
+            print("📦 Loaded Anthropic global settings")
+            return settings
+        } catch {
+            print("❌ Failed to decode Anthropic settings: \(error)")
+            return AnthropicGlobalSettings()
+        }
+    }
+
+    func saveAnthropicSettings(_ settings: AnthropicGlobalSettings) {
+        do {
+            let data = try encoder.encode(settings)
+            userDefaults.set(data, forKey: anthropicSettingsKey)
+            print("💾 Saved Anthropic global settings")
+        } catch {
+            print("❌ Failed to encode Anthropic settings: \(error)")
+        }
+    }
 }
 
 // MARK: - Helper for UI
@@ -106,6 +145,12 @@ struct GlobalSettingsWrapper {
             providerType: .ollama,
             displayName: OllamaGlobalSettings.displayName,
             description: OllamaGlobalSettings.settingsDescription,
+            hasSettings: true
+        ),
+        GlobalSettingsWrapper(
+            providerType: .anthropic,
+            displayName: AnthropicGlobalSettings.displayName,
+            description: AnthropicGlobalSettings.settingsDescription,
             hasSettings: true
         ),
         GlobalSettingsWrapper(
