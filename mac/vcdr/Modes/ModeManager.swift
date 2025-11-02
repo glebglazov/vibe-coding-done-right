@@ -25,48 +25,61 @@ class ModeManager: ObservableObject {
     /// Custom modes (can be edited/deleted)
     @Published var customModes: [CustomMode] = []
 
-    /// All available LLM providers
-    let availableProviders: [any LLMProvider]
+    /// All available LLM provider configurations
+    @Published var providerConfigurations: [ProviderConfiguration] = []
+
+    /// All available LLM provider instances
+    @Published var availableProviders: [any LLMProvider] = []
 
     /// Track the last used custom mode for quick access with 'c' shortcut
     @Published var lastUsedCustomMode: CustomMode?
 
-    private let storage = CustomModesStorage.shared
+    private let customModesStorage = CustomModesStorage.shared
+    private let providerConfigurationsStorage = ProvidersStorage.shared
 
     private init() {
         // Initialize built-in modes
-        builtInModes = [
+        let modes: [any Mode] = [
             DisabledMode(),
             AssistantMode()
         ]
+        builtInModes = modes
 
         // Load custom modes from storage
-        let loadedCustomModes = storage.loadCustomModes()
+        let loadedCustomModes = CustomModesStorage.shared.loadCustomModes()
         customModes = loadedCustomModes
 
         // Combine built-in and custom modes
-        availableModes = builtInModes + loadedCustomModes
+        availableModes = modes + loadedCustomModes
 
-        // Initialize LLM providers
-        let foundationModelsProvider = FoundationModelsProvider()
-        let ollamaProvider = OllamaProvider(modelName: "llama3.2:3b")
-        availableProviders = [
-            foundationModelsProvider,
-            ollamaProvider
-        ]
+        // Load provider configurations and create instances
+        let configs = ProvidersStorage.shared.loadConfigurations()
+        providerConfigurations = configs
 
-        // Set defaults (prefer Ollama if available, fallback to Foundation Models)
-        activeLLMProvider = foundationModelsProvider
-        activeMode = availableModes.first // DisabledMode by default
+        let providers = configs
+            .filter { $0.isEnabled }
+            .compactMap { Self.createProviderInstance(from: $0) }
+        availableProviders = providers
 
-        // Check if Ollama is available and switch to it
-        Task {
-            if await ollamaProvider.isAvailable {
-                await MainActor.run {
-                    activeLLMProvider = ollamaProvider
-                    print("✅ Using Ollama as default LLM provider")
-                }
-            }
+        // Set defaults
+        activeMode = modes.first // DisabledMode by default
+
+        // Set active provider from storage or use first available
+        if let savedProviderId = ProvidersStorage.shared.getActiveProviderId(),
+           let savedProvider = providers.first(where: { $0.id == savedProviderId }) {
+            activeLLMProvider = savedProvider
+            print("✅ Restored saved provider: \(savedProvider.name)")
+        } else if let firstProvider = providers.first {
+            activeLLMProvider = firstProvider
+            providerConfigurationsStorage.setActiveProviderId(firstProvider.id)
+            print("✅ Using first available provider: \(firstProvider.name)")
+        } else {
+            // Fallback to a default provider if none are available
+            let fallback = FoundationModelsProvider()
+            availableProviders = [fallback]
+            activeLLMProvider = fallback
+            providerConfigurationsStorage.setActiveProviderId(fallback.id)
+            print("⚠️ No providers configured, using fallback: \(fallback.name)")
         }
     }
 
@@ -112,6 +125,7 @@ class ModeManager: ObservableObject {
     /// Set the active LLM provider
     func setProvider(_ provider: any LLMProvider) {
         activeLLMProvider = provider
+        providerConfigurationsStorage.setActiveProviderId(provider.id)
     }
 
     /// Cycle through custom modes using 'c' shortcut
@@ -141,7 +155,7 @@ class ModeManager: ObservableObject {
 
     /// Add a new custom mode
     func addCustomMode(_ mode: CustomMode) {
-        storage.addCustomMode(mode)
+        customModesStorage.addCustomMode(mode)
         customModes.append(mode)
         availableModes = builtInModes + customModes
         print("➕ Added custom mode: \(mode.name)")
@@ -149,7 +163,7 @@ class ModeManager: ObservableObject {
 
     /// Update an existing custom mode
     func updateCustomMode(_ mode: CustomMode) {
-        storage.updateCustomMode(mode)
+        customModesStorage.updateCustomMode(mode)
         if let index = customModes.firstIndex(where: { $0.id == mode.id }) {
             customModes[index] = mode
             availableModes = builtInModes + customModes
@@ -159,7 +173,7 @@ class ModeManager: ObservableObject {
 
     /// Delete a custom mode
     func deleteCustomMode(_ mode: CustomMode) {
-        storage.deleteCustomMode(mode)
+        customModesStorage.deleteCustomMode(mode)
         customModes.removeAll { $0.id == mode.id }
         availableModes = builtInModes + customModes
 
@@ -175,6 +189,82 @@ class ModeManager: ObservableObject {
     func isCustomMode(_ mode: any Mode) -> Bool {
         return customModes.contains(where: { $0.id == mode.id })
     }
+
+    // MARK: - Provider Management
+
+    /// Create a provider instance from a configuration
+    private static func createProviderInstance(from config: ProviderConfiguration) -> (any LLMProvider)? {
+        switch config.providerType {
+        case .appleFoundationModels:
+            let provider = FoundationModelsProvider(id: config.id)
+            return provider
+
+        case .ollama:
+            guard let modelName = config.ollamaModelName else {
+                print("⚠️ Ollama config missing model name: \(config.displayName)")
+                return nil
+            }
+            let baseURL = config.ollamaBaseURL ?? "http://localhost:11434"
+            let provider = OllamaProvider(id: config.id, name: config.displayName, modelName: modelName, baseURL: baseURL)
+            return provider
+        }
+    }
+
+    /// Reload providers from configurations
+    func reloadProviders() {
+        providerConfigurations = providerConfigurationsStorage.loadConfigurations()
+        availableProviders = providerConfigurations
+            .filter { $0.isEnabled }
+            .compactMap { Self.createProviderInstance(from: $0) }
+
+        // If active provider is no longer available, switch to first available
+        if !availableProviders.contains(where: { $0.id == activeLLMProvider.id }) {
+            if let firstProvider = availableProviders.first {
+                activeLLMProvider = firstProvider
+                providerConfigurationsStorage.setActiveProviderId(firstProvider.id)
+                print("⚠️ Active provider no longer available, switched to: \(firstProvider.name)")
+            }
+        }
+    }
+
+    /// Add a new provider configuration
+    func addProviderConfiguration(_ config: ProviderConfiguration) {
+        providerConfigurationsStorage.addConfiguration(config)
+        reloadProviders()
+        print("➕ Added provider configuration: \(config.displayName)")
+    }
+
+    /// Update an existing provider configuration
+    func updateProviderConfiguration(_ config: ProviderConfiguration) {
+        providerConfigurationsStorage.updateConfiguration(config)
+        reloadProviders()
+        print("✏️ Updated provider configuration: \(config.displayName)")
+    }
+
+    /// Delete a provider configuration
+    func deleteProviderConfiguration(_ config: ProviderConfiguration) {
+        providerConfigurationsStorage.deleteConfiguration(config)
+        reloadProviders()
+        print("🗑️ Deleted provider configuration: \(config.displayName)")
+    }
+
+    /// Get configuration for a provider
+    func getConfiguration(for provider: any LLMProvider) -> ProviderConfiguration? {
+        return providerConfigurations.first { config in
+            // Match by type and specific properties
+            switch config.providerType {
+            case .appleFoundationModels:
+                return provider is FoundationModelsProvider
+            case .ollama:
+                if let ollamaProvider = provider as? OllamaProvider {
+                    return ollamaProvider.modelName == config.ollamaModelName &&
+                           ollamaProvider.baseURL == (config.ollamaBaseURL ?? "http://localhost:11434")
+                }
+                return false
+            }
+        }
+    }
+
 }
 
 /// Errors that can occur during mode processing

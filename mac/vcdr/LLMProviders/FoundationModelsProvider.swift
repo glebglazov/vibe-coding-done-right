@@ -3,9 +3,13 @@ import FoundationModels
 
 /// LLM provider using Apple's on-device Foundation Models
 class FoundationModelsProvider: LLMProvider {
-    let id = UUID()
+    let id: UUID
     let name = "Apple Foundation Models"
     let requiresAPIKey = false
+
+    init(id: UUID = UUID()) {
+        self.id = id
+    }
 
     private let model = SystemLanguageModel.default
 

@@ -3,8 +3,8 @@ import Foundation
 /// LLM provider using Ollama for local model inference
 /// Requires Ollama to be installed and running (ollama.com)
 class OllamaProvider: LLMProvider {
-    let id = UUID()
-    let name = "Ollama"
+    let id: UUID
+    var name: String
     let requiresAPIKey = false
 
     /// The model to use (e.g., "llama3.2:3b", "qwen2.5-coder:7b", "gemma2:9b")
@@ -13,7 +13,9 @@ class OllamaProvider: LLMProvider {
     /// Base URL for Ollama API (default: http://localhost:11434)
     var baseURL: String
 
-    init(modelName: String = "llama3.2:3b", baseURL: String = "http://localhost:11434") {
+    init(id: UUID = UUID(), name: String = "Ollama", modelName: String = "llama3.2:3b", baseURL: String = "http://localhost:11434") {
+        self.id = id
+        self.name = name
         self.modelName = modelName
         self.baseURL = baseURL
     }
