@@ -101,7 +101,7 @@ struct vcdrApp: App {
                             menuBarController.toggleRecordingInOverlay()
                         },
                         onAddClipboard: {
-                            menuBarController.addClipboardToCapture()
+                            menuBarController.copySelectionAndAddToCapture()
                         },
                         onAddKeyboardInput: {
                             menuBarController.openKeyboardInputOverlay()
@@ -124,13 +124,24 @@ struct vcdrApp: App {
                 // Configure minimized overlay window styling
                 try? await Task.sleep(nanoseconds: 50_000_000)
                 if let window = NSApp.windows.first(where: { $0.title == "Minimized Overlay" }) {
-                    window.styleMask = [.borderless, .fullSizeContentView]
-                    window.backgroundColor = .clear
-                    window.isOpaque = false
-                    window.level = .statusBar
-                    window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-                    window.isMovable = false
-                    window.ignoresMouseEvents = false // Enable mouse events for buttons
+                    // Replace the window with our custom non-activating panel
+                    let panel = NonActivatingPanel(
+                        contentRect: window.frame,
+                        styleMask: [.borderless, .fullSizeContentView, .nonactivatingPanel],
+                        backing: .buffered,
+                        defer: false
+                    )
+
+                    // Transfer content view
+                    panel.contentView = window.contentView
+
+                    // Configure panel properties
+                    panel.backgroundColor = .clear
+                    panel.isOpaque = false
+                    panel.level = .statusBar
+                    panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+                    panel.isMovable = false
+                    panel.hidesOnDeactivate = false
 
                     // Position in bottom center with margin
                     if let screen = NSScreen.main {
@@ -141,8 +152,12 @@ struct vcdrApp: App {
                             x: screenFrame.midX - windowSize.width / 2,
                             y: screenFrame.minY + margin
                         )
-                        window.setFrame(CGRect(origin: origin, size: windowSize), display: true)
+                        panel.setFrame(CGRect(origin: origin, size: windowSize), display: true)
                     }
+
+                    // Close the old window and show the panel
+                    window.close()
+                    panel.orderFront(nil)
                 }
             }
         }

@@ -576,7 +576,7 @@ class MenuBarController: ObservableObject {
         print("⌨️ Added keyboard input to capture: \(text.prefix(50))...")
     }
 
-    private func copySelectionAndAddToCapture() {
+    func copySelectionAndAddToCapture() {
         // Only work if capture is active
         guard isCapturing else {
             print("⚠️ Copy selection shortcut ignored - no active capture")
