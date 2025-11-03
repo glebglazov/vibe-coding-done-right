@@ -128,25 +128,23 @@ struct CustomModeRow: View {
 
             Spacer()
 
-            // Action buttons (visible on hover)
-            if isHovered {
-                HStack(spacing: 8) {
-                    Button(action: onEdit) {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 14))
-                            .foregroundColor(.blue)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .help("Edit mode")
-
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 14))
-                            .foregroundColor(.red)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .help("Delete mode")
+            // Action buttons
+            HStack(spacing: 8) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14))
+                        .foregroundColor(.blue)
                 }
+                .buttonStyle(PlainButtonStyle())
+                .help("Edit mode")
+
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Delete mode")
             }
         }
         .padding(10)
