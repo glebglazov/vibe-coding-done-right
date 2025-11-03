@@ -11,6 +11,7 @@ import Combine
 
 class AudioRecorder: NSObject, ObservableObject {
     private var audioRecorder: AVAudioRecorder?
+    private let mediaController = MediaController()
 
     @Published var isRecording = false
     @Published var recordingTime: TimeInterval = 0
@@ -62,6 +63,9 @@ class AudioRecorder: NSObject, ObservableObject {
             audioRecorder?.isMeteringEnabled = true
 
             if audioRecorder?.record() == true {
+                // Pause any playing media before starting recording
+                mediaController.pauseMedia()
+
                 DispatchQueue.main.async {
                     self.isRecording = true
                     self.recordingTime = 0
@@ -81,6 +85,9 @@ class AudioRecorder: NSObject, ObservableObject {
         audioRecorder?.stop()
         stopTimer()
         stopLevelMonitoring()
+
+        // Resume media playback if it was playing before
+        mediaController.resumeMediaIfNeeded()
 
         DispatchQueue.main.async {
             self.isRecording = false
