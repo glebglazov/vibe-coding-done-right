@@ -452,17 +452,23 @@ class MenuBarController: ObservableObject {
             isCapturing = false
         } else {
             // Start new capture
-            startCapture()
+            Task {
+                await startCapture()
+            }
         }
     }
 
-    private func startCapture() {
+    /// Starts a new capture session
+    /// - Parameter captureSelectedText: Whether to automatically capture selected text when starting.
+    ///   Set to false when the calling action will handle text capture itself (e.g., clipboard shortcut)
+    ///   to avoid capturing the same text twice.
+    private func startCapture(captureSelectedText: Bool = true) async {
         // Store the currently active app BEFORE showing overlay
         previousActiveApp = NSWorkspace.shared.frontmostApplication
 
-        Task {
-            // Capture any selected text before showing overlay
-            if let selectedText = await captureSelectedText(), !selectedText.isEmpty {
+        // Capture any selected text before showing overlay (unless caller will do it)
+        if captureSelectedText {
+            if let selectedText = await self.captureSelectedText(), !selectedText.isEmpty {
                 print("📋 Captured selected text: \(selectedText.prefix(50))...")
 
                 // Create capture action for selected text
@@ -471,30 +477,33 @@ class MenuBarController: ObservableObject {
                     captureActions.append(action)
                 }
             }
+        }
 
-            await MainActor.run {
-                isCapturing = true
-                statusMessage = "Press R to start recording"
-                print("✅ MenuBarController: Capture started")
+        await MainActor.run {
+            isCapturing = true
+            statusMessage = "Press R to start recording"
+            print("✅ MenuBarController: Capture started")
 
-                // Show HUD notification for capturing session start
-                // let modeName = modeManager.activeMode?.name ?? "Unknown"
-                // hudManager?.showCapturingStarted(mode: modeName)
+            // Show HUD notification for capturing session start
+            // let modeName = modeManager.activeMode?.name ?? "Unknown"
+            // hudManager?.showCapturingStarted(mode: modeName)
 
-                // Position overlay window
-                positionCapturingWindow()
-            }
+            // Position overlay window
+            positionCapturingWindow()
         }
     }
 
     private func handleToggleRecordingShortcut() {
-        // Only work if capture is active
-        guard isCapturing else {
-            print("⚠️ Toggle recording shortcut ignored - no active capture")
-            return
+        // Auto-start capture if not active
+        if !isCapturing {
+            print("🎙️ Starting capture and recording automatically")
+            Task {
+                await startCapture()
+                toggleRecordingInOverlay()
+            }
+        } else {
+            toggleRecordingInOverlay()
         }
-
-        toggleRecordingInOverlay()
     }
 
     func openPreview() {
@@ -543,8 +552,13 @@ class MenuBarController: ObservableObject {
     }
 
     func openKeyboardInputOverlay() {
-        guard isCapturing else {
-            print("⚠️ Cannot open keyboard input - no active capture")
+        // Auto-start capture if not active
+        if !isCapturing {
+            print("⌨️ Starting capture and opening keyboard input automatically")
+            Task {
+                await startCapture()
+                openKeyboardInputOverlay()
+            }
             return
         }
 
@@ -574,9 +588,14 @@ class MenuBarController: ObservableObject {
     }
 
     func copySelectionAndAddToCapture() {
-        // Only work if capture is active
-        guard isCapturing else {
-            print("⚠️ Copy selection shortcut ignored - no active capture")
+        // Auto-start capture if not active
+        if !isCapturing {
+            print("📋 Starting capture and adding clipboard automatically")
+            Task {
+                // Skip initial text capture since this action will capture it anyway
+                await startCapture(captureSelectedText: false)
+                copySelectionAndAddToCapture()
+            }
             return
         }
 
