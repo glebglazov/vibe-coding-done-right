@@ -14,6 +14,9 @@ struct CustomModesSection: View {
     @State private var showingDeleteConfirmation = false
     @State private var modeToDelete: CustomMode?
 
+    // Stable UUID for creating new modes
+    private let newModeID = UUID()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -80,6 +83,7 @@ struct CustomModesSection: View {
                 // Refresh after save
                 showingEditor = false
             }
+            .id(editingMode?.id ?? newModeID)
         }
         .alert("Delete Custom Mode?", isPresented: $showingDeleteConfirmation, presenting: modeToDelete) { mode in
             Button("Cancel", role: .cancel) {
