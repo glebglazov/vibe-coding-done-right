@@ -107,7 +107,7 @@ xcodebuild test -project vcdr.xcodeproj -scheme vcdr
 
 #### Window Management (vcdrApp.swift)
 - **MenuBar**: Main menu dropdown
-- **MinimizedOverlay**: Shows recording status during capture (bottom-center, always visible)
+- **MiniOverlay**: Shows recording status during capture (bottom-center, always visible)
 - **KeyboardInputOverlay**: Text input overlay for adding keyboard input during capture (center screen, dismissable)
 - **ResultsOverlay**: Shows after capture for action selection (floating, keyboard-driven)
 - **HUD**: Transient notifications for mode switches, events (center screen, auto-dismiss)
@@ -221,7 +221,7 @@ vcdr/
 │   ├── MenuBarController.swift    # Main coordinator/controller
 │   ├── MenuBarView.swift          # Menu bar dropdown UI
 │   ├── ResultsOverlay.swift       # Post-capture action selector
-│   ├── MinimizedOverlay.swift     # In-capture status indicator
+│   ├── MiniOverlay.swift          # In-capture status indicator
 │   ├── KeyboardInputOverlay.swift # Keyboard input text entry overlay
 │   ├── SettingsView.swift         # App settings UI
 │   └── ...

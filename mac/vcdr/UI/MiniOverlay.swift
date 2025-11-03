@@ -1,5 +1,5 @@
 //
-//  MinimizedOverlay.swift
+//  MiniOverlay.swift
 //  vcdr
 //
 //  Created by Claude Code
@@ -7,9 +7,9 @@
 
 import SwiftUI
 
-/// A minimized overlay that shows recording status with a mini soundwave
+/// A mini overlay that shows recording status with a mini soundwave
 /// Stays visible while capture is active
-struct MinimizedOverlay: View {
+struct MiniOverlay: View {
     let isRecording: Bool
     @ObservedObject var audioRecorder: AudioRecorder
     let onToggleRecording: () -> Void
@@ -148,7 +148,7 @@ struct MinimizedOverlay: View {
 
 #Preview {
     VStack(spacing: 20) {
-        MinimizedOverlay(
+        MiniOverlay(
             isRecording: true,
             audioRecorder: AudioRecorder(),
             onToggleRecording: {},
@@ -157,7 +157,7 @@ struct MinimizedOverlay: View {
             onPreview: {},
             onStopCapture: {}
         )
-        MinimizedOverlay(
+        MiniOverlay(
             isRecording: false,
             audioRecorder: AudioRecorder(),
             onToggleRecording: {},

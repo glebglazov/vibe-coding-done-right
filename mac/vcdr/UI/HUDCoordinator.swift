@@ -25,8 +25,8 @@ struct HUDCoordinator: View {
                     openWindow(id: windowId)
                 }
 
-                // Open minimized overlay window on startup (it will show/hide based on isOverlayVisible)
-                openWindow(id: "minimized-overlay")
+                // Open mini overlay window on startup (it will show/hide based on isOverlayVisible)
+                openWindow(id: "mini-overlay")
             }
             .onChange(of: hudManager.shouldShowWindow) { _, newValue in
                 if newValue {

@@ -90,11 +90,11 @@ struct vcdrApp: App {
         .windowResizability(.contentSize)
         .defaultSize(width: 280, height: 50)
 
-        // Minimized overlay (always-visible status indicator during capture)
-        Window("Minimized Overlay", id: "minimized-overlay") {
+        // Mini overlay (always-visible status indicator during capture)
+        Window("Mini Overlay", id: "mini-overlay") {
             ZStack {
                 if menuBarController.isCapturing {
-                    MinimizedOverlay(
+                    MiniOverlay(
                         isRecording: menuBarController.isRecording,
                         audioRecorder: menuBarController.audioRecorder,
                         onToggleRecording: {
@@ -121,9 +121,9 @@ struct vcdrApp: App {
             .frame(width: 260, height: 42)
             .ignoresSafeArea()
             .task {
-                // Configure minimized overlay window styling
+                // Configure mini overlay window styling
                 try? await Task.sleep(nanoseconds: 50_000_000)
-                if let window = NSApp.windows.first(where: { $0.title == "Minimized Overlay" }) {
+                if let window = NSApp.windows.first(where: { $0.title == "Mini Overlay" }) {
                     // Replace the window with our custom non-activating panel
                     let panel = NonActivatingPanel(
                         contentRect: window.frame,
