@@ -73,16 +73,8 @@ struct vcdrApp: App {
                     window.isMovable = false
                     window.ignoresMouseEvents = true
 
-                    // Center on screen
-                    if let screen = NSScreen.main {
-                        let screenFrame = screen.frame
-                        let windowSize = CGSize(width: 280, height: 50)
-                        let origin = CGPoint(
-                            x: screenFrame.midX - windowSize.width / 2,
-                            y: screenFrame.midY - windowSize.height / 2
-                        )
-                        window.setFrame(CGRect(origin: origin, size: windowSize), display: true)
-                    }
+                    // Center on active screen
+                    ScreenHelper.centerWindow(window)
                 }
             }
         }
@@ -144,17 +136,8 @@ struct vcdrApp: App {
                     panel.isMovable = false
                     panel.hidesOnDeactivate = false
 
-                    // Position in bottom center with margin
-                    if let screen = NSScreen.main {
-                        let screenFrame = screen.frame
-                        let windowSize = CGSize(width: 260, height: 42)
-                        let margin: CGFloat = 80
-                        let origin = CGPoint(
-                            x: screenFrame.midX - windowSize.width / 2,
-                            y: screenFrame.minY + margin
-                        )
-                        panel.setFrame(CGRect(origin: origin, size: windowSize), display: true)
-                    }
+                    // Position in bottom center with margin on the active screen
+                    ScreenHelper.positionWindowAtBottom(panel, margin: 80, relativeTo: menuBarController.previousActiveApp)
 
                     // Close the old window and show the panel
                     window.close()
@@ -213,25 +196,17 @@ struct vcdrApp: App {
                     window.acceptsMouseMovedEvents = true
                     window.level = .floating
                     window.collectionBehavior = [.moveToActiveSpace]
-
-                    // Center on screen immediately
-                    if let screen = NSScreen.main {
-                        let screenFrame = screen.frame
-                        let windowSize = window.frame.size
-                        let origin = CGPoint(
-                            x: screenFrame.midX - windowSize.width / 2,
-                            y: screenFrame.midY - windowSize.height / 2
-                        )
-                        window.setFrameOrigin(origin)
-                    }
                 }
             }
             .onChange(of: menuBarController.showResultsOverlay) { _, newValue in
                 if newValue {
-                    // When results overlay shows, activate and focus it
+                    // When results overlay shows, reposition, activate and focus it
                     Task {
                         try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
                         if let window = NSApp.windows.first(where: { $0.title == "Results" }) {
+                            // Reposition to center of active screen
+                            ScreenHelper.centerWindow(window, relativeTo: menuBarController.previousActiveApp)
+
                             window.makeKeyAndOrderFront(nil)
                             NSApp.activate(ignoringOtherApps: true)
                         }
