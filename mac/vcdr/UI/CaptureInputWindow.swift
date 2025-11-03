@@ -1,5 +1,5 @@
 //
-//  CaptureActionsPreview.swift
+//  CaptureInputWindow.swift
 //  vcdr
 //
 //  Created by Claude Code
@@ -7,13 +7,13 @@
 
 import SwiftUI
 
-/// Displays a preview of all capture actions
+/// Displays a window showing all captured inputs
 /// Can be used for current session or historical captures
-struct CaptureActionsPreview: View {
+struct CaptureInputWindow: View {
     let actions: [CaptureAction]
     let title: String
 
-    init(actions: [CaptureAction], title: String = "Capture Actions") {
+    init(actions: [CaptureAction], title: String = "Captured Input") {
         self.actions = actions
         self.title = title
     }
@@ -144,5 +144,5 @@ struct CaptureActionRow: View {
         CaptureAction(source: .recording, text: "What that company's doing?", audioFileURL: URL(fileURLWithPath: "/tmp/test2.wav"))
     ]
 
-    CaptureActionsPreview(actions: sampleActions, title: "Current Capture")
+    CaptureInputWindow(actions: sampleActions, title: "Current Capture")
 }

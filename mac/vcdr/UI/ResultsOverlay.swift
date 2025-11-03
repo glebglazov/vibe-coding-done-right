@@ -13,6 +13,7 @@ struct ResultsOverlay: View {
     let onStopAndPaste: () -> Void
     let onStopAndCopyToClipboard: () -> Void
     let onStopAndSendToTmux: () -> Void
+    let onStopAndPreview: () -> Void
     let onCancel: () -> Void
     @ObservedObject var controller: MenuBarController
     let previousActiveApp: NSRunningApplication?
@@ -192,6 +193,9 @@ struct ResultsOverlay: View {
                 } else if characters == "t" && hasCommand {
                     onStopAndSendToTmux()
                     return nil
+                } else if characters == "p" && hasCommand {
+                    onStopAndPreview()
+                    return nil
                 }
 
                 return event // Let other events pass through
@@ -288,6 +292,31 @@ struct ResultsOverlay: View {
                     }
                     .buttonStyle(PlainButtonStyle())
 
+                    // Preview button
+                    Button(action: onStopAndPreview) {
+                        HStack {
+                            Image(systemName: "eye.fill")
+                            Text("Preview")
+                            Spacer()
+                            Text("⌘P")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+
+                HStack(spacing: 8) {
                     // Cancel button
                     Button(action: onCancel) {
                         HStack {
@@ -377,6 +406,7 @@ struct CustomModeSlot: View {
         onStopAndPaste: { },
         onStopAndCopyToClipboard: { },
         onStopAndSendToTmux: { },
+        onStopAndPreview: { },
         onCancel: { },
         controller: MenuBarController(),
         previousActiveApp: nil

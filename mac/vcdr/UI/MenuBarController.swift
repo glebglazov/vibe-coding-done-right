@@ -12,6 +12,7 @@ enum DestinationType {
     case paste
     case copy
     case tmux
+    case preview
 }
 
 @MainActor
@@ -19,6 +20,8 @@ class MenuBarController: ObservableObject {
     @Published var isCapturing = false
     @Published var showResultsOverlay = false
     @Published var showKeyboardInputOverlay = false
+    @Published var showPreviewWindow = false
+    @Published var previewText = ""
     @Published var isRecording = false
     @Published var isProcessing = false
     @Published var isInitializing = true
@@ -38,6 +41,7 @@ class MenuBarController: ObservableObject {
     private let pasteDestination = PasteDestination()
     private let copyDestination = CopyDestination()
     private let tmuxDestination = TmuxDestination()
+    private let previewDestination = PreviewDestination()
     private let hotkeyManager = GlobalHotkeyManager()
     private var permissionMonitorTimer: Timer?
 
@@ -60,11 +64,18 @@ class MenuBarController: ObservableObject {
 
     init() {
         print("📱 MenuBarController: Initializing...")
-        print("🎯 Available destinations: Clipboard, Tmux")
+        print("🎯 Available destinations: Clipboard, Tmux, Preview")
 
         // Sync mode manager with app settings
         let settings = AppSettings.shared
         modeManager.setMode(named: settings.activeModeName)
+
+        // Setup preview destination callback
+        previewDestination.onShowPreview = { [weak self] text in
+            self?.previewText = text
+            self?.showPreviewWindow = true
+            self?.openWindowCallback?("preview-window")
+        }
 
         Task {
             await initializeWhisper()
@@ -314,6 +325,10 @@ class MenuBarController: ObservableObject {
         stopRecordingAndSendTo(.tmux)
     }
 
+    func stopAndPreview() {
+        stopRecordingAndSendTo(.preview)
+    }
+
     func switchToDisabledMode() {
         modeManager.setMode(named: "Disabled")
         let settings = AppSettings.shared
@@ -423,6 +438,8 @@ class MenuBarController: ObservableObject {
                 destinationService = copyDestination
             case .tmux:
                 destinationService = tmuxDestination
+            case .preview:
+                destinationService = previewDestination
             }
 
             await sendTranscriptionToDestination(processedText, destination: destinationService)

@@ -16,7 +16,7 @@ struct vcdrApp: App {
         // Inject hudManager into menuBarController
         // Note: This happens before StateObject initialization, so we use a workaround
     }
-
+    
     var body: some Scene {
         MenuBarExtra("VCDR", systemImage: menuBarController.menuBarIcon) {
             HUDCoordinator(hudManager: hudManager, menuBarController: menuBarController)
@@ -31,9 +31,9 @@ struct vcdrApp: App {
         .defaultSize(width: 400, height: 300)
         .windowLevel(.floating)
 
-        // Capture actions preview window
-        Window("Capture Preview", id: "capture-preview") {
-            CaptureActionsPreview(
+        // Capture input window
+        Window("Captured Input", id: "capture-preview") {
+            CaptureInputWindow(
                 actions: menuBarController.captureActions,
                 title: "Current Capture"
             )
@@ -180,6 +180,9 @@ struct vcdrApp: App {
                         onStopAndSendToTmux: {
                             menuBarController.stopAndSendToTmux()
                         },
+                        onStopAndPreview: {
+                            menuBarController.stopAndPreview()
+                        },
                         onCancel: {
                             menuBarController.cancelRecording()
                         },
@@ -252,6 +255,23 @@ struct vcdrApp: App {
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 320, height: 160)
+        .windowLevel(.floating)
+
+        // Processed output window
+        Window("Processed Output", id: "preview-window") {
+            if menuBarController.showPreviewWindow {
+                ProcessedOutputWindow(
+                    text: menuBarController.previewText,
+                    isPresented: $menuBarController.showPreviewWindow
+                )
+            } else {
+                Color.clear
+                    .frame(width: 600, height: 400)
+            }
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultSize(width: 600, height: 400)
         .windowLevel(.floating)
     }
 }
