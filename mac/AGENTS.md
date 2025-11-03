@@ -94,10 +94,15 @@ xcodebuild test -project vcdr.xcodeproj -scheme vcdr
 
 #### Destination System (Destinations/)
 - **TextDestination Protocol**: Abstraction for where processed text goes
+  - `name`: Display name for the destination
+  - `shouldRestoreFocus`: Whether to restore focus to previous app before sending (default: true)
+  - `send(text:onPrepareSend:)`: Async method to send processed text
+  - `isAvailable()`: Check if destination is currently available
 - **TmuxDestination**: Finds Claude Code session in tmux and sends text directly
 - **PasteDestination**: Uses clipboard + CGEvent to paste into the previously active app
 - **CopyDestination**: Simply copies to clipboard
-- All destinations implement `send(text:onPrepareSend:)` for async handling
+- **PreviewDestination**: Shows processed output in a window (Esc to close, Cmd+Shift+C to copy)
+  - Sets `shouldRestoreFocus = false` to keep preview window visible
 
 #### Capture Actions (Core/CaptureAction.swift)
 - Represents a single piece of captured content within a session
@@ -105,13 +110,27 @@ xcodebuild test -project vcdr.xcodeproj -scheme vcdr
 - Multiple actions accumulate during a capture session
 - Combined text = all action texts joined with newlines
 
+#### History System (Core/CaptureHistory.swift)
+- **CaptureHistory**: Singleton storage manager for capture history
+  - Stores last 1000 captures with full metadata
+  - JSON persistence in Application Support directory
+  - Observable for real-time UI updates
+- **CaptureHistoryEntry**: Data model for each capture
+  - Stores: actions, mode info, provider info, processed output, destination type
+  - Includes timestamps and UUIDs for tracking
+- **HistoryView**: Apple Notes-style UI for browsing history
+  - Master-detail layout with list and detail views
+  - Accessible via "History..." menu item
+
 #### Window Management (vcdrApp.swift)
 - **MenuBar**: Main menu dropdown
 - **MiniOverlay**: Shows recording status during capture (bottom-center, always visible)
 - **KeyboardInputOverlay**: Text input overlay for adding keyboard input during capture (center screen, dismissable)
 - **ResultsOverlay**: Shows after capture for action selection (floating, keyboard-driven)
 - **HUD**: Transient notifications for mode switches, events (center screen, auto-dismiss)
-- **CapturePreview**: Preview window for viewing accumulated capture content
+- **CaptureInputWindow**: Preview window for viewing accumulated capture content (Cmd+Option+P during capture)
+- **ProcessedOutputWindow**: Shows processed AI output after sending to Preview destination (Esc to close, Cmd+Shift+C to copy)
+- **HistoryView**: Master-detail view for browsing capture history (Apple Notes style)
 - All windows are styled with custom frames, transparency, and positioning
 
 ### State Management
@@ -144,11 +163,15 @@ Settings stored in AppSettings, reconfigurable via SettingsView.
 ## Important Implementation Details
 
 ### Focus Management
-When finishing a capture and sending to paste destination:
+When finishing a capture and sending to a destination:
 1. `previousActiveApp` is captured at the START of the capture session (before overlay shows)
-2. Results overlay shows, user selects action
-3. **CRITICAL**: Focus is restored to `previousActiveApp` BEFORE LLM processing starts
-4. This ensures paste happens in the correct app, even if LLM takes time
+2. Results overlay shows, user selects action and destination
+3. LLM processes the text
+4. **Focus restoration** (configurable per destination):
+   - If `destination.shouldRestoreFocus == true`: Focus is restored to `previousActiveApp` BEFORE sending
+   - If `destination.shouldRestoreFocus == false`: Focus stays with vcdr (e.g., for Preview destination)
+5. Text is sent to the destination
+6. This ensures paste/interaction happens in the correct context for each destination type
 
 ### Audio File Cleanup
 Recording actions store temporary audio files (`audioFileURL`). These are cleaned up:
@@ -210,10 +233,15 @@ DispatchQueue.main.asyncAfter(deadline: .now() + Self.feedbackDuration) {
 
 ### Adding a New Destination
 1. Create class conforming to `TextDestination` protocol
-2. Implement `name`, `send(text:onPrepareSend:)`, and `isAvailable()`
+2. Implement required properties and methods:
+   - `name`: Display name
+   - `shouldRestoreFocus`: Set to `true` if focus should return to previous app (e.g., for paste), `false` if vcdr should stay focused (e.g., for UI destinations)
+   - `send(text:onPrepareSend:)`: Async sending logic
+   - `isAvailable()`: Availability check
 3. Add instance to MenuBarController
 4. Add button in ResultsOverlay for the new destination
-5. Add corresponding method in MenuBarController (e.g., `stopAndSendToNewDestination()`)
+5. Add corresponding case to `DestinationType` enum and switch statement
+6. Add corresponding method in MenuBarController (e.g., `stopAndSendToNewDestination()`)
 
 ### Adding a New LLM Provider
 1. Add new case to `ProviderType` enum in `ProviderConfiguration.swift`
@@ -284,11 +312,14 @@ vcdr/
 │   ├── DestinationProtocol.swift
 │   ├── TmuxDestination.swift
 │   ├── PasteDestination.swift
-│   └── CopyDestination.swift
+│   ├── CopyDestination.swift
+│   └── PreviewDestination.swift
 └── Core/                      # Core utilities
     ├── GlobalHotkeyManager.swift
     ├── HUDNotificationManager.swift
     ├── CaptureAction.swift
+    ├── CaptureHistory.swift
+    ├── CaptureHistoryEntry.swift
     └── AppSettings.swift
 ```
 
