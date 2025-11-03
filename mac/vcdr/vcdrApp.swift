@@ -97,6 +97,7 @@ struct vcdrApp: App {
                     MiniOverlay(
                         isRecording: menuBarController.isRecording,
                         audioRecorder: menuBarController.audioRecorder,
+                        controller: menuBarController,
                         onToggleRecording: {
                             menuBarController.toggleRecordingInOverlay()
                         },

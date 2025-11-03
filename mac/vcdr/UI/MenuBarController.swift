@@ -25,6 +25,7 @@ class MenuBarController: ObservableObject {
     @Published var statusMessage = "Initializing Whisper..."
     @Published var lastTranscription = ""
     @Published var captureActions: [CaptureAction] = []
+    @Published var keyboardInputJustAdded = false
 
     /// Combined text from all capture actions
     var capturedText: String {
@@ -321,7 +322,7 @@ class MenuBarController: ObservableObject {
         print("🔄 Switched to Disabled mode")
 
         // Show HUD notification
-        hudManager?.showModeChanged(to: "Disabled Mode", isRecording: isRecording)
+        // hudManager?.showModeChanged(to: "Disabled Mode", isRecording: isRecording)
     }
 
     func switchToAssistantMode() {
@@ -332,7 +333,7 @@ class MenuBarController: ObservableObject {
         print("🔄 Switched to Assistant mode")
 
         // Show HUD notification
-        hudManager?.showModeChanged(to: "Assistant Mode", isRecording: isRecording)
+        // hudManager?.showModeChanged(to: "Assistant Mode", isRecording: isRecording)
     }
 
     func cycleCustomModes() {
@@ -344,7 +345,7 @@ class MenuBarController: ObservableObject {
             settings.saveSettings()
 
             // Show HUD notification
-            hudManager?.showModeChanged(to: activeMode.name, isRecording: isRecording)
+            // hudManager?.showModeChanged(to: activeMode.name, isRecording: isRecording)
         }
     }
 
@@ -380,8 +381,8 @@ class MenuBarController: ObservableObject {
                 statusMessage = "Processing..."
 
                 // Show HUD notification for processing start
-                let modeName = modeManager.activeMode?.name ?? "Disabled"
-                hudManager?.showProcessingStarted(mode: modeName)
+                // let modeName = modeManager.activeMode?.name ?? "Disabled"
+                // hudManager?.showProcessingStarted(mode: modeName)
             }
 
             // Restore focus to previous app BEFORE LLM processing
@@ -477,8 +478,8 @@ class MenuBarController: ObservableObject {
                 print("✅ MenuBarController: Capture started")
 
                 // Show HUD notification for capturing session start
-                let modeName = modeManager.activeMode?.name ?? "Unknown"
-                hudManager?.showCapturingStarted(mode: modeName)
+                // let modeName = modeManager.activeMode?.name ?? "Unknown"
+                // hudManager?.showCapturingStarted(mode: modeName)
 
                 // Position overlay window
                 positionCapturingWindow()
@@ -512,7 +513,7 @@ class MenuBarController: ObservableObject {
         if let clipboardText = pasteboard.string(forType: .string), !clipboardText.isEmpty {
             let action = CaptureAction(source: .clipboard, text: clipboardText)
             captureActions.append(action)
-            hudManager?.showClipboardAdded()
+            // hudManager?.showClipboardAdded()
             print("📋 Added clipboard text to capture: \(clipboardText.prefix(50))...")
         } else {
             print("⚠️ Clipboard is empty")
@@ -563,15 +564,11 @@ class MenuBarController: ObservableObject {
         let action = CaptureAction(source: .keyboardInput, text: text)
         captureActions.append(action)
 
-        // Show HUD notification
-        hudManager?.show(
-            HUDNotification(
-                icon: "keyboard",
-                iconColor: .blue,
-                title: "Keyboard Input Added",
-                subtitle: "\(text.prefix(50))..."
-            )
-        )
+        // Show button feedback
+        keyboardInputJustAdded = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            self.keyboardInputJustAdded = false
+        }
 
         print("⌨️ Added keyboard input to capture: \(text.prefix(50))...")
     }
@@ -595,7 +592,7 @@ class MenuBarController: ObservableObject {
                     statusMessage = "Added clipboard text"
 
                     // Show HUD notification
-                    hudManager?.showClipboardAdded()
+                    // hudManager?.showClipboardAdded()
 
                     // Reset status message after a delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -710,8 +707,8 @@ class MenuBarController: ObservableObject {
                 print("✅ MenuBarController: Recording started in overlay")
 
                 // Show HUD notification
-                let modeName = modeManager.activeMode?.name ?? "Unknown"
-                hudManager?.showRecordingStarted(mode: modeName)
+                // let modeName = modeManager.activeMode?.name ?? "Unknown"
+                // hudManager?.showRecordingStarted(mode: modeName)
             } else {
                 statusMessage = "Failed to start recording"
             }
@@ -736,8 +733,8 @@ class MenuBarController: ObservableObject {
                 statusMessage = "Transcribing..."
 
                 // Show HUD notification
-                let modeName = modeManager.activeMode?.name ?? "Unknown"
-                hudManager?.showRecordingStopped(mode: modeName)
+                // let modeName = modeManager.activeMode?.name ?? "Unknown"
+                // hudManager?.showRecordingStopped(mode: modeName)
             }
 
             do {

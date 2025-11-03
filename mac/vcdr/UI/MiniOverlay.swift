@@ -10,8 +10,13 @@ import SwiftUI
 /// A mini overlay that shows recording status with a mini soundwave
 /// Stays visible while capture is active
 struct MiniOverlay: View {
+    // MARK: - Constants
+    private static let buttonFeedbackDuration: TimeInterval = 2.0
+
+    // MARK: - Properties
     let isRecording: Bool
     @ObservedObject var audioRecorder: AudioRecorder
+    @ObservedObject var controller: MenuBarController
     let onToggleRecording: () -> Void
     let onAddClipboard: () -> Void
     let onAddKeyboardInput: () -> Void
@@ -21,12 +26,19 @@ struct MiniOverlay: View {
     @State private var audioLevels: [CGFloat] = Array(repeating: 0.1, count: 15)
     @State private var animationTimer: Timer?
     @State private var currentLevel: Float = 0.0
+    @State private var clipboardJustAdded = false
 
     var body: some View {
         HStack(spacing: 10) {
             // Add from clipboard button
-            Button(action: onAddClipboard) {
-                Image(systemName: "doc.on.clipboard")
+            Button(action: {
+                onAddClipboard()
+                clipboardJustAdded = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.buttonFeedbackDuration) {
+                    clipboardJustAdded = false
+                }
+            }) {
+                Image(systemName: clipboardJustAdded ? "checkmark" : "doc.on.clipboard")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.green)
                     .frame(width: 21, height: 21)
@@ -63,7 +75,7 @@ struct MiniOverlay: View {
 
             // Keyboard input button
             Button(action: onAddKeyboardInput) {
-                Image(systemName: "keyboard")
+                Image(systemName: controller.keyboardInputJustAdded ? "checkmark" : "keyboard")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.blue)
                     .frame(width: 21, height: 21)
@@ -147,10 +159,13 @@ struct MiniOverlay: View {
 }
 
 #Preview {
-    VStack(spacing: 20) {
+    let controller = MenuBarController()
+
+    return VStack(spacing: 20) {
         MiniOverlay(
             isRecording: true,
             audioRecorder: AudioRecorder(),
+            controller: controller,
             onToggleRecording: {},
             onAddClipboard: {},
             onAddKeyboardInput: {},
@@ -160,6 +175,7 @@ struct MiniOverlay: View {
         MiniOverlay(
             isRecording: false,
             audioRecorder: AudioRecorder(),
+            controller: controller,
             onToggleRecording: {},
             onAddClipboard: {},
             onAddKeyboardInput: {},
