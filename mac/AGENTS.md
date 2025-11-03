@@ -170,6 +170,42 @@ Non-intrusive, center-screen notifications for:
 - Clipboard added
 - Processing complete
 
+## Coding Standards
+
+### Magic Numbers and Constants
+
+**Always extract magic numbers and hardcoded values into named constants.**
+
+❌ **Bad:**
+```swift
+DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+    isVisible = false
+}
+```
+
+✅ **Good:**
+```swift
+private static let feedbackDuration: TimeInterval = 2.0
+
+DispatchQueue.main.asyncAfter(deadline: .now() + Self.feedbackDuration) {
+    isVisible = false
+}
+```
+
+**Benefits:**
+- Single source of truth - change the value in one place
+- Self-documenting code - the constant name explains its purpose
+- Easier to maintain and refactor
+- Facilitates consistency across the codebase
+
+**Where to place constants:**
+- At the top of the struct/class in a `// MARK: - Constants` section
+- Use `static let` for type-level constants
+- Use descriptive names: `buttonFeedbackDuration`, `maxRetryAttempts`, `defaultTimeout`
+
+**Examples in the codebase:**
+- `MiniOverlay.buttonFeedbackDuration` - Duration for button checkmark feedback (2.0 seconds)
+
 ## Common Development Scenarios
 
 ### Adding a New Destination
