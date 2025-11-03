@@ -273,5 +273,11 @@ struct vcdrApp: App {
         .windowResizability(.contentSize)
         .defaultSize(width: 600, height: 400)
         .windowLevel(.floating)
+
+        // History window
+        Window("Capture History", id: "history") {
+            HistoryView()
+        }
+        .defaultSize(width: 900, height: 700)
     }
 }

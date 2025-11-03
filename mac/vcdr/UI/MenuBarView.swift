@@ -10,6 +10,7 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var controller: MenuBarController
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject var captureHistory = CaptureHistory.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +33,15 @@ struct MenuBarView: View {
                 }
             }
 
+            // History
+            Button("History...") {
+                openWindow(id: "history")
+                // Activate the app to bring history window to foreground
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
+
             Divider()
 
             // Status (if not ready)
@@ -43,21 +53,21 @@ struct MenuBarView: View {
                 Divider()
             }
 
-            // Last transcription (clickable to copy)
-            if !controller.lastTranscription.isEmpty {
+            // Last capture (clickable to copy processed output)
+            if let lastCapture = captureHistory.entries.first {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Last transcription:")
+                    Text("Last capture:")
                         .font(.caption)
                         .foregroundColor(.secondary)
 
                     Button(action: {
-                        print("📋 Copying to clipboard: '\(controller.lastTranscription)'")
+                        print("📋 Copying processed output to clipboard")
                         let pasteboard = NSPasteboard.general
                         pasteboard.clearContents()
-                        let success = pasteboard.setString(controller.lastTranscription, forType: .string)
+                        let success = pasteboard.setString(lastCapture.processedOutput, forType: .string)
                         print("📋 Clipboard copy success: \(success)")
                     }) {
-                        Text(controller.lastTranscription)
+                        Text(lastCapture.inputText.components(separatedBy: "\n").first ?? "")
                             .font(.caption)
                             .multilineTextAlignment(.leading)
                             .lineLimit(4)
@@ -74,7 +84,7 @@ struct MenuBarView: View {
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
                     .buttonStyle(PlainButtonStyle())
-                    .help("Click to copy full transcription to clipboard")
+                    .help("Click to copy processed output to clipboard")
                 }
                 .padding(.horizontal, 4)
 

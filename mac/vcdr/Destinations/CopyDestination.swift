@@ -10,6 +10,7 @@ import AppKit
 
 class CopyDestination: TextDestination {
     let name = "Copy"
+    let shouldRestoreFocus = true
 
     func send(text: String, onPrepareSend: (() async -> Void)? = nil) async throws {
         print("📋 CopyDestination: Copying text to clipboard...")

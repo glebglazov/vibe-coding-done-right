@@ -9,6 +9,7 @@ import Foundation
 
 class PreviewDestination: TextDestination {
     let name = "Preview"
+    let shouldRestoreFocus = false
 
     // Callback to show preview window with text
     var onShowPreview: ((String) -> Void)?

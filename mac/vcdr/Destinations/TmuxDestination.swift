@@ -9,6 +9,7 @@ import Foundation
 
 class TmuxDestination: TextDestination {
     let name = "Tmux (Claude)"
+    let shouldRestoreFocus = true
 
     private lazy var tmuxPath: String? = {
         let possiblePaths = [

@@ -9,7 +9,7 @@ import Foundation
 
 /// Represents a single action within a capture session
 /// Each action can be from recording, clipboard, or selected text
-struct CaptureAction: Identifiable, Codable {
+struct CaptureAction: Identifiable, Codable, Hashable {
     let id: UUID
     let timestamp: Date
     let source: CaptureSource

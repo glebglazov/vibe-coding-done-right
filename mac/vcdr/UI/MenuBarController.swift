@@ -38,6 +38,7 @@ class MenuBarController: ObservableObject {
     let audioRecorder = AudioRecorder()
     private let transcriptionProvider: any TranscriptionProvider = WhisperKitService.shared
     private let modeManager = ModeManager.shared
+    private let captureHistory = CaptureHistory.shared
     private let pasteDestination = PasteDestination()
     private let copyDestination = CopyDestination()
     private let tmuxDestination = TmuxDestination()
@@ -400,9 +401,6 @@ class MenuBarController: ObservableObject {
                 // hudManager?.showProcessingStarted(mode: modeName)
             }
 
-            // Restore focus to previous app BEFORE LLM processing
-            await restorePreviousAppFocus()
-
             // Process through mode system
             let processedText: String
             do {
@@ -442,7 +440,26 @@ class MenuBarController: ObservableObject {
                 destinationService = previewDestination
             }
 
+            // Restore focus to previous app before sending (if destination requires it)
+            if destinationService.shouldRestoreFocus {
+                await restorePreviousAppFocus()
+            }
+
             await sendTranscriptionToDestination(processedText, destination: destinationService)
+
+            // Log to history
+            await MainActor.run {
+                let historyEntry = CaptureHistoryEntry(
+                    actions: captureActions,
+                    modeName: modeManager.activeMode?.name ?? "Disabled",
+                    modeId: modeManager.activeMode?.id ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+                    providerName: modeManager.activeMode is DisabledMode ? nil : modeManager.activeLLMProvider.name,
+                    providerId: modeManager.activeMode is DisabledMode ? nil : modeManager.activeLLMProvider.id,
+                    processedOutput: processedText,
+                    destinationType: destinationService.name
+                )
+                captureHistory.addEntry(historyEntry)
+            }
 
             // Close overlay
             await MainActor.run {

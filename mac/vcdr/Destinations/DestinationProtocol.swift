@@ -9,6 +9,9 @@ import Foundation
 
 protocol TextDestination {
     var name: String { get }
+    /// Whether to restore focus to the previous app after sending
+    /// Set to false for destinations that show UI (e.g., Preview)
+    var shouldRestoreFocus: Bool { get }
     func send(text: String, onPrepareSend: (() async -> Void)?) async throws
     func isAvailable() async -> Bool
 }
