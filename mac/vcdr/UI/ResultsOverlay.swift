@@ -168,32 +168,32 @@ struct ResultsOverlay: View {
         .onAppear {
             // Set up local event monitor for keyboard events
             eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                // Handle key events
-                let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
+                // Handle key events using keyCode (works across keyboard layouts)
+                let keyCode = event.keyCode
                 let hasCommand = event.modifierFlags.contains(.command)
 
-                if event.keyCode == 53 { // Escape key
+                if keyCode == 53 { // Escape key
                     onCancel()
                     return nil // Event handled
-                } else if characters == "x" && !hasCommand {
+                } else if keyCode == 7 && !hasCommand { // X key (Disabled mode)
                     controller.switchToDisabledMode()
                     return nil
-                } else if characters == "a" && !hasCommand {
+                } else if keyCode == 0 && !hasCommand { // A key (Assistant mode)
                     controller.switchToAssistantMode()
                     return nil
-                } else if characters == "c" && !hasCommand && !event.modifierFlags.contains(.command) {
+                } else if keyCode == 8 && !hasCommand { // C key (Cycle custom modes)
                     controller.cycleCustomModes()
                     return nil
-                } else if characters == "v" && hasCommand {
+                } else if keyCode == 9 && hasCommand { // V key (Paste)
                     onStopAndPaste()
                     return nil
-                } else if characters == "c" && hasCommand {
+                } else if keyCode == 8 && hasCommand { // C key (Copy)
                     onStopAndCopyToClipboard()
                     return nil
-                } else if characters == "t" && hasCommand {
+                } else if keyCode == 17 && hasCommand { // T key (Tmux)
                     onStopAndSendToTmux()
                     return nil
-                } else if characters == "p" && hasCommand {
+                } else if keyCode == 35 && hasCommand { // P key (Preview)
                     onStopAndPreview()
                     return nil
                 }
