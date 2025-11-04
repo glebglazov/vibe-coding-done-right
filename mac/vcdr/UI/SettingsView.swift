@@ -81,15 +81,32 @@ struct GeneralTab: View {
                         }
                     )
 
-                    // Add clipboard shortcut
+                    // Add selected text shortcut
                     ShortcutRow(
-                        icon: "doc.on.clipboard",
+                        icon: "selection.pin.in.out",
                         iconColor: .green,
-                        title: "Add Clipboard to Capture",
+                        title: "Add Selected Text to Capture",
                         keyCode: $settings.addClipboardShortcutKeyCode,
                         modifiers: $settings.addClipboardShortcutModifiers,
                         onReset: {
                             settings.resetAddClipboardShortcut()
+                            controller.updateGlobalShortcut()
+                        },
+                        onChange: {
+                            settings.saveSettings()
+                            controller.updateGlobalShortcut()
+                        }
+                    )
+
+                    // Add last clipboard entry shortcut
+                    ShortcutRow(
+                        icon: "doc.on.clipboard",
+                        iconColor: .orange,
+                        title: "Add Last Clipboard Entry to Capture",
+                        keyCode: $settings.addLastClipboardShortcutKeyCode,
+                        modifiers: $settings.addLastClipboardShortcutModifiers,
+                        onReset: {
+                            settings.resetAddLastClipboardShortcut()
                             controller.updateGlobalShortcut()
                         },
                         onChange: {

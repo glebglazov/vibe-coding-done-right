@@ -37,8 +37,8 @@ xcodebuild test -project vcdr.xcodeproj -scheme vcdr
 1. **Capture Session**: User triggers global hotkey (default: Cmd+Option+/) to start a capture session
 2. **Multi-Source Input**: Within a session, user can:
    - Record voice (transcribed via WhisperKit)
-   - Add selected text from other apps
-   - Add clipboard content
+   - Add selected text from other apps (copies selection via Cmd+C)
+   - Add last clipboard entry (reads existing clipboard)
    - Add keyboard input (direct text entry via overlay)
 3. **Mode Processing**: Combined text is processed through the active Mode (Disabled, Assistant, or custom)
 4. **Destination**: Processed text is sent to chosen destination (tmux, paste, or clipboard)
@@ -148,7 +148,8 @@ The app uses @Published properties in MenuBarController for reactive UI updates:
 Implemented using Carbon Event Manager with Accessibility permissions:
 - **Capture Toggle** (Cmd+Option+/): Start/finish capture session
 - **Toggle Recording** (Cmd+Option+R): Start/stop voice recording (only during capture)
-- **Add Clipboard** (Cmd+Option+C): Add clipboard content (only during capture)
+- **Add Selected Text** (Cmd+Option+C): Add selected text from other apps (only during capture)
+- **Add Last Clipboard Entry** (Cmd+Option+Y): Add last clipboard entry to capture (only during capture)
 - **Add Keyboard Input** (Cmd+Option+I): Open keyboard input overlay to type text (only during capture)
 - **Preview** (Cmd+Option+P): Show capture preview window (only during capture)
 

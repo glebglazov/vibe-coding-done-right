@@ -96,6 +96,9 @@ struct vcdrApp: App {
                         onAddClipboard: {
                             menuBarController.copySelectionAndAddToCapture()
                         },
+                        onAddLastClipboard: {
+                            menuBarController.addClipboardToCapture()
+                        },
                         onAddKeyboardInput: {
                             menuBarController.openKeyboardInputOverlay()
                         },

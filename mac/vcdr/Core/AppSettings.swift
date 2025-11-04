@@ -20,9 +20,13 @@ class AppSettings: ObservableObject {
     @Published var toggleRecordingShortcutKeyCode: CGKeyCode = 15 // R key
     @Published var toggleRecordingShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+R
 
-    // Add clipboard to capture shortcut
+    // Add selected text to capture shortcut
     @Published var addClipboardShortcutKeyCode: CGKeyCode = 8 // C key
     @Published var addClipboardShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+C
+
+    // Add last clipboard entry to capture shortcut
+    @Published var addLastClipboardShortcutKeyCode: CGKeyCode = 16 // Y key
+    @Published var addLastClipboardShortcutModifiers: CGEventFlags = [.maskCommand, .maskAlternate] // Cmd+Option+Y
 
     // Preview capture shortcut
     @Published var previewShortcutKeyCode: CGKeyCode = 35 // P key
@@ -68,7 +72,7 @@ class AppSettings: ObservableObject {
             toggleRecordingShortcutModifiers = CGEventFlags(rawValue: UInt64(toggleRecordingModifierRawValue))
         }
 
-        // Load add clipboard shortcut
+        // Load add selected text shortcut
         let addClipboardKeyCode = userDefaults.integer(forKey: "addClipboardShortcutKeyCode")
         if addClipboardKeyCode == 0 && userDefaults.object(forKey: "addClipboardShortcutKeyCode") == nil {
             // First time launch - set default
@@ -78,6 +82,18 @@ class AppSettings: ObservableObject {
             addClipboardShortcutKeyCode = CGKeyCode(addClipboardKeyCode)
             let addClipboardModifierRawValue = userDefaults.integer(forKey: "addClipboardShortcutModifiers")
             addClipboardShortcutModifiers = CGEventFlags(rawValue: UInt64(addClipboardModifierRawValue))
+        }
+
+        // Load add last clipboard entry shortcut
+        let addLastClipboardKeyCode = userDefaults.integer(forKey: "addLastClipboardShortcutKeyCode")
+        if addLastClipboardKeyCode == 0 && userDefaults.object(forKey: "addLastClipboardShortcutKeyCode") == nil {
+            // First time launch - set default
+            addLastClipboardShortcutKeyCode = 16 // Y key
+            addLastClipboardShortcutModifiers = [.maskCommand, .maskAlternate]
+        } else {
+            addLastClipboardShortcutKeyCode = CGKeyCode(addLastClipboardKeyCode)
+            let addLastClipboardModifierRawValue = userDefaults.integer(forKey: "addLastClipboardShortcutModifiers")
+            addLastClipboardShortcutModifiers = CGEventFlags(rawValue: UInt64(addLastClipboardModifierRawValue))
         }
 
         // Load preview shortcut
@@ -119,6 +135,9 @@ class AppSettings: ObservableObject {
 
         userDefaults.set(Int(addClipboardShortcutKeyCode), forKey: "addClipboardShortcutKeyCode")
         userDefaults.set(Int(addClipboardShortcutModifiers.rawValue), forKey: "addClipboardShortcutModifiers")
+
+        userDefaults.set(Int(addLastClipboardShortcutKeyCode), forKey: "addLastClipboardShortcutKeyCode")
+        userDefaults.set(Int(addLastClipboardShortcutModifiers.rawValue), forKey: "addLastClipboardShortcutModifiers")
 
         userDefaults.set(Int(previewShortcutKeyCode), forKey: "previewShortcutKeyCode")
         userDefaults.set(Int(previewShortcutModifiers.rawValue), forKey: "previewShortcutModifiers")
@@ -180,6 +199,23 @@ class AppSettings: ObservableObject {
     func resetAddClipboardShortcut() {
         addClipboardShortcutKeyCode = 0
         addClipboardShortcutModifiers = []
+        saveSettings()
+    }
+
+    var addLastClipboardShortcutDisplayString: String {
+        if addLastClipboardShortcutKeyCode == 0 {
+            return "Not set"
+        }
+        return shortcutDisplayString(keyCode: addLastClipboardShortcutKeyCode, modifiers: addLastClipboardShortcutModifiers)
+    }
+
+    var isAddLastClipboardShortcutSet: Bool {
+        return addLastClipboardShortcutKeyCode != 0
+    }
+
+    func resetAddLastClipboardShortcut() {
+        addLastClipboardShortcutKeyCode = 0
+        addLastClipboardShortcutModifiers = []
         saveSettings()
     }
 

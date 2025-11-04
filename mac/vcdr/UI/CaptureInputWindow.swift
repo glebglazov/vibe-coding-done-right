@@ -44,7 +44,7 @@ struct CaptureInputWindow: View {
                     Text("No actions yet")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text("Start recording or add clipboard text")
+                    Text("Start recording or add selected text")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

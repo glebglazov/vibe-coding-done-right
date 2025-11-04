@@ -19,6 +19,7 @@ struct MiniOverlay: View {
     @ObservedObject var controller: MenuBarController
     let onToggleRecording: () -> Void
     let onAddClipboard: () -> Void
+    let onAddLastClipboard: () -> Void
     let onAddKeyboardInput: () -> Void
     let onPreview: () -> Void
     let onStopCapture: () -> Void
@@ -27,10 +28,27 @@ struct MiniOverlay: View {
     @State private var animationTimer: Timer?
     @State private var currentLevel: Float = 0.0
     @State private var clipboardJustAdded = false
+    @State private var lastClipboardJustAdded = false
 
     var body: some View {
         HStack(spacing: 10) {
-            // Add from clipboard button
+            // Add last clipboard entry button
+            Button(action: {
+                onAddLastClipboard()
+                lastClipboardJustAdded = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.buttonFeedbackDuration) {
+                    lastClipboardJustAdded = false
+                }
+            }) {
+                Image(systemName: lastClipboardJustAdded ? "checkmark" : "doc.on.clipboard")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.orange)
+                    .frame(width: 21, height: 21)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Add last clipboard entry to capture")
+
+            // Add selected text button
             Button(action: {
                 onAddClipboard()
                 clipboardJustAdded = true
@@ -38,13 +56,13 @@ struct MiniOverlay: View {
                     clipboardJustAdded = false
                 }
             }) {
-                Image(systemName: clipboardJustAdded ? "checkmark" : "doc.on.clipboard")
+                Image(systemName: clipboardJustAdded ? "checkmark" : "selection.pin.in.out")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.green)
                     .frame(width: 21, height: 21)
             }
             .buttonStyle(PlainButtonStyle())
-            .help("Add clipboard to capture")
+            .help("Add selected text to capture")
 
             // Toggle recording button
             Button(action: onToggleRecording) {
@@ -168,6 +186,7 @@ struct MiniOverlay: View {
             controller: controller,
             onToggleRecording: {},
             onAddClipboard: {},
+            onAddLastClipboard: {},
             onAddKeyboardInput: {},
             onPreview: {},
             onStopCapture: {}
@@ -178,6 +197,7 @@ struct MiniOverlay: View {
             controller: controller,
             onToggleRecording: {},
             onAddClipboard: {},
+            onAddLastClipboard: {},
             onAddKeyboardInput: {},
             onPreview: {},
             onStopCapture: {}

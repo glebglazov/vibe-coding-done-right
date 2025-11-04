@@ -120,20 +120,33 @@ class MenuBarController: ObservableObject {
             ))
         }
 
-        // 3. Add clipboard to capture shortcut
+        // 3. Add selected text to capture shortcut
         if settings.isAddClipboardShortcutSet {
             hotkeys.append(HotkeyRegistration(
-                name: "Add Clipboard",
+                name: "Add Selected Text",
                 keyCode: settings.addClipboardShortcutKeyCode,
                 modifiers: settings.addClipboardShortcutModifiers,
                 callback: { [weak self] in
-                    print("📋 Add clipboard hotkey triggered!")
+                    print("📋 Add selected text hotkey triggered!")
                     self?.copySelectionAndAddToCapture()
                 }
             ))
         }
 
-        // 4. Preview capture shortcut
+        // 4. Add last clipboard entry to capture shortcut
+        if settings.isAddLastClipboardShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Add Last Clipboard Entry",
+                keyCode: settings.addLastClipboardShortcutKeyCode,
+                modifiers: settings.addLastClipboardShortcutModifiers,
+                callback: { [weak self] in
+                    print("📋 Add last clipboard entry hotkey triggered!")
+                    self?.addClipboardToCapture()
+                }
+            ))
+        }
+
+        // 5. Preview capture shortcut
         if settings.isPreviewShortcutSet {
             hotkeys.append(HotkeyRegistration(
                 name: "Preview Capture",
@@ -146,7 +159,7 @@ class MenuBarController: ObservableObject {
             ))
         }
 
-        // 5. Add keyboard input to capture shortcut
+        // 6. Add keyboard input to capture shortcut
         if settings.isAddKeyboardInputShortcutSet {
             hotkeys.append(HotkeyRegistration(
                 name: "Add Keyboard Input",
@@ -195,11 +208,22 @@ class MenuBarController: ObservableObject {
 
         if settings.isAddClipboardShortcutSet {
             hotkeys.append(HotkeyRegistration(
-                name: "Add Clipboard",
+                name: "Add Selected Text",
                 keyCode: settings.addClipboardShortcutKeyCode,
                 modifiers: settings.addClipboardShortcutModifiers,
                 callback: { [weak self] in
                     self?.copySelectionAndAddToCapture()
+                }
+            ))
+        }
+
+        if settings.isAddLastClipboardShortcutSet {
+            hotkeys.append(HotkeyRegistration(
+                name: "Add Last Clipboard Entry",
+                keyCode: settings.addLastClipboardShortcutKeyCode,
+                modifiers: settings.addLastClipboardShortcutModifiers,
+                callback: { [weak self] in
+                    self?.addClipboardToCapture()
                 }
             ))
         }
@@ -621,7 +645,7 @@ class MenuBarController: ObservableObject {
     func copySelectionAndAddToCapture() {
         // Auto-start capture if not active
         if !isCapturing {
-            print("📋 Starting capture and adding clipboard automatically")
+            print("📋 Starting capture and adding selected text automatically")
             Task {
                 // Skip initial text capture since this action will capture it anyway
                 await startCapture(captureSelectedText: false)
@@ -634,12 +658,12 @@ class MenuBarController: ObservableObject {
             // Simulate Cmd+C to copy selected text, then add to capture
             if let copiedText = await copySelectedText(), !copiedText.isEmpty {
                 await MainActor.run {
-                    // Create capture action for clipboard
-                    let action = CaptureAction(source: .clipboard, text: copiedText)
+                    // Create capture action for selected text
+                    let action = CaptureAction(source: .selectedText, text: copiedText)
                     captureActions.append(action)
 
-                    print("📋 Added clipboard text to capture: \(copiedText.prefix(50))...")
-                    statusMessage = "Added clipboard text"
+                    print("📋 Added selected text to capture: \(copiedText.prefix(50))...")
+                    statusMessage = "Added selected text"
 
                     // Show HUD notification
                     // hudManager?.showClipboardAdded()
