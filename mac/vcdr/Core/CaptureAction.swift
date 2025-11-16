@@ -21,6 +21,7 @@ struct CaptureAction: Identifiable, Codable, Hashable {
         case recording
         case selectedText
         case keyboardInput
+        case appContext
     }
 
     init(source: CaptureSource, text: String, audioFileURL: URL? = nil) {
@@ -44,6 +45,8 @@ extension CaptureAction {
             return "Selected Text"
         case .keyboardInput:
             return "Keyboard Input"
+        case .appContext:
+            return "App Context"
         }
     }
 
@@ -58,6 +61,8 @@ extension CaptureAction {
             return "selection.pin.in.out"
         case .keyboardInput:
             return "keyboard"
+        case .appContext:
+            return "macwindow"
         }
     }
 }

@@ -15,7 +15,14 @@ class CustomMode: Mode, Codable {
     }
 
     func process(text: String, using provider: any LLMProvider) async throws -> String {
-        return try await provider.generate(prompt: text, systemPrompt: systemPrompt)
+        // Combine base input structure prompt with user's custom system prompt
+        let combinedSystemPrompt = """
+        \(baseInputStructurePrompt)
+
+        === USER SYSTEM PROMPT ===
+        \(systemPrompt)
+        """
+        return try await provider.generate(prompt: text, systemPrompt: combinedSystemPrompt)
     }
 
     // Codable conformance

@@ -30,9 +30,34 @@ class MenuBarController: ObservableObject {
     @Published var captureActions: [CaptureAction] = []
     @Published var keyboardInputJustAdded = false
 
-    /// Combined text from all capture actions
+    /// Combined text from all capture actions (raw, no formatting)
     var capturedText: String {
         captureActions.map { $0.text }.joined(separator: "\n\n")
+    }
+
+    /// Formatted text with source labels for AI model clarity
+    var formattedCapturedText: String {
+        var formattedSections: [String] = []
+
+        for action in captureActions {
+            let label: String
+            switch action.source {
+            case .appContext:
+                label = "=== CONTEXT FROM ACTIVE APP ==="
+            case .selectedText:
+                label = "=== SELECTED TEXT (CONTEXT) ==="
+            case .clipboard:
+                label = "=== CLIPBOARD CONTENT ==="
+            case .recording:
+                label = "=== USER QUERY (VOICE) ==="
+            case .keyboardInput:
+                label = "=== USER QUERY (TYPED) ==="
+            }
+
+            formattedSections.append("\(label)\n\(action.text)")
+        }
+
+        return formattedSections.joined(separator: "\n\n")
     }
 
     let audioRecorder = AudioRecorder()
@@ -412,8 +437,8 @@ class MenuBarController: ObservableObject {
         // Close results overlay immediately
         showResultsOverlay = false
 
-        // Use combined text from all capture actions
-        let textToProcess = capturedText
+        // Use formatted text from all capture actions (with source labels for AI clarity)
+        let textToProcess = formattedCapturedText
 
         Task {
             await MainActor.run {
@@ -523,6 +548,20 @@ class MenuBarController: ObservableObject {
     private func startCapture(captureSelectedText: Bool = true) async {
         // Store the currently active app BEFORE showing overlay
         previousActiveApp = NSWorkspace.shared.frontmostApplication
+
+        // Capture app context from the frontmost application
+        if AppContextProvider.checkAccessibilityPermissions() {
+            if let contextText = await AppContextProvider.captureActiveAppContext() {
+                print("🌐 Captured app context: \(contextText.prefix(100))...")
+                await MainActor.run {
+                    let action = CaptureAction(source: .appContext, text: contextText)
+                    captureActions.append(action)
+                }
+            }
+        } else {
+            print("⚠️ Accessibility permissions not granted - skipping app context capture")
+            // Silently skip if no permissions - don't interrupt the capture flow
+        }
 
         // Capture any selected text before showing overlay (unless caller will do it)
         if captureSelectedText {

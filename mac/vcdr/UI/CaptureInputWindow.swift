@@ -132,6 +132,8 @@ struct CaptureActionRow: View {
             return .green
         case .keyboardInput:
             return .blue
+        case .appContext:
+            return .purple
         }
     }
 }
