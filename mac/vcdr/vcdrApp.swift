@@ -154,33 +154,25 @@ struct vcdrApp: App {
         
 
         Window("Results", id: "results-overlay") {
-            ZStack {
-                if menuBarController.showResultsOverlay {
-                    ResultsOverlay(
-                        onStopAndPaste: {
-                            menuBarController.stopAndPaste()
-                        },
-                        onStopAndCopyToClipboard: {
-                            menuBarController.stopAndCopyToClipboard()
-                        },
-                        onStopAndSendToTmux: {
-                            menuBarController.stopAndSendToTmux()
-                        },
-                        onStopAndPreview: {
-                            menuBarController.stopAndPreview()
-                        },
-                        onCancel: {
-                            menuBarController.cancelRecording()
-                        },
-                        controller: menuBarController,
-                        previousActiveApp: menuBarController.previousActiveApp
-                    )
-                } else {
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .opacity(0)
-                }
-            }
+            ResultsOverlay(
+                onStopAndPaste: {
+                    menuBarController.stopAndPaste()
+                },
+                onStopAndCopyToClipboard: {
+                    menuBarController.stopAndCopyToClipboard()
+                },
+                onStopAndSendToTmux: {
+                    menuBarController.stopAndSendToTmux()
+                },
+                onStopAndPreview: {
+                    menuBarController.stopAndPreview()
+                },
+                onCancel: {
+                    menuBarController.cancelRecording()
+                },
+                controller: menuBarController,
+                previousActiveApp: menuBarController.previousActiveApp
+            )
             .focusable()
             .focusEffectDisabled()
             .task {
@@ -212,6 +204,13 @@ struct vcdrApp: App {
 
                             window.makeKeyAndOrderFront(nil)
                             NSApp.activate(ignoringOtherApps: true)
+                        }
+                    }
+                } else {
+                    // Close the window when overlay should be hidden
+                    Task {
+                        if let window = NSApp.windows.first(where: { $0.title == "Results" }) {
+                            window.close()
                         }
                     }
                 }
