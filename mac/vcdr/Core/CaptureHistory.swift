@@ -61,6 +61,7 @@ class CaptureHistory: ObservableObject {
         do {
             let data = try Data(contentsOf: storageURL)
             let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
             entries = try decoder.decode([CaptureHistoryEntry].self, from: data)
             print("📚 Loaded \(entries.count) history entries")
         } catch {
