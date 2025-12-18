@@ -36,8 +36,12 @@ class PasteDestination: TextDestination {
 
         print("✅ PasteDestination: Accessibility permissions available")
 
-        // Small delay to ensure clipboard is set
-        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        // Wait for clipboard to be set with verification
+        let clipboardReady = await ClipboardHelper.waitForClipboardContent(text)
+
+        if !clipboardReady {
+            print("⚠️ PasteDestination: Clipboard verification timeout, attempting paste anyway")
+        }
 
         // Verify clipboard contents before pasting
         let clipboardText = pasteboard.string(forType: .string) ?? ""

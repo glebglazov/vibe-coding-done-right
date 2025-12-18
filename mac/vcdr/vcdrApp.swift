@@ -63,8 +63,7 @@ struct vcdrApp: App {
             .ignoresSafeArea()
             .task {
                 // Configure HUD window styling
-                try? await Task.sleep(nanoseconds: 50_000_000)
-                if let window = NSApp.windows.first(where: { $0.title == "HUD" }) {
+                if let window = await WindowHelper.waitForWindow(titled: "HUD") {
                     window.styleMask = [.borderless, .fullSizeContentView]
                     window.backgroundColor = .clear
                     window.isOpaque = false
@@ -118,8 +117,7 @@ struct vcdrApp: App {
             .ignoresSafeArea()
             .task {
                 // Configure mini overlay window styling
-                try? await Task.sleep(nanoseconds: 50_000_000)
-                if let window = NSApp.windows.first(where: { $0.title == "Mini Overlay" }) {
+                if let window = await WindowHelper.waitForWindow(titled: "Mini Overlay") {
                     // Replace the window with our custom non-activating panel
                     let panel = NonActivatingPanel(
                         contentRect: window.frame,

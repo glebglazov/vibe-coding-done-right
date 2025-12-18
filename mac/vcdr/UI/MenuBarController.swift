@@ -739,9 +739,9 @@ class MenuBarController: ObservableObject {
     }
 
     private func copySelectedText() async -> String? {
-        // Get current clipboard content
+        // Get current clipboard state
         let pasteboard = NSPasteboard.general
-        let savedChangeCount = pasteboard.changeCount
+        let initialChangeCount = pasteboard.changeCount
 
         print("📋 Triggering Cmd+C to copy selected text...")
 
@@ -758,20 +758,17 @@ class MenuBarController: ObservableObject {
         keyUpEvent?.flags = .maskCommand
         keyUpEvent?.post(tap: .cghidEventTap)
 
-        // Wait for clipboard to update
-        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        // Wait for clipboard to update using polling
+        let clipboardChanged = await ClipboardHelper.waitForClipboardChange(from: initialChangeCount)
 
-        // Check if clipboard changed (meaning text was selected)
-        let newChangeCount = pasteboard.changeCount
-
-        if newChangeCount != savedChangeCount {
+        if clipboardChanged {
             // Clipboard changed, get the new content
             let copiedText = pasteboard.string(forType: .string)
             print("✅ Copied selected text: \(copiedText ?? "[empty]")")
             return copiedText
         } else {
-            // No text was selected
-            print("ℹ️ No text was selected (clipboard unchanged)")
+            // No text was selected or timeout occurred
+            print("ℹ️ No text was selected (clipboard unchanged or timeout)")
             return nil
         }
     }
@@ -891,15 +888,16 @@ class MenuBarController: ObservableObject {
     private func captureSelectedText() async -> String? {
         // Get current clipboard content to restore later
         let pasteboard = NSPasteboard.general
-        let savedChangeCount = pasteboard.changeCount
+        let initialChangeCount = pasteboard.changeCount
         let savedContent = pasteboard.string(forType: .string)
 
         print("📋 === Clipboard State ===")
         print("Current clipboard content: \(savedContent ?? "[empty]")")
-        print("Change count: \(savedChangeCount)")
+        print("Change count: \(initialChangeCount)")
         print("=========================")
 
         // Give a tiny delay to ensure app is focused
+        // TODO: Replace with proper focus verification in Phase 3
         try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
 
         // Simulate Cmd+C to copy selected text
@@ -915,17 +913,15 @@ class MenuBarController: ObservableObject {
         keyUpEvent?.flags = .maskCommand
         keyUpEvent?.post(tap: .cghidEventTap)
 
-        // Wait a bit for clipboard to update
-        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        // Wait for clipboard to update using polling
+        let clipboardChanged = await ClipboardHelper.waitForClipboardChange(from: initialChangeCount)
 
-        // Check if clipboard changed (meaning text was selected)
-        let newChangeCount = pasteboard.changeCount
         let capturedText: String?
 
         print("📋 === After Cmd+C ===")
-        print("New change count: \(newChangeCount)")
+        print("Clipboard changed: \(clipboardChanged)")
 
-        if newChangeCount != savedChangeCount {
+        if clipboardChanged {
             // Clipboard changed, get the new content
             capturedText = pasteboard.string(forType: .string)
             print("✅ Captured selected text: \(capturedText ?? "[empty]")")
@@ -937,11 +933,10 @@ class MenuBarController: ObservableObject {
             }
             print("♻️ Restored original clipboard")
         } else {
-            // No text was selected
+            // No text was selected or timeout occurred
             capturedText = nil
-            print("ℹ️ No text was selected (clipboard unchanged)")
+            print("ℹ️ No text was selected (clipboard unchanged or timeout)")
         }
-        print("=====================")
 
         return capturedText
     }
