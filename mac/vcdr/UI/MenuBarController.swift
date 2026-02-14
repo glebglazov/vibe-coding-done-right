@@ -549,19 +549,17 @@ class MenuBarController: ObservableObject {
         // Store the currently active app BEFORE showing overlay
         previousActiveApp = NSWorkspace.shared.frontmostApplication
 
-        // Capture app context from the frontmost application
-        if AppContextProvider.checkAccessibilityPermissions() {
-            if let contextText = await AppContextProvider.captureActiveAppContext() {
-                print("🌐 Captured app context: \(contextText.prefix(100))...")
-                await MainActor.run {
-                    let action = CaptureAction(source: .appContext, text: contextText)
-                    captureActions.append(action)
-                }
-            }
-        } else {
-            print("⚠️ Accessibility permissions not granted - skipping app context capture")
-            // Silently skip if no permissions - don't interrupt the capture flow
-        }
+        // TODO: Re-enable app context capture once the output is more useful
+        // Currently disabled because it adds too much noise to the prompt
+        // if AppContextProvider.checkAccessibilityPermissions() {
+        //     if let contextText = await AppContextProvider.captureActiveAppContext() {
+        //         print("🌐 Captured app context: \(contextText.prefix(100))...")
+        //         await MainActor.run {
+        //             let action = CaptureAction(source: .appContext, text: contextText)
+        //             captureActions.append(action)
+        //         }
+        //     }
+        // }
 
         // Capture any selected text before showing overlay (unless caller will do it)
         if captureSelectedText {
