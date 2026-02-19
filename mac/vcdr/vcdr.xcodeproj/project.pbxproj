@@ -33,9 +33,22 @@
 		E5D6B8312F466C83002066AA /* vcdrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = vcdrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E5C1B1502F467A000029DBEB /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E5D6B8192F466C82002066AA /* vcdr */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E5D6B81C2F466C82002066AA /* vcdr */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E5C1B1502F467A000029DBEB /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
 			path = vcdr;
 			sourceTree = "<group>";
 		};
