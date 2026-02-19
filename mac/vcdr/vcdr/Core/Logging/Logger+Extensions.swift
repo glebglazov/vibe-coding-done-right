@@ -9,4 +9,5 @@ extension Logger {
     static let hotkeys = Logger(subsystem: subsystem, category: "hotkeys")
     static let actions = Logger(subsystem: subsystem, category: "actions")
     static let settings = Logger(subsystem: subsystem, category: "settings")
+    static let audio = Logger(subsystem: subsystem, category: "audio")
 }

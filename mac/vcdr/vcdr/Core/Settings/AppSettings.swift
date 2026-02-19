@@ -21,6 +21,10 @@ final class AppSettings {
     var activeModeID: UUID {
         didSet { save() }
     }
+    /// Selected input device unique ID, or nil for system default
+    var preferredInputDeviceID: String? {
+        didSet { save() }
+    }
 
     /// Active mode looked up by ID, falling back to first mode
     var activeMode: Mode {
@@ -70,6 +74,8 @@ final class AppSettings {
         } else {
             self.activeModeID = loadedModes.first?.id ?? UUID()
         }
+
+        self.preferredInputDeviceID = userDefaults.string(forKey: "preferredInputDeviceID")
     }
 
     private func save() {
@@ -78,6 +84,11 @@ final class AppSettings {
         userDefaults.set(activeModeID.uuidString, forKey: "activeModeID")
         if let encoded = try? JSONEncoder().encode(modes) {
             userDefaults.set(encoded, forKey: "modes")
+        }
+        if let preferredInputDeviceID {
+            userDefaults.set(preferredInputDeviceID, forKey: "preferredInputDeviceID")
+        } else {
+            userDefaults.removeObject(forKey: "preferredInputDeviceID")
         }
         Logger.settings.info("Settings saved")
     }

@@ -8,6 +8,8 @@ final class AppDependencies {
     let settings: AppSettings
     let transcriptionProvider: ParakeetProvider
     let coordinator: PushToTalkCoordinator
+    let audioDeviceMonitor: AudioDeviceMonitor
+    let inputLevelMonitor: InputLevelMonitor
 
     private(set) var isTranscriptionReady = false
     private(set) var initializationStatus = "Loading model..."
@@ -26,6 +28,8 @@ final class AppDependencies {
         self.settings = settings
         self.transcriptionProvider = provider
         self.coordinator = PushToTalkCoordinator(settings: settings, transcriptionProvider: provider)
+        self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
+        self.inputLevelMonitor = InputLevelMonitor()
     }
 
     func initialize() async {
