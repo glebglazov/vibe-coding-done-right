@@ -25,6 +25,11 @@ struct TranscriptionTabView: View {
             }
         }
         .navigationTitle("Transcription")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Color.clear.frame(width: 0, height: 0)
+            }
+        }
     }
 }
 

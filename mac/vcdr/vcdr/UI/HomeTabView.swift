@@ -91,6 +91,11 @@ struct HomeTabView: View {
             }
         }
         .navigationTitle("Home")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Color.clear.frame(width: 0, height: 0)
+            }
+        }
     }
 
     private var isRecording: Bool {
