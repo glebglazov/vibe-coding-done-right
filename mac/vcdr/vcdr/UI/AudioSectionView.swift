@@ -55,22 +55,18 @@ private struct AudioLevelMeter: View {
     private static let redThreshold: Float = 0.8
 
     var body: some View {
-        HStack {
-            Text("Sound Check")
-            Spacer()
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: Self.cornerRadius)
-                        .fill(Color.secondary.opacity(0.2))
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .fill(Color.secondary.opacity(0.2))
 
-                    RoundedRectangle(cornerRadius: Self.cornerRadius)
-                        .fill(meterColor)
-                        .frame(width: geometry.size.width * CGFloat(level))
-                        .animation(.linear(duration: 0.05), value: level)
-                }
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .fill(meterColor)
+                    .frame(width: geometry.size.width * CGFloat(level))
+                    .animation(.linear(duration: 0.05), value: level)
             }
-            .frame(width: 120, height: Self.meterHeight)
         }
+        .frame(width: 120, height: Self.meterHeight)
     }
 
     private var meterColor: Color {
