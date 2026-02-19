@@ -33,7 +33,6 @@ final class AppDependencies {
     }
 
     func initialize() async {
-        requestAllPermissions()
         checkPermissions()
         startPermissionPolling()
 
@@ -99,22 +98,6 @@ final class AppDependencies {
                 timer.invalidate()
                 self.permissionTimer = nil
             }
-        }
-    }
-
-    private func requestAllPermissions() {
-        // Microphone
-        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                Logger.app.info("Microphone permission: \(granted)")
-            }
-        }
-
-        // Accessibility (needed for global hotkey event tap)
-        if !AXIsProcessTrusted() {
-            let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
-            AXIsProcessTrustedWithOptions(options)
-            Logger.app.info("Requested accessibility permissions")
         }
     }
 
