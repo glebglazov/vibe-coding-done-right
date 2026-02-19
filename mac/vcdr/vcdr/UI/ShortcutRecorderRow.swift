@@ -2,6 +2,7 @@ import SwiftUI
 import Carbon
 
 struct ShortcutRecorderRow: View {
+    let label: String
     @Binding var keyCode: UInt16
     @Binding var modifiers: UInt64
     @State private var isRecording = false
@@ -17,7 +18,7 @@ struct ShortcutRecorderRow: View {
     }
 
     var body: some View {
-        LabeledContent("Push-to-Talk") {
+        LabeledContent(label) {
             HStack(spacing: 6) {
                 Button(action: { toggleRecording() }) {
                     Text(isRecording ? "Press a key combo..." : displayString)
@@ -32,12 +33,13 @@ struct ShortcutRecorderRow: View {
                         .stroke(isRecording ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: 1)
                 )
 
-                if isAssigned && !isRecording {
+                if !isRecording {
                     Button(action: { clearShortcut() }) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .disabled(!isAssigned)
                     .help("Clear shortcut")
                 }
 

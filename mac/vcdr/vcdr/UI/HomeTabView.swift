@@ -76,9 +76,12 @@ struct HomeTabView: View {
                         .tint(isRecording ? .red : .accentColor)
                         .disabled(!canToggleRecording)
 
-                        Text("Active mode: \(dependencies.settings.activeMode.name)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Button(action: { dependencies.modeSwitcherCoordinator.showSwitcher() }) {
+                            Text(dependencies.settings.activeMode.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
                     Spacer()
                 }
@@ -86,18 +89,36 @@ struct HomeTabView: View {
 
             Section("Shortcuts") {
                 ShortcutRecorderRow(
+                    label: "Push-to-Talk",
                     keyCode: Binding(
-                        get: { dependencies.settings.hotkeyKeyCode },
+                        get: { dependencies.settings.pushToTalkHotkey.keyCode },
                         set: {
-                            dependencies.settings.hotkeyKeyCode = $0
+                            dependencies.settings.pushToTalkHotkey.keyCode = $0
                             dependencies.coordinator.updateHotkey()
                         }
                     ),
                     modifiers: Binding(
-                        get: { dependencies.settings.hotkeyModifiers },
+                        get: { dependencies.settings.pushToTalkHotkey.modifiers },
                         set: {
-                            dependencies.settings.hotkeyModifiers = $0
+                            dependencies.settings.pushToTalkHotkey.modifiers = $0
                             dependencies.coordinator.updateHotkey()
+                        }
+                    )
+                )
+                ShortcutRecorderRow(
+                    label: "Mode Switcher",
+                    keyCode: Binding(
+                        get: { dependencies.settings.modeSwitcherHotkey.keyCode },
+                        set: {
+                            dependencies.settings.modeSwitcherHotkey.keyCode = $0
+                            dependencies.modeSwitcherCoordinator.updateHotkey()
+                        }
+                    ),
+                    modifiers: Binding(
+                        get: { dependencies.settings.modeSwitcherHotkey.modifiers },
+                        set: {
+                            dependencies.settings.modeSwitcherHotkey.modifiers = $0
+                            dependencies.modeSwitcherCoordinator.updateHotkey()
                         }
                     )
                 )

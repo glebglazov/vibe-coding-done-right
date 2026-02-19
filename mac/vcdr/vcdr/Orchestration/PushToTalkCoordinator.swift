@@ -31,11 +31,11 @@ final class PushToTalkCoordinator {
     }
 
     func setupHotkey() {
-        let keyCode = CGKeyCode(settings.hotkeyKeyCode)
-        let modifiers = CGEventFlags(rawValue: settings.hotkeyModifiers)
+        let keyCode = CGKeyCode(settings.pushToTalkHotkey.keyCode)
+        let modifiers = CGEventFlags(rawValue: settings.pushToTalkHotkey.modifiers)
 
         // Unassigned hotkey — unregister and bail
-        guard keyCode != 0 || modifiers.rawValue != 0 else {
+        guard settings.pushToTalkHotkey.isAssigned else {
             hotkeyManager.unregister()
             Logger.hotkeys.info("Hotkey unassigned, unregistered")
             return

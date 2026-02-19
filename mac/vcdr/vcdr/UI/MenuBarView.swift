@@ -55,9 +55,10 @@ struct MenuBarView: View {
     }
 
     private var hotkeyDisplay: String {
-        let kc = dependencies.settings.hotkeyKeyCode
-        let mods = dependencies.settings.hotkeyModifiers
-        guard kc != 0 || mods != 0 else { return "Not set" }
+        let binding = dependencies.settings.pushToTalkHotkey
+        let kc = binding.keyCode
+        let mods = binding.modifiers
+        guard binding.isAssigned else { return "Not set" }
         return GlobalHotkeyManager.shortcutDisplayString(
             keyCode: CGKeyCode(kc),
             modifiers: CGEventFlags(rawValue: mods)

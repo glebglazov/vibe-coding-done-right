@@ -10,6 +10,7 @@ final class AppDependencies {
     let coordinator: PushToTalkCoordinator
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
+    let modeSwitcherCoordinator: ModeSwitcherCoordinator
 
     private(set) var isTranscriptionReady = false
     private(set) var initializationStatus = "Loading model..."
@@ -30,6 +31,7 @@ final class AppDependencies {
         self.coordinator = PushToTalkCoordinator(settings: settings, transcriptionProvider: provider)
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
+        self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings)
     }
 
     func initialize() async {
@@ -60,6 +62,7 @@ final class AppDependencies {
             initializationStatus = "Ready"
             if hasAccessibilityPermission {
                 coordinator.setupHotkey()
+                modeSwitcherCoordinator.setupHotkey()
             }
             Logger.app.info("App fully initialized")
         } catch {
@@ -90,7 +93,8 @@ final class AppDependencies {
             // Register hotkey as soon as accessibility is granted
             if !wasAccessible && self.hasAccessibilityPermission {
                 self.coordinator.setupHotkey()
-                Logger.app.info("Accessibility granted, hotkey registered")
+                self.modeSwitcherCoordinator.setupHotkey()
+                Logger.app.info("Accessibility granted, hotkeys registered")
             }
 
             // Stop polling once both permissions are granted

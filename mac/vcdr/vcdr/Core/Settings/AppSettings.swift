@@ -7,12 +7,29 @@ enum PostTranscriptionActionType: String, CaseIterable, Codable {
     case bash = "bash"
 }
 
+struct HotkeyBinding: Codable, Equatable {
+    var keyCode: UInt16
+    var modifiers: UInt64
+
+    static let unassigned = HotkeyBinding(keyCode: 0, modifiers: 0)
+
+    /// Default push-to-talk: Cmd+Option+Space
+    static let defaultPushToTalk = HotkeyBinding(
+        keyCode: 49,
+        modifiers: UInt64(CGEventFlags.maskCommand.rawValue | CGEventFlags.maskAlternate.rawValue)
+    )
+
+    var isAssigned: Bool {
+        keyCode != 0 || modifiers != 0
+    }
+}
+
 @Observable
 final class AppSettings {
-    var hotkeyKeyCode: UInt16 {
+    var pushToTalkHotkey: HotkeyBinding {
         didSet { save() }
     }
-    var hotkeyModifiers: UInt64 {
+    var modeSwitcherHotkey: HotkeyBinding {
         didSet { save() }
     }
     var modes: [Mode] {
@@ -33,23 +50,51 @@ final class AppSettings {
 
     private let userDefaults: UserDefaults
 
+    // MARK: - UserDefaults Keys
+
+    private enum Keys {
+        static let pushToTalkHotkey = "pushToTalkHotkey"
+        static let modeSwitcherHotkey = "modeSwitcherHotkey"
+        static let modes = "modes"
+        static let activeModeID = "activeModeID"
+        static let preferredInputDeviceID = "preferredInputDeviceID"
+        // Legacy keys for migration
+        static let legacyKeyCode = "hotkeyKeyCode"
+        static let legacyModifiers = "hotkeyModifiers"
+    }
+
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
 
-        // Default hotkey: Cmd+Option+Space (keyCode 49 = Space)
-        let savedKeyCode = userDefaults.integer(forKey: "hotkeyKeyCode")
-        self.hotkeyKeyCode = savedKeyCode != 0 ? UInt16(savedKeyCode) : 49
-
-        let savedModifiers = userDefaults.integer(forKey: "hotkeyModifiers")
-        if savedModifiers != 0 {
-            self.hotkeyModifiers = UInt64(savedModifiers)
+        // Load push-to-talk hotkey (with migration from legacy keys)
+        if let data = userDefaults.data(forKey: Keys.pushToTalkHotkey),
+           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
+            self.pushToTalkHotkey = decoded
         } else {
-            self.hotkeyModifiers = UInt64(CGEventFlags.maskCommand.rawValue | CGEventFlags.maskAlternate.rawValue)
+            // Migrate from legacy keys
+            let savedKeyCode = userDefaults.integer(forKey: Keys.legacyKeyCode)
+            let savedModifiers = userDefaults.integer(forKey: Keys.legacyModifiers)
+            if savedKeyCode != 0 || savedModifiers != 0 {
+                self.pushToTalkHotkey = HotkeyBinding(
+                    keyCode: UInt16(savedKeyCode),
+                    modifiers: UInt64(savedModifiers)
+                )
+            } else {
+                self.pushToTalkHotkey = .defaultPushToTalk
+            }
+        }
+
+        // Load mode switcher hotkey (default: unassigned)
+        if let data = userDefaults.data(forKey: Keys.modeSwitcherHotkey),
+           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
+            self.modeSwitcherHotkey = decoded
+        } else {
+            self.modeSwitcherHotkey = .unassigned
         }
 
         // Load modes into local var first (can't use self.modes before all properties init)
         let loadedModes: [Mode]
-        if let modesData = userDefaults.data(forKey: "modes"),
+        if let modesData = userDefaults.data(forKey: Keys.modes),
            let decoded = try? JSONDecoder().decode([Mode].self, from: modesData),
            !decoded.isEmpty {
             loadedModes = decoded
@@ -68,27 +113,31 @@ final class AppSettings {
         self.modes = loadedModes
 
         // Load active mode ID, defaulting to first mode
-        if let savedActiveID = userDefaults.string(forKey: "activeModeID"),
+        if let savedActiveID = userDefaults.string(forKey: Keys.activeModeID),
            let uuid = UUID(uuidString: savedActiveID) {
             self.activeModeID = uuid
         } else {
             self.activeModeID = loadedModes.first?.id ?? UUID()
         }
 
-        self.preferredInputDeviceID = userDefaults.string(forKey: "preferredInputDeviceID")
+        self.preferredInputDeviceID = userDefaults.string(forKey: Keys.preferredInputDeviceID)
     }
 
     private func save() {
-        userDefaults.set(Int(hotkeyKeyCode), forKey: "hotkeyKeyCode")
-        userDefaults.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers")
-        userDefaults.set(activeModeID.uuidString, forKey: "activeModeID")
+        if let encoded = try? JSONEncoder().encode(pushToTalkHotkey) {
+            userDefaults.set(encoded, forKey: Keys.pushToTalkHotkey)
+        }
+        if let encoded = try? JSONEncoder().encode(modeSwitcherHotkey) {
+            userDefaults.set(encoded, forKey: Keys.modeSwitcherHotkey)
+        }
+        userDefaults.set(activeModeID.uuidString, forKey: Keys.activeModeID)
         if let encoded = try? JSONEncoder().encode(modes) {
-            userDefaults.set(encoded, forKey: "modes")
+            userDefaults.set(encoded, forKey: Keys.modes)
         }
         if let preferredInputDeviceID {
-            userDefaults.set(preferredInputDeviceID, forKey: "preferredInputDeviceID")
+            userDefaults.set(preferredInputDeviceID, forKey: Keys.preferredInputDeviceID)
         } else {
-            userDefaults.removeObject(forKey: "preferredInputDeviceID")
+            userDefaults.removeObject(forKey: Keys.preferredInputDeviceID)
         }
         Logger.settings.info("Settings saved")
     }
