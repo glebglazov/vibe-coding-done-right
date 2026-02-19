@@ -18,6 +18,6 @@ struct vcdrApp: App {
             MainWindowView(dependencies: dependencies)
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 500, height: 450)
+        .defaultSize(width: 650, height: 450)
     }
 }

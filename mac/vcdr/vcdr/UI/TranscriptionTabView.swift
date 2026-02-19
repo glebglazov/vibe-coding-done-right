@@ -4,7 +4,7 @@ struct TranscriptionTabView: View {
     let dependencies: AppDependencies
 
     var body: some View {
-        Form {
+        List {
             Section("Models") {
                 HStack {
                     VStack(alignment: .leading) {
@@ -24,7 +24,7 @@ struct TranscriptionTabView: View {
                 }
             }
         }
-        .formStyle(.grouped)
+        .navigationTitle("Transcription")
     }
 }
 

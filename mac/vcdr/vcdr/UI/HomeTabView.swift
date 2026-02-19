@@ -5,7 +5,7 @@ struct HomeTabView: View {
     let dependencies: AppDependencies
 
     var body: some View {
-        Form {
+        List {
             if dependencies.needsPermissionAttention {
                 Section {
                     if !dependencies.hasMicrophonePermission {
@@ -48,19 +48,25 @@ struct HomeTabView: View {
                 }
             }
 
-            Section {
+            Section("Quick Actions") {
                 HStack {
                     Spacer()
-                    Button(action: { dependencies.coordinator.toggleRecording() }) {
-                        Label(
-                            isRecording ? "Stop Recording" : "Start Recording",
-                            systemImage: isRecording ? "stop.circle.fill" : "record.circle"
-                        )
-                        .font(.title3)
+                    VStack(spacing: 8) {
+                        Button(action: { dependencies.coordinator.toggleRecording() }) {
+                            Label(
+                                isRecording ? "Stop Recording" : "Start Recording",
+                                systemImage: isRecording ? "stop.circle.fill" : "record.circle"
+                            )
+                            .font(.title3)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(isRecording ? .red : .accentColor)
+                        .disabled(!canToggleRecording)
+
+                        Text("Active mode: \(dependencies.settings.activeMode.name)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(isRecording ? .red : .accentColor)
-                    .disabled(!canToggleRecording)
                     Spacer()
                 }
             }
@@ -84,7 +90,7 @@ struct HomeTabView: View {
                 )
             }
         }
-        .formStyle(.grouped)
+        .navigationTitle("Home")
     }
 
     private var isRecording: Bool {

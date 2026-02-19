@@ -1,44 +1,41 @@
 import SwiftUI
 
-struct ModesTabView: View {
+/// List of modes with NavigationLink rows (chevrons).
+/// Lives inside a NavigationStack owned by MainWindowView.
+struct ModesListView: View {
     @Bindable var settings: AppSettings
-    @State private var selectedModeID: UUID?
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selectedModeID) {
-                Section {
-                    ForEach(settings.modes) { mode in
-                        ModeRow(
-                            mode: mode,
-                            isActive: mode.id == settings.activeModeID,
-                            onSetActive: { settings.activeModeID = mode.id }
-                        )
-                        .tag(mode.id)
+        List {
+            ForEach(settings.modes) { mode in
+                NavigationLink(value: mode.id) {
+                    ModeRowView(
+                        mode: mode,
+                        isActive: mode.id == settings.activeModeID
+                    )
+                }
+                .contextMenu {
+                    Button("Set as Active") {
+                        settings.activeModeID = mode.id
                     }
-                } header: {
-                    HStack {
-                        Text("Modes")
-                        Spacer()
-                        Button(action: { addMode() }) {
-                            Image(systemName: "plus")
-                        }
-                        .buttonStyle(.plain)
+                    .disabled(mode.id == settings.activeModeID)
+
+                    Divider()
+
+                    Button("Delete", role: .destructive) {
+                        deleteMode(mode)
                     }
+                    .disabled(settings.modes.count <= 1)
                 }
             }
-            .listStyle(.sidebar)
-        } detail: {
-            if let selectedID = selectedModeID,
-               let index = settings.modes.firstIndex(where: { $0.id == selectedID }) {
-                ModeDetailView(mode: Binding(
-                    get: { settings.modes[index] },
-                    set: { settings.modes[index] = $0 }
-                ))
-            } else {
-                Text("Select a mode to edit")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .navigationTitle("Modes")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: addMode) {
+                    Image(systemName: "plus")
+                }
+                .help("Add new mode")
             }
         }
     }
@@ -51,29 +48,35 @@ struct ModesTabView: View {
             bashCommand: "echo {}"
         )
         settings.modes.append(newMode)
-        selectedModeID = newMode.id
+    }
+
+    private func deleteMode(_ mode: Mode) {
+        guard settings.modes.count > 1 else { return }
+        settings.modes.removeAll { $0.id == mode.id }
+        // If we deleted the active mode, activate the first remaining
+        if settings.activeModeID == mode.id {
+            settings.activeModeID = settings.modes.first?.id ?? UUID()
+        }
     }
 }
 
 // MARK: - Mode Row
 
-private struct ModeRow: View {
+private struct ModeRowView: View {
     let mode: Mode
     let isActive: Bool
-    let onSetActive: () -> Void
 
     var body: some View {
         HStack {
-            Button(action: onSetActive) {
-                Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
-            }
-            .buttonStyle(.plain)
-            .help(isActive ? "Active mode" : "Set as active mode")
-
             VStack(alignment: .leading) {
                 Text(mode.name)
                 Text(mode.actionType == .paste ? "Paste" : "Script")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if isActive {
+                Text("Active")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -81,9 +84,9 @@ private struct ModeRow: View {
     }
 }
 
-// MARK: - Mode Detail View
+// MARK: - Mode Detail View (pushed via NavigationLink)
 
-private struct ModeDetailView: View {
+struct ModeDetailView: View {
     @Binding var mode: Mode
 
     var body: some View {
@@ -108,5 +111,6 @@ private struct ModeDetailView: View {
             }
         }
         .formStyle(.grouped)
+        .navigationTitle(mode.name)
     }
 }

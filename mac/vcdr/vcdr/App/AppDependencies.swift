@@ -34,7 +34,25 @@ final class AppDependencies {
         startPermissionPolling()
 
         do {
+            // Poll the provider's init phase so the UI updates in real time
+            let phasePoller = Task {
+                while !Task.isCancelled {
+                    let phase = await transcriptionProvider.initPhase
+                    switch phase {
+                    case .notStarted, .downloading:
+                        initializationStatus = "Downloading model..."
+                    case .compiling:
+                        initializationStatus = "Compiling model..."
+                    case .ready:
+                        break
+                    }
+                    try? await Task.sleep(for: Self.phasePollingInterval)
+                }
+            }
+
             try await transcriptionProvider.initialize()
+            phasePoller.cancel()
+
             isTranscriptionReady = true
             initializationStatus = "Ready"
             if hasAccessibilityPermission {
@@ -54,6 +72,7 @@ final class AppDependencies {
 
     // MARK: - Constants
 
+    private static let phasePollingInterval: Duration = .milliseconds(200)
     private static let permissionPollInterval: TimeInterval = 2
 
     private func startPermissionPolling() {
