@@ -5,7 +5,7 @@ struct HomeTabView: View {
     let dependencies: AppDependencies
 
     var body: some View {
-        List {
+        Form {
             if dependencies.needsPermissionAttention {
                 Section {
                     if !dependencies.hasMicrophonePermission {
@@ -90,6 +90,7 @@ struct HomeTabView: View {
                 )
             }
         }
+        .formStyle(.grouped)
         .navigationTitle("Home")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
