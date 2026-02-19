@@ -14,11 +14,10 @@ struct vcdrApp: App {
             Image(systemName: dependencies.coordinator.menuBarIcon)
         }
 
-        Window("VCDR Settings", id: "settings") {
-            SettingsView(dependencies: dependencies)
+        Window("VCDR", id: "main") {
+            MainWindowView(dependencies: dependencies)
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 450, height: 350)
+        .defaultSize(width: 500, height: 450)
     }
 }
-

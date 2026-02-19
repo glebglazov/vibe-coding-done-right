@@ -15,7 +15,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            Text("Action: \(actionLabel)")
+            Text("Mode: \(dependencies.settings.activeMode.name)")
                 .foregroundStyle(.secondary)
 
             Text("Hotkey: \(hotkeyDisplay)")
@@ -24,7 +24,7 @@ struct MenuBarView: View {
             Divider()
 
             Button("Settings...") {
-                openWindow(id: "settings")
+                openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
             }
 
@@ -34,6 +34,10 @@ struct MenuBarView: View {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q")
+        }
+        .task {
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
@@ -50,18 +54,13 @@ struct MenuBarView: View {
         }
     }
 
-    private var actionLabel: String {
-        switch dependencies.settings.actionType {
-        case .paste: "Paste"
-        case .bash: "Bash"
-        }
-    }
-
     private var hotkeyDisplay: String {
-        let mgr = GlobalHotkeyManager()
-        return mgr.shortcutDisplayString(
-            keyCode: CGKeyCode(dependencies.settings.hotkeyKeyCode),
-            modifiers: CGEventFlags(rawValue: dependencies.settings.hotkeyModifiers)
+        let kc = dependencies.settings.hotkeyKeyCode
+        let mods = dependencies.settings.hotkeyModifiers
+        guard kc != 0 || mods != 0 else { return "Not set" }
+        return GlobalHotkeyManager.shortcutDisplayString(
+            keyCode: CGKeyCode(kc),
+            modifiers: CGEventFlags(rawValue: mods)
         )
     }
 }

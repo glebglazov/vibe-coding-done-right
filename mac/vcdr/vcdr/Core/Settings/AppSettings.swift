@@ -15,12 +15,16 @@ final class AppSettings {
     var hotkeyModifiers: UInt64 {
         didSet { save() }
     }
-
-    var actionType: PostTranscriptionActionType {
+    var modes: [Mode] {
         didSet { save() }
     }
-    var bashCommand: String {
+    var activeModeID: UUID {
         didSet { save() }
+    }
+
+    /// Active mode looked up by ID, falling back to first mode
+    var activeMode: Mode {
+        modes.first(where: { $0.id == activeModeID }) ?? modes.first ?? Mode.makeDefault()
     }
 
     private let userDefaults: UserDefaults
@@ -39,18 +43,42 @@ final class AppSettings {
             self.hotkeyModifiers = UInt64(CGEventFlags.maskCommand.rawValue | CGEventFlags.maskAlternate.rawValue)
         }
 
-        self.actionType = PostTranscriptionActionType(
-            rawValue: userDefaults.string(forKey: "actionType") ?? ""
-        ) ?? .paste
+        // Load modes into local var first (can't use self.modes before all properties init)
+        let loadedModes: [Mode]
+        if let modesData = userDefaults.data(forKey: "modes"),
+           let decoded = try? JSONDecoder().decode([Mode].self, from: modesData),
+           !decoded.isEmpty {
+            loadedModes = decoded
+        } else {
+            let oldActionType = PostTranscriptionActionType(
+                rawValue: userDefaults.string(forKey: "actionType") ?? ""
+            ) ?? .paste
+            let oldBashCommand = userDefaults.string(forKey: "bashCommand") ?? "echo {}"
+            loadedModes = [Mode(
+                id: UUID(),
+                name: "Default",
+                actionType: oldActionType,
+                bashCommand: oldBashCommand
+            )]
+        }
+        self.modes = loadedModes
 
-        self.bashCommand = userDefaults.string(forKey: "bashCommand") ?? "echo {}"
+        // Load active mode ID, defaulting to first mode
+        if let savedActiveID = userDefaults.string(forKey: "activeModeID"),
+           let uuid = UUID(uuidString: savedActiveID) {
+            self.activeModeID = uuid
+        } else {
+            self.activeModeID = loadedModes.first?.id ?? UUID()
+        }
     }
 
     private func save() {
         userDefaults.set(Int(hotkeyKeyCode), forKey: "hotkeyKeyCode")
         userDefaults.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers")
-        userDefaults.set(actionType.rawValue, forKey: "actionType")
-        userDefaults.set(bashCommand, forKey: "bashCommand")
+        userDefaults.set(activeModeID.uuidString, forKey: "activeModeID")
+        if let encoded = try? JSONEncoder().encode(modes) {
+            userDefaults.set(encoded, forKey: "modes")
+        }
         Logger.settings.info("Settings saved")
     }
 }

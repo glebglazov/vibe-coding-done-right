@@ -34,6 +34,13 @@ final class PushToTalkCoordinator {
         let keyCode = CGKeyCode(settings.hotkeyKeyCode)
         let modifiers = CGEventFlags(rawValue: settings.hotkeyModifiers)
 
+        // Unassigned hotkey — unregister and bail
+        guard keyCode != 0 || modifiers.rawValue != 0 else {
+            hotkeyManager.unregister()
+            Logger.hotkeys.info("Hotkey unassigned, unregistered")
+            return
+        }
+
         hotkeyManager.onKeyDown = { [weak self] in
             Task { @MainActor in
                 await self?.onHotkeyDown()
@@ -41,7 +48,7 @@ final class PushToTalkCoordinator {
         }
         hotkeyManager.onKeyUp = { [weak self] in
             Task { @MainActor in
-                await self?.onHotkeyUp()
+                self?.stopRecordingAndTranscribe()
             }
         }
 
@@ -52,14 +59,34 @@ final class PushToTalkCoordinator {
         setupHotkey()
     }
 
+    /// Toggle recording from UI button (fully synchronous for immediate feedback)
+    func toggleRecording() {
+        switch state {
+        case .idle, .error:
+            Task { await onHotkeyDown() }
+        case .recording:
+            stopRecordingAndTranscribe()
+        default:
+            break
+        }
+    }
+
+    // MARK: - Recording Start (async — needs mic permission check)
+
     private func onHotkeyDown() async {
-        // Allow retrying from error state immediately
         if case .error = state {
             state = .idle
         }
 
         guard state == .idle else {
             Logger.app.warning("Hotkey pressed but not idle (state: \(String(describing: self.state)))")
+            return
+        }
+
+        guard await transcriptionProvider.isReady else {
+            Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
+            state = .error("Model still loading...")
+            resetAfterDelay()
             return
         }
 
@@ -75,7 +102,7 @@ final class PushToTalkCoordinator {
             // If key was released while we were starting, immediately stop
             if !isKeyDown {
                 Logger.app.info("Key released during setup, stopping immediately")
-                await onHotkeyUp()
+                stopRecordingAndTranscribe()
             }
         } else {
             isKeyDown = false
@@ -85,7 +112,11 @@ final class PushToTalkCoordinator {
         }
     }
 
-    private func onHotkeyUp() async {
+    // MARK: - Recording Stop (synchronous for immediate UI feedback)
+
+    /// Stops recording synchronously and kicks off transcription in a background Task.
+    /// Called from both the UI button and the hotkey-up event.
+    private func stopRecordingAndTranscribe() {
         isKeyDown = false
         recordingIndicator.hide()
         guard state == .recording else { return }
@@ -99,13 +130,18 @@ final class PushToTalkCoordinator {
         state = .transcribing
         Logger.app.info("Push-to-talk: transcribing...")
 
+        Task { await processTranscription(audioURL: audioURL) }
+    }
+
+    // MARK: - Transcription + Action (async)
+
+    private func processTranscription(audioURL: URL) async {
         do {
             let transcriptionStart = ContinuousClock.now
             let text = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
             let elapsed = transcriptionStart.duration(to: .now)
             Logger.app.info("Transcribed in \(elapsed): \(text)")
 
-            // Clean up audio file
             try? FileManager.default.removeItem(at: audioURL)
 
             guard !text.isEmpty else {
@@ -120,8 +156,9 @@ final class PushToTalkCoordinator {
             let action = makeAction()
 
             // For paste action, restore focus to the previous app first
-            if settings.actionType == .paste, let previousApp = previousActiveApp {
+            if settings.activeMode.actionType == .paste, let previousApp = previousActiveApp {
                 previousApp.activate()
+                // Brief delay for the target app to gain focus before simulating Cmd+V
                 try await Task.sleep(for: .milliseconds(100))
             }
 
@@ -136,17 +173,22 @@ final class PushToTalkCoordinator {
     }
 
     private func makeAction() -> any PostTranscriptionAction {
-        switch settings.actionType {
+        let mode = settings.activeMode
+        switch mode.actionType {
         case .paste:
-            PasteAction()
+            return PasteAction()
         case .bash:
-            BashAction(commandTemplate: settings.bashCommand)
+            return BashAction(commandTemplate: mode.bashCommand)
         }
     }
 
+    // MARK: - Constants
+
+    private static let errorDisplayDuration: Duration = .seconds(3)
+
     private func resetAfterDelay() {
         Task {
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: Self.errorDisplayDuration)
             if case .error = state {
                 state = .idle
             }

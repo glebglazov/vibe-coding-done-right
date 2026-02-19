@@ -34,7 +34,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		E5C1B1502F467A000029DBEB /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		E5C1B1502F467A000029DBEB /* Exceptions for "vcdr" folder in "vcdr" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -47,7 +47,7 @@
 		E5D6B81C2F466C82002066AA /* vcdr */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				E5C1B1502F467A000029DBEB /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				E5C1B1502F467A000029DBEB /* Exceptions for "vcdr" folder in "vcdr" target */,
 			);
 			path = vcdr;
 			sourceTree = "<group>";

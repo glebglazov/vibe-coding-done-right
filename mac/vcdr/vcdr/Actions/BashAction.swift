@@ -6,14 +6,20 @@ struct BashAction: PostTranscriptionAction {
     let commandTemplate: String
 
     func execute(text: String) async throws {
-        let escapedText = text.replacingOccurrences(of: "'", with: "'\\''")
-        let command = commandTemplate.replacingOccurrences(of: "{}", with: "'\(escapedText)'")
+        // Replace {} with $VCDR_TEXT shell variable reference.
+        // The text is passed via environment variable to avoid quoting/escaping issues.
+        let command = commandTemplate.replacingOccurrences(of: "{}", with: "$VCDR_TEXT")
 
         Logger.actions.info("Executing bash command")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = ["-c", command]
+
+        // Pass transcribed text as environment variable — safe regardless of quoting
+        var env = ProcessInfo.processInfo.environment
+        env["VCDR_TEXT"] = text
+        process.environment = env
 
         let pipe = Pipe()
         process.standardOutput = pipe

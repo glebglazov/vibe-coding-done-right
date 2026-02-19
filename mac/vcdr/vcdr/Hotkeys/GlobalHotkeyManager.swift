@@ -50,7 +50,7 @@ final class GlobalHotkeyManager {
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
 
-        let display = shortcutDisplayString(keyCode: keyCode, modifiers: modifiers)
+        let display = Self.shortcutDisplayString(keyCode: keyCode, modifiers: modifiers)
         Logger.hotkeys.info("Hotkey registered: \(display)")
         return true
     }
@@ -105,7 +105,7 @@ final class GlobalHotkeyManager {
         AXIsProcessTrustedWithOptions(options)
     }
 
-    func shortcutDisplayString(keyCode: CGKeyCode, modifiers: CGEventFlags) -> String {
+    static func shortcutDisplayString(keyCode: CGKeyCode, modifiers: CGEventFlags) -> String {
         var parts: [String] = []
         if modifiers.contains(.maskControl) { parts.append("\u{2303}") }
         if modifiers.contains(.maskAlternate) { parts.append("\u{2325}") }
@@ -115,7 +115,7 @@ final class GlobalHotkeyManager {
         return parts.joined()
     }
 
-    func keyNameForCode(_ keyCode: CGKeyCode) -> String {
+    static func keyNameForCode(_ keyCode: CGKeyCode) -> String {
         let names: [CGKeyCode: String] = [
             0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
             8: "C", 9: "V", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R",

@@ -10,7 +10,15 @@ final class AppDependencies {
     let coordinator: PushToTalkCoordinator
 
     private(set) var isTranscriptionReady = false
-    private(set) var initializationStatus = "Downloading Parakeet model..."
+    private(set) var initializationStatus = "Loading model..."
+    private(set) var hasMicrophonePermission = false
+    private(set) var hasAccessibilityPermission = false
+
+    var needsPermissionAttention: Bool {
+        !hasMicrophonePermission || !hasAccessibilityPermission
+    }
+
+    private var permissionTimer: Timer?
 
     init() {
         let settings = AppSettings()
@@ -22,12 +30,16 @@ final class AppDependencies {
 
     func initialize() async {
         requestAllPermissions()
+        checkPermissions()
+        startPermissionPolling()
 
         do {
             try await transcriptionProvider.initialize()
             isTranscriptionReady = true
             initializationStatus = "Ready"
-            setupHotkeyWhenAccessible()
+            if hasAccessibilityPermission {
+                coordinator.setupHotkey()
+            }
             Logger.app.info("App fully initialized")
         } catch {
             initializationStatus = "Failed: \(error.localizedDescription)"
@@ -35,19 +47,34 @@ final class AppDependencies {
         }
     }
 
-    private func setupHotkeyWhenAccessible() {
-        if AXIsProcessTrusted() {
-            coordinator.setupHotkey()
-            return
-        }
+    private func checkPermissions() {
+        hasMicrophonePermission = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        hasAccessibilityPermission = AXIsProcessTrusted()
+    }
 
-        Logger.app.info("Waiting for accessibility permissions...")
-        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] timer in
+    // MARK: - Constants
+
+    private static let permissionPollInterval: TimeInterval = 2
+
+    private func startPermissionPolling() {
+        permissionTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.permissionPollInterval,
+            repeats: true
+        ) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
-            if AXIsProcessTrusted() {
-                timer.invalidate()
+            let wasAccessible = self.hasAccessibilityPermission
+            self.checkPermissions()
+
+            // Register hotkey as soon as accessibility is granted
+            if !wasAccessible && self.hasAccessibilityPermission {
                 self.coordinator.setupHotkey()
                 Logger.app.info("Accessibility granted, hotkey registered")
+            }
+
+            // Stop polling once both permissions are granted
+            if self.hasMicrophonePermission && self.hasAccessibilityPermission {
+                timer.invalidate()
+                self.permissionTimer = nil
             }
         }
     }
@@ -66,5 +93,9 @@ final class AppDependencies {
             AXIsProcessTrustedWithOptions(options)
             Logger.app.info("Requested accessibility permissions")
         }
+    }
+
+    deinit {
+        permissionTimer?.invalidate()
     }
 }

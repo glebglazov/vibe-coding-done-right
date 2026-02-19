@@ -7,29 +7,47 @@ struct ShortcutRecorderRow: View {
     @State private var isRecording = false
     @State private var eventMonitor: Any?
 
+    // MARK: - Constants
+
+    private static let unassignedKeyCode: UInt16 = 0
+    private static let unassignedModifiers: UInt64 = 0
+
+    private var isAssigned: Bool {
+        keyCode != Self.unassignedKeyCode || modifiers != Self.unassignedModifiers
+    }
+
     var body: some View {
-        HStack {
-            Text("Shortcut:")
-
-            Button(action: { toggleRecording() }) {
-                Text(isRecording ? "Press a key combo..." : displayString)
-                    .frame(minWidth: 140)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-            }
-            .background(isRecording ? Color.accentColor.opacity(0.2) : Color.clear)
-            .cornerRadius(6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isRecording ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: 1)
-            )
-
-            if isRecording {
-                Button("Cancel") {
-                    stopRecording()
+        LabeledContent("Push-to-Talk") {
+            HStack(spacing: 6) {
+                Button(action: { toggleRecording() }) {
+                    Text(isRecording ? "Press a key combo..." : displayString)
+                        .frame(minWidth: 140)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .background(isRecording ? Color.accentColor.opacity(0.2) : Color.clear)
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isRecording ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: 1)
+                )
+
+                if isAssigned && !isRecording {
+                    Button(action: { clearShortcut() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear shortcut")
+                }
+
+                if isRecording {
+                    Button("Cancel") {
+                        stopRecording()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
             }
         }
         .onDisappear {
@@ -38,11 +56,16 @@ struct ShortcutRecorderRow: View {
     }
 
     private var displayString: String {
-        let mgr = GlobalHotkeyManager()
-        return mgr.shortcutDisplayString(
+        guard isAssigned else { return "Not set" }
+        return GlobalHotkeyManager.shortcutDisplayString(
             keyCode: CGKeyCode(keyCode),
             modifiers: CGEventFlags(rawValue: modifiers)
         )
+    }
+
+    private func clearShortcut() {
+        keyCode = Self.unassignedKeyCode
+        modifiers = Self.unassignedModifiers
     }
 
     private func toggleRecording() {
