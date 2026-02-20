@@ -19,7 +19,7 @@ xcodebuild -scheme vcdr -destination 'platform=macOS' build
 ## Project Structure
 
 ```
-vcdr/vcdr/
+vcdr/
 ├── vcdrApp.swift                    # App entry point: MenuBarExtra + Settings window
 ├── App/AppDependencies.swift        # DI container — all services wired here
 ├── Core/
