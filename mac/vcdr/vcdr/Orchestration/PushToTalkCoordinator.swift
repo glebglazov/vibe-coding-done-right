@@ -18,14 +18,16 @@ final class PushToTalkCoordinator {
     private let transcriptionProvider: ParakeetProvider
     private let audioRecorder: AudioRecorder
     private let hotkeyManager: GlobalHotkeyManager
+    private let mediaPlaybackController: MediaPlaybackController
 
     private var previousActiveApp: NSRunningApplication?
     private var isKeyDown = false
     private let recordingIndicator = RecordingIndicatorPanel()
 
-    init(settings: AppSettings, transcriptionProvider: ParakeetProvider) {
+    init(settings: AppSettings, transcriptionProvider: ParakeetProvider, mediaPlaybackController: MediaPlaybackController) {
         self.settings = settings
         self.transcriptionProvider = transcriptionProvider
+        self.mediaPlaybackController = mediaPlaybackController
         self.audioRecorder = AudioRecorder()
         self.hotkeyManager = GlobalHotkeyManager()
     }
@@ -97,6 +99,9 @@ final class PushToTalkCoordinator {
         if started {
             state = .recording
             recordingIndicator.show()
+            if settings.audioSettings.pauseMediaDuringRecording {
+                mediaPlaybackController.pauseIfNeeded()
+            }
             Logger.app.info("Push-to-talk: recording started")
 
             // If key was released while we were starting, immediately stop
@@ -119,6 +124,7 @@ final class PushToTalkCoordinator {
     private func stopRecordingAndTranscribe() {
         isKeyDown = false
         recordingIndicator.hide()
+        mediaPlaybackController.resumeIfNeeded()
         guard state == .recording else { return }
 
         guard let audioURL = audioRecorder.stopRecording() else {

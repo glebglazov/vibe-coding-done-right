@@ -5,12 +5,14 @@ struct MainWindowView: View {
 
     enum Tab: String, CaseIterable, Hashable {
         case home
+        case audio
         case modes
         case transcription
 
         var title: String {
             switch self {
             case .home: "Home"
+            case .audio: "Audio"
             case .modes: "Modes"
             case .transcription: "Transcription"
             }
@@ -19,6 +21,7 @@ struct MainWindowView: View {
         var systemImage: String {
             switch self {
             case .home: "house"
+            case .audio: "speaker.wave.2"
             case .modes: "list.bullet"
             case .transcription: "waveform"
             }
@@ -48,6 +51,8 @@ struct MainWindowView: View {
                     switch selection {
                     case .home:
                         HomeTabView(dependencies: dependencies)
+                    case .audio:
+                        AudioTabView(dependencies: dependencies)
                     case .modes:
                         ModesListView(settings: dependencies.settings)
                     case .transcription:

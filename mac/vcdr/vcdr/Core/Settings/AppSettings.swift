@@ -7,6 +7,16 @@ enum PostTranscriptionActionType: String, CaseIterable, Codable {
     case bash = "bash"
 }
 
+struct AudioSettings: Codable, Equatable {
+    var preferredInputDeviceID: String?
+    var pauseMediaDuringRecording: Bool
+
+    static let `default` = AudioSettings(
+        preferredInputDeviceID: nil,
+        pauseMediaDuringRecording: true
+    )
+}
+
 struct HotkeyBinding: Codable, Equatable {
     var keyCode: UInt16
     var modifiers: UInt64
@@ -38,8 +48,7 @@ final class AppSettings {
     var activeModeID: UUID {
         didSet { save() }
     }
-    /// Selected input device unique ID, or nil for system default
-    var preferredInputDeviceID: String? {
+    var audioSettings: AudioSettings {
         didSet { save() }
     }
 
@@ -57,7 +66,9 @@ final class AppSettings {
         static let modeSwitcherHotkey = "modeSwitcherHotkey"
         static let modes = "modes"
         static let activeModeID = "activeModeID"
-        static let preferredInputDeviceID = "preferredInputDeviceID"
+        static let audioSettings = "audioSettings"
+        // Legacy key for migration
+        static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         // Legacy keys for migration
         static let legacyKeyCode = "hotkeyKeyCode"
         static let legacyModifiers = "hotkeyModifiers"
@@ -120,7 +131,17 @@ final class AppSettings {
             self.activeModeID = loadedModes.first?.id ?? UUID()
         }
 
-        self.preferredInputDeviceID = userDefaults.string(forKey: Keys.preferredInputDeviceID)
+        // Load audio settings (with migration from legacy preferredInputDeviceID)
+        if let data = userDefaults.data(forKey: Keys.audioSettings),
+           let decoded = try? JSONDecoder().decode(AudioSettings.self, from: data) {
+            self.audioSettings = decoded
+        } else {
+            let legacyDeviceID = userDefaults.string(forKey: Keys.legacyPreferredInputDeviceID)
+            self.audioSettings = AudioSettings(
+                preferredInputDeviceID: legacyDeviceID,
+                pauseMediaDuringRecording: true
+            )
+        }
     }
 
     private func save() {
@@ -134,10 +155,8 @@ final class AppSettings {
         if let encoded = try? JSONEncoder().encode(modes) {
             userDefaults.set(encoded, forKey: Keys.modes)
         }
-        if let preferredInputDeviceID {
-            userDefaults.set(preferredInputDeviceID, forKey: Keys.preferredInputDeviceID)
-        } else {
-            userDefaults.removeObject(forKey: Keys.preferredInputDeviceID)
+        if let encoded = try? JSONEncoder().encode(audioSettings) {
+            userDefaults.set(encoded, forKey: Keys.audioSettings)
         }
         Logger.settings.info("Settings saved")
     }

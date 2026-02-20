@@ -48,19 +48,6 @@ struct HomeTabView: View {
                 }
             }
 
-            AudioSectionView(
-                deviceMonitor: dependencies.audioDeviceMonitor,
-                levelMonitor: dependencies.inputLevelMonitor,
-                hasMicrophonePermission: dependencies.hasMicrophonePermission,
-                onToggleSoundCheck: { enabled in
-                    if enabled {
-                        startLevelMonitoring()
-                    } else {
-                        dependencies.inputLevelMonitor.stop()
-                    }
-                }
-            )
-
             Section("Quick Actions") {
                 HStack {
                     Spacer()
@@ -131,21 +118,6 @@ struct HomeTabView: View {
                 Color.clear.frame(width: 0, height: 0)
             }
         }
-        .onDisappear {
-            dependencies.inputLevelMonitor.stop()
-        }
-        .onChange(of: dependencies.audioDeviceMonitor.selectedDeviceID) {
-            // Restart on the new device only if already monitoring
-            if dependencies.inputLevelMonitor.isMonitoring {
-                startLevelMonitoring()
-            }
-        }
-    }
-
-    private func startLevelMonitoring() {
-        dependencies.inputLevelMonitor.start(
-            deviceUID: dependencies.audioDeviceMonitor.selectedDeviceUID
-        )
     }
 
     private var isRecording: Bool {

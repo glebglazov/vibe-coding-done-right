@@ -1,50 +1,8 @@
 import SwiftUI
 
-struct AudioSectionView: View {
-    let deviceMonitor: AudioDeviceMonitor
-    let levelMonitor: InputLevelMonitor
-    let hasMicrophonePermission: Bool
-    let onToggleSoundCheck: (Bool) -> Void
-
-    var body: some View {
-        Section("Audio") {
-            Picker("Input Device", selection: Binding(
-                get: { deviceMonitor.selectedDeviceID },
-                set: { deviceMonitor.selectedDeviceID = $0 }
-            )) {
-                ForEach(deviceMonitor.devices) { device in
-                    Text(device.name).tag(device.id)
-                }
-            }
-
-            if hasMicrophonePermission {
-                HStack {
-                    Text("Sound Check")
-                    Spacer()
-                    if levelMonitor.isMonitoring {
-                        AudioLevelMeter(level: levelMonitor.level)
-                    }
-                    Button(levelMonitor.isMonitoring ? "Stop" : "Test") {
-                        onToggleSoundCheck(!levelMonitor.isMonitoring)
-                    }
-                    .controlSize(.small)
-                }
-            } else {
-                HStack {
-                    Text("Sound Check")
-                    Spacer()
-                    Text("Microphone permission required")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Audio Level Meter
 
-private struct AudioLevelMeter: View {
+struct AudioLevelMeter: View {
     let level: Float
 
     // MARK: - Constants

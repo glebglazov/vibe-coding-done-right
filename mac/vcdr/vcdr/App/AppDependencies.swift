@@ -11,6 +11,7 @@ final class AppDependencies {
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
+    let mediaPlaybackController: MediaPlaybackController
 
     private(set) var isTranscriptionReady = false
     private(set) var initializationStatus = "Loading model..."
@@ -28,7 +29,13 @@ final class AppDependencies {
         let provider = ParakeetProvider()
         self.settings = settings
         self.transcriptionProvider = provider
-        self.coordinator = PushToTalkCoordinator(settings: settings, transcriptionProvider: provider)
+        let mediaPlayback = MediaPlaybackController()
+        self.mediaPlaybackController = mediaPlayback
+        self.coordinator = PushToTalkCoordinator(
+            settings: settings,
+            transcriptionProvider: provider,
+            mediaPlaybackController: mediaPlayback
+        )
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings)

@@ -26,8 +26,8 @@ final class AudioDeviceMonitor {
 
     /// The currently selected device ID (empty string = system default)
     var selectedDeviceID: String {
-        get { settings.preferredInputDeviceID ?? "" }
-        set { settings.preferredInputDeviceID = newValue.isEmpty ? nil : newValue }
+        get { settings.audioSettings.preferredInputDeviceID ?? "" }
+        set { settings.audioSettings.preferredInputDeviceID = newValue.isEmpty ? nil : newValue }
     }
 
     /// The device UID to pass to audio APIs, or nil for system default
