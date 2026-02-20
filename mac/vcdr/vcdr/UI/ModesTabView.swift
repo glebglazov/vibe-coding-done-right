@@ -28,6 +28,14 @@ struct ModesListView: View {
                     .disabled(settings.modes.count <= 1)
                 }
             }
+            .onDelete { indexSet in
+                for index in indexSet {
+                    deleteMode(settings.modes[index])
+                }
+            }
+            .onMove { source, destination in
+                settings.modes.move(fromOffsets: source, toOffset: destination)
+            }
         }
         .navigationTitle("Modes")
         .toolbar {
