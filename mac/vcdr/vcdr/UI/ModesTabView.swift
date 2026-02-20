@@ -109,6 +109,16 @@ struct ModeDetailView: View {
                         .help("Use {} as placeholder for transcribed text")
                 }
             }
+
+            Section("Dictation") {
+                Toggle("Append terminator", isOn: $mode.terminatorTemplateEnabled)
+
+                if mode.terminatorTemplateEnabled {
+                    TextField("Terminator Template", text: $mode.terminatorTemplate)
+                        .textFieldStyle(.roundedBorder)
+                        .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
+                }
+            }
         }
         .formStyle(.grouped)
         .navigationTitle(mode.name)

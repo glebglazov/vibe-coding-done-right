@@ -150,6 +150,11 @@ final class PushToTalkCoordinator {
                 return
             }
 
+            let mode = settings.activeMode
+            let terminatedText = mode.terminatorTemplateEnabled
+                ? Self.applyTerminator(text, terminator: mode.terminatorTemplate)
+                : text
+
             state = .executing
             Logger.app.info("Push-to-talk: executing action")
 
@@ -162,7 +167,7 @@ final class PushToTalkCoordinator {
                 try await Task.sleep(for: .milliseconds(100))
             }
 
-            try await action.execute(text: text)
+            try await action.execute(text: terminatedText)
             state = .idle
             Logger.app.info("Push-to-talk: complete")
         } catch {
@@ -180,6 +185,31 @@ final class PushToTalkCoordinator {
         case .bash:
             return BashAction(commandTemplate: mode.bashCommand)
         }
+    }
+
+    // MARK: - Terminator
+
+    private static let sentenceEndingPunctuation: Set<Character> = [".", "?", "!"]
+
+    /// Appends the mode's terminator to the transcription if it doesn't already
+    /// end with sentence-ending punctuation. Converts `<space>` and `<newline>`
+    /// tokens to actual characters.
+    private static func applyTerminator(_ text: String, terminator: String) -> String {
+        guard !terminator.isEmpty else { return text }
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let lastChar = trimmed.last else { return text }
+
+        if sentenceEndingPunctuation.contains(lastChar) {
+            return trimmed
+        }
+
+        let resolved = terminator
+            .replacingOccurrences(of: "<dot>", with: ".")
+            .replacingOccurrences(of: "<space>", with: " ")
+            .replacingOccurrences(of: "<newline>", with: "\n")
+
+        return trimmed + resolved
     }
 
     // MARK: - Constants
