@@ -10,6 +10,9 @@
 *.temp
 .cache/
 
+# Xcode user data
+xcuserdata/
+
 # IDEs
 .vscode/
 .vs/
