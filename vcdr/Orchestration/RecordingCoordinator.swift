@@ -243,23 +243,30 @@ final class RecordingCoordinator {
 
     private static let sentenceEndingPunctuation: Set<Character> = [".", "?", "!"]
 
-    /// Appends the mode's terminator to the transcription if it doesn't already
-    /// end with sentence-ending punctuation. Converts `<space>` and `<newline>`
-    /// tokens to actual characters.
+    /// Appends the mode's terminator to the transcription, separating punctuation
+    /// from spacing. If the text already ends with sentence-ending punctuation,
+    /// only the spacing portion of the terminator is appended (e.g. `"Hello."` with
+    /// terminator `<dot><space>` becomes `"Hello. "`, not `"Hello."`).
     private static func applyTerminator(_ text: String, terminator: String) -> String {
         guard !terminator.isEmpty else { return text }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let lastChar = trimmed.last else { return text }
-
-        if sentenceEndingPunctuation.contains(lastChar) {
-            return trimmed
-        }
+        guard trimmed.last != nil else { return text }
 
         let resolved = terminator
             .replacingOccurrences(of: "<dot>", with: ".")
             .replacingOccurrences(of: "<space>", with: " ")
             .replacingOccurrences(of: "<newline>", with: "\n")
+
+        // Split resolved terminator into leading punctuation and trailing spacing.
+        // If text already ends with punctuation, skip the punctuation part but
+        // still append spacing so consecutive dictations are properly separated.
+        let punctuationPrefix = String(resolved.prefix(while: { sentenceEndingPunctuation.contains($0) }))
+        let spacingSuffix = String(resolved.dropFirst(punctuationPrefix.count))
+
+        if sentenceEndingPunctuation.contains(trimmed.last!) {
+            return trimmed + spacingSuffix
+        }
 
         return trimmed + resolved
     }
