@@ -7,7 +7,7 @@ import OSLog
 final class AppDependencies {
     let settings: AppSettings
     let transcriptionProvider: ParakeetProvider
-    let coordinator: PushToTalkCoordinator
+    let coordinator: RecordingCoordinator
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
@@ -31,7 +31,7 @@ final class AppDependencies {
         self.transcriptionProvider = provider
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
-        self.coordinator = PushToTalkCoordinator(
+        self.coordinator = RecordingCoordinator(
             settings: settings,
             transcriptionProvider: provider,
             mediaPlaybackController: mediaPlayback

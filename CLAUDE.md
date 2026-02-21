@@ -34,7 +34,7 @@ vcdr/
 │   ├── PostTranscriptionAction.swift     # Protocol
 │   ├── PasteAction.swift                 # Clipboard + simulated Cmd+V
 │   └── BashAction.swift                  # Shell command with {} placeholder
-├── Orchestration/PushToTalkCoordinator.swift  # State machine: idle→recording→transcribing→executing
+├── Orchestration/RecordingCoordinator.swift    # State machine: idle→recording→transcribing→executing
 └── UI/
     ├── MenuBarView.swift
     ├── SettingsView.swift
@@ -51,7 +51,7 @@ These rules exist to prevent specific problems encountered in a previous version
 **Problem:** The previous version had a 1,019-line `MenuBarController` handling 12+ responsibilities — audio, transcription, window management, hotkeys, UI state, clipboard, text processing, destination routing, focus management, and more. It was untestable and fragile.
 
 **Rule:** No single class should handle more than one major concern. Split responsibilities into focused types:
-- `PushToTalkCoordinator` — orchestration state machine only
+- `RecordingCoordinator` — orchestration state machine only
 - `AudioRecorder` — recording only
 - `ParakeetProvider` — transcription only
 - `PasteAction`/`BashAction` — post-transcription actions only
@@ -69,7 +69,7 @@ These rules exist to prevent specific problems encountered in a previous version
 
 ```swift
 // GOOD — dependency injection
-final class PushToTalkCoordinator {
+final class RecordingCoordinator {
     private let settings: AppSettings
     private let transcriptionProvider: ParakeetProvider
 
@@ -77,7 +77,7 @@ final class PushToTalkCoordinator {
 }
 
 // BAD — singleton access
-final class PushToTalkCoordinator {
+final class RecordingCoordinator {
     private let settings = AppSettings.shared  // NEVER do this
 }
 ```
@@ -166,7 +166,7 @@ Logger.settings.info("Settings saved")
 ### Adding a New Post-Transcription Action
 1. Create a struct conforming to `PostTranscriptionAction` in `Actions/`
 2. Add a case to `PostTranscriptionActionType` in `AppSettings.swift`
-3. Update `PushToTalkCoordinator.makeAction()` to handle the new case
+3. Update `RecordingCoordinator.makeAction()` to handle the new case
 4. Add UI in `SettingsView` for the new action type
 
 ### Adding a New Transcription Provider
@@ -177,7 +177,7 @@ Logger.settings.info("Settings saved")
 ### Modifying the Global Hotkey
 1. Update `AppSettings` if new settings are needed
 2. Update `GlobalHotkeyManager` for registration changes
-3. Update `PushToTalkCoordinator.setupHotkey()` for behavior changes
+3. Update `RecordingCoordinator.setupHotkey()` for behavior changes
 
 ## Permissions Required
 

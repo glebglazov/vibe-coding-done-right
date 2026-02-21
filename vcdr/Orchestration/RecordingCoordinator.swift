@@ -3,7 +3,7 @@ import AppKit
 import OSLog
 
 @Observable
-final class PushToTalkCoordinator {
+final class RecordingCoordinator {
     enum State: Equatable {
         case idle
         case recording
