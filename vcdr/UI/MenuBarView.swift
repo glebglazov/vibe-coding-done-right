@@ -35,10 +35,6 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("q")
         }
-        .task {
-            openWindow(id: "main")
-            NSApp.activate(ignoringOtherApps: true)
-        }
     }
 
     private var statusText: String {
