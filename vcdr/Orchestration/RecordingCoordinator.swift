@@ -87,6 +87,10 @@ final class RecordingCoordinator {
 
         guard state == .idle else {
             Logger.app.warning("Hotkey pressed but not idle (state: \(String(describing: self.state)))")
+            // Buzz the indicator to signal "busy, can't start now"
+            if state == .transcribing || state == .executing {
+                recordingIndicator.buzz()
+            }
             return
         }
 
@@ -135,20 +139,27 @@ final class RecordingCoordinator {
     /// Called from both the UI button and the hotkey-up event.
     private func stopRecordingAndTranscribe() {
         Logger.app.debug("[stopRecordingAndTranscribe] enter — state=\(String(describing: self.state))")
-        recordingIndicator.hide()
         mediaPlaybackController.resumeIfNeeded()
         guard state == .recording else {
             Logger.app.debug("[stopRecordingAndTranscribe] state is not .recording, returning early")
+            // Only hide the indicator if we're NOT in a processing state —
+            // during transcribing/executing the indicator should stay visible
+            if state != .transcribing && state != .executing {
+                recordingIndicator.hide()
+            }
             return
         }
 
         guard let audioURL = audioRecorder.stopRecording() else {
             state = .error("No audio recorded")
+            recordingIndicator.update(phase: .error)
+            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
             return
         }
 
         state = .transcribing
+        recordingIndicator.update(phase: .processing)
         Logger.app.info("Push-to-talk: transcribing...")
 
         Task { @MainActor in await self.processTranscription(audioURL: audioURL) }
@@ -168,6 +179,8 @@ final class RecordingCoordinator {
             guard !text.isEmpty else {
                 capturedSelection = nil
                 state = .error("No speech detected")
+                recordingIndicator.update(phase: .error)
+                dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
                 resetAfterDelay()
                 return
             }
@@ -220,10 +233,14 @@ final class RecordingCoordinator {
             }
 
             state = .idle
+            recordingIndicator.update(phase: .success)
+            dismissIndicatorAfterDelay(Self.successIndicatorDuration)
             Logger.app.info("Push-to-talk: complete")
         } catch {
             capturedSelection = nil
             state = .error(error.localizedDescription)
+            recordingIndicator.update(phase: .error)
+            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Push-to-talk failed: \(error)")
             resetAfterDelay()
         }
@@ -274,12 +291,26 @@ final class RecordingCoordinator {
     // MARK: - Constants
 
     private static let errorDisplayDuration: Duration = .seconds(3)
+    private static let successIndicatorDuration: Duration = .seconds(2)
+    private static let errorIndicatorDuration: Duration = .seconds(2)
 
     private func resetAfterDelay() {
         Task {
             try? await Task.sleep(for: Self.errorDisplayDuration)
             if case .error = state {
                 state = .idle
+            }
+        }
+    }
+
+    private func dismissIndicatorAfterDelay(_ duration: Duration) {
+        Task {
+            try? await Task.sleep(for: duration)
+            // Only dismiss if still showing a terminal phase — a new recording
+            // may have started and reset the phase to .recording
+            let phase = recordingIndicator.currentPhase
+            if phase == .success || phase == .error {
+                recordingIndicator.hide()
             }
         }
     }
