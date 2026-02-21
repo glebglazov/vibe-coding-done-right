@@ -7,6 +7,8 @@ struct Mode: Identifiable, Codable, Equatable {
     var bashCommand: String
     var terminatorTemplateEnabled: Bool
     var terminatorTemplate: String
+    var systemPromptEnabled: Bool
+    var systemPrompt: String
 
     // MARK: - Constants
 
@@ -27,7 +29,9 @@ struct Mode: Identifiable, Codable, Equatable {
         actionType: PostTranscriptionActionType,
         bashCommand: String,
         terminatorTemplateEnabled: Bool = false,
-        terminatorTemplate: String = defaultTerminatorTemplate
+        terminatorTemplate: String = defaultTerminatorTemplate,
+        systemPromptEnabled: Bool = false,
+        systemPrompt: String = ""
     ) {
         self.id = id
         self.name = name
@@ -35,6 +39,8 @@ struct Mode: Identifiable, Codable, Equatable {
         self.bashCommand = bashCommand
         self.terminatorTemplateEnabled = terminatorTemplateEnabled
         self.terminatorTemplate = terminatorTemplate
+        self.systemPromptEnabled = systemPromptEnabled
+        self.systemPrompt = systemPrompt
     }
 
     // MARK: - Codable (backward-compatible)
@@ -47,5 +53,7 @@ struct Mode: Identifiable, Codable, Equatable {
         bashCommand = try container.decode(String.self, forKey: .bashCommand)
         terminatorTemplateEnabled = try container.decodeIfPresent(Bool.self, forKey: .terminatorTemplateEnabled) ?? false
         terminatorTemplate = try container.decodeIfPresent(String.self, forKey: .terminatorTemplate) ?? Self.defaultTerminatorTemplate
+        systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
+        systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
     }
 }

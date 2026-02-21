@@ -161,6 +161,10 @@ final class RecordingCoordinator {
                 ? Self.applyTerminator(text, terminator: mode.terminatorTemplate)
                 : text
 
+            let finalText = (mode.actionType == .bash && mode.systemPromptEnabled && !mode.systemPrompt.isEmpty)
+                ? mode.systemPrompt + "\n\n" + terminatedText
+                : terminatedText
+
             state = .executing
             Logger.app.info("Push-to-talk: executing action")
 
@@ -173,7 +177,7 @@ final class RecordingCoordinator {
                 try await Task.sleep(for: .milliseconds(100))
             }
 
-            try await action.execute(text: terminatedText)
+            try await action.execute(text: finalText)
             state = .idle
             Logger.app.info("Push-to-talk: complete")
         } catch {

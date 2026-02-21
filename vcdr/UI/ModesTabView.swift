@@ -115,6 +115,16 @@ struct ModeDetailView: View {
                     TextField("Command (use {} for text)", text: $mode.bashCommand)
                         .textFieldStyle(.roundedBorder)
                         .help("Use {} as placeholder for transcribed text")
+
+                    Toggle("Include system prompt in $VCDR_TEXT", isOn: $mode.systemPromptEnabled)
+
+                    if mode.systemPromptEnabled {
+                        TextEditor(text: $mode.systemPrompt)
+                            .font(.body)
+                            .frame(minHeight: 80)
+                            .border(Color.secondary.opacity(0.3))
+                            .help("This text is prepended to $VCDR_TEXT before the transcribed text")
+                    }
                 }
             }
 
