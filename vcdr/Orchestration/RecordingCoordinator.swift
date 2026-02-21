@@ -21,7 +21,6 @@ final class RecordingCoordinator {
     private let mediaPlaybackController: MediaPlaybackController
 
     private var previousActiveApp: NSRunningApplication?
-    private var isKeyDown = false
     private let recordingIndicator = RecordingIndicatorPanel()
 
     init(settings: AppSettings, transcriptionProvider: ParakeetProvider, mediaPlaybackController: MediaPlaybackController) {
@@ -45,13 +44,15 @@ final class RecordingCoordinator {
 
         hotkeyManager.onKeyDown = { [weak self] in
             Task { @MainActor in
-                await self?.onHotkeyDown()
+                await self?.onHotkeyDown(fromHotkey: true)
             }
         }
+        // Called synchronously from the CGEvent tap callback (no GCD, no Task).
+        // This is critical: DispatchQueue.main.async and MainActor Tasks can be
+        // delayed by seconds when the executor is stalled, but the CGEvent tap
+        // callback always fires promptly on the main run loop.
         hotkeyManager.onKeyUp = { [weak self] in
-            Task { @MainActor in
-                self?.stopRecordingAndTranscribe()
-            }
+            self?.stopRecordingAndTranscribe()
         }
 
         _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
@@ -75,7 +76,9 @@ final class RecordingCoordinator {
 
     // MARK: - Recording Start (async — needs mic permission check)
 
-    private func onHotkeyDown() async {
+    private func onHotkeyDown(fromHotkey: Bool = false) async {
+        Logger.app.debug("[onHotkeyDown] enter — fromHotkey=\(fromHotkey), state=\(String(describing: self.state))")
+
         if case .error = state {
             state = .idle
         }
@@ -85,6 +88,7 @@ final class RecordingCoordinator {
             return
         }
 
+        Logger.app.debug("[onHotkeyDown] awaiting transcriptionProvider.isReady")
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
             state = .error("Model still loading...")
@@ -92,10 +96,11 @@ final class RecordingCoordinator {
             return
         }
 
-        isKeyDown = true
         previousActiveApp = NSWorkspace.shared.frontmostApplication
 
+        Logger.app.debug("[onHotkeyDown] awaiting audioRecorder.startRecording()")
         let started = await audioRecorder.startRecording()
+        Logger.app.debug("[onHotkeyDown] startRecording returned \(started)")
         if started {
             state = .recording
             recordingIndicator.show()
@@ -104,13 +109,15 @@ final class RecordingCoordinator {
             }
             Logger.app.info("Push-to-talk: recording started")
 
-            // If key was released while we were starting, immediately stop
-            if !isKeyDown {
-                Logger.app.info("Key released during setup, stopping immediately")
+            // If the hotkey was released while we were awaiting startRecording(),
+            // the synchronous onKeyUp callback may have already called
+            // stopRecordingAndTranscribe() — but if state was still .idle at that point,
+            // the stop was a no-op. Check isHotkeyActive to catch this race condition.
+            if fromHotkey && !hotkeyManager.isHotkeyActive {
+                Logger.app.debug("[onHotkeyDown] key already released (isHotkeyActive=false), stopping")
                 stopRecordingAndTranscribe()
             }
         } else {
-            isKeyDown = false
             state = .error("Failed to start recording")
             Logger.app.error("Push-to-talk: failed to start recording")
             resetAfterDelay()
@@ -122,10 +129,13 @@ final class RecordingCoordinator {
     /// Stops recording synchronously and kicks off transcription in a background Task.
     /// Called from both the UI button and the hotkey-up event.
     private func stopRecordingAndTranscribe() {
-        isKeyDown = false
+        Logger.app.debug("[stopRecordingAndTranscribe] enter — state=\(String(describing: self.state))")
         recordingIndicator.hide()
         mediaPlaybackController.resumeIfNeeded()
-        guard state == .recording else { return }
+        guard state == .recording else {
+            Logger.app.debug("[stopRecordingAndTranscribe] state is not .recording, returning early")
+            return
+        }
 
         guard let audioURL = audioRecorder.stopRecording() else {
             state = .error("No audio recorded")
@@ -136,7 +146,7 @@ final class RecordingCoordinator {
         state = .transcribing
         Logger.app.info("Push-to-talk: transcribing...")
 
-        Task { await processTranscription(audioURL: audioURL) }
+        Task { @MainActor in await self.processTranscription(audioURL: audioURL) }
     }
 
     // MARK: - Transcription + Action (async)

@@ -9,9 +9,13 @@ final class GlobalHotkeyManager {
 
     private var targetKeyCode: CGKeyCode = 0
     private var targetModifiers: CGEventFlags = []
-    private var isHotkeyActive = false
+    private(set) var isHotkeyActive = false
 
     var onKeyDown: (() -> Void)?
+    /// Called synchronously from the CGEvent tap callback (no GCD dispatch).
+    /// This runs on the main thread during the run loop's event source processing,
+    /// bypassing both DispatchQueue.main.async and MainActor Task scheduling — both
+    /// of which can be delayed by seconds when the MainActor executor is stalled.
     var onKeyUp: (() -> Void)?
 
     func register(keyCode: CGKeyCode, modifiers: CGEventFlags) -> Bool {
@@ -84,6 +88,7 @@ final class GlobalHotkeyManager {
             let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
             if !isRepeat {
                 isHotkeyActive = true
+                Logger.hotkeys.debug("[tap] keyDown fired, isHotkeyActive=true")
                 DispatchQueue.main.async { self.onKeyDown?() }
             }
             return nil
@@ -93,7 +98,12 @@ final class GlobalHotkeyManager {
                 return Unmanaged.passUnretained(event)
             }
             isHotkeyActive = false
-            DispatchQueue.main.async { self.onKeyUp?() }
+            Logger.hotkeys.debug("[tap] keyUp fired, isHotkeyActive=false, calling onKeyUp synchronously")
+            // Call onKeyUp synchronously — NOT through DispatchQueue.main.async.
+            // The CGEvent tap callback already runs on the main thread (main run loop).
+            // Dispatching through GCD or Tasks adds latency that can reach seconds
+            // when the MainActor executor is stalled.
+            self.onKeyUp?()
             return nil
         }
 
