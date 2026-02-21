@@ -187,7 +187,23 @@ final class RecordingCoordinator {
                 try await Task.sleep(for: .milliseconds(100))
             }
 
-            try await action.execute(text: finalText)
+            let output = try await action.execute(text: finalText)
+
+            // For bash actions, always copy stdout to clipboard for easy re-use.
+            // Only simulate Cmd+V paste if the "paste output" option is enabled.
+            if mode.actionType == .bash,
+               let output, !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(trimmedOutput, forType: .string)
+                Logger.app.info("Script output copied to clipboard")
+
+                if mode.pasteScriptOutput {
+                    let pasteAction = PasteAction()
+                    try await pasteAction.execute(text: trimmedOutput)
+                }
+            }
+
             state = .idle
             Logger.app.info("Push-to-talk: complete")
         } catch {

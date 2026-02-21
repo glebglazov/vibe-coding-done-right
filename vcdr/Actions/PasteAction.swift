@@ -10,7 +10,7 @@ struct PasteAction: PostTranscriptionAction {
 
     private static let clipboardSettleDelay: Duration = .milliseconds(50)
 
-    func execute(text: String) async throws {
+    func execute(text: String) async throws -> String? {
         guard AXIsProcessTrusted() else {
             throw ActionError.accessibilityRequired
         }
@@ -32,5 +32,6 @@ struct PasteAction: PostTranscriptionAction {
         keyUp?.post(tap: .cghidEventTap)
 
         Logger.actions.info("Paste simulated via Cmd+V")
+        return nil
     }
 }

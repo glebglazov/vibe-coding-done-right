@@ -16,5 +16,6 @@ enum ActionError: LocalizedError {
 
 protocol PostTranscriptionAction: Sendable {
     var name: String { get }
-    func execute(text: String) async throws
+    @discardableResult
+    func execute(text: String) async throws -> String?
 }

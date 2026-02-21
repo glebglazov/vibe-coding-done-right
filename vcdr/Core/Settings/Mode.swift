@@ -9,6 +9,7 @@ struct Mode: Identifiable, Codable, Equatable {
     var terminatorTemplate: String
     var systemPromptEnabled: Bool
     var systemPrompt: String
+    var pasteScriptOutput: Bool
 
     // MARK: - Constants
 
@@ -31,7 +32,8 @@ struct Mode: Identifiable, Codable, Equatable {
         terminatorTemplateEnabled: Bool = false,
         terminatorTemplate: String = defaultTerminatorTemplate,
         systemPromptEnabled: Bool = false,
-        systemPrompt: String = ""
+        systemPrompt: String = "",
+        pasteScriptOutput: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -41,6 +43,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.terminatorTemplate = terminatorTemplate
         self.systemPromptEnabled = systemPromptEnabled
         self.systemPrompt = systemPrompt
+        self.pasteScriptOutput = pasteScriptOutput
     }
 
     // MARK: - Codable (backward-compatible)
@@ -55,5 +58,6 @@ struct Mode: Identifiable, Codable, Equatable {
         terminatorTemplate = try container.decodeIfPresent(String.self, forKey: .terminatorTemplate) ?? Self.defaultTerminatorTemplate
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
+        pasteScriptOutput = try container.decodeIfPresent(Bool.self, forKey: .pasteScriptOutput) ?? false
     }
 }

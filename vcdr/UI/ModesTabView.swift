@@ -125,6 +125,9 @@ struct ModeDetailView: View {
                             .border(Color.secondary.opacity(0.3))
                             .help("This text is prepended to $VCDR_TEXT before the transcribed text")
                     }
+
+                    Toggle("Paste output to current app", isOn: $mode.pasteScriptOutput)
+                        .help("Paste the script's stdout into the currently-active app after execution")
                 }
             }
 

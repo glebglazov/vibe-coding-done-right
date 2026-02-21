@@ -5,7 +5,7 @@ struct BashAction: PostTranscriptionAction {
     let name = "Bash Command"
     let commandTemplate: String
 
-    func execute(text: String) async throws {
+    func execute(text: String) async throws -> String? {
         // Replace {} with $VCDR_TEXT shell variable reference.
         // The text is passed via environment variable to avoid quoting/escaping issues.
         let command = commandTemplate.replacingOccurrences(of: "{}", with: "$VCDR_TEXT")
@@ -34,6 +34,7 @@ struct BashAction: PostTranscriptionAction {
 
             if process.terminationStatus == 0 {
                 Logger.actions.info("Command succeeded")
+                return output
             } else {
                 Logger.actions.error("Command failed with status \(process.terminationStatus): \(output)")
                 throw ActionError.executionFailed("Exit code \(process.terminationStatus): \(output)")
