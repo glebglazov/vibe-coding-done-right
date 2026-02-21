@@ -14,12 +14,23 @@ final class MediaPlaybackController {
     private static let keyUpFlags: UInt32 = 0xB00
     private static let systemDefinedSubtype: Int16 = 8
 
-    /// Pauses media only if audio output is currently active (i.e. something is actually
-    /// producing sound). This avoids the bug where toggling play/pause with nothing playing
-    /// would accidentally START playback on resume.
+    /// Snapshots whether audio output is active. Must be called BEFORE the
+    /// AVAudioRecorder session starts, because recording can activate the output
+    /// device and cause false positives.
+    func snapshotAudioState() {
+        audioWasActive = Self.isAudioOutputActive()
+        Logger.audio.info("Audio output snapshot: active=\(self.audioWasActive)")
+    }
+
+    private var audioWasActive = false
+
+    /// Pauses media only if audio output was active at the time of the snapshot
+    /// (i.e. something was actually producing sound before we started recording).
+    /// This avoids the bug where toggling play/pause with nothing playing would
+    /// accidentally START playback on resume.
     func pauseIfNeeded() {
-        guard Self.isAudioOutputActive() else {
-            Logger.audio.info("No audio output active, skipping pause")
+        guard audioWasActive else {
+            Logger.audio.info("No audio output was active before recording, skipping pause")
             return
         }
 

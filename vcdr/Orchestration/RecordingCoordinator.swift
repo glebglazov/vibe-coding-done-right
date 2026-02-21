@@ -107,6 +107,13 @@ final class RecordingCoordinator {
         // Capture any highlighted text in the frontmost app before recording starts
         capturedSelection = await selectionCapturer.capture()
 
+        // Snapshot audio output state BEFORE recording starts — AVAudioRecorder
+        // can activate the output device, causing false positives in the "is audio
+        // playing" check (e.g. when Xcode keeps the audio device active).
+        if settings.audioSettings.pauseMediaDuringRecording {
+            mediaPlaybackController.snapshotAudioState()
+        }
+
         Logger.app.debug("[onHotkeyDown] awaiting audioRecorder.startRecording()")
         let started = await audioRecorder.startRecording()
         Logger.app.debug("[onHotkeyDown] startRecording returned \(started)")
