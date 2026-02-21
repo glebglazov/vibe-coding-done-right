@@ -22,6 +22,8 @@ final class RecordingCoordinator {
 
     private var previousActiveApp: NSRunningApplication?
     private let recordingIndicator = RecordingIndicatorPanel()
+    private let selectionCapturer = SelectionCapturer()
+    private var capturedSelection: String?
 
     init(settings: AppSettings, transcriptionProvider: ParakeetProvider, mediaPlaybackController: MediaPlaybackController) {
         self.settings = settings
@@ -98,6 +100,9 @@ final class RecordingCoordinator {
 
         previousActiveApp = NSWorkspace.shared.frontmostApplication
 
+        // Capture any highlighted text in the frontmost app before recording starts
+        capturedSelection = await selectionCapturer.capture()
+
         Logger.app.debug("[onHotkeyDown] awaiting audioRecorder.startRecording()")
         let started = await audioRecorder.startRecording()
         Logger.app.debug("[onHotkeyDown] startRecording returned \(started)")
@@ -161,6 +166,7 @@ final class RecordingCoordinator {
             try? FileManager.default.removeItem(at: audioURL)
 
             guard !text.isEmpty else {
+                capturedSelection = nil
                 state = .error("No speech detected")
                 resetAfterDelay()
                 return
@@ -175,6 +181,15 @@ final class RecordingCoordinator {
                 ? mode.systemPrompt + "\n\n" + terminatedText
                 : terminatedText
 
+            // Append captured selection text if the user had text highlighted
+            let textWithSelection: String
+            if let selection = capturedSelection {
+                textWithSelection = finalText + "\n\n" + selection
+            } else {
+                textWithSelection = finalText
+            }
+            capturedSelection = nil
+
             state = .executing
             Logger.app.info("Push-to-talk: executing action")
 
@@ -187,7 +202,7 @@ final class RecordingCoordinator {
                 try await Task.sleep(for: .milliseconds(100))
             }
 
-            let output = try await action.execute(text: finalText)
+            let output = try await action.execute(text: textWithSelection)
 
             // For bash actions, always copy stdout to clipboard for easy re-use.
             // Only simulate Cmd+V paste if the "paste output" option is enabled.
@@ -207,6 +222,7 @@ final class RecordingCoordinator {
             state = .idle
             Logger.app.info("Push-to-talk: complete")
         } catch {
+            capturedSelection = nil
             state = .error(error.localizedDescription)
             Logger.app.error("Push-to-talk failed: \(error)")
             resetAfterDelay()
