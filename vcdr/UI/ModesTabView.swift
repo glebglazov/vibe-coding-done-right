@@ -4,6 +4,10 @@ import SwiftUI
 /// Lives inside a NavigationStack owned by MainWindowView.
 struct ModesListView: View {
     @Bindable var settings: AppSettings
+    @Binding var path: NavigationPath
+
+    // MARK: - Constants
+    private static let newModeBaseName = "New Mode"
 
     var body: some View {
         List {
@@ -51,11 +55,24 @@ struct ModesListView: View {
     private func addMode() {
         let newMode = Mode(
             id: UUID(),
-            name: "New Mode",
+            name: nextUniqueModeName(),
             actionType: .paste,
             bashCommand: "echo {}"
         )
         settings.modes.append(newMode)
+        path.append(newMode.id)
+    }
+
+    private func nextUniqueModeName() -> String {
+        let existingNames = Set(settings.modes.map(\.name))
+        if !existingNames.contains(Self.newModeBaseName) {
+            return Self.newModeBaseName
+        }
+        var counter = 1
+        while existingNames.contains("\(Self.newModeBaseName) (\(counter))") {
+            counter += 1
+        }
+        return "\(Self.newModeBaseName) (\(counter))"
     }
 
     private func deleteMode(_ mode: Mode) {
@@ -96,15 +113,25 @@ private struct ModeRowView: View {
 
 struct ModeDetailView: View {
     @Binding var mode: Mode
+    @FocusState private var isNameFieldFocused: Bool
+
+    // MARK: - Constants
+
+    /// Delay before selecting all text — needed for the NSTextField first responder
+    /// to settle after SwiftUI focus state change, otherwise selectAll is a no-op.
+    private static let selectAllDelay: Duration = .milliseconds(100)
 
     var body: some View {
         Form {
-            Section("General") {
-                TextField("Name", text: $mode.name)
-                    .textFieldStyle(.roundedBorder)
-            }
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Name")
+                        .foregroundStyle(.secondary)
+                    TextField("Name", text: $mode.name)
+                        .labelsHidden()
+                        .focused($isNameFieldFocused)
+                }
 
-            Section("Action") {
                 Picker("Type", selection: $mode.actionType) {
                     Text("Paste (Cmd+V)").tag(PostTranscriptionActionType.paste)
                     Text("Custom script").tag(PostTranscriptionActionType.bash)
@@ -112,36 +139,49 @@ struct ModeDetailView: View {
                 .pickerStyle(.radioGroup)
 
                 if mode.actionType == .bash {
-                    TextField("Command (use {} for text)", text: $mode.bashCommand)
-                        .textFieldStyle(.roundedBorder)
-                        .help("Use {} as placeholder for transcribed text")
-
-                    Toggle("Include system prompt in $VCDR_TEXT", isOn: $mode.systemPromptEnabled)
-
-                    if mode.systemPromptEnabled {
-                        TextEditor(text: $mode.systemPrompt)
-                            .font(.body)
-                            .frame(minHeight: 80)
-                            .border(Color.secondary.opacity(0.3))
-                            .help("This text is prepended to $VCDR_TEXT before the transcribed text")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Command")
+                            .foregroundStyle(.secondary)
+                        TextField("Command", text: $mode.bashCommand)
+                            .labelsHidden()
+                            .help("Use {} as placeholder for transcribed text")
                     }
 
                     Toggle("Paste output to current app", isOn: $mode.pasteScriptOutput)
                         .help("Paste the script's stdout into the currently-active app after execution")
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Include system prompt in $VCDR_TEXT", isOn: $mode.systemPromptEnabled)
+
+                        if mode.systemPromptEnabled {
+                            TextEditor(text: $mode.systemPrompt)
+                                .font(.body)
+                                .frame(minHeight: 80)
+                                .border(Color.secondary.opacity(0.3))
+                                .help("This text is prepended to $VCDR_TEXT before the transcribed text")
+                        }
+                    }
                 }
-            }
 
-            Section("Dictation") {
-                Toggle("Append terminator", isOn: $mode.terminatorTemplateEnabled)
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Append terminator template", isOn: $mode.terminatorTemplateEnabled)
 
-                if mode.terminatorTemplateEnabled {
-                    TextField("Terminator Template", text: $mode.terminatorTemplate)
-                        .textFieldStyle(.roundedBorder)
-                        .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
+                    if mode.terminatorTemplateEnabled {
+                        TextField("Terminator template", text: $mode.terminatorTemplate)
+                            .labelsHidden()
+                            .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
+                    }
                 }
             }
         }
         .formStyle(.grouped)
         .navigationTitle(mode.name)
+        .onAppear {
+            isNameFieldFocused = true
+            Task { @MainActor in
+                try? await Task.sleep(for: Self.selectAllDelay)
+                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            }
+        }
     }
 }

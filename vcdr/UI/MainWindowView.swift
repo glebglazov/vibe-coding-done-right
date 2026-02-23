@@ -54,7 +54,7 @@ struct MainWindowView: View {
                     case .audio:
                         AudioTabView(dependencies: dependencies)
                     case .modes:
-                        ModesListView(settings: dependencies.settings)
+                        ModesListView(settings: dependencies.settings, path: $path)
                     case .transcription:
                         TranscriptionTabView(dependencies: dependencies)
                     case .none:
