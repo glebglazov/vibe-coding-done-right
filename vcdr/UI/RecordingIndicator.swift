@@ -15,21 +15,34 @@ enum IndicatorPhase: Equatable {
 final class IndicatorPhaseState {
     var phase: IndicatorPhase = .recording
     var rejectCount: Int = 0
+    var errorMessage: String?
 }
 
 // MARK: - Panel
 
 @MainActor
 final class RecordingIndicatorPanel {
+    // MARK: - Constants
+
+    private static let normalPanelSize: CGFloat = 48
+    private static let errorPanelWidth: CGFloat = 320
+    private static let errorPanelHeight: CGFloat = 120
+    /// Gap between bottom of menu bar and top of indicator panel
+    private static let menuBarGap: CGFloat = 8
+
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
 
     func show() {
         phaseState.phase = .recording
-        guard panel == nil else { return }
+        phaseState.errorMessage = nil
+        guard panel == nil else {
+            resizePanel(forError: false)
+            return
+        }
 
         let hostingView = NSHostingView(rootView: RecordingIndicatorView(phaseState: phaseState))
-        hostingView.frame = NSRect(x: 0, y: 0, width: 48, height: 48)
+        hostingView.frame = NSRect(x: 0, y: 0, width: Self.normalPanelSize, height: Self.normalPanelSize)
 
         let panel = NSPanel(
             contentRect: hostingView.frame,
@@ -51,8 +64,8 @@ final class RecordingIndicatorPanel {
             let screenFrame = screen.frame
             let visibleFrame = screen.visibleFrame
             let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
-            let x = screenFrame.midX - 24
-            let y = screenFrame.maxY - menuBarHeight - 56
+            let x = screenFrame.midX - Self.normalPanelSize / 2
+            let y = screenFrame.maxY - menuBarHeight - Self.normalPanelSize - Self.menuBarGap
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 
@@ -60,8 +73,14 @@ final class RecordingIndicatorPanel {
         self.panel = panel
     }
 
-    func update(phase: IndicatorPhase) {
+    func update(phase: IndicatorPhase, message: String? = nil) {
+        phaseState.errorMessage = (phase == .error) ? message : nil
         phaseState.phase = phase
+        if phase == .error && message != nil {
+            resizePanel(forError: true)
+        } else {
+            resizePanel(forError: false)
+        }
     }
 
     /// Trigger a shake animation to reject a hotkey press during processing
@@ -77,6 +96,21 @@ final class RecordingIndicatorPanel {
         panel?.close()
         panel = nil
     }
+
+    /// Resize and reposition the panel, keeping the top-center anchored
+    private func resizePanel(forError: Bool) {
+        guard let panel else { return }
+        let currentTopCenter = NSPoint(x: panel.frame.midX, y: panel.frame.maxY)
+        let newWidth = forError ? Self.errorPanelWidth : Self.normalPanelSize
+        let newHeight = forError ? Self.errorPanelHeight : Self.normalPanelSize
+        let newFrame = NSRect(
+            x: currentTopCenter.x - newWidth / 2,
+            y: currentTopCenter.y - newHeight,
+            width: newWidth,
+            height: newHeight
+        )
+        panel.setFrame(newFrame, display: true)
+    }
 }
 
 // MARK: - SwiftUI View
@@ -86,42 +120,62 @@ private struct RecordingIndicatorView: View {
 
     private static let circleSize: CGFloat = 44
     private static let iconSize: CGFloat = 20
-
     private static let phaseTransitionDuration: Double = 0.2
+
+    private static let errorPillSpacing: CGFloat = 4
+    private static let errorPillHPadding: CGFloat = 8
+    private static let errorPillVPadding: CGFloat = 3
+    private static let errorPillCornerRadius: CGFloat = 6
+    private static let errorPillFontSize: CGFloat = 11
 
     let phaseState: IndicatorPhaseState
     @State private var animating = false
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(.ultraThinMaterial)
-                .frame(width: Self.circleSize, height: Self.circleSize)
+        VStack(spacing: Self.errorPillSpacing) {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: Self.circleSize, height: Self.circleSize)
 
-            switch phaseState.phase {
-            case .recording:
-                Image(systemName: "waveform")
-                    .font(.system(size: Self.iconSize, weight: .medium))
-                    .foregroundStyle(.red)
-                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: animating)
-                    .transition(.opacity)
+                switch phaseState.phase {
+                case .recording:
+                    Image(systemName: "waveform")
+                        .font(.system(size: Self.iconSize, weight: .medium))
+                        .foregroundStyle(.red)
+                        .symbolEffect(.variableColor.iterative, options: .repeating, isActive: animating)
+                        .transition(.opacity)
 
-            case .processing:
-                ProgressView()
-                    .controlSize(.small)
-                    .progressViewStyle(.circular)
-                    .transition(.opacity)
+                case .processing:
+                    ProgressView()
+                        .controlSize(.small)
+                        .progressViewStyle(.circular)
+                        .transition(.opacity)
 
-            case .success:
-                Image(systemName: "checkmark")
-                    .font(.system(size: Self.iconSize, weight: .semibold))
-                    .foregroundStyle(.green)
-                    .transition(.opacity)
+                case .success:
+                    Image(systemName: "checkmark")
+                        .font(.system(size: Self.iconSize, weight: .semibold))
+                        .foregroundStyle(.green)
+                        .transition(.opacity)
 
-            case .error:
-                Image(systemName: "xmark")
-                    .font(.system(size: Self.iconSize, weight: .semibold))
-                    .foregroundStyle(.red)
+                case .error:
+                    Image(systemName: "xmark")
+                        .font(.system(size: Self.iconSize, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .transition(.opacity)
+                }
+            }
+
+            if let message = phaseState.errorMessage, phaseState.phase == .error {
+                Text(message)
+                    .font(.system(size: Self.errorPillFontSize))
+                    .foregroundStyle(.primary)
+                    .lineLimit(4)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Self.errorPillHPadding)
+                    .padding(.vertical, Self.errorPillVPadding)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
                     .transition(.opacity)
             }
         }

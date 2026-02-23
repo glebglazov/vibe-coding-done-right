@@ -98,6 +98,9 @@ final class RecordingCoordinator {
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
             state = .error("Model still loading...")
+            recordingIndicator.show()
+            recordingIndicator.update(phase: .error, message: "Model still loading...")
+            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
             return
         }
@@ -135,6 +138,9 @@ final class RecordingCoordinator {
             }
         } else {
             state = .error("Failed to start recording")
+            recordingIndicator.show()
+            recordingIndicator.update(phase: .error, message: "Failed to start recording")
+            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Push-to-talk: failed to start recording")
             resetAfterDelay()
         }
@@ -159,7 +165,7 @@ final class RecordingCoordinator {
 
         guard let audioURL = audioRecorder.stopRecording() else {
             state = .error("No audio recorded")
-            recordingIndicator.update(phase: .error)
+            recordingIndicator.update(phase: .error, message: "No audio recorded")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
             return
@@ -186,7 +192,7 @@ final class RecordingCoordinator {
             guard !text.isEmpty else {
                 capturedSelection = nil
                 state = .error("No speech detected")
-                recordingIndicator.update(phase: .error)
+                recordingIndicator.update(phase: .error, message: "No speech detected")
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
                 resetAfterDelay()
                 return
@@ -246,7 +252,7 @@ final class RecordingCoordinator {
         } catch {
             capturedSelection = nil
             state = .error(error.localizedDescription)
-            recordingIndicator.update(phase: .error)
+            recordingIndicator.update(phase: .error, message: error.localizedDescription)
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Push-to-talk failed: \(error)")
             resetAfterDelay()
@@ -297,9 +303,9 @@ final class RecordingCoordinator {
 
     // MARK: - Constants
 
-    private static let errorDisplayDuration: Duration = .seconds(3)
+    private static let errorDisplayDuration: Duration = .seconds(10)
     private static let successIndicatorDuration: Duration = .seconds(2)
-    private static let errorIndicatorDuration: Duration = .seconds(2)
+    private static let errorIndicatorDuration: Duration = .seconds(10)
 
     private func resetAfterDelay() {
         Task {
