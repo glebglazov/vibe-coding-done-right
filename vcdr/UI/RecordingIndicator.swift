@@ -37,7 +37,7 @@ final class RecordingIndicatorPanel {
         phaseState.phase = .recording
         phaseState.errorMessage = nil
         guard panel == nil else {
-            resizePanel(forError: false)
+            positionPanel(forError: false)
             return
         }
 
@@ -59,28 +59,16 @@ final class RecordingIndicatorPanel {
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
 
-        // Position at top center of the main screen, just below the menu bar
-        if let screen = NSScreen.main {
-            let screenFrame = screen.frame
-            let visibleFrame = screen.visibleFrame
-            let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
-            let x = screenFrame.midX - Self.normalPanelSize / 2
-            let y = screenFrame.maxY - menuBarHeight - Self.normalPanelSize - Self.menuBarGap
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
-        }
-
-        panel.orderFrontRegardless()
         self.panel = panel
+        positionPanel(forError: false)
+        panel.orderFrontRegardless()
     }
 
     func update(phase: IndicatorPhase, message: String? = nil) {
         phaseState.errorMessage = (phase == .error) ? message : nil
         phaseState.phase = phase
-        if phase == .error && message != nil {
-            resizePanel(forError: true)
-        } else {
-            resizePanel(forError: false)
-        }
+        let forError = phase == .error && message != nil
+        positionPanel(forError: forError)
     }
 
     /// Trigger a shake animation to reject a hotkey press during processing
@@ -97,17 +85,19 @@ final class RecordingIndicatorPanel {
         panel = nil
     }
 
-    /// Resize and reposition the panel, keeping the top-center anchored
-    private func resizePanel(forError: Bool) {
-        guard let panel else { return }
-        let currentTopCenter = NSPoint(x: panel.frame.midX, y: panel.frame.maxY)
-        let newWidth = forError ? Self.errorPanelWidth : Self.normalPanelSize
-        let newHeight = forError ? Self.errorPanelHeight : Self.normalPanelSize
+    /// Resize and reposition the panel at the top center of the current main screen
+    private func positionPanel(forError: Bool) {
+        guard let panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let screenFrame = screen.frame
+        let visibleFrame = screen.visibleFrame
+        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+        let width = forError ? Self.errorPanelWidth : Self.normalPanelSize
+        let height = forError ? Self.errorPanelHeight : Self.normalPanelSize
         let newFrame = NSRect(
-            x: currentTopCenter.x - newWidth / 2,
-            y: currentTopCenter.y - newHeight,
-            width: newWidth,
-            height: newHeight
+            x: screenFrame.midX - width / 2,
+            y: screenFrame.maxY - menuBarHeight - height - Self.menuBarGap,
+            width: width,
+            height: height
         )
         panel.setFrame(newFrame, display: true)
     }
