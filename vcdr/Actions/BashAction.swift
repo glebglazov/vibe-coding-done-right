@@ -1,20 +1,53 @@
 import Foundation
+import AppKit
 import OSLog
 
 struct BashAction: PostTranscriptionAction {
     let name = "Bash Command"
     let commandTemplate: String
 
+    /// Whether to simulate Cmd+V to paste script output into the previous app
+    private let pasteOutput: Bool
+    /// PID of the app to restore focus to when pasting output.
+    /// Using pid_t instead of NSRunningApplication to keep the action Sendable.
+    private let targetAppPID: pid_t?
+
+    init(commandTemplate: String, pasteOutput: Bool = false, targetAppPID: pid_t? = nil) {
+        self.commandTemplate = commandTemplate
+        self.pasteOutput = pasteOutput
+        self.targetAppPID = targetAppPID
+    }
+
     func execute(text: String) async throws -> String? {
+        let output = try await runProcess(command: commandTemplate, text: text)
+
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(trimmed, forType: .string)
+            Logger.actions.info("Script output copied to clipboard")
+
+            if pasteOutput {
+                let pasteAction = PasteAction(targetAppPID: targetAppPID)
+                try await pasteAction.execute(text: trimmed)
+            }
+        }
+
+        return output
+    }
+
+    // MARK: - Process Execution
+
+    private func runProcess(command: String, text: String) async throws -> String {
         // Replace {} with $VCDR_TEXT shell variable reference.
         // The text is passed via environment variable to avoid quoting/escaping issues.
-        let command = commandTemplate.replacingOccurrences(of: "{}", with: "$VCDR_TEXT")
+        let resolvedCommand = command.replacingOccurrences(of: "{}", with: "$VCDR_TEXT")
 
         Logger.actions.info("Executing bash command")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", command]
+        process.arguments = ["-c", resolvedCommand]
 
         // Pass transcribed text as environment variable — safe regardless of quoting
         var env = ProcessInfo.processInfo.environment
@@ -25,25 +58,33 @@ struct BashAction: PostTranscriptionAction {
         process.standardOutput = pipe
         process.standardError = pipe
 
+        let terminationStatus: Int32
         do {
-            try process.run()
-            process.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-
-            if process.terminationStatus == 0 {
-                Logger.actions.info("Command succeeded")
-                return output
-            } else {
-                Logger.actions.error("Command failed with status \(process.terminationStatus): \(output)")
-                throw ActionError.executionFailed("Exit code \(process.terminationStatus): \(output)")
+            terminationStatus = try await withCheckedThrowingContinuation { continuation in
+                process.terminationHandler = { proc in
+                    continuation.resume(returning: proc.terminationStatus)
+                }
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
             }
-        } catch let error as ActionError {
-            throw error
         } catch {
             Logger.actions.error("Failed to run command: \(error)")
             throw ActionError.executionFailed(error.localizedDescription)
+        }
+
+        // Process has exited — readDataToEndOfFile is non-blocking at this point
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: data, encoding: .utf8) ?? ""
+
+        if terminationStatus == 0 {
+            Logger.actions.info("Command succeeded")
+            return output
+        } else {
+            Logger.actions.error("Command failed with status \(terminationStatus): \(output)")
+            throw ActionError.executionFailed("Exit code \(terminationStatus): \(output)")
         }
     }
 }

@@ -24,7 +24,9 @@ vcdr/
 ├── App/AppDependencies.swift        # DI container — all services wired here
 ├── Core/
 │   ├── Logging/Logger+Extensions.swift   # OSLog categories
-│   └── Settings/AppSettings.swift        # UserDefaults-backed @Observable settings
+│   └── Settings/
+│       ├── AppSettings.swift             # UserDefaults-backed @Observable settings
+│       └── Mode.swift                    # Mode model + text transform pipeline
 ├── Transcription/
 │   ├── TranscriptionProvider.swift       # Protocol
 │   └── ParakeetProvider.swift            # FluidAudio Parakeet implementation (actor)
@@ -32,8 +34,8 @@ vcdr/
 ├── Hotkeys/GlobalHotkeyManager.swift     # CGEvent tap for global hotkeys
 ├── Actions/
 │   ├── PostTranscriptionAction.swift     # Protocol
-│   ├── PasteAction.swift                 # Clipboard + simulated Cmd+V
-│   └── BashAction.swift                  # Shell command with {} placeholder
+│   ├── PasteAction.swift                 # Clipboard + focus restore + simulated Cmd+V
+│   └── BashAction.swift                  # Shell command + clipboard copy + optional paste
 ├── Orchestration/RecordingCoordinator.swift    # State machine: idle→recording→transcribing→executing
 └── UI/
     ├── MenuBarView.swift
@@ -71,9 +73,9 @@ These rules exist to prevent specific problems encountered in a previous version
 // GOOD — dependency injection
 final class RecordingCoordinator {
     private let settings: AppSettings
-    private let transcriptionProvider: ParakeetProvider
+    private let transcriptionProvider: any TranscriptionProvider
 
-    init(settings: AppSettings, transcriptionProvider: ParakeetProvider) { ... }
+    init(settings: AppSettings, transcriptionProvider: any TranscriptionProvider) { ... }
 }
 
 // BAD — singleton access
@@ -165,9 +167,10 @@ Logger.settings.info("Settings saved")
 
 ### Adding a New Post-Transcription Action
 1. Create a struct conforming to `PostTranscriptionAction` in `Actions/`
-2. Add a case to `PostTranscriptionActionType` in `AppSettings.swift`
-3. Update `RecordingCoordinator.makeAction()` to handle the new case
-4. Add UI in `SettingsView` for the new action type
+2. The action should handle its complete lifecycle (focus restoration, clipboard management, etc.) via init parameters
+3. Add a case to `PostTranscriptionActionType` in `AppSettings.swift`
+4. Update `RecordingCoordinator.makeAction()` to construct with context (target PID, mode settings)
+5. Add UI in `SettingsView` for the new action type
 
 ### Adding a New Transcription Provider
 1. Create a type conforming to `TranscriptionProvider` in `Transcription/`

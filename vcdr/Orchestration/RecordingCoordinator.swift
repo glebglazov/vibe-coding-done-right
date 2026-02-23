@@ -15,22 +15,32 @@ final class RecordingCoordinator {
     private(set) var state: State = .idle
 
     private let settings: AppSettings
-    private let transcriptionProvider: ParakeetProvider
+    private let transcriptionProvider: any TranscriptionProvider
     private let audioRecorder: AudioRecorder
     private let hotkeyManager: GlobalHotkeyManager
     private let mediaPlaybackController: MediaPlaybackController
+    private let recordingIndicator: RecordingIndicatorPanel
+    private let selectionCapturer: SelectionCapturer
 
     private var previousActiveApp: NSRunningApplication?
-    private let recordingIndicator = RecordingIndicatorPanel()
-    private let selectionCapturer = SelectionCapturer()
     private var capturedSelection: String?
 
-    init(settings: AppSettings, transcriptionProvider: ParakeetProvider, mediaPlaybackController: MediaPlaybackController) {
+    init(
+        settings: AppSettings,
+        transcriptionProvider: any TranscriptionProvider,
+        audioRecorder: AudioRecorder,
+        hotkeyManager: GlobalHotkeyManager,
+        mediaPlaybackController: MediaPlaybackController,
+        recordingIndicator: RecordingIndicatorPanel,
+        selectionCapturer: SelectionCapturer
+    ) {
         self.settings = settings
         self.transcriptionProvider = transcriptionProvider
+        self.audioRecorder = audioRecorder
+        self.hotkeyManager = hotkeyManager
         self.mediaPlaybackController = mediaPlaybackController
-        self.audioRecorder = AudioRecorder()
-        self.hotkeyManager = GlobalHotkeyManager()
+        self.recordingIndicator = recordingIndicator
+        self.selectionCapturer = selectionCapturer
     }
 
     func setupHotkey() {
@@ -199,51 +209,14 @@ final class RecordingCoordinator {
             }
 
             let mode = settings.activeMode
-            let terminatedText = mode.terminatorTemplateEnabled
-                ? Self.applyTerminator(text, terminator: mode.terminatorTemplate)
-                : text
-
-            let finalText = (mode.actionType == .bash && mode.systemPromptEnabled && !mode.systemPrompt.isEmpty)
-                ? mode.systemPrompt + "\n\n" + terminatedText
-                : terminatedText
-
-            // Append captured selection text if the user had text highlighted
-            let textWithSelection: String
-            if let selection = capturedSelection {
-                textWithSelection = finalText + "\n\n" + selection
-            } else {
-                textWithSelection = finalText
-            }
+            let transformedText = mode.transformTranscription(text, capturedSelection: capturedSelection)
             capturedSelection = nil
 
             state = .executing
             Logger.app.info("Push-to-talk: executing action")
 
             let action = makeAction()
-
-            // For paste action, restore focus to the previous app first
-            if settings.activeMode.actionType == .paste, let previousApp = previousActiveApp {
-                previousApp.activate()
-                // Brief delay for the target app to gain focus before simulating Cmd+V
-                try await Task.sleep(for: .milliseconds(100))
-            }
-
-            let output = try await action.execute(text: textWithSelection)
-
-            // For bash actions, always copy stdout to clipboard for easy re-use.
-            // Only simulate Cmd+V paste if the "paste output" option is enabled.
-            if mode.actionType == .bash,
-               let output, !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(trimmedOutput, forType: .string)
-                Logger.app.info("Script output copied to clipboard")
-
-                if mode.pasteScriptOutput {
-                    let pasteAction = PasteAction()
-                    try await pasteAction.execute(text: trimmedOutput)
-                }
-            }
+            try await action.execute(text: transformedText)
 
             state = .idle
             recordingIndicator.update(phase: .success)
@@ -261,44 +234,17 @@ final class RecordingCoordinator {
 
     private func makeAction() -> any PostTranscriptionAction {
         let mode = settings.activeMode
+        let targetPID = previousActiveApp?.processIdentifier
         switch mode.actionType {
         case .paste:
-            return PasteAction()
+            return PasteAction(targetAppPID: targetPID)
         case .bash:
-            return BashAction(commandTemplate: mode.bashCommand)
+            return BashAction(
+                commandTemplate: mode.bashCommand,
+                pasteOutput: mode.pasteScriptOutput,
+                targetAppPID: targetPID
+            )
         }
-    }
-
-    // MARK: - Terminator
-
-    private static let sentenceEndingPunctuation: Set<Character> = [".", "?", "!"]
-
-    /// Appends the mode's terminator to the transcription, separating punctuation
-    /// from spacing. If the text already ends with sentence-ending punctuation,
-    /// only the spacing portion of the terminator is appended (e.g. `"Hello."` with
-    /// terminator `<dot><space>` becomes `"Hello. "`, not `"Hello."`).
-    private static func applyTerminator(_ text: String, terminator: String) -> String {
-        guard !terminator.isEmpty else { return text }
-
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.last != nil else { return text }
-
-        let resolved = terminator
-            .replacingOccurrences(of: "<dot>", with: ".")
-            .replacingOccurrences(of: "<space>", with: " ")
-            .replacingOccurrences(of: "<newline>", with: "\n")
-
-        // Split resolved terminator into leading punctuation and trailing spacing.
-        // If text already ends with punctuation, skip the punctuation part but
-        // still append spacing so consecutive dictations are properly separated.
-        let punctuationPrefix = String(resolved.prefix(while: { sentenceEndingPunctuation.contains($0) }))
-        let spacingSuffix = String(resolved.dropFirst(punctuationPrefix.count))
-
-        if sentenceEndingPunctuation.contains(trimmed.last!) {
-            return trimmed + spacingSuffix
-        }
-
-        return trimmed + resolved
     }
 
     // MARK: - Constants

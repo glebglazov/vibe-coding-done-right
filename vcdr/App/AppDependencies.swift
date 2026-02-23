@@ -31,10 +31,18 @@ final class AppDependencies {
         self.transcriptionProvider = provider
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
+        let audioRecorder = AudioRecorder()
+        let hotkeyManager = GlobalHotkeyManager()
+        let recordingIndicator = RecordingIndicatorPanel()
+        let selectionCapturer = SelectionCapturer()
         self.coordinator = RecordingCoordinator(
             settings: settings,
             transcriptionProvider: provider,
-            mediaPlaybackController: mediaPlayback
+            audioRecorder: audioRecorder,
+            hotkeyManager: hotkeyManager,
+            mediaPlaybackController: mediaPlayback,
+            recordingIndicator: recordingIndicator,
+            selectionCapturer: selectionCapturer
         )
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
