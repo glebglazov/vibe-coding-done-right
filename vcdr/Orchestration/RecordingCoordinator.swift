@@ -21,9 +21,11 @@ final class RecordingCoordinator {
     private let mediaPlaybackController: MediaPlaybackController
     private let recordingIndicator: RecordingIndicatorPanel
     private let selectionCapturer: SelectionCapturer
+    private let transcriptionHistory: TranscriptionHistory
 
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
+    private var recordingStartInstant: ContinuousClock.Instant?
 
     init(
         settings: AppSettings,
@@ -32,7 +34,8 @@ final class RecordingCoordinator {
         hotkeyManager: GlobalHotkeyManager,
         mediaPlaybackController: MediaPlaybackController,
         recordingIndicator: RecordingIndicatorPanel,
-        selectionCapturer: SelectionCapturer
+        selectionCapturer: SelectionCapturer,
+        transcriptionHistory: TranscriptionHistory
     ) {
         self.settings = settings
         self.transcriptionProvider = transcriptionProvider
@@ -41,6 +44,7 @@ final class RecordingCoordinator {
         self.mediaPlaybackController = mediaPlaybackController
         self.recordingIndicator = recordingIndicator
         self.selectionCapturer = selectionCapturer
+        self.transcriptionHistory = transcriptionHistory
     }
 
     func setupHotkey() {
@@ -134,6 +138,7 @@ final class RecordingCoordinator {
         Logger.app.debug("[onHotkeyDown] startRecording returned \(started)")
         if started {
             state = .recording
+            recordingStartInstant = .now
             recordingIndicator.show()
             Logger.app.info("Push-to-talk: recording started")
 
@@ -174,6 +179,9 @@ final class RecordingCoordinator {
             return
         }
 
+        let recordingDuration = recordingStartInstant.map { $0.duration(to: .now) }
+        recordingStartInstant = nil
+
         guard let audioURL = audioRecorder.stopRecording() else {
             mediaPlaybackController.resumeIfNeeded()
             state = .error("No audio recorded")
@@ -195,12 +203,12 @@ final class RecordingCoordinator {
             self.mediaPlaybackController.resumeIfNeeded()
         }
 
-        Task { @MainActor in await self.processTranscription(audioURL: audioURL) }
+        Task { @MainActor in await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration) }
     }
 
     // MARK: - Transcription + Action (async)
 
-    private func processTranscription(audioURL: URL) async {
+    private func processTranscription(audioURL: URL, recordingDuration: Duration?) async {
         do {
             let transcriptionStart = ContinuousClock.now
             let text = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
@@ -226,7 +234,20 @@ final class RecordingCoordinator {
             Logger.app.info("Push-to-talk: executing action")
 
             let action = makeAction()
-            try await action.execute(text: transformedText)
+            let actionResult = try await action.execute(text: transformedText)
+
+            // Record in history (raw transcription text, before mode transforms)
+            let durationSeconds = recordingDuration.map {
+                Double($0.components.seconds) + Double($0.components.attoseconds) / 1e18
+            } ?? 0
+            let trimmedResult = actionResult?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let record = TranscriptionRecord(
+                text: text,
+                modelName: transcriptionProvider.name,
+                recordingDuration: durationSeconds,
+                actionResult: trimmedResult?.isEmpty == false ? trimmedResult : nil
+            )
+            transcriptionHistory.addRecord(record)
 
             state = .idle
             recordingIndicator.update(phase: .success)

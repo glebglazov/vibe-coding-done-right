@@ -8,6 +8,7 @@ struct MainWindowView: View {
         case audio
         case modes
         case transcription
+        case history
 
         var title: String {
             switch self {
@@ -15,6 +16,7 @@ struct MainWindowView: View {
             case .audio: "Audio"
             case .modes: "Modes"
             case .transcription: "Transcription"
+            case .history: "History"
             }
         }
 
@@ -24,6 +26,7 @@ struct MainWindowView: View {
             case .audio: "speaker.wave.2"
             case .modes: "list.bullet"
             case .transcription: "waveform"
+            case .history: "clock.arrow.circlepath"
             }
         }
     }
@@ -57,6 +60,8 @@ struct MainWindowView: View {
                         ModesListView(settings: dependencies.settings, path: $path)
                     case .transcription:
                         TranscriptionTabView(dependencies: dependencies)
+                    case .history:
+                        HistoryTabView(history: dependencies.transcriptionHistory)
                     case .none:
                         Text("Select a section")
                             .foregroundStyle(.secondary)

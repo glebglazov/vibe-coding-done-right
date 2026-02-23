@@ -4,6 +4,9 @@ struct MenuBarView: View {
     let dependencies: AppDependencies
     @Environment(\.openWindow) private var openWindow
 
+    // MARK: - Constants
+    private static let previewLineLimit = 2
+
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
@@ -11,6 +14,25 @@ struct MenuBarView: View {
                     .fill(dependencies.isTranscriptionReady ? .green : .orange)
                     .frame(width: 8, height: 8)
                 Text(statusText)
+            }
+
+            if let latest = dependencies.transcriptionHistory.latestRecord {
+                Divider()
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(latest.text, forType: .string)
+                } label: {
+                    VStack(alignment: .leading) {
+                        Text(latest.text)
+                            .lineLimit(Self.previewLineLimit)
+                            .truncationMode(.tail)
+                        Text("Click to copy")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
             }
 
             Divider()

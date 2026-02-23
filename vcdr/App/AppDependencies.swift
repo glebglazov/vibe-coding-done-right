@@ -12,6 +12,7 @@ final class AppDependencies {
     let inputLevelMonitor: InputLevelMonitor
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
     let mediaPlaybackController: MediaPlaybackController
+    let transcriptionHistory: TranscriptionHistory
 
     private(set) var isTranscriptionReady = false
     private(set) var initializationStatus = "Loading model..."
@@ -31,6 +32,8 @@ final class AppDependencies {
         self.transcriptionProvider = provider
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
+        let history = TranscriptionHistory()
+        self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
         let hotkeyManager = GlobalHotkeyManager()
         let recordingIndicator = RecordingIndicatorPanel()
@@ -42,7 +45,8 @@ final class AppDependencies {
             hotkeyManager: hotkeyManager,
             mediaPlaybackController: mediaPlayback,
             recordingIndicator: recordingIndicator,
-            selectionCapturer: selectionCapturer
+            selectionCapturer: selectionCapturer,
+            transcriptionHistory: history
         )
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()

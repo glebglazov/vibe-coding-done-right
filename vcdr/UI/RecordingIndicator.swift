@@ -1,3 +1,4 @@
+
 import AppKit
 import SwiftUI
 
@@ -10,10 +11,12 @@ enum IndicatorPhase: Equatable {
     case error
 }
 
+
 @Observable
 @MainActor
 final class IndicatorPhaseState {
     var phase: IndicatorPhase = .recording
+    
     var rejectCount: Int = 0
     var errorMessage: String?
 }
