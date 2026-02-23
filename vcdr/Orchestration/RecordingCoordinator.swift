@@ -108,7 +108,7 @@ final class RecordingCoordinator {
         previousActiveApp = NSWorkspace.shared.frontmostApplication
 
         // Capture any highlighted text in the frontmost app before recording starts
-        capturedSelection = await selectionCapturer.capture()
+        capturedSelection = selectionCapturer.capture()
 
         // Snapshot audio output state BEFORE recording starts — AVAudioRecorder
         // can activate the output device, causing false positives in the "is audio

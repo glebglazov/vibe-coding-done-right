@@ -2,54 +2,39 @@ import AppKit
 import OSLog
 
 struct SelectionCapturer: Sendable {
-    // MARK: - Constants
+    /// Reads the currently selected text in the frontmost app via the Accessibility API
+    /// (kAXSelectedTextAttribute). This avoids simulating Cmd+C which causes the system
+    /// alert sound ("bonk") when nothing is selected, and doesn't touch the clipboard.
+    /// Returns nil if no text is selected or if the focused app doesn't support the attribute.
+    func capture() -> String? {
+        let systemWide = AXUIElementCreateSystemWide()
 
-    /// Delay after simulating Cmd+C for the target app to update the clipboard
-    private static let clipboardSettleDelay: Duration = .milliseconds(100)
-
-    /// Virtual key code for the C key
-    private static let cKeyCode: UInt16 = 8
-
-    /// Attempts to capture the currently selected text in the frontmost app
-    /// by simulating Cmd+C. Returns the selected text, or nil if nothing was selected.
-    /// Restores the original clipboard string after capture.
-    func capture() async -> String? {
-        let pasteboard = NSPasteboard.general
-        let previousChangeCount = pasteboard.changeCount
-        let previousString = pasteboard.string(forType: .string)
-
-        simulateCmdC()
-
-        // Wait for the target app to process Cmd+C and update the clipboard
-        try? await Task.sleep(for: Self.clipboardSettleDelay)
-
-        guard pasteboard.changeCount != previousChangeCount else {
-            // Clipboard didn't change — nothing was selected
+        var focusedElementRef: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedElementRef
+        ) == .success else {
             return nil
         }
 
-        let capturedText = pasteboard.string(forType: .string)
+        // AXUIElementCopyAttributeValue returns AnyObject; cast to AXUIElement
+        let focusedElement = focusedElementRef as! AXUIElement
 
-        // Restore previous clipboard contents so the user's clipboard isn't affected
-        pasteboard.clearContents()
-        if let previousString {
-            pasteboard.setString(previousString, forType: .string)
-        }
-
-        guard let capturedText, !capturedText.isEmpty else {
+        var selectedTextRef: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            focusedElement,
+            kAXSelectedTextAttribute as CFString,
+            &selectedTextRef
+        ) == .success else {
             return nil
         }
 
-        Logger.actions.info("Captured highlighted text (\(capturedText.count) chars)")
-        return capturedText
-    }
+        guard let text = selectedTextRef as? String, !text.isEmpty else {
+            return nil
+        }
 
-    private func simulateCmdC() {
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: Self.cKeyCode, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: Self.cKeyCode, keyDown: false)
-        keyDown?.flags = .maskCommand
-        keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        Logger.actions.info("Captured highlighted text (\(text.count) chars)")
+        return text
     }
 }
