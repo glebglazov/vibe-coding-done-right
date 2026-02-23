@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CoreAudio
 import OSLog
 
 @Observable
@@ -10,6 +11,11 @@ final class AudioRecorder: NSObject {
     private var audioRecorder: AVAudioRecorder?
     private var levelTimer: Timer?
     private var recordingStartTime: ContinuousClock.Instant?
+
+    /// The system default input device before we changed it, restored on stop.
+    /// Prevents the Bluetooth A2DP→HFP codec switch when the user selects
+    /// a non-Bluetooth mic (e.g. built-in MacBook mic) in the app's settings.
+    private var previousDefaultInputDevice: AudioDeviceID?
 
     // MARK: - Constants
 
@@ -37,10 +43,19 @@ final class AudioRecorder: NSObject {
         }
     }
 
-    func startRecording() async -> Bool {
+    /// Starts recording. If `deviceUID` is provided, temporarily sets the system
+    /// default input device to that device so AVAudioRecorder uses it instead of
+    /// whatever macOS auto-selected (which may be a Bluetooth mic, triggering
+    /// the A2DP→HFP codec switch and degrading output quality).
+    func startRecording(deviceUID: String? = nil) async -> Bool {
         guard await requestMicrophonePermission() else {
             Logger.recording.warning("Microphone permission denied")
             return false
+        }
+
+        // Route to the preferred input device before AVAudioRecorder activates
+        if let deviceUID {
+            routeToPreferredInput(deviceUID: deviceUID)
         }
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -83,6 +98,7 @@ final class AudioRecorder: NSObject {
         let url = recorder.url
         recorder.stop()
         stopLevelMonitoring()
+        restorePreviousInputDevice()
 
         let wasShort = recordingStartTime.map { $0.duration(to: .now) < Self.minimumRecordingDuration } ?? false
 
@@ -145,6 +161,66 @@ final class AudioRecorder: NSObject {
     private func stopLevelMonitoring() {
         levelTimer?.invalidate()
         levelTimer = nil
+    }
+
+    // MARK: - Input Device Routing
+
+    /// Saves the current system default input device, then sets it to the
+    /// requested device UID. AVAudioRecorder always uses the system default,
+    /// so this is the only way to force a specific mic on macOS.
+    private func routeToPreferredInput(deviceUID: String) {
+        guard let targetDeviceID = CoreAudioHelpers.deviceID(forUID: deviceUID) else {
+            Logger.recording.warning("Could not resolve preferred device UID: \(deviceUID)")
+            return
+        }
+
+        let currentDefault = getSystemDefaultInputDevice()
+        if currentDefault != targetDeviceID {
+            previousDefaultInputDevice = currentDefault
+            setSystemDefaultInputDevice(targetDeviceID)
+            Logger.recording.info("Switched system input to preferred device (UID: \(deviceUID))")
+        }
+    }
+
+    /// Restores the system default input device that was active before recording.
+    private func restorePreviousInputDevice() {
+        guard let previousDevice = previousDefaultInputDevice else { return }
+        setSystemDefaultInputDevice(previousDevice)
+        previousDefaultInputDevice = nil
+        Logger.recording.info("Restored previous system input device")
+    }
+
+    private func getSystemDefaultInputDevice() -> AudioDeviceID {
+        var deviceID = AudioDeviceID(0)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address, 0, nil, &size, &deviceID
+        )
+        return deviceID
+    }
+
+    private func setSystemDefaultInputDevice(_ deviceID: AudioDeviceID) {
+        var mutableID = deviceID
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectSetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address, 0, nil,
+            UInt32(MemoryLayout<AudioDeviceID>.size),
+            &mutableID
+        )
+        if status != noErr {
+            Logger.recording.warning("Failed to set system input device: \(status)")
+        }
     }
 
     deinit {

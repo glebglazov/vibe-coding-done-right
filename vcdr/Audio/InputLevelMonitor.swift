@@ -29,7 +29,7 @@ final class InputLevelMonitor {
         let engine = AVAudioEngine()
 
         if let deviceUID {
-            guard let audioDeviceID = coreAudioDeviceID(for: deviceUID) else {
+            guard let audioDeviceID = CoreAudioHelpers.deviceID(forUID: deviceUID) else {
                 Logger.audio.warning("Could not resolve device UID: \(deviceUID)")
                 return
             }
@@ -83,46 +83,6 @@ final class InputLevelMonitor {
         }
         let rms = sqrtf(sum / Float(frames))
         return min(rms * rmsScaleFactor, 1.0)
-    }
-
-    // MARK: - CoreAudio Device Resolution
-
-    /// Translates an AVCaptureDevice uniqueID to a CoreAudio AudioDeviceID
-    private func coreAudioDeviceID(for uid: String) -> AudioDeviceID? {
-        var deviceID = AudioDeviceID(0)
-        var uidCF = uid as CFString
-
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDeviceForUID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let status: OSStatus = withUnsafeMutablePointer(to: &uidCF) { uidPtr in
-            withUnsafeMutablePointer(to: &deviceID) { devicePtr in
-                var translation = AudioValueTranslation(
-                    mInputData: uidPtr,
-                    mInputDataSize: UInt32(MemoryLayout<CFString>.size),
-                    mOutputData: devicePtr,
-                    mOutputDataSize: UInt32(MemoryLayout<AudioDeviceID>.size)
-                )
-                var size = UInt32(MemoryLayout<AudioValueTranslation>.size)
-                return AudioObjectGetPropertyData(
-                    AudioObjectID(kAudioObjectSystemObject),
-                    &address,
-                    0,
-                    nil,
-                    &size,
-                    &translation
-                )
-            }
-        }
-
-        guard status == noErr else {
-            Logger.audio.warning("CoreAudio UID translation failed: \(status)")
-            return nil
-        }
-        return deviceID
     }
 
     /// Sets the input device on the audio engine's input node

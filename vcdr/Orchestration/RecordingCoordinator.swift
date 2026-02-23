@@ -120,22 +120,21 @@ final class RecordingCoordinator {
         // Capture any highlighted text in the frontmost app before recording starts
         capturedSelection = selectionCapturer.capture()
 
-        // Snapshot audio output state BEFORE recording starts — AVAudioRecorder
-        // can activate the output device, causing false positives in the "is audio
-        // playing" check (e.g. when Xcode keeps the audio device active).
+        // Snapshot and pause media BEFORE starting the mic. The snapshot must
+        // happen before AVAudioRecorder activates the output device (false positives),
+        // and the pause must happen before the mic opens so the user doesn't hear
+        // wobbly/degraded music bleeding into the first moments of recording.
         if settings.audioSettings.pauseMediaDuringRecording {
             mediaPlaybackController.snapshotAudioState()
+            mediaPlaybackController.pauseIfNeeded()
         }
 
         Logger.app.debug("[onHotkeyDown] awaiting audioRecorder.startRecording()")
-        let started = await audioRecorder.startRecording()
+        let started = await audioRecorder.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID)
         Logger.app.debug("[onHotkeyDown] startRecording returned \(started)")
         if started {
             state = .recording
             recordingIndicator.show()
-            if settings.audioSettings.pauseMediaDuringRecording {
-                mediaPlaybackController.pauseIfNeeded()
-            }
             Logger.app.info("Push-to-talk: recording started")
 
             // If the hotkey was released while we were awaiting startRecording(),
@@ -147,6 +146,8 @@ final class RecordingCoordinator {
                 stopRecordingAndTranscribe()
             }
         } else {
+            // Recording failed — resume media since we paused it before the attempt
+            mediaPlaybackController.resumeIfNeeded()
             state = .error("Failed to start recording")
             recordingIndicator.show()
             recordingIndicator.update(phase: .error, message: "Failed to start recording")
@@ -162,9 +163,9 @@ final class RecordingCoordinator {
     /// Called from both the UI button and the hotkey-up event.
     private func stopRecordingAndTranscribe() {
         Logger.app.debug("[stopRecordingAndTranscribe] enter — state=\(String(describing: self.state))")
-        mediaPlaybackController.resumeIfNeeded()
         guard state == .recording else {
             Logger.app.debug("[stopRecordingAndTranscribe] state is not .recording, returning early")
+            mediaPlaybackController.resumeIfNeeded()
             // Only hide the indicator if we're NOT in a processing state —
             // during transcribing/executing the indicator should stay visible
             if state != .transcribing && state != .executing {
@@ -174,6 +175,7 @@ final class RecordingCoordinator {
         }
 
         guard let audioURL = audioRecorder.stopRecording() else {
+            mediaPlaybackController.resumeIfNeeded()
             state = .error("No audio recorded")
             recordingIndicator.update(phase: .error, message: "No audio recorded")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -184,6 +186,14 @@ final class RecordingCoordinator {
         state = .transcribing
         recordingIndicator.update(phase: .processing)
         Logger.app.info("Push-to-talk: transcribing...")
+
+        // Resume media playback after stopping the mic. The delay lets CoreAudio
+        // fully release the recording session so the output device is not contending
+        // with an active input, which avoids degraded audio quality on resume.
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.audioSettleDelayBeforeResume)
+            self.mediaPlaybackController.resumeIfNeeded()
+        }
 
         Task { @MainActor in await self.processTranscription(audioURL: audioURL) }
     }
@@ -249,13 +259,17 @@ final class RecordingCoordinator {
 
     // MARK: - Constants
 
-    private static let errorDisplayDuration: Duration = .seconds(10)
+    /// Delay after stopping the mic before resuming media playback.
+    /// CoreAudio needs time to fully release the recording session so the
+    /// output device is not contending with an active input — without this,
+    /// the first 1-2 seconds of resumed music can sound degraded.
+    private static let audioSettleDelayBeforeResume: Duration = .milliseconds(300)
     private static let successIndicatorDuration: Duration = .seconds(2)
     private static let errorIndicatorDuration: Duration = .seconds(10)
 
     private func resetAfterDelay() {
         Task {
-            try? await Task.sleep(for: Self.errorDisplayDuration)
+            try? await Task.sleep(for: Self.errorIndicatorDuration)
             if case .error = state {
                 state = .idle
             }
