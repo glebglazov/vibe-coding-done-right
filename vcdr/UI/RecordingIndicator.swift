@@ -24,9 +24,10 @@ final class IndicatorPhaseState {
 final class RecordingIndicatorPanel {
     // MARK: - Constants
 
-    private static let normalPanelSize: CGFloat = 48
-    private static let errorPanelWidth: CGFloat = 320
-    private static let errorPanelHeight: CGFloat = 120
+    /// Fixed panel size — large enough to fit the error message pill below the circle.
+    /// The panel background is clear, so the extra space is invisible in non-error states.
+    private static let panelWidth: CGFloat = 320
+    private static let panelHeight: CGFloat = 120
     /// Gap between bottom of menu bar and top of indicator panel
     private static let menuBarGap: CGFloat = 8
 
@@ -36,13 +37,10 @@ final class RecordingIndicatorPanel {
     func show() {
         phaseState.phase = .recording
         phaseState.errorMessage = nil
-        guard panel == nil else {
-            positionPanel(forError: false)
-            return
-        }
+        guard panel == nil else { return }
 
         let hostingView = NSHostingView(rootView: RecordingIndicatorView(phaseState: phaseState))
-        hostingView.frame = NSRect(x: 0, y: 0, width: Self.normalPanelSize, height: Self.normalPanelSize)
+        hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
 
         let panel = NSPanel(
             contentRect: hostingView.frame,
@@ -52,23 +50,31 @@ final class RecordingIndicatorPanel {
         )
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         panel.contentView = hostingView
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
+        panel.ignoresMouseEvents = true
 
-        self.panel = panel
-        positionPanel(forError: false)
+        // Position at top center of the main screen, just below the menu bar
+        if let screen = NSScreen.main ?? NSScreen.screens.first {
+            let screenFrame = screen.frame
+            let visibleFrame = screen.visibleFrame
+            let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+            let x = screenFrame.midX - Self.panelWidth / 2
+            let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.menuBarGap
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
         panel.orderFrontRegardless()
+        self.panel = panel
     }
 
     func update(phase: IndicatorPhase, message: String? = nil) {
         phaseState.errorMessage = (phase == .error) ? message : nil
         phaseState.phase = phase
-        let forError = phase == .error && message != nil
-        positionPanel(forError: forError)
     }
 
     /// Trigger a shake animation to reject a hotkey press during processing
@@ -83,23 +89,6 @@ final class RecordingIndicatorPanel {
     func hide() {
         panel?.close()
         panel = nil
-    }
-
-    /// Resize and reposition the panel at the top center of the current main screen
-    private func positionPanel(forError: Bool) {
-        guard let panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-        let screenFrame = screen.frame
-        let visibleFrame = screen.visibleFrame
-        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
-        let width = forError ? Self.errorPanelWidth : Self.normalPanelSize
-        let height = forError ? Self.errorPanelHeight : Self.normalPanelSize
-        let newFrame = NSRect(
-            x: screenFrame.midX - width / 2,
-            y: screenFrame.maxY - menuBarHeight - height - Self.menuBarGap,
-            width: width,
-            height: height
-        )
-        panel.setFrame(newFrame, display: true)
     }
 }
 
@@ -127,6 +116,7 @@ private struct RecordingIndicatorView: View {
                 Circle()
                     .fill(.ultraThinMaterial)
                     .frame(width: Self.circleSize, height: Self.circleSize)
+                    .shadow(radius: 2)
 
                 switch phaseState.phase {
                 case .recording:
@@ -166,9 +156,11 @@ private struct RecordingIndicatorView: View {
                     .padding(.horizontal, Self.errorPillHPadding)
                     .padding(.vertical, Self.errorPillVPadding)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
+                    .shadow(radius: 2)
                     .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .modifier(ShakeEffect(shakeCount: phaseState.rejectCount))
         .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: phaseState.phase)
         .animation(.default, value: phaseState.rejectCount)
