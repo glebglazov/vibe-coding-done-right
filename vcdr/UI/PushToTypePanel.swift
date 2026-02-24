@@ -6,6 +6,7 @@ final class PushToTypePanel {
     private var panel: NSPanel?
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
+    private var becameKeyObserver: NSObjectProtocol?
 
     // MARK: - Constants
 
@@ -66,13 +67,26 @@ final class PushToTypePanel {
         // because SwiftUI's focus system may not connect to the panel's responder chain.
         Self.focusFirstTextView(in: hostingView, panel: panel)
 
-        // Intercept Return (submit) and Escape (dismiss) before they reach the text field
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
-            guard let viewModel else { return event }
+        // Intercept Return (submit) and Escape (dismiss) before they reach the text field.
+        // Only handle events when this panel is key — if another panel (e.g. mode switcher)
+        // is key, let events pass through so its own monitor can handle them.
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel, weak panel] event in
+            guard let viewModel, panel?.isKeyWindow == true else { return event }
             if viewModel.handleKeyEvent(event) {
                 return nil
             }
             return event
+        }
+
+        // Re-focus the text view when this panel regains key status (e.g. after
+        // the mode switcher panel closes and key window falls back to this panel)
+        becameKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: panel,
+            queue: .main
+        ) { [weak hostingView, weak panel] _ in
+            guard let hostingView, let panel else { return }
+            Self.focusFirstTextView(in: hostingView, panel: panel)
         }
 
         // Dismiss if the user clicks outside the panel
@@ -89,6 +103,10 @@ final class PushToTypePanel {
         if let monitor = localEventMonitor {
             NSEvent.removeMonitor(monitor)
             localEventMonitor = nil
+        }
+        if let observer = becameKeyObserver {
+            NotificationCenter.default.removeObserver(observer)
+            becameKeyObserver = nil
         }
         panel?.close()
         panel = nil
