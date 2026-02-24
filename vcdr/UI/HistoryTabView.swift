@@ -12,8 +12,15 @@ struct HistoryTabView: View {
                     description: Text("Your transcription history will appear here.")
                 )
             } else {
-                List(history.records) { record in
-                    HistoryRowView(record: record)
+                List {
+                    ForEach(history.records) { record in
+                        HistoryRowView(record: record, onDelete: { history.removeRecord(record) })
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button("Delete", role: .destructive) {
+                                    history.removeRecord(record)
+                                }
+                            }
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -33,6 +40,7 @@ struct HistoryTabView: View {
 
 private struct HistoryRowView: View {
     let record: TranscriptionRecord
+    let onDelete: () -> Void
 
     // MARK: - Constants
     private static let textLineLimit = 3
@@ -108,6 +116,12 @@ private struct HistoryRowView: View {
                 Button("Copy Result") {
                     copyToClipboard(result)
                 }
+            }
+
+            Divider()
+
+            Button("Delete", role: .destructive) {
+                onDelete()
             }
         }
     }

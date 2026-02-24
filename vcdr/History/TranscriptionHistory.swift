@@ -25,6 +25,11 @@ final class TranscriptionHistory {
         save()
     }
 
+    func removeRecord(_ record: TranscriptionRecord) {
+        records.removeAll { $0.id == record.id }
+        save()
+    }
+
     func clearAll() {
         records.removeAll()
         save()
