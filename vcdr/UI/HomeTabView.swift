@@ -93,6 +93,23 @@ struct HomeTabView: View {
                     )
                 )
                 ShortcutRecorderRow(
+                    label: "Push-to-Type",
+                    keyCode: Binding(
+                        get: { dependencies.settings.pushToTypeHotkey.keyCode },
+                        set: {
+                            dependencies.settings.pushToTypeHotkey.keyCode = $0
+                            dependencies.pushToTypeCoordinator.updateHotkey()
+                        }
+                    ),
+                    modifiers: Binding(
+                        get: { dependencies.settings.pushToTypeHotkey.modifiers },
+                        set: {
+                            dependencies.settings.pushToTypeHotkey.modifiers = $0
+                            dependencies.pushToTypeCoordinator.updateHotkey()
+                        }
+                    )
+                )
+                ShortcutRecorderRow(
                     label: "Mode Switcher",
                     keyCode: Binding(
                         get: { dependencies.settings.modeSwitcherHotkey.keyCode },

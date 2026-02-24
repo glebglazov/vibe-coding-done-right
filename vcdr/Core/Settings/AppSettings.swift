@@ -42,6 +42,9 @@ final class AppSettings {
     var modeSwitcherHotkey: HotkeyBinding {
         didSet { save() }
     }
+    var pushToTypeHotkey: HotkeyBinding {
+        didSet { save() }
+    }
     var modes: [Mode] {
         didSet { save() }
     }
@@ -64,6 +67,7 @@ final class AppSettings {
     private enum Keys {
         static let pushToTalkHotkey = "pushToTalkHotkey"
         static let modeSwitcherHotkey = "modeSwitcherHotkey"
+        static let pushToTypeHotkey = "pushToTypeHotkey"
         static let modes = "modes"
         static let activeModeID = "activeModeID"
         static let audioSettings = "audioSettings"
@@ -101,6 +105,14 @@ final class AppSettings {
             self.modeSwitcherHotkey = decoded
         } else {
             self.modeSwitcherHotkey = .unassigned
+        }
+
+        // Load push-to-type hotkey (default: unassigned)
+        if let data = userDefaults.data(forKey: Keys.pushToTypeHotkey),
+           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
+            self.pushToTypeHotkey = decoded
+        } else {
+            self.pushToTypeHotkey = .unassigned
         }
 
         // Load modes into local var first (can't use self.modes before all properties init)
@@ -150,6 +162,9 @@ final class AppSettings {
         }
         if let encoded = try? JSONEncoder().encode(modeSwitcherHotkey) {
             userDefaults.set(encoded, forKey: Keys.modeSwitcherHotkey)
+        }
+        if let encoded = try? JSONEncoder().encode(pushToTypeHotkey) {
+            userDefaults.set(encoded, forKey: Keys.pushToTypeHotkey)
         }
         userDefaults.set(activeModeID.uuidString, forKey: Keys.activeModeID)
         if let encoded = try? JSONEncoder().encode(modes) {

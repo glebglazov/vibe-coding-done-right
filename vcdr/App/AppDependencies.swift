@@ -11,6 +11,7 @@ final class AppDependencies {
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
+    let pushToTypeCoordinator: PushToTypeCoordinator
     let mediaPlaybackController: MediaPlaybackController
     let transcriptionHistory: TranscriptionHistory
 
@@ -51,6 +52,12 @@ final class AppDependencies {
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings)
+        self.pushToTypeCoordinator = PushToTypeCoordinator(
+            settings: settings,
+            recordingIndicator: recordingIndicator,
+            selectionCapturer: selectionCapturer,
+            transcriptionHistory: history
+        )
     }
 
     func initialize() async {
@@ -82,6 +89,7 @@ final class AppDependencies {
             if hasAccessibilityPermission {
                 coordinator.setupHotkey()
                 modeSwitcherCoordinator.setupHotkey()
+                pushToTypeCoordinator.setupHotkey()
             }
             Logger.app.info("App fully initialized")
         } catch {
@@ -113,6 +121,7 @@ final class AppDependencies {
             if !wasAccessible && self.hasAccessibilityPermission {
                 self.coordinator.setupHotkey()
                 self.modeSwitcherCoordinator.setupHotkey()
+                self.pushToTypeCoordinator.setupHotkey()
                 Logger.app.info("Accessibility granted, hotkeys registered")
             }
 
