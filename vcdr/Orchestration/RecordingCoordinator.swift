@@ -18,6 +18,8 @@ final class RecordingCoordinator {
     private let transcriptionProvider: any TranscriptionProvider
     private let audioRecorder: AudioRecorder
     private let hotkeyManager: GlobalHotkeyManager
+    private let toggleRecordingHotkeyManager = GlobalHotkeyManager()
+    private let escCancelManager = GlobalHotkeyManager()
     private let mediaPlaybackController: MediaPlaybackController
     private let recordingIndicator: RecordingIndicatorPanel
     private let selectionCapturer: SelectionCapturer
@@ -26,6 +28,11 @@ final class RecordingCoordinator {
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
     private var recordingStartInstant: ContinuousClock.Instant?
+    /// Tracks whether the current recording was started via toggle (vs push-to-talk)
+    private var isToggleMode = false
+    /// Guards against concurrent onHotkeyDown() calls racing during the async gap
+    /// between state == .idle check and state = .recording assignment.
+    private var isPreparingToRecord = false
 
     init(
         settings: AppSettings,
@@ -60,6 +67,7 @@ final class RecordingCoordinator {
 
         hotkeyManager.onKeyDown = { [weak self] in
             Task { @MainActor in
+                self?.isToggleMode = false
                 await self?.onHotkeyDown(fromHotkey: true)
             }
         }
@@ -78,10 +86,11 @@ final class RecordingCoordinator {
         setupHotkey()
     }
 
-    /// Toggle recording from UI button (fully synchronous for immediate feedback)
+    /// Toggle recording from UI button or toggle-recording hotkey
     func toggleRecording() {
         switch state {
         case .idle, .error:
+            isToggleMode = true
             Task { await onHotkeyDown() }
         case .recording:
             stopRecordingAndTranscribe()
@@ -93,22 +102,21 @@ final class RecordingCoordinator {
     // MARK: - Recording Start (async — needs mic permission check)
 
     private func onHotkeyDown(fromHotkey: Bool = false) async {
-        Logger.app.debug("[onHotkeyDown] enter — fromHotkey=\(fromHotkey), state=\(String(describing: self.state))")
-
         if case .error = state {
             state = .idle
         }
 
-        guard state == .idle else {
+        guard state == .idle, !isPreparingToRecord else {
             Logger.app.warning("Hotkey pressed but not idle (state: \(String(describing: self.state)))")
-            // Buzz the indicator to signal "busy, can't start now"
             if state == .transcribing || state == .executing {
                 recordingIndicator.buzz()
             }
             return
         }
 
-        Logger.app.debug("[onHotkeyDown] awaiting transcriptionProvider.isReady")
+        isPreparingToRecord = true
+        defer { isPreparingToRecord = false }
+
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
             state = .error("Model still loading...")
@@ -120,44 +128,36 @@ final class RecordingCoordinator {
         }
 
         previousActiveApp = NSWorkspace.shared.frontmostApplication
-
-        // Capture any highlighted text in the frontmost app before recording starts
         capturedSelection = selectionCapturer.capture()
 
-        // Snapshot and pause media BEFORE starting the mic. The snapshot must
-        // happen before AVAudioRecorder activates the output device (false positives),
-        // and the pause must happen before the mic opens so the user doesn't hear
-        // wobbly/degraded music bleeding into the first moments of recording.
         if settings.audioSettings.pauseMediaDuringRecording {
             mediaPlaybackController.snapshotAudioState()
             mediaPlaybackController.pauseIfNeeded()
         }
 
-        Logger.app.debug("[onHotkeyDown] awaiting audioRecorder.startRecording()")
         let started = await audioRecorder.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID)
-        Logger.app.debug("[onHotkeyDown] startRecording returned \(started)")
         if started {
             state = .recording
             recordingStartInstant = .now
-            recordingIndicator.show()
-            Logger.app.info("Push-to-talk: recording started")
+            escCancelManager.isEnabled = true
+            recordingIndicator.show(withBorder: isToggleMode)
+            Logger.app.info("Recording started (toggle=\(self.isToggleMode))")
 
             // If the hotkey was released while we were awaiting startRecording(),
             // the synchronous onKeyUp callback may have already called
             // stopRecordingAndTranscribe() — but if state was still .idle at that point,
             // the stop was a no-op. Check isHotkeyActive to catch this race condition.
             if fromHotkey && !hotkeyManager.isHotkeyActive {
-                Logger.app.debug("[onHotkeyDown] key already released (isHotkeyActive=false), stopping")
                 stopRecordingAndTranscribe()
             }
         } else {
-            // Recording failed — resume media since we paused it before the attempt
             mediaPlaybackController.resumeIfNeeded()
+            escCancelManager.isEnabled = false
             state = .error("Failed to start recording")
             recordingIndicator.show()
             recordingIndicator.update(phase: .error, message: "Failed to start recording")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
-            Logger.app.error("Push-to-talk: failed to start recording")
+            Logger.app.error("Failed to start recording")
             resetAfterDelay()
         }
     }
@@ -167,9 +167,7 @@ final class RecordingCoordinator {
     /// Stops recording synchronously and kicks off transcription in a background Task.
     /// Called from both the UI button and the hotkey-up event.
     private func stopRecordingAndTranscribe() {
-        Logger.app.debug("[stopRecordingAndTranscribe] enter — state=\(String(describing: self.state))")
         guard state == .recording else {
-            Logger.app.debug("[stopRecordingAndTranscribe] state is not .recording, returning early")
             mediaPlaybackController.resumeIfNeeded()
             // Only hide the indicator if we're NOT in a processing state —
             // during transcribing/executing the indicator should stay visible
@@ -178,6 +176,8 @@ final class RecordingCoordinator {
             }
             return
         }
+
+        escCancelManager.isEnabled = false
 
         let recordingDuration = recordingStartInstant.map { $0.duration(to: .now) }
         recordingStartInstant = nil
@@ -278,6 +278,65 @@ final class RecordingCoordinator {
                 targetAppPID: targetPID
             )
         }
+    }
+
+    // MARK: - Toggle Recording Hotkey
+
+    func setupToggleRecordingHotkey() {
+        let binding = settings.toggleRecordingHotkey
+        guard binding.isAssigned else {
+            toggleRecordingHotkeyManager.unregister()
+            return
+        }
+
+        toggleRecordingHotkeyManager.onKeyDown = { [weak self] in
+            self?.toggleRecording()
+        }
+        // Toggle mode uses only keyDown — no keyUp action needed
+        toggleRecordingHotkeyManager.onKeyUp = nil
+
+        _ = toggleRecordingHotkeyManager.register(
+            keyCode: CGKeyCode(binding.keyCode),
+            modifiers: CGEventFlags(rawValue: binding.modifiers)
+        )
+    }
+
+    func updateToggleRecordingHotkey() {
+        setupToggleRecordingHotkey()
+    }
+
+    // MARK: - Esc Cancel
+
+    private static let escapeKeyCode: CGKeyCode = 53
+    private static let cancelledIndicatorDisplayDuration: Duration = .seconds(1)
+
+    func setupEscCancel() {
+        escCancelManager.isEnabled = false
+        escCancelManager.onKeyDown = { [weak self] in
+            self?.cancelRecording()
+        }
+        escCancelManager.onKeyUp = nil
+
+        _ = escCancelManager.register(keyCode: Self.escapeKeyCode, modifiers: [])
+    }
+
+    private func cancelRecording() {
+        guard state == .recording else { return }
+
+        escCancelManager.isEnabled = false
+        state = .idle
+
+        // Stop and discard the audio file without transcribing
+        if let audioURL = audioRecorder.stopRecording() {
+            try? FileManager.default.removeItem(at: audioURL)
+        }
+
+        mediaPlaybackController.resumeIfNeeded()
+        capturedSelection = nil
+        recordingStartInstant = nil
+
+        recordingIndicator.showCancelled()
+        Logger.app.info("Recording cancelled via Esc")
     }
 
     // MARK: - Constants

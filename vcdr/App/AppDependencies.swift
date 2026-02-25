@@ -88,6 +88,8 @@ final class AppDependencies {
             initializationStatus = "Ready"
             if hasAccessibilityPermission {
                 coordinator.setupHotkey()
+                coordinator.setupToggleRecordingHotkey()
+                coordinator.setupEscCancel()
                 modeSwitcherCoordinator.setupHotkey()
                 pushToTypeCoordinator.setupHotkey()
             }
@@ -120,6 +122,8 @@ final class AppDependencies {
             // Register hotkey as soon as accessibility is granted
             if !wasAccessible && self.hasAccessibilityPermission {
                 self.coordinator.setupHotkey()
+                self.coordinator.setupToggleRecordingHotkey()
+                self.coordinator.setupEscCancel()
                 self.modeSwitcherCoordinator.setupHotkey()
                 self.pushToTypeCoordinator.setupHotkey()
                 Logger.app.info("Accessibility granted, hotkeys registered")

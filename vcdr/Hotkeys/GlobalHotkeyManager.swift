@@ -11,11 +11,15 @@ final class GlobalHotkeyManager {
     private var targetModifiers: CGEventFlags = []
     private(set) var isHotkeyActive = false
 
-    var onKeyDown: (() -> Void)?
+    /// When false, matched key events pass through unconsumed.
+    /// Key-up still resets `isHotkeyActive` to keep internal state consistent.
+    var isEnabled: Bool = true
+
     /// Called synchronously from the CGEvent tap callback (no GCD dispatch).
     /// This runs on the main thread during the run loop's event source processing,
     /// bypassing both DispatchQueue.main.async and MainActor Task scheduling — both
     /// of which can be delayed by seconds when the MainActor executor is stalled.
+    var onKeyDown: (() -> Void)?
     var onKeyUp: (() -> Void)?
 
     func register(keyCode: CGKeyCode, modifiers: CGEventFlags) -> Bool {
@@ -85,11 +89,16 @@ final class GlobalHotkeyManager {
             guard keyCode == targetKeyCode && flags == targetModifiers else {
                 return Unmanaged.passUnretained(event)
             }
+            guard isEnabled else { return Unmanaged.passUnretained(event) }
             let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
             if !isRepeat {
                 isHotkeyActive = true
                 Logger.hotkeys.debug("[tap] keyDown fired, isHotkeyActive=true")
-                DispatchQueue.main.async { self.onKeyDown?() }
+                // Call onKeyDown synchronously — the CGEvent tap callback already
+                // runs on the main thread (main run loop). DispatchQueue.main.async
+                // and Task scheduling can be delayed by seconds when the MainActor
+                // executor is stalled.
+                self.onKeyDown?()
             }
             return nil
         } else if type == .keyUp {
@@ -97,8 +106,10 @@ final class GlobalHotkeyManager {
             guard keyCode == targetKeyCode && isHotkeyActive else {
                 return Unmanaged.passUnretained(event)
             }
+            // Must reset isHotkeyActive even when disabled to keep state consistent
             isHotkeyActive = false
-            Logger.hotkeys.debug("[tap] keyUp fired, isHotkeyActive=false, calling onKeyUp synchronously")
+            guard isEnabled else { return Unmanaged.passUnretained(event) }
+            Logger.hotkeys.debug("[tap] keyUp fired, calling onKeyUp synchronously")
             // Call onKeyUp synchronously — NOT through DispatchQueue.main.async.
             // The CGEvent tap callback already runs on the main thread (main run loop).
             // Dispatching through GCD or Tasks adds latency that can reach seconds

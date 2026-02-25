@@ -16,7 +16,7 @@ enum IndicatorPhase: Equatable {
 @MainActor
 final class IndicatorPhaseState {
     var phase: IndicatorPhase = .recording
-    
+    var showBorder: Bool = false
     var rejectCount: Int = 0
     var errorMessage: String?
 }
@@ -37,10 +37,14 @@ final class RecordingIndicatorPanel {
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
 
-    func show() {
+    func show(withBorder: Bool = false) {
         phaseState.phase = .recording
+        phaseState.showBorder = withBorder
         phaseState.errorMessage = nil
-        guard panel == nil else { return }
+
+        // Always recreate the panel — the existing one may be a CancelledIndicatorView
+        // from a recent Esc cancel, which doesn't reference phaseState at all.
+        hide()
 
         let hostingView = NSHostingView(rootView: RecordingIndicatorView(phaseState: phaseState))
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
@@ -93,6 +97,53 @@ final class RecordingIndicatorPanel {
         panel?.close()
         panel = nil
     }
+
+    /// Show a brief "cancelled" indicator (grey X) that auto-hides
+    func showCancelled() {
+        hide()
+
+        let hostingView = NSHostingView(rootView: CancelledIndicatorView())
+        hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
+
+        let cancelPanel = NSPanel(
+            contentRect: hostingView.frame,
+            styleMask: [.nonactivatingPanel, .borderless],
+            backing: .buffered,
+            defer: false
+        )
+        cancelPanel.isOpaque = false
+        cancelPanel.backgroundColor = .clear
+        cancelPanel.hasShadow = false
+        cancelPanel.level = .statusBar
+        cancelPanel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        cancelPanel.contentView = hostingView
+        cancelPanel.isMovableByWindowBackground = false
+        cancelPanel.hidesOnDeactivate = false
+        cancelPanel.ignoresMouseEvents = true
+
+        if let screen = NSScreen.main ?? NSScreen.screens.first {
+            let screenFrame = screen.frame
+            let visibleFrame = screen.visibleFrame
+            let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+            let x = screenFrame.midX - Self.panelWidth / 2
+            let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.menuBarGap
+            cancelPanel.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        cancelPanel.orderFrontRegardless()
+        self.panel = cancelPanel
+
+        Task {
+            try? await Task.sleep(for: Self.cancelledDisplayDuration)
+            cancelPanel.close()
+            if self.panel === cancelPanel {
+                self.panel = nil
+            }
+        }
+    }
+
+    // MARK: - Constants (cancel indicator)
+    private static let cancelledDisplayDuration: Duration = .seconds(1)
 }
 
 // MARK: - SwiftUI View
@@ -102,6 +153,7 @@ private struct RecordingIndicatorView: View {
 
     private static let circleSize: CGFloat = 44
     private static let iconSize: CGFloat = 20
+    private static let toggleBorderWidth: CGFloat = 2
     private static let phaseTransitionDuration: Double = 0.2
 
     private static let errorPillSpacing: CGFloat = 4
@@ -119,6 +171,9 @@ private struct RecordingIndicatorView: View {
                 Circle()
                     .fill(.ultraThinMaterial)
                     .frame(width: Self.circleSize, height: Self.circleSize)
+                    .overlay(
+                        Circle().strokeBorder(.red, lineWidth: phaseState.showBorder ? Self.toggleBorderWidth : 0)
+                    )
                     .shadow(radius: 2)
 
                 switch phaseState.phase {
@@ -168,6 +223,29 @@ private struct RecordingIndicatorView: View {
         .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: phaseState.phase)
         .animation(.default, value: phaseState.rejectCount)
         .onAppear { animating = true }
+    }
+}
+
+// MARK: - Cancelled Indicator View
+
+private struct CancelledIndicatorView: View {
+    private static let circleSize: CGFloat = 44
+    private static let iconSize: CGFloat = 20
+
+    var body: some View {
+        VStack {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: Self.circleSize, height: Self.circleSize)
+                    .shadow(radius: 2)
+
+                Image(systemName: "xmark")
+                    .font(.system(size: Self.iconSize, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 

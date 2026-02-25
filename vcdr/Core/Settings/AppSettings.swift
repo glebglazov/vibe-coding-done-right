@@ -45,6 +45,9 @@ final class AppSettings {
     var pushToTypeHotkey: HotkeyBinding {
         didSet { save() }
     }
+    var toggleRecordingHotkey: HotkeyBinding {
+        didSet { save() }
+    }
     var modes: [Mode] {
         didSet { save() }
     }
@@ -68,6 +71,7 @@ final class AppSettings {
         static let pushToTalkHotkey = "pushToTalkHotkey"
         static let modeSwitcherHotkey = "modeSwitcherHotkey"
         static let pushToTypeHotkey = "pushToTypeHotkey"
+        static let toggleRecordingHotkey = "toggleRecordingHotkey"
         static let modes = "modes"
         static let activeModeID = "activeModeID"
         static let audioSettings = "audioSettings"
@@ -113,6 +117,14 @@ final class AppSettings {
             self.pushToTypeHotkey = decoded
         } else {
             self.pushToTypeHotkey = .unassigned
+        }
+
+        // Load toggle recording hotkey (default: unassigned)
+        if let data = userDefaults.data(forKey: Keys.toggleRecordingHotkey),
+           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
+            self.toggleRecordingHotkey = decoded
+        } else {
+            self.toggleRecordingHotkey = .unassigned
         }
 
         // Load modes into local var first (can't use self.modes before all properties init)
@@ -165,6 +177,9 @@ final class AppSettings {
         }
         if let encoded = try? JSONEncoder().encode(pushToTypeHotkey) {
             userDefaults.set(encoded, forKey: Keys.pushToTypeHotkey)
+        }
+        if let encoded = try? JSONEncoder().encode(toggleRecordingHotkey) {
+            userDefaults.set(encoded, forKey: Keys.toggleRecordingHotkey)
         }
         userDefaults.set(activeModeID.uuidString, forKey: Keys.activeModeID)
         if let encoded = try? JSONEncoder().encode(modes) {
