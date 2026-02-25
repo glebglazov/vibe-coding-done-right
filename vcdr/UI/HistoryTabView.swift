@@ -54,6 +54,19 @@ private struct HistoryRowView: View {
                 Text(record.text)
                     .lineLimit(Self.textLineLimit)
 
+                if let selection = record.capturedSelection {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Image(systemName: "text.cursor")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+
+                        Text(selection)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(Self.textLineLimit)
+                    }
+                }
+
                 if let result = record.actionResult {
                     // Script entry: transcription is primary (the question),
                     // script output shown below with a subtle terminal icon
@@ -85,8 +98,8 @@ private struct HistoryRowView: View {
 
             if record.actionResult != nil {
                 Menu {
-                    Button("Copy Transcription") {
-                        copyToClipboard(record.text)
+                    Button("Copy Capture") {
+                        copyToClipboard(record.fullCapture)
                     }
                     Button("Copy Result") {
                         copyToClipboard(record.actionResult ?? "")
@@ -99,7 +112,7 @@ private struct HistoryRowView: View {
                 .fixedSize()
             } else {
                 Button {
-                    copyToClipboard(record.text)
+                    copyToClipboard(record.fullCapture)
                 } label: {
                     Image(systemName: "doc.on.doc")
                 }
@@ -109,8 +122,8 @@ private struct HistoryRowView: View {
         }
         .padding(.vertical, 2)
         .contextMenu {
-            Button("Copy Transcription") {
-                copyToClipboard(record.text)
+            Button("Copy Capture") {
+                copyToClipboard(record.fullCapture)
             }
             if let result = record.actionResult {
                 Button("Copy Result") {

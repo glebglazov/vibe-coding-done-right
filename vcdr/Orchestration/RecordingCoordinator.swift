@@ -227,6 +227,7 @@ final class RecordingCoordinator {
             }
 
             let mode = settings.activeMode
+            let selection = capturedSelection
             let transformedText = mode.transformTranscription(text, capturedSelection: capturedSelection)
             capturedSelection = nil
 
@@ -245,7 +246,8 @@ final class RecordingCoordinator {
                 text: text,
                 modelName: transcriptionProvider.name,
                 recordingDuration: durationSeconds,
-                actionResult: trimmedResult?.isEmpty == false ? trimmedResult : nil
+                actionResult: trimmedResult?.isEmpty == false ? trimmedResult : nil,
+                capturedSelection: selection
             )
             transcriptionHistory.addRecord(record)
 

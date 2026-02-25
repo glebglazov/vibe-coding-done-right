@@ -90,6 +90,7 @@ final class PushToTypeCoordinator {
 
     private func submitText(_ text: String) {
         let mode = settings.activeMode
+        let selection = capturedSelection
         let transformedText = mode.transformTranscription(text, capturedSelection: capturedSelection)
         capturedSelection = nil
 
@@ -109,7 +110,8 @@ final class PushToTypeCoordinator {
                     text: text,
                     modelName: "Push-to-Type",
                     recordingDuration: 0,
-                    actionResult: trimmedResult?.isEmpty == false ? trimmedResult : nil
+                    actionResult: trimmedResult?.isEmpty == false ? trimmedResult : nil,
+                    capturedSelection: selection
                 )
                 transcriptionHistory.addRecord(record)
 
