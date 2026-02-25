@@ -47,6 +47,10 @@ private struct HistoryRowView: View {
     /// Extra trailing padding on the plain copy button to align with the menu
     /// copy button, which has a system chevron taking up space to its right.
     private static let copyButtonTrailingPadding: CGFloat = 15
+    private static let copiedFeedbackDuration: Duration = .seconds(1.5)
+
+    @State private var showCopied = false
+    @State private var showSelectionCopied = false
 
     var body: some View {
         HStack(alignment: .top) {
@@ -56,14 +60,22 @@ private struct HistoryRowView: View {
 
                 if let selection = record.capturedSelection {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Image(systemName: "text.cursor")
+                        Image(systemName: showSelectionCopied ? "checkmark" : "text.cursor")
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(showSelectionCopied ? Color.green : Color.secondary)
 
                         Text(selection)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(Self.textLineLimit)
+                    }
+                    .onTapGesture {
+                        copyToClipboard(selection)
+                        showSelectionCopied = true
+                        Task {
+                            try? await Task.sleep(for: Self.copiedFeedbackDuration)
+                            showSelectionCopied = false
+                        }
                     }
                 }
 
@@ -105,18 +117,19 @@ private struct HistoryRowView: View {
                         copyToClipboard(record.actionResult ?? "")
                     }
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                 }
                 .menuStyle(.borderlessButton)
-                .tint(.secondary)
+                .tint(showCopied ? .green : .secondary)
                 .fixedSize()
             } else {
                 Button {
                     copyToClipboard(record.fullCapture)
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.borderless)
+                .tint(showCopied ? .green : .secondary)
                 .padding(.trailing, Self.copyButtonTrailingPadding)
             }
         }
@@ -142,5 +155,11 @@ private struct HistoryRowView: View {
     private func copyToClipboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+
+        showCopied = true
+        Task {
+            try? await Task.sleep(for: Self.copiedFeedbackDuration)
+            showCopied = false
+        }
     }
 }

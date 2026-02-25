@@ -6,6 +6,9 @@ struct MenuBarView: View {
 
     // MARK: - Constants
     private static let previewLineLimit = 2
+    private static let copiedFeedbackDuration: Duration = .seconds(1.5)
+
+    @State private var showCopied = false
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -22,14 +25,27 @@ struct MenuBarView: View {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(latest.text, forType: .string)
+                    showCopied = true
+                    Task {
+                        try? await Task.sleep(for: Self.copiedFeedbackDuration)
+                        showCopied = false
+                    }
                 } label: {
                     VStack(alignment: .leading) {
                         Text(latest.text)
                             .lineLimit(Self.previewLineLimit)
                             .truncationMode(.tail)
-                        Text("Click to copy")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        Group {
+                            if showCopied {
+                                Text("Copied!")
+                                    .foregroundStyle(.green)
+                            } else {
+                                Text("Click to copy")
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .font(.caption2)
+                        .animation(.easeInOut, value: showCopied)
                     }
                 }
                 .buttonStyle(.plain)
