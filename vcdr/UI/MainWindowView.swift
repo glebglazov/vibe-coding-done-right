@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Navigation value for output destination detail views.
+/// Distinguishes output destination UUIDs from mode UUIDs in NavigationStack.
+struct OutputDestinationNavID: Hashable {
+    let id: UUID
+}
+
 struct MainWindowView: View {
     let dependencies: AppDependencies
 
@@ -7,6 +13,7 @@ struct MainWindowView: View {
         case home
         case audio
         case modes
+        case outputDestinations
         case transcription
         case history
 
@@ -15,6 +22,7 @@ struct MainWindowView: View {
             case .home: "Home"
             case .audio: "Audio"
             case .modes: "Modes"
+            case .outputDestinations: "Output"
             case .transcription: "Transcription"
             case .history: "History"
             }
@@ -25,6 +33,7 @@ struct MainWindowView: View {
             case .home: "house"
             case .audio: "speaker.wave.2"
             case .modes: "list.bullet"
+            case .outputDestinations: "arrow.right.square"
             case .transcription: "waveform"
             case .history: "clock.arrow.circlepath"
             }
@@ -58,6 +67,8 @@ struct MainWindowView: View {
                         AudioTabView(dependencies: dependencies)
                     case .modes:
                         ModesListView(settings: dependencies.settings, path: $path)
+                    case .outputDestinations:
+                        OutputDestinationsListView(settings: dependencies.settings, path: $path)
                     case .transcription:
                         TranscriptionTabView(dependencies: dependencies)
                     case .history:
@@ -73,6 +84,17 @@ struct MainWindowView: View {
                             mode: Binding(
                                 get: { dependencies.settings.modes[index] },
                                 set: { dependencies.settings.modes[index] = $0 }
+                            ),
+                            outputDestinations: dependencies.settings.outputDestinations
+                        )
+                    }
+                }
+                .navigationDestination(for: OutputDestinationNavID.self) { navID in
+                    if let index = dependencies.settings.outputDestinations.firstIndex(where: { $0.id == navID.id }) {
+                        OutputDestinationDetailView(
+                            destination: Binding(
+                                get: { dependencies.settings.outputDestinations[index] },
+                                set: { dependencies.settings.outputDestinations[index] = $0 }
                             )
                         )
                     }

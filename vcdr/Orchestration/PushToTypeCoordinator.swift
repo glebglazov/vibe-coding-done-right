@@ -12,6 +12,9 @@ final class PushToTypeCoordinator {
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
 
+    /// Temporary output destination override set via mode switcher
+    var outputDestinationOverride: UUID?
+
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
 
@@ -91,26 +94,40 @@ final class PushToTypeCoordinator {
     private func submitText(_ text: String) {
         let mode = settings.activeMode
         let selection = capturedSelection
-        let transformedText = mode.transformTranscription(text, capturedSelection: capturedSelection)
         capturedSelection = nil
 
         // Show processing indicator
         recordingIndicator.show()
         recordingIndicator.update(phase: .processing)
-        Logger.app.info("Push-to-type: executing action")
+        Logger.app.info("Push-to-type: executing pipeline")
 
         Task { @MainActor in
             do {
-                let action = makeAction()
-                let actionResult = try await action.execute(text: transformedText)
+                // Step 1: Pre-processing
+                let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection)
+
+                // Step 2: Processing (optional bash script)
+                let processedText: String
+                switch mode.processingType {
+                case .none:
+                    processedText = preprocessedText
+                case .bashScript:
+                    processedText = try await BashRunner.run(
+                        command: mode.processingCommand,
+                        text: preprocessedText
+                    )
+                }
+
+                // Step 3: Output
+                let action = makeOutputAction()
+                try await action.execute(text: processedText)
 
                 // Record in history
-                let trimmedResult = actionResult?.trimmingCharacters(in: .whitespacesAndNewlines)
                 let record = TranscriptionRecord(
                     text: text,
                     modelName: "Push-to-Type",
                     recordingDuration: 0,
-                    actionResult: trimmedResult?.isEmpty == false ? trimmedResult : nil,
+                    actionResult: nil,
                     capturedSelection: selection
                 )
                 transcriptionHistory.addRecord(record)
@@ -119,6 +136,7 @@ final class PushToTypeCoordinator {
                 dismissIndicatorAfterDelay(Self.successIndicatorDuration)
                 Logger.app.info("Push-to-type: complete")
             } catch {
+                outputDestinationOverride = nil
                 recordingIndicator.update(phase: .error, message: error.localizedDescription)
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
                 Logger.app.error("Push-to-type failed: \(error)")
@@ -128,17 +146,22 @@ final class PushToTypeCoordinator {
         }
     }
 
-    private func makeAction() -> any PostTranscriptionAction {
+    private func makeOutputAction() -> any PostTranscriptionAction {
         let mode = settings.activeMode
         let targetPID = previousActiveApp?.processIdentifier
-        switch mode.actionType {
+
+        let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
+        outputDestinationOverride = nil
+
+        let destination = settings.outputDestination(for: destinationID)
+
+        switch destination.type {
         case .paste:
             return PasteAction(targetAppPID: targetPID)
-        case .bash:
-            return BashAction(
-                commandTemplate: mode.bashCommand,
-                pasteOutput: mode.pasteScriptOutput,
-                targetAppPID: targetPID
+        case .bashScript:
+            return OutputBashAction(
+                name: destination.name,
+                commandTemplate: destination.bashCommand
             )
         }
     }

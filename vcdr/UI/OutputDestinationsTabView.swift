@@ -1,0 +1,200 @@
+import SwiftUI
+
+/// List of output destinations with NavigationLink rows.
+/// Lives inside a NavigationStack owned by MainWindowView.
+struct OutputDestinationsListView: View {
+    @Bindable var settings: AppSettings
+    @Binding var path: NavigationPath
+
+    // MARK: - Constants
+    private static let newDestinationBaseName = "New Destination"
+
+    var body: some View {
+        List {
+            ForEach(settings.outputDestinations) { destination in
+                NavigationLink(value: OutputDestinationNavID(id: destination.id)) {
+                    OutputDestinationRowView(
+                        destination: destination,
+                        isInUse: isDestinationInUse(destination)
+                    )
+                }
+                .contextMenu {
+                    if !destination.isBuiltIn {
+                        Button("Delete", role: .destructive) {
+                            deleteDestination(destination)
+                        }
+                        .disabled(isDestinationInUse(destination))
+                    }
+                }
+            }
+            .onDelete { indexSet in
+                for index in indexSet {
+                    let dest = settings.outputDestinations[index]
+                    if !dest.isBuiltIn && !isDestinationInUse(dest) {
+                        deleteDestination(dest)
+                    }
+                }
+            }
+            .onMove { source, destination in
+                settings.outputDestinations.move(fromOffsets: source, toOffset: destination)
+            }
+        }
+        .navigationTitle("Output")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: addDestination) {
+                    Image(systemName: "plus")
+                }
+                .help("Add new output destination")
+            }
+        }
+    }
+
+    private func addDestination() {
+        let newDest = OutputDestination.makeNewBashScript(
+            name: nextUniqueName()
+        )
+        settings.outputDestinations.append(newDest)
+        path.append(OutputDestinationNavID(id: newDest.id))
+    }
+
+    private func nextUniqueName() -> String {
+        let existingNames = Set(settings.outputDestinations.map(\.name))
+        if !existingNames.contains(Self.newDestinationBaseName) {
+            return Self.newDestinationBaseName
+        }
+        var counter = 1
+        while existingNames.contains("\(Self.newDestinationBaseName) (\(counter))") {
+            counter += 1
+        }
+        return "\(Self.newDestinationBaseName) (\(counter))"
+    }
+
+    /// A destination is "in use" if any mode references it as its default output
+    private func isDestinationInUse(_ destination: OutputDestination) -> Bool {
+        settings.modes.contains { $0.defaultOutputDestinationID == destination.id }
+    }
+
+    private func deleteDestination(_ destination: OutputDestination) {
+        guard !destination.isBuiltIn, !isDestinationInUse(destination) else { return }
+        settings.outputDestinations.removeAll { $0.id == destination.id }
+    }
+}
+
+// MARK: - Destination Row
+
+private struct OutputDestinationRowView: View {
+    let destination: OutputDestination
+    let isInUse: Bool
+
+    var body: some View {
+        HStack {
+            Text(destination.symbol)
+                .font(.title3)
+                .frame(width: 24)
+
+            VStack(alignment: .leading) {
+                Text(destination.name)
+                Text(destination.type.displayName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if !destination.activationKey.isEmpty {
+                Text(destination.activationKey)
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+            }
+
+            if destination.isBuiltIn {
+                Text("Built-in")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if isInUse {
+                Text("In Use")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - Destination Detail
+
+struct OutputDestinationDetailView: View {
+    @Binding var destination: OutputDestination
+    @FocusState private var isNameFieldFocused: Bool
+
+    // MARK: - Constants
+    private static let selectAllDelay: Duration = .milliseconds(100)
+    private static let maxActivationKeyLength = 1
+
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Name")
+                        .foregroundStyle(.secondary)
+                    TextField("Name", text: $destination.name)
+                        .labelsHidden()
+                        .focused($isNameFieldFocused)
+                }
+
+                if !destination.isBuiltIn {
+                    // Type is not editable for built-in destinations
+                    // Currently only shows "Bash Script" since that's the only user-creatable type
+                    Picker("Type", selection: $destination.type) {
+                        ForEach(OutputDestinationType.userCreatable, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Symbol")
+                        .foregroundStyle(.secondary)
+                    TextField("Symbol", text: $destination.symbol)
+                        .labelsHidden()
+                        .help("Displayed in the mode switcher to identify this destination")
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Activation Key")
+                        .foregroundStyle(.secondary)
+                    TextField("Key", text: $destination.activationKey)
+                        .labelsHidden()
+                        .onChange(of: destination.activationKey) { _, newValue in
+                            // Enforce single character limit
+                            if newValue.count > Self.maxActivationKeyLength {
+                                destination.activationKey = String(newValue.prefix(Self.maxActivationKeyLength))
+                            }
+                        }
+                        .help("Press this key in the mode switcher to override the output destination")
+                }
+
+                if destination.type == .bashScript {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Command")
+                            .foregroundStyle(.secondary)
+                        TextField("Command", text: $destination.bashCommand)
+                            .labelsHidden()
+                            .help("The script receives text via $VCDR_TEXT. Use {} as placeholder.")
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(destination.name)
+        .onAppear {
+            isNameFieldFocused = true
+            Task { @MainActor in
+                try? await Task.sleep(for: Self.selectAllDelay)
+                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+            }
+        }
+    }
+}

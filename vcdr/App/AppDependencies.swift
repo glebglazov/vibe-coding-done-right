@@ -58,6 +58,12 @@ final class AppDependencies {
             selectionCapturer: selectionCapturer,
             transcriptionHistory: history
         )
+
+        // Wire output destination override from mode switcher to both coordinators
+        modeSwitcherCoordinator.onOutputDestinationOverride = { [weak self] destinationID in
+            self?.coordinator.outputDestinationOverride = destinationID
+            self?.pushToTypeCoordinator.outputDestinationOverride = destinationID
+        }
     }
 
     func initialize() async {

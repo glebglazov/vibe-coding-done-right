@@ -1,15 +1,24 @@
 import Foundation
 
+enum ProcessingType: String, Codable, CaseIterable {
+    case none
+    case bashScript
+}
+
 struct Mode: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
-    var actionType: PostTranscriptionActionType
-    var bashCommand: String
+
+    // Processing
     var terminatorTemplateEnabled: Bool
     var terminatorTemplate: String
+    var processingType: ProcessingType
+    var processingCommand: String
     var systemPromptEnabled: Bool
     var systemPrompt: String
-    var pasteScriptOutput: Bool
+
+    // Output
+    var defaultOutputDestinationID: UUID
 
     // MARK: - Constants
 
@@ -18,14 +27,15 @@ struct Mode: Identifiable, Codable, Equatable {
 
     // MARK: - Text Pipeline
 
-    /// Transforms raw transcription text by applying the mode's terminator, system
-    /// prompt (bash-only), and appending any captured selection from the frontmost app.
-    func transformTranscription(_ text: String, capturedSelection: String?) -> String {
+    /// Pre-processes transcription text by applying terminator, system prompt
+    /// (bash processing only), and appending any captured selection.
+    /// This is step 1 of the pipeline — before the optional processing script.
+    func applyPreProcessing(_ text: String, capturedSelection: String?) -> String {
         var result = terminatorTemplateEnabled
             ? Self.applyTerminator(text, terminator: terminatorTemplate)
             : text
 
-        if actionType == .bash && systemPromptEnabled && !systemPrompt.isEmpty {
+        if processingType == .bashScript && systemPromptEnabled && !systemPrompt.isEmpty {
             result = systemPrompt + "\n\n" + result
         }
 
@@ -65,48 +75,84 @@ struct Mode: Identifiable, Codable, Equatable {
     }
 
     static func makeDefault() -> Mode {
-        Mode(
-            id: UUID(),
-            name: "Default",
-            actionType: .paste,
-            bashCommand: "echo {}"
-        )
+        Mode(id: UUID(), name: "Default")
     }
 
     init(
         id: UUID,
         name: String,
-        actionType: PostTranscriptionActionType,
-        bashCommand: String,
+        processingType: ProcessingType = .none,
+        processingCommand: String = "",
         terminatorTemplateEnabled: Bool = false,
         terminatorTemplate: String = defaultTerminatorTemplate,
         systemPromptEnabled: Bool = false,
         systemPrompt: String = "",
-        pasteScriptOutput: Bool = false
+        defaultOutputDestinationID: UUID = OutputDestination.builtInPasteID
     ) {
         self.id = id
         self.name = name
-        self.actionType = actionType
-        self.bashCommand = bashCommand
+        self.processingType = processingType
+        self.processingCommand = processingCommand
         self.terminatorTemplateEnabled = terminatorTemplateEnabled
         self.terminatorTemplate = terminatorTemplate
         self.systemPromptEnabled = systemPromptEnabled
         self.systemPrompt = systemPrompt
-        self.pasteScriptOutput = pasteScriptOutput
+        self.defaultOutputDestinationID = defaultOutputDestinationID
     }
 
     // MARK: - Codable (backward-compatible)
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name
+        case terminatorTemplateEnabled, terminatorTemplate
+        case processingType, processingCommand
+        case systemPromptEnabled, systemPrompt
+        case defaultOutputDestinationID
+        // Legacy keys (read-only, for migration)
+        case actionType, bashCommand, pasteScriptOutput
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(terminatorTemplateEnabled, forKey: .terminatorTemplateEnabled)
+        try container.encode(terminatorTemplate, forKey: .terminatorTemplate)
+        try container.encode(processingType, forKey: .processingType)
+        try container.encode(processingCommand, forKey: .processingCommand)
+        try container.encode(systemPromptEnabled, forKey: .systemPromptEnabled)
+        try container.encode(systemPrompt, forKey: .systemPrompt)
+        try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
+        // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
+        // Once saved in new format, old keys are gone (one-way migration).
+    }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
-        actionType = try container.decode(PostTranscriptionActionType.self, forKey: .actionType)
-        bashCommand = try container.decode(String.self, forKey: .bashCommand)
         terminatorTemplateEnabled = try container.decodeIfPresent(Bool.self, forKey: .terminatorTemplateEnabled) ?? false
         terminatorTemplate = try container.decodeIfPresent(String.self, forKey: .terminatorTemplate) ?? Self.defaultTerminatorTemplate
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
-        pasteScriptOutput = try container.decodeIfPresent(Bool.self, forKey: .pasteScriptOutput) ?? false
+        defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteID
+
+        // New fields
+        if let newProcessingType = try container.decodeIfPresent(ProcessingType.self, forKey: .processingType) {
+            self.processingType = newProcessingType
+            self.processingCommand = try container.decodeIfPresent(String.self, forKey: .processingCommand) ?? ""
+        } else {
+            // Migrate from legacy actionType + bashCommand
+            let legacyActionType = try container.decodeIfPresent(PostTranscriptionActionType.self, forKey: .actionType)
+            let legacyBashCommand = try container.decodeIfPresent(String.self, forKey: .bashCommand) ?? ""
+            switch legacyActionType {
+            case .bash:
+                self.processingType = .bashScript
+                self.processingCommand = legacyBashCommand
+            default:
+                self.processingType = .none
+                self.processingCommand = ""
+            }
+        }
     }
 }

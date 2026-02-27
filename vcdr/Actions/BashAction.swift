@@ -6,15 +6,12 @@ struct BashAction: PostTranscriptionAction {
     let name = "Bash Command"
     let commandTemplate: String
 
-    /// Whether to simulate Cmd+V to paste script output into the previous app
-    private let pasteOutput: Bool
     /// PID of the app to restore focus to when pasting output.
     /// Using pid_t instead of NSRunningApplication to keep the action Sendable.
     private let targetAppPID: pid_t?
 
-    init(commandTemplate: String, pasteOutput: Bool = false, targetAppPID: pid_t? = nil) {
+    init(commandTemplate: String, targetAppPID: pid_t? = nil) {
         self.commandTemplate = commandTemplate
-        self.pasteOutput = pasteOutput
         self.targetAppPID = targetAppPID
     }
 
@@ -26,11 +23,6 @@ struct BashAction: PostTranscriptionAction {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(trimmed, forType: .string)
             Logger.actions.info("Script output copied to clipboard")
-
-            if pasteOutput {
-                let pasteAction = PasteAction(targetAppPID: targetAppPID)
-                try await pasteAction.execute(text: trimmed)
-            }
         }
 
         return output

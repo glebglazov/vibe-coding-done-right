@@ -25,6 +25,10 @@ final class RecordingCoordinator {
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
 
+    /// Temporary output destination override set via mode switcher.
+    /// Cleared after one transcription completes (or on error/cancel).
+    var outputDestinationOverride: UUID?
+
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
     private var recordingStartInstant: ContinuousClock.Instant?
@@ -218,6 +222,7 @@ final class RecordingCoordinator {
 
             guard !text.isEmpty else {
                 capturedSelection = nil
+                outputDestinationOverride = nil
                 state = .error("No speech detected")
                 recordingIndicator.update(phase: .error, message: "No speech detected")
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -227,25 +232,39 @@ final class RecordingCoordinator {
 
             let mode = settings.activeMode
             let selection = capturedSelection
-            let transformedText = mode.transformTranscription(text, capturedSelection: capturedSelection)
             capturedSelection = nil
 
+            // Step 1: Pre-processing (terminator, system prompt, captured selection)
+            let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection)
+
+            // Step 2: Processing (optional bash script)
+            let processedText: String
+            switch mode.processingType {
+            case .none:
+                processedText = preprocessedText
+            case .bashScript:
+                processedText = try await BashRunner.run(
+                    command: mode.processingCommand,
+                    text: preprocessedText
+                )
+            }
+
             state = .executing
-            Logger.app.info("Push-to-talk: executing action")
+            Logger.app.info("Pipeline: executing output action")
 
-            let action = makeAction()
-            let actionResult = try await action.execute(text: transformedText)
+            // Step 3: Output (paste or bash script destination)
+            let action = makeOutputAction()
+            try await action.execute(text: processedText)
 
-            // Record in history (raw transcription text, before mode transforms)
+            // Record in history (raw transcription text, before any transforms)
             let durationSeconds = recordingDuration.map {
                 Double($0.components.seconds) + Double($0.components.attoseconds) / 1e18
             } ?? 0
-            let trimmedResult = actionResult?.trimmingCharacters(in: .whitespacesAndNewlines)
             let record = TranscriptionRecord(
                 text: text,
                 modelName: transcriptionProvider.name,
                 recordingDuration: durationSeconds,
-                actionResult: trimmedResult?.isEmpty == false ? trimmedResult : nil,
+                actionResult: nil,
                 capturedSelection: selection
             )
             transcriptionHistory.addRecord(record)
@@ -253,28 +272,35 @@ final class RecordingCoordinator {
             state = .idle
             recordingIndicator.update(phase: .success)
             dismissIndicatorAfterDelay(Self.successIndicatorDuration)
-            Logger.app.info("Push-to-talk: complete")
+            Logger.app.info("Pipeline: complete")
         } catch {
             capturedSelection = nil
+            outputDestinationOverride = nil
             state = .error(error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
-            Logger.app.error("Push-to-talk failed: \(error)")
+            Logger.app.error("Pipeline failed: \(error)")
             resetAfterDelay()
         }
     }
 
-    private func makeAction() -> any PostTranscriptionAction {
+    private func makeOutputAction() -> any PostTranscriptionAction {
         let mode = settings.activeMode
         let targetPID = previousActiveApp?.processIdentifier
-        switch mode.actionType {
+
+        // Use temporary override if set, otherwise mode's default destination
+        let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
+        outputDestinationOverride = nil
+
+        let destination = settings.outputDestination(for: destinationID)
+
+        switch destination.type {
         case .paste:
             return PasteAction(targetAppPID: targetPID)
-        case .bash:
-            return BashAction(
-                commandTemplate: mode.bashCommand,
-                pasteOutput: mode.pasteScriptOutput,
-                targetAppPID: targetPID
+        case .bashScript:
+            return OutputBashAction(
+                name: destination.name,
+                commandTemplate: destination.bashCommand
             )
         }
     }
@@ -332,6 +358,7 @@ final class RecordingCoordinator {
 
         Task { await mediaPlaybackController.resumeIfNeeded() }
         capturedSelection = nil
+        outputDestinationOverride = nil
         recordingStartInstant = nil
 
         recordingIndicator.showCancelled()

@@ -15,7 +15,8 @@ struct ModesListView: View {
                 NavigationLink(value: mode.id) {
                     ModeRowView(
                         mode: mode,
-                        isActive: mode.id == settings.activeModeID
+                        isActive: mode.id == settings.activeModeID,
+                        outputDestinationName: settings.outputDestination(for: mode.defaultOutputDestinationID).name
                     )
                 }
                 .contextMenu {
@@ -55,9 +56,7 @@ struct ModesListView: View {
     private func addMode() {
         let newMode = Mode(
             id: UUID(),
-            name: nextUniqueModeName(),
-            actionType: .paste,
-            bashCommand: "echo {}"
+            name: nextUniqueModeName()
         )
         settings.modes.append(newMode)
         path.append(newMode.id)
@@ -90,12 +89,13 @@ struct ModesListView: View {
 private struct ModeRowView: View {
     let mode: Mode
     let isActive: Bool
+    let outputDestinationName: String
 
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
                 Text(mode.name)
-                Text(mode.actionType == .paste ? "Paste" : "Script")
+                Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -107,12 +107,18 @@ private struct ModeRowView: View {
             }
         }
     }
+
+    private var subtitle: String {
+        let processing = mode.processingType == .bashScript ? "Script" : "Direct"
+        return "\(processing) → \(outputDestinationName)"
+    }
 }
 
 // MARK: - Mode Detail View (pushed via NavigationLink)
 
 struct ModeDetailView: View {
     @Binding var mode: Mode
+    let outputDestinations: [OutputDestination]
     @FocusState private var isNameFieldFocused: Bool
 
     // MARK: - Constants
@@ -123,6 +129,7 @@ struct ModeDetailView: View {
 
     var body: some View {
         Form {
+            // Name section
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Name")
@@ -131,24 +138,34 @@ struct ModeDetailView: View {
                         .labelsHidden()
                         .focused($isNameFieldFocused)
                 }
+            }
 
-                Picker("Type", selection: $mode.actionType) {
-                    Text("Paste (Cmd+V)").tag(PostTranscriptionActionType.paste)
-                    Text("Custom script").tag(PostTranscriptionActionType.bash)
+            // Processing section
+            Section("Processing") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Append terminator template", isOn: $mode.terminatorTemplateEnabled)
+
+                    if mode.terminatorTemplateEnabled {
+                        TextField("Terminator template", text: $mode.terminatorTemplate)
+                            .labelsHidden()
+                            .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
+                    }
+                }
+
+                Picker("Processing", selection: $mode.processingType) {
+                    Text("None").tag(ProcessingType.none)
+                    Text("Bash Script").tag(ProcessingType.bashScript)
                 }
                 .pickerStyle(.radioGroup)
 
-                if mode.actionType == .bash {
+                if mode.processingType == .bashScript {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Command")
                             .foregroundStyle(.secondary)
-                        TextField("Command", text: $mode.bashCommand)
+                        TextField("Command", text: $mode.processingCommand)
                             .labelsHidden()
-                            .help("Use {} as placeholder for transcribed text")
+                            .help("Use {} as placeholder for transcribed text. Text also available as $VCDR_TEXT.")
                     }
-
-                    Toggle("Paste output to current app", isOn: $mode.pasteScriptOutput)
-                        .help("Paste the script's stdout into the currently-active app after execution")
 
                     VStack(alignment: .leading, spacing: 8) {
                         Toggle("Include system prompt in $VCDR_TEXT", isOn: $mode.systemPromptEnabled)
@@ -162,14 +179,14 @@ struct ModeDetailView: View {
                         }
                     }
                 }
+            }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Append terminator template", isOn: $mode.terminatorTemplateEnabled)
-
-                    if mode.terminatorTemplateEnabled {
-                        TextField("Terminator template", text: $mode.terminatorTemplate)
-                            .labelsHidden()
-                            .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
+            // Output section
+            Section("Output") {
+                Picker("Default output destination", selection: $mode.defaultOutputDestinationID) {
+                    ForEach(outputDestinations) { destination in
+                        Text("\(destination.symbol) \(destination.name)")
+                            .tag(destination.id)
                     }
                 }
             }
