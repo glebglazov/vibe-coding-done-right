@@ -134,6 +134,10 @@ final class RecordingCoordinator {
         previousActiveApp = NSWorkspace.shared.frontmostApplication
         capturedSelection = selectionCapturer.capture()
 
+        // Show indicator immediately for visual feedback — the media pause
+        // and recording start below are async and can take 200-400ms.
+        recordingIndicator.show(withBorder: isToggleMode)
+
         if settings.audioSettings.pauseMediaDuringRecording {
             await mediaPlaybackController.pauseIfNeeded()
         }
@@ -143,7 +147,6 @@ final class RecordingCoordinator {
             state = .recording
             recordingStartInstant = .now
             escCancelManager.isEnabled = true
-            recordingIndicator.show(withBorder: isToggleMode)
             Logger.app.info("Recording started (toggle=\(self.isToggleMode))")
 
             // If the hotkey was released while we were awaiting startRecording(),
@@ -157,7 +160,6 @@ final class RecordingCoordinator {
             await mediaPlaybackController.resumeIfNeeded()
             escCancelManager.isEnabled = false
             state = .error("Failed to start recording")
-            recordingIndicator.show()
             recordingIndicator.update(phase: .error, message: "Failed to start recording")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Failed to start recording")

@@ -120,6 +120,7 @@
 				E5D6B8162F466C82002066AA /* Sources */,
 				E5D6B8172F466C82002066AA /* Frameworks */,
 				E5D6B8182F466C82002066AA /* Resources */,
+				A1B2C3D4E5F60001AABBCCDD /* Copy MediaRemote Adapter */,
 			);
 			buildRules = (
 			);
@@ -252,6 +253,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A1B2C3D4E5F60001AABBCCDD /* Copy MediaRemote Adapter */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/vendor/MediaRemote/mediaremote-adapter.pl",
+				"$(PROJECT_DIR)/vendor/MediaRemote/MediaRemoteAdapter.dylib",
+			);
+			name = "Copy MediaRemote Adapter";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/MediaRemote/mediaremote-adapter.pl",
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/MediaRemote/MediaRemoteAdapter.dylib",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/MediaRemote\"\nmkdir -p \"$DEST\"\ncp \"${PROJECT_DIR}/vendor/MediaRemote/mediaremote-adapter.pl\" \"$DEST/\"\ncp \"${PROJECT_DIR}/vendor/MediaRemote/MediaRemoteAdapter.dylib\" \"$DEST/\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		E5D6B8162F466C82002066AA /* Sources */ = {

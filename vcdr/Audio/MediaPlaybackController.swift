@@ -4,10 +4,91 @@ import OSLog
 
 @MainActor
 final class MediaPlaybackController {
-    /// Apps that were paused by us during recording, to be resumed afterwards.
+    private let mediaRemoteClient = MediaRemoteClient()
+
+    // MARK: - Backend Selection
+
+    private enum Backend {
+        case mediaRemote
+        case appleScript
+    }
+
+    /// Resolved lazily on first `pauseIfNeeded()` call via the adapter's `test` command.
+    private var backend: Backend?
+
+    // MARK: - State tracking
+
+    /// MediaRemote backend: whether we sent a pause command this session.
+    private var didPauseViaMediaRemote = false
+    /// AppleScript backend: which specific apps we paused this session.
     private var pausedApps: Set<MediaApp> = []
 
-    // MARK: - Supported media apps
+    // MARK: - Pause / Resume
+
+    /// Pauses the active media player if anything is currently playing.
+    /// On first call, detects whether the MediaRemote adapter is available
+    /// and caches the result for all subsequent calls.
+    func pauseIfNeeded() async {
+        let backend = await resolveBackend()
+
+        switch backend {
+        case .mediaRemote:
+            await pauseViaMediaRemote()
+        case .appleScript:
+            await pauseViaAppleScript()
+        }
+    }
+
+    /// Resumes playback in any apps that were paused by ``pauseIfNeeded()``.
+    func resumeIfNeeded() async {
+        guard let backend else { return }
+
+        switch backend {
+        case .mediaRemote:
+            await resumeViaMediaRemote()
+        case .appleScript:
+            await resumeViaAppleScript()
+        }
+    }
+
+    // MARK: - Backend Resolution
+
+    private func resolveBackend() async -> Backend {
+        if let backend { return backend }
+
+        let available = await mediaRemoteClient.test()
+        let resolved: Backend = available ? .mediaRemote : .appleScript
+        backend = resolved
+
+        Logger.audio.info("Media playback backend: \(available ? "MediaRemote" : "AppleScript")")
+        return resolved
+    }
+
+    // MARK: - MediaRemote Backend
+
+    private func pauseViaMediaRemote() async {
+        didPauseViaMediaRemote = false
+
+        guard let nowPlaying = await mediaRemoteClient.getNowPlaying(),
+              nowPlaying.isPlaying else {
+            Logger.audio.info("MediaRemote: nothing playing, skipping pause")
+            return
+        }
+
+        await mediaRemoteClient.pause()
+        didPauseViaMediaRemote = true
+        Logger.audio.info("MediaRemote: paused (\(nowPlaying.title ?? "unknown"))")
+    }
+
+    private func resumeViaMediaRemote() async {
+        guard didPauseViaMediaRemote else { return }
+        didPauseViaMediaRemote = false
+
+        await mediaRemoteClient.play()
+        Logger.audio.info("MediaRemote: resumed playback")
+    }
+
+    // MARK: - AppleScript Backend (fallback)
 
     private enum MediaApp: String, CaseIterable, Hashable {
         case music = "Music"
@@ -43,17 +124,9 @@ final class MediaPlaybackController {
         }
     }
 
-    // MARK: - Constants
-
     private static let osascriptPath = "/usr/bin/osascript"
 
-    // MARK: - Pause / Resume
-
-    /// Pauses any currently-playing media apps. Tracks which apps were paused
-    /// so that only those apps are resumed later. Unlike the previous CGEvent
-    /// media key approach, this sends explicit pause commands via AppleScript —
-    /// it will never accidentally start playback or launch an app.
-    func pauseIfNeeded() async {
+    private func pauseViaAppleScript() async {
         pausedApps = []
 
         await withTaskGroup(of: MediaApp?.self) { group in
@@ -72,15 +145,14 @@ final class MediaPlaybackController {
         }
 
         if pausedApps.isEmpty {
-            Logger.audio.info("No media apps were playing, nothing paused")
+            Logger.audio.info("AppleScript: no media apps were playing, nothing paused")
         } else {
             let names = pausedApps.map(\.rawValue).sorted().joined(separator: ", ")
-            Logger.audio.info("Paused media apps: \(names)")
+            Logger.audio.info("AppleScript: paused \(names)")
         }
     }
 
-    /// Resumes playback in any apps that were paused by ``pauseIfNeeded()``.
-    func resumeIfNeeded() async {
+    private func resumeViaAppleScript() async {
         guard !pausedApps.isEmpty else { return }
 
         let appsToResume = pausedApps
@@ -95,13 +167,9 @@ final class MediaPlaybackController {
         }
 
         let names = appsToResume.map(\.rawValue).sorted().joined(separator: ", ")
-        Logger.audio.info("Resumed media apps: \(names)")
+        Logger.audio.info("AppleScript: resumed \(names)")
     }
 
-    // MARK: - AppleScript execution
-
-    /// Runs an AppleScript via `/usr/bin/osascript` off the main thread and
-    /// returns the trimmed stdout. Returns `nil` on failure.
     private func runAppleScript(_ source: String) async -> String? {
         await Task.detached {
             let process = Process()
