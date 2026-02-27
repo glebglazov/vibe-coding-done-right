@@ -12,23 +12,49 @@ final class ModeSwitcherPanel {
     private static let rowHeight: CGFloat = 32
     private static let verticalPadding: CGFloat = 8
     private static let panelOffsetBelowMenuBar: CGFloat = 8
+    private static let separatorHeight: CGFloat = 17
+    private static let hintRowHeight: CGFloat = 24
+    private static let resizeAnimationDuration: CGFloat = 0.15
 
-    func show(modes: [Mode], activeModeID: UUID, onSelect: @escaping (UUID) -> Void) {
+    /// Stored screen positioning state for reuse during resize
+    private var screenFrame: NSRect = .zero
+    private var menuBarHeight: CGFloat = 0
+
+    func show(
+        modes: [Mode],
+        activeModeID: UUID,
+        outputDestinations: [OutputDestination],
+        showHint: Bool,
+        onSelect: @escaping (UUID) -> Void,
+        onOutputDestinationSelect: @escaping (UUID) -> Void
+    ) {
         hide()
 
         let activeIndex = modes.firstIndex(where: { $0.id == activeModeID }) ?? 0
-        let panelHeight = Self.verticalPadding * 2 + Self.rowHeight * CGFloat(modes.count)
 
         let viewModel = ModeSwitcherViewModel(
             modes: modes,
             highlightedIndex: activeIndex,
+            outputDestinations: outputDestinations,
+            showHint: showHint,
             onSelect: { [weak self] id in
                 onSelect(id)
+                self?.hide()
+            },
+            onOutputDestinationSelect: { [weak self] id in
+                onOutputDestinationSelect(id)
                 self?.hide()
             },
             onDismiss: { [weak self] in
                 self?.hide()
             }
+        )
+
+        let panelHeight = Self.calculateHeight(
+            modeCount: modes.count,
+            destinationCount: outputDestinations.count,
+            showingDestinations: viewModel.showingDestinations,
+            showHint: showHint
         )
 
         let view = ModeSwitcherView(viewModel: viewModel)
@@ -50,11 +76,11 @@ final class ModeSwitcherPanel {
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
 
-        // Position at top center, just below the menu bar (same as recording indicator)
+        // Store screen positioning state for reuse during resize
         if let screen = NSScreen.main {
-            let screenFrame = screen.frame
+            screenFrame = screen.frame
             let visibleFrame = screen.visibleFrame
-            let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+            menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
             let x = screenFrame.midX - Self.panelWidth / 2
             let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar
             panel.setFrameOrigin(NSPoint(x: x, y: y))
@@ -63,6 +89,24 @@ final class ModeSwitcherPanel {
         panel.orderFrontRegardless()
         panel.makeKey()
         self.panel = panel
+
+        // Wire resize callback — recalculate height when destinations are toggled
+        viewModel.onResize = { [weak self, weak viewModel] in
+            guard let self, let viewModel, let panel = self.panel else { return }
+            let newHeight = Self.calculateHeight(
+                modeCount: viewModel.modes.count,
+                destinationCount: viewModel.outputDestinations.count,
+                showingDestinations: viewModel.showingDestinations,
+                showHint: viewModel.showHint
+            )
+            let x = self.screenFrame.midX - Self.panelWidth / 2
+            let y = self.screenFrame.maxY - self.menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar
+            let newFrame = NSRect(x: x, y: y, width: Self.panelWidth, height: newHeight)
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Self.resizeAnimationDuration
+                panel.animator().setFrame(newFrame, display: true)
+            }
+        }
 
         // Handle keyboard events via local monitor (works even with nonactivatingPanel + canBecomeKey)
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
@@ -77,6 +121,33 @@ final class ModeSwitcherPanel {
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             self?.hide()
         }
+    }
+
+    // MARK: - Height Calculation
+
+    private static func calculateHeight(
+        modeCount: Int,
+        destinationCount: Int,
+        showingDestinations: Bool,
+        showHint: Bool
+    ) -> CGFloat {
+        let modeRowsHeight = rowHeight * CGFloat(modeCount)
+        let hasDestinations = destinationCount > 0
+
+        if !hasDestinations {
+            return verticalPadding * 2 + modeRowsHeight
+        }
+
+        if showingDestinations {
+            let destinationRowsHeight = rowHeight * CGFloat(destinationCount)
+            return verticalPadding * 2 + modeRowsHeight + separatorHeight + destinationRowsHeight
+        }
+
+        if showHint {
+            return verticalPadding * 2 + modeRowsHeight + separatorHeight + hintRowHeight
+        }
+
+        return verticalPadding * 2 + modeRowsHeight
     }
 
     func hide() {
@@ -107,20 +178,71 @@ private final class KeyablePanel: NSPanel {
 private final class ModeSwitcherViewModel {
     let modes: [Mode]
     var highlightedIndex: Int
+    let outputDestinations: [OutputDestination]
+    let showHint: Bool
     let onSelect: (UUID) -> Void
+    let onOutputDestinationSelect: (UUID) -> Void
     let onDismiss: () -> Void
 
-    init(modes: [Mode], highlightedIndex: Int, onSelect: @escaping (UUID) -> Void, onDismiss: @escaping () -> Void) {
+    /// Whether the destination rows are currently expanded (toggled by "?" key)
+    var showingDestinations = false
+
+    /// Callback to notify panel when content height changes (e.g. destinations toggled)
+    var onResize: (() -> Void)?
+
+    /// Destination override staged by pressing an activation key.
+    /// Applied only when the user confirms with Enter / number key / click on a mode row.
+    /// Cleared on Escape (no override applied).
+    var pendingDestinationOverrideID: UUID?
+
+    init(
+        modes: [Mode],
+        highlightedIndex: Int,
+        outputDestinations: [OutputDestination],
+        showHint: Bool,
+        onSelect: @escaping (UUID) -> Void,
+        onOutputDestinationSelect: @escaping (UUID) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
         self.modes = modes
         self.highlightedIndex = highlightedIndex
+        self.outputDestinations = outputDestinations
+        self.showHint = showHint
         self.onSelect = onSelect
+        self.onOutputDestinationSelect = onOutputDestinationSelect
         self.onDismiss = onDismiss
+    }
+
+    /// Confirms mode selection and applies any pending destination override.
+    func confirmMode(_ id: UUID) {
+        if let overrideID = pendingDestinationOverrideID {
+            onOutputDestinationSelect(overrideID)
+        }
+        onSelect(id)
+    }
+
+    /// Toggles the pending destination override. Pressing the same key twice clears it.
+    func toggleDestinationOverride(_ id: UUID) {
+        if pendingDestinationOverrideID == id {
+            pendingDestinationOverrideID = nil
+        } else {
+            pendingDestinationOverrideID = id
+        }
     }
 
     /// Returns true if the event was handled
     func handleKeyEvent(_ event: NSEvent) -> Bool {
         let keyCode = event.keyCode
-        let chars = event.charactersIgnoringModifiers ?? ""
+        let charsIgnoringModifiers = event.charactersIgnoringModifiers ?? ""
+        // Use `characters` (not `charactersIgnoringModifiers`) to detect "?" which is Shift+/
+        let chars = event.characters ?? ""
+
+        // Toggle destination list with "?" key
+        if chars == "?" && !outputDestinations.isEmpty {
+            showingDestinations.toggle()
+            onResize?()
+            return true
+        }
 
         switch keyCode {
         case 125, 38: // Down arrow, J
@@ -130,17 +252,25 @@ private final class ModeSwitcherViewModel {
             highlightedIndex = max(highlightedIndex - 1, 0)
             return true
         case 36: // Return
-            onSelect(modes[highlightedIndex].id)
+            confirmMode(modes[highlightedIndex].id)
             return true
         case 53: // Escape
             onDismiss()
             return true
         default:
-            // Number keys 1-9
-            if let number = chars.first?.wholeNumberValue,
+            // Number keys 1-9 for modes
+            if let number = charsIgnoringModifiers.first?.wholeNumberValue,
                number >= 1, number <= modes.count {
-                onSelect(modes[number - 1].id)
+                confirmMode(modes[number - 1].id)
                 return true
+            }
+            // Output destination activation keys — stage as pending override
+            if let char = charsIgnoringModifiers.first {
+                let key = String(char)
+                if let destination = outputDestinations.first(where: { $0.activationKey == key }) {
+                    toggleDestinationOverride(destination.id)
+                    return true
+                }
             }
             return false
         }
@@ -161,12 +291,36 @@ private struct ModeSwitcherView: View {
 
     var body: some View {
         VStack(spacing: 2) {
+            // Modes section
             ForEach(Array(viewModel.modes.enumerated().prefix(9)), id: \.element.id) { index, mode in
                 modeRow(index: index, mode: mode)
                     .onHover { hovering in
                         if hovering { viewModel.highlightedIndex = index }
                     }
-                    .onTapGesture { viewModel.onSelect(mode.id) }
+                    .onTapGesture { viewModel.confirmMode(mode.id) }
+            }
+
+            // Output destinations section (conditional)
+            if !viewModel.outputDestinations.isEmpty {
+                if viewModel.showingDestinations {
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    ForEach(viewModel.outputDestinations) { destination in
+                        destinationRow(destination: destination)
+                            .onTapGesture {
+                                viewModel.toggleDestinationOverride(destination.id)
+                            }
+                    }
+                } else if viewModel.showHint {
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    Text("Press ? for output options")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity)
+                }
             }
         }
         .padding(.horizontal, Self.horizontalPadding)
@@ -175,7 +329,17 @@ private struct ModeSwitcherView: View {
     }
 
     private func modeRow(index: Int, mode: Mode) -> some View {
-        HStack(spacing: 8) {
+        let isHighlighted = index == viewModel.highlightedIndex
+        let defaultDestination = viewModel.outputDestinations.first(where: { $0.id == mode.defaultOutputDestinationID })
+        // On the highlighted row, show the pending override symbol if one is staged
+        let overrideDestination = isHighlighted
+            ? viewModel.pendingDestinationOverrideID.flatMap { overrideID in
+                viewModel.outputDestinations.first(where: { $0.id == overrideID })
+            }
+            : nil
+        let displayedDestination = overrideDestination ?? defaultDestination
+
+        return HStack(spacing: 8) {
             Text("\(index + 1)")
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -185,12 +349,48 @@ private struct ModeSwitcherView: View {
                 .lineLimit(1)
 
             Spacer()
+
+            Text(displayedDestination?.symbol ?? "")
+                .font(.caption)
+                .foregroundStyle(overrideDestination != nil ? .white : .primary)
+                .padding(.horizontal, overrideDestination != nil ? 4 : 0)
+                .padding(.vertical, overrideDestination != nil ? 2 : 0)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(overrideDestination != nil ? Color.accentColor : .clear)
+                )
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: Self.rowCornerRadius)
-                .fill(index == viewModel.highlightedIndex ? Color.accentColor.opacity(0.3) : Color.clear)
+                .fill(isHighlighted ? Color.accentColor.opacity(0.3) : Color.clear)
+        )
+        .contentShape(Rectangle())
+    }
+
+    private func destinationRow(destination: OutputDestination) -> some View {
+        let isSelected = viewModel.pendingDestinationOverrideID == destination.id
+
+        return HStack(spacing: 8) {
+            Text(destination.activationKey.isEmpty ? " " : destination.activationKey)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+
+            Text(destination.symbol)
+
+            Text(destination.name)
+                .lineLimit(1)
+                .foregroundStyle(isSelected ? .primary : .secondary)
+
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: Self.rowCornerRadius)
+                .fill(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
         )
         .contentShape(Rectangle())
     }

@@ -9,6 +9,9 @@ final class ModeSwitcherCoordinator {
     private let hotkeyManager = GlobalHotkeyManager()
     private let panel = ModeSwitcherPanel()
 
+    /// Callback to set a temporary output destination override on the active coordinators
+    var onOutputDestinationOverride: ((UUID) -> Void)?
+
     init(settings: AppSettings) {
         self.settings = settings
     }
@@ -41,11 +44,20 @@ final class ModeSwitcherCoordinator {
         guard !settings.modes.isEmpty else { return }
         panel.show(
             modes: settings.modes,
-            activeModeID: settings.activeModeID
-        ) { [weak self] selectedID in
-            self?.settings.activeModeID = selectedID
-            Logger.settings.info("Mode switched via popup")
-        }
+            activeModeID: settings.activeModeID,
+            outputDestinations: settings.outputDestinations,
+            showHint: settings.showModeSwitcherHint,
+            onSelect: { [weak self] id in
+                guard let self else { return }
+                self.settings.activeModeID = id
+                Logger.settings.info("Mode switched to \(id)")
+            },
+            onOutputDestinationSelect: { [weak self] destinationID in
+                guard let self else { return }
+                self.onOutputDestinationOverride?(destinationID)
+                Logger.settings.info("Output destination override set to \(destinationID)")
+            }
+        )
     }
 
     private func toggleSwitcher() {

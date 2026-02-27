@@ -74,6 +74,16 @@ struct HomeTabView: View {
                 }
             }
 
+            Section("Mode Switcher") {
+                Toggle("Show output destination hint", isOn: Binding(
+                    get: { dependencies.settings.showModeSwitcherHint },
+                    set: { dependencies.settings.showModeSwitcherHint = $0 }
+                ))
+                Text("Shows a hint in the mode switcher about pressing ? to see output destinations.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Shortcuts") {
                 ShortcutRecorderRow(
                     label: "Toggle Recording",

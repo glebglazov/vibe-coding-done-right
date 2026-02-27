@@ -2,6 +2,8 @@ import Foundation
 import CoreGraphics
 import OSLog
 
+/// Legacy enum — kept for backward-compatible Mode decoding only.
+/// New code uses ProcessingType (for text processing) and OutputDestinationType (for output).
 enum PostTranscriptionActionType: String, CaseIterable, Codable {
     case paste = "paste"
     case bash = "bash"
@@ -54,13 +56,24 @@ final class AppSettings {
     var activeModeID: UUID {
         didSet { save() }
     }
+    var outputDestinations: [OutputDestination] {
+        didSet { save() }
+    }
     var audioSettings: AudioSettings {
+        didSet { save() }
+    }
+    var showModeSwitcherHint: Bool {
         didSet { save() }
     }
 
     /// Active mode looked up by ID, falling back to first mode
     var activeMode: Mode {
         modes.first(where: { $0.id == activeModeID }) ?? modes.first ?? Mode.makeDefault()
+    }
+
+    /// Resolves an output destination by ID, falling back to the built-in Paste
+    func outputDestination(for id: UUID) -> OutputDestination {
+        outputDestinations.first(where: { $0.id == id }) ?? outputDestinations.first ?? OutputDestination.makeDefaultPaste()
     }
 
     private let userDefaults: UserDefaults
@@ -74,7 +87,9 @@ final class AppSettings {
         static let toggleRecordingHotkey = "toggleRecordingHotkey"
         static let modes = "modes"
         static let activeModeID = "activeModeID"
+        static let outputDestinations = "outputDestinations"
         static let audioSettings = "audioSettings"
+        static let showModeSwitcherHint = "showModeSwitcherHint"
         // Legacy key for migration
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         // Legacy keys for migration
@@ -137,15 +152,25 @@ final class AppSettings {
             let oldActionType = PostTranscriptionActionType(
                 rawValue: userDefaults.string(forKey: "actionType") ?? ""
             ) ?? .paste
-            let oldBashCommand = userDefaults.string(forKey: "bashCommand") ?? "echo {}"
+            let oldBashCommand = userDefaults.string(forKey: "bashCommand") ?? ""
+            let migratedProcessingType: ProcessingType = oldActionType == .bash ? .bashScript : .none
             loadedModes = [Mode(
                 id: UUID(),
                 name: "Default",
-                actionType: oldActionType,
-                bashCommand: oldBashCommand
+                processingType: migratedProcessingType,
+                processingCommand: migratedProcessingType == .bashScript ? oldBashCommand : ""
             )]
         }
         self.modes = loadedModes
+
+        // Load output destinations
+        if let data = userDefaults.data(forKey: Keys.outputDestinations),
+           let decoded = try? JSONDecoder().decode([OutputDestination].self, from: data),
+           !decoded.isEmpty {
+            self.outputDestinations = decoded
+        } else {
+            self.outputDestinations = [OutputDestination.makeDefaultPaste()]
+        }
 
         // Load active mode ID, defaulting to first mode
         if let savedActiveID = userDefaults.string(forKey: Keys.activeModeID),
@@ -153,6 +178,13 @@ final class AppSettings {
             self.activeModeID = uuid
         } else {
             self.activeModeID = loadedModes.first?.id ?? UUID()
+        }
+
+        // Load mode switcher hint preference (default: true)
+        if userDefaults.object(forKey: Keys.showModeSwitcherHint) != nil {
+            self.showModeSwitcherHint = userDefaults.bool(forKey: Keys.showModeSwitcherHint)
+        } else {
+            self.showModeSwitcherHint = true
         }
 
         // Load audio settings (with migration from legacy preferredInputDeviceID)
@@ -185,9 +217,13 @@ final class AppSettings {
         if let encoded = try? JSONEncoder().encode(modes) {
             userDefaults.set(encoded, forKey: Keys.modes)
         }
+        if let encoded = try? JSONEncoder().encode(outputDestinations) {
+            userDefaults.set(encoded, forKey: Keys.outputDestinations)
+        }
         if let encoded = try? JSONEncoder().encode(audioSettings) {
             userDefaults.set(encoded, forKey: Keys.audioSettings)
         }
+        userDefaults.set(showModeSwitcherHint, forKey: Keys.showModeSwitcherHint)
         Logger.settings.info("Settings saved")
     }
 }
