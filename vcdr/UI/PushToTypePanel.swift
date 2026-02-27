@@ -11,8 +11,8 @@ final class PushToTypePanel {
 
     // MARK: - Constants
 
-    private static let panelWidth: CGFloat = 320
-    private static let panelHeight: CGFloat = 100
+    private static let panelWidth: CGFloat = 400
+    private static let panelHeight: CGFloat = 140
     private static let panelOffsetBelowMenuBar: CGFloat = 8
 
     func show(settings: AppSettings, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
@@ -203,32 +203,51 @@ private struct PushToTypeView: View {
     // MARK: - Constants
 
     private static let cornerRadius: CGFloat = 10
-    private static let horizontalPadding: CGFloat = 12
-    private static let verticalPadding: CGFloat = 10
-    private static let modeNameFontSize: CGFloat = 11
+    private static let textPadding: CGFloat = 12
+    private static let hintBarHPadding: CGFloat = 10
+    private static let hintBarVPadding: CGFloat = 6
+    private static let hintSpacing: CGFloat = 12
+    private static let keyCornerRadius: CGFloat = 3
+    private static let keyHPadding: CGFloat = 4
+    private static let keyVPadding: CGFloat = 1
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(viewModel.modeLabel)
-                    .font(.system(size: Self.modeNameFontSize, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("\u{21B5} submit")
-                    .font(.system(size: Self.modeNameFontSize))
-                    .foregroundStyle(.tertiary)
-            }
-
+        VStack(spacing: 0) {
             TextEditor(text: $viewModel.text)
                 .font(.system(size: 13))
                 .scrollContentBackground(.hidden)
                 .focused($isTextFieldFocused)
+                .padding(Self.textPadding)
+
+            Divider()
+
+            HStack(spacing: Self.hintSpacing) {
+                Text(viewModel.modeLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                hintLabel("\u{21B5}", "submit")
+                hintLabel("esc", "dismiss")
+            }
+            .padding(.horizontal, Self.hintBarHPadding)
+            .padding(.vertical, Self.hintBarVPadding)
         }
-        .padding(.horizontal, Self.horizontalPadding)
-        .padding(.vertical, Self.verticalPadding)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
         .onAppear {
             isTextFieldFocused = true
+        }
+    }
+
+    private func hintLabel(_ key: String, _ label: String) -> some View {
+        HStack(spacing: 2) {
+            Text(key)
+                .font(.system(.caption, design: .monospaced))
+                .padding(.horizontal, Self.keyHPadding)
+                .padding(.vertical, Self.keyVPadding)
+                .background(Color.secondary.opacity(0.2), in: RoundedRectangle(cornerRadius: Self.keyCornerRadius))
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
