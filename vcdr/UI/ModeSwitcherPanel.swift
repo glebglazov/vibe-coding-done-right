@@ -20,9 +20,10 @@ final class ModeSwitcherPanel {
     private static let resizeAnimationDuration: CGFloat = 0.15
 
     /// Vertical offset so the mode switcher always appears below where the recording
-    /// indicator circle sits (8pt menu bar gap + 44pt circle + 8pt spacing), ensuring
-    /// a consistent position whether recording is active or not.
-    private static let recordingIndicatorClearance: CGFloat = 60
+    /// indicator circle and mode label sit (8pt menu bar gap + 44pt circle + 4pt spacing
+    /// + ~16pt label + 8pt spacing), ensuring a consistent position whether recording
+    /// is active or not.
+    private static let recordingIndicatorClearance: CGFloat = 80
 
     /// Stored screen positioning state for reuse during resize
     private var screenFrame: NSRect = .zero

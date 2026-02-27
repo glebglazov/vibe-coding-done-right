@@ -38,7 +38,7 @@ final class AppDependencies {
         self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
         let hotkeyManager = GlobalHotkeyManager()
-        let recordingIndicator = RecordingIndicatorPanel()
+        let recordingIndicator = RecordingIndicatorPanel(settings: settings)
         let selectionCapturer = SelectionCapturer()
         self.coordinator = RecordingCoordinator(
             settings: settings,
@@ -66,10 +66,11 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator
         )
 
-        // Wire output destination override from mode switcher to both coordinators
+        // Wire output destination override from mode switcher to both coordinators + indicator label
         modeSwitcherCoordinator.onOutputDestinationOverride = { [weak self] destinationID in
             self?.coordinator.outputDestinationOverride = destinationID
             self?.pushToTypeCoordinator.outputDestinationOverride = destinationID
+            recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
 
         // Suspend esc-cancel while mode switcher is open so Escape dismisses the switcher,

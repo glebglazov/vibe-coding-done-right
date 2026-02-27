@@ -19,6 +19,8 @@ final class IndicatorPhaseState {
     var showBorder: Bool = false
     var rejectCount: Int = 0
     var errorMessage: String?
+    /// Output destination override set via mode switcher; nil means use mode default
+    var outputDestinationOverrideID: UUID?
 }
 
 // MARK: - Panel
@@ -36,17 +38,23 @@ final class RecordingIndicatorPanel {
 
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
+    private let settings: AppSettings
+
+    init(settings: AppSettings) {
+        self.settings = settings
+    }
 
     func show(withBorder: Bool = false) {
         phaseState.phase = .recording
         phaseState.showBorder = withBorder
         phaseState.errorMessage = nil
+        phaseState.outputDestinationOverrideID = nil
 
         // Always recreate the panel — the existing one may be a CancelledIndicatorView
         // from a recent Esc cancel, which doesn't reference phaseState at all.
         hide()
 
-        let hostingView = NSHostingView(rootView: RecordingIndicatorView(phaseState: phaseState))
+        let hostingView = NSHostingView(rootView: RecordingIndicatorView(phaseState: phaseState, settings: settings))
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
 
         let panel = NSPanel(
@@ -91,6 +99,10 @@ final class RecordingIndicatorPanel {
 
     var currentPhase: IndicatorPhase {
         phaseState.phase
+    }
+
+    func updateOutputDestinationOverride(_ id: UUID?) {
+        phaseState.outputDestinationOverrideID = id
     }
 
     func hide() {
@@ -220,7 +232,12 @@ private struct RecordingIndicatorView: View {
     private static let errorPillCornerRadius: CGFloat = 6
     private static let errorPillFontSize: CGFloat = 11
 
+    private static let modeLabelHPadding: CGFloat = 8
+    private static let modeLabelVPadding: CGFloat = 2
+    private static let modeLabelCornerRadius: CGFloat = 6
+
     let phaseState: IndicatorPhaseState
+    let settings: AppSettings
     @State private var animating = false
 
     var body: some View {
@@ -260,6 +277,19 @@ private struct RecordingIndicatorView: View {
                         .foregroundStyle(.red)
                         .transition(.opacity)
                 }
+            }
+
+            if phaseState.phase == .recording {
+                let destinationID = phaseState.outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
+                let destination = settings.outputDestination(for: destinationID)
+                Text("\(settings.activeMode.name) · \(destination.symbol)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, Self.modeLabelHPadding)
+                    .padding(.vertical, Self.modeLabelVPadding)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.modeLabelCornerRadius))
+                    .shadow(radius: 2)
+                    .transition(.opacity)
             }
 
             if let message = phaseState.errorMessage, phaseState.phase == .error {
