@@ -9,8 +9,13 @@ final class ModeSwitcherCoordinator {
     private let hotkeyManager = GlobalHotkeyManager()
     private let panel = ModeSwitcherPanel()
 
-    /// Callback to set a temporary output destination override on the active coordinators
-    var onOutputDestinationOverride: ((UUID) -> Void)?
+    /// Callback to set or clear a temporary output destination override on the active coordinators.
+    /// Called with a UUID to set, or nil to clear.
+    var onOutputDestinationOverride: ((UUID?) -> Void)?
+
+    /// Tracks the currently active output destination override so the mode switcher
+    /// can pre-populate its pending state when reopened.
+    private(set) var currentOutputDestinationOverrideID: UUID?
 
     /// Called when the mode switcher panel becomes visible
     var onPanelShow: (() -> Void)?
@@ -54,23 +59,40 @@ final class ModeSwitcherCoordinator {
 
     func showSwitcher() {
         guard !settings.modes.isEmpty else { return }
+        let activeModeID = settings.activeModeID
         panel.show(
             modes: settings.modes,
-            activeModeID: settings.activeModeID,
+            activeModeID: activeModeID,
             outputDestinations: settings.outputDestinations,
             showHint: settings.showModeSwitcherHint,
+            currentOutputDestinationOverrideID: currentOutputDestinationOverrideID,
             onSelect: { [weak self] id in
                 guard let self else { return }
+                let modeChanged = activeModeID != id
                 self.settings.activeModeID = id
+                if modeChanged {
+                    self.currentOutputDestinationOverrideID = nil
+                    self.onOutputDestinationOverride?(nil)
+                }
                 Logger.settings.info("Mode switched to \(id)")
             },
             onOutputDestinationSelect: { [weak self] destinationID in
                 guard let self else { return }
+                self.currentOutputDestinationOverrideID = destinationID
                 self.onOutputDestinationOverride?(destinationID)
-                Logger.settings.info("Output destination override set to \(destinationID)")
+                if let destinationID {
+                    Logger.settings.info("Output destination override set to \(destinationID)")
+                } else {
+                    Logger.settings.info("Output destination override cleared")
+                }
             }
         )
         onPanelShow?()
+    }
+
+    /// Clears the tracked override (called after dictation consumes or cancels the override).
+    func clearOutputDestinationOverride() {
+        currentOutputDestinationOverrideID = nil
     }
 
     private func toggleSwitcher() {

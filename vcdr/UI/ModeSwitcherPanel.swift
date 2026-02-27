@@ -29,23 +29,35 @@ final class ModeSwitcherPanel {
     private var screenFrame: NSRect = .zero
     private var menuBarHeight: CGFloat = 0
 
+    /// Stored reference to the view model so we can inspect pending override state on dismiss.
+    private var viewModel: ModeSwitcherViewModel?
+
+    /// Raw callback for clearing override on non-confirmed dismiss (avoids re-entrant hide).
+    private var onDismissOverrideClear: (() -> Void)?
+
     func show(
         modes: [Mode],
         activeModeID: UUID,
         outputDestinations: [OutputDestination],
         showHint: Bool,
+        currentOutputDestinationOverrideID: UUID?,
         onSelect: @escaping (UUID) -> Void,
-        onOutputDestinationSelect: @escaping (UUID) -> Void
+        onOutputDestinationSelect: @escaping (UUID?) -> Void
     ) {
         hide()
 
         let activeIndex = modes.firstIndex(where: { $0.id == activeModeID }) ?? 0
 
+        // Store raw callback for dismiss path (does not call hide)
+        self.onDismissOverrideClear = { onOutputDestinationSelect(nil) }
+
         let viewModel = ModeSwitcherViewModel(
             modes: modes,
+            activeModeID: activeModeID,
             highlightedIndex: activeIndex,
             outputDestinations: outputDestinations,
             showHint: showHint,
+            initialOverrideID: currentOutputDestinationOverrideID,
             onSelect: { [weak self] id in
                 onSelect(id)
                 self?.hide()
@@ -58,6 +70,7 @@ final class ModeSwitcherPanel {
                 self?.hide()
             }
         )
+        self.viewModel = viewModel
 
         let panelHeight = Self.calculateHeight(
             modeCount: modes.count,
@@ -160,6 +173,14 @@ final class ModeSwitcherPanel {
 
     func hide() {
         let wasVisible = panel != nil
+
+        // If dismissed without confirming and the user changed the pending override,
+        // clear the override entirely (user staged a change but didn't commit it).
+        if let viewModel, !viewModel.wasConfirmed,
+           viewModel.pendingDestinationOverrideID != viewModel.initialOverrideID {
+            onDismissOverrideClear?()
+        }
+
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
@@ -170,6 +191,8 @@ final class ModeSwitcherPanel {
         }
         panel?.close()
         panel = nil
+        viewModel = nil
+        onDismissOverrideClear = nil
         if wasVisible {
             onHide?()
         }
@@ -189,46 +212,66 @@ private final class KeyablePanel: NSPanel {
 @Observable
 private final class ModeSwitcherViewModel {
     let modes: [Mode]
+    let activeModeID: UUID
     var highlightedIndex: Int
     let outputDestinations: [OutputDestination]
     let showHint: Bool
     let onSelect: (UUID) -> Void
-    let onOutputDestinationSelect: (UUID) -> Void
+    let onOutputDestinationSelect: (UUID?) -> Void
     let onDismiss: () -> Void
 
-    /// Whether the destination rows are currently expanded (toggled by "?" key)
-    var showingDestinations = false
+    /// Whether the destination rows are currently expanded (toggled by "?" key).
+    /// Auto-expanded when reopening with an active override so the user can see it.
+    var showingDestinations: Bool
 
     /// Callback to notify panel when content height changes (e.g. destinations toggled)
     var onResize: (() -> Void)?
 
+    /// The override that was active when the panel opened.
+    /// Used to detect whether the user changed the override on dismiss.
+    let initialOverrideID: UUID?
+
     /// Destination override staged by pressing an activation key.
-    /// Applied only when the user confirms with Enter / number key / click on a mode row.
-    /// Cleared on Escape (no override applied).
+    /// Applied when the user confirms with Enter / number key / click on a mode row.
     var pendingDestinationOverrideID: UUID?
+
+    /// Set to true when the user confirms via Enter / number / click,
+    /// so hide() knows not to fire the dismiss-clear logic.
+    var wasConfirmed = false
 
     init(
         modes: [Mode],
+        activeModeID: UUID,
         highlightedIndex: Int,
         outputDestinations: [OutputDestination],
         showHint: Bool,
+        initialOverrideID: UUID?,
         onSelect: @escaping (UUID) -> Void,
-        onOutputDestinationSelect: @escaping (UUID) -> Void,
+        onOutputDestinationSelect: @escaping (UUID?) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.modes = modes
+        self.activeModeID = activeModeID
         self.highlightedIndex = highlightedIndex
         self.outputDestinations = outputDestinations
         self.showHint = showHint
+        self.initialOverrideID = initialOverrideID
+        self.pendingDestinationOverrideID = initialOverrideID
+        self.showingDestinations = initialOverrideID != nil
         self.onSelect = onSelect
         self.onOutputDestinationSelect = onOutputDestinationSelect
         self.onDismiss = onDismiss
     }
 
-    /// Confirms mode selection and applies any pending destination override.
+    /// Confirms mode selection and applies the pending destination override.
     func confirmMode(_ id: UUID) {
-        if let overrideID = pendingDestinationOverrideID {
-            onOutputDestinationSelect(overrideID)
+        wasConfirmed = true
+        if id == activeModeID {
+            // Same mode — apply override change (nil clears the override)
+            onOutputDestinationSelect(pendingDestinationOverrideID)
+        } else {
+            // Different mode — clear any override
+            onOutputDestinationSelect(nil)
         }
         onSelect(id)
     }

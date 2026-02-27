@@ -30,6 +30,9 @@ final class RecordingCoordinator {
     /// Cleared after one transcription completes (or on error/cancel).
     var outputDestinationOverride: UUID?
 
+    /// Called when the override is consumed or cleared (after dictation, error, or cancel).
+    var onOverrideConsumed: (() -> Void)?
+
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
     private var recordingStartInstant: ContinuousClock.Instant?
@@ -227,7 +230,7 @@ final class RecordingCoordinator {
 
             guard !text.isEmpty else {
                 capturedSelection = nil
-                outputDestinationOverride = nil
+                clearOverride()
                 state = .error("No speech detected")
                 recordingIndicator.update(phase: .error, message: "No speech detected")
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -259,7 +262,7 @@ final class RecordingCoordinator {
 
             // Step 3: Output
             let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
-            outputDestinationOverride = nil
+            clearOverride()
             let destination = settings.outputDestination(for: destinationID)
 
             if destination.type == .outputPanel {
@@ -295,7 +298,7 @@ final class RecordingCoordinator {
             Logger.app.info("Pipeline: complete")
         } catch {
             capturedSelection = nil
-            outputDestinationOverride = nil
+            clearOverride()
             state = .error(error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -389,7 +392,7 @@ final class RecordingCoordinator {
 
         Task { await mediaPlaybackController.resumeIfNeeded() }
         capturedSelection = nil
-        outputDestinationOverride = nil
+        clearOverride()
         recordingStartInstant = nil
 
         recordingIndicator.showCancelled()
@@ -425,6 +428,11 @@ final class RecordingCoordinator {
                 recordingIndicator.hide()
             }
         }
+    }
+
+    private func clearOverride() {
+        outputDestinationOverride = nil
+        onOverrideConsumed?()
     }
 
     var isHotkeyRegistered: Bool { hotkeyManager.isRegistered }
