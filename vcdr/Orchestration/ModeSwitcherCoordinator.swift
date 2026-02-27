@@ -12,8 +12,17 @@ final class ModeSwitcherCoordinator {
     /// Callback to set a temporary output destination override on the active coordinators
     var onOutputDestinationOverride: ((UUID) -> Void)?
 
+    /// Called when the mode switcher panel becomes visible
+    var onPanelShow: (() -> Void)?
+
+    /// Called when the mode switcher panel is dismissed (any path: selection, escape, click outside, toggle)
+    var onPanelHide: (() -> Void)?
+
     init(settings: AppSettings) {
         self.settings = settings
+        panel.onHide = { [weak self] in
+            self?.onPanelHide?()
+        }
     }
 
     func setupHotkey() {
@@ -24,8 +33,11 @@ final class ModeSwitcherCoordinator {
             return
         }
 
+        // Use assumeIsolated instead of Task { @MainActor in } to execute
+        // synchronously. The CGEvent tap callback runs on the main thread, but
+        // Task scheduling can be starved by key-repeat events during recording.
         hotkeyManager.onKeyDown = { [weak self] in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self?.toggleSwitcher()
             }
         }
@@ -58,6 +70,7 @@ final class ModeSwitcherCoordinator {
                 Logger.settings.info("Output destination override set to \(destinationID)")
             }
         )
+        onPanelShow?()
     }
 
     private func toggleSwitcher() {

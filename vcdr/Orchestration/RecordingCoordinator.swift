@@ -330,6 +330,20 @@ final class RecordingCoordinator {
         setupToggleRecordingHotkey()
     }
 
+    // MARK: - Esc Cancel Suspend/Resume
+
+    /// Temporarily disables the Escape-to-cancel tap so another panel (e.g. mode switcher)
+    /// can handle Escape via its own NSEvent monitor.
+    func suspendEscCancel() {
+        escCancelManager.isEnabled = false
+    }
+
+    /// Re-enables the Escape-to-cancel tap, but only while actively recording.
+    func resumeEscCancel() {
+        guard state == .recording else { return }
+        escCancelManager.isEnabled = true
+    }
+
     // MARK: - Esc Cancel
 
     private static let escapeKeyCode: CGKeyCode = 53

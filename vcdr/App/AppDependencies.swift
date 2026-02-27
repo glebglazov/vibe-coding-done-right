@@ -64,6 +64,16 @@ final class AppDependencies {
             self?.coordinator.outputDestinationOverride = destinationID
             self?.pushToTypeCoordinator.outputDestinationOverride = destinationID
         }
+
+        // Suspend esc-cancel while mode switcher is open so Escape dismisses the switcher,
+        // then re-enable it once the switcher closes (if still recording).
+        modeSwitcherCoordinator.onPanelShow = { [weak self] in
+            self?.coordinator.suspendEscCancel()
+        }
+        modeSwitcherCoordinator.onPanelHide = { [weak self] in
+            self?.coordinator.resumeEscCancel()
+        }
+
     }
 
     func initialize() async {

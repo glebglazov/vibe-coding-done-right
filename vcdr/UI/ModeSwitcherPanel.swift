@@ -6,6 +6,9 @@ final class ModeSwitcherPanel {
     private var eventMonitor: Any?
     private var localEventMonitor: Any?
 
+    /// Called when the panel is hidden (by any dismiss path: selection, escape, click outside, toggle).
+    var onHide: (() -> Void)?
+
     // MARK: - Constants
 
     private static let panelWidth: CGFloat = 220
@@ -15,6 +18,11 @@ final class ModeSwitcherPanel {
     private static let separatorHeight: CGFloat = 17
     private static let hintRowHeight: CGFloat = 24
     private static let resizeAnimationDuration: CGFloat = 0.15
+
+    /// Vertical offset so the mode switcher always appears below where the recording
+    /// indicator circle sits (8pt menu bar gap + 44pt circle + 8pt spacing), ensuring
+    /// a consistent position whether recording is active or not.
+    private static let recordingIndicatorClearance: CGFloat = 60
 
     /// Stored screen positioning state for reuse during resize
     private var screenFrame: NSRect = .zero
@@ -76,13 +84,12 @@ final class ModeSwitcherPanel {
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
 
-        // Store screen positioning state for reuse during resize
         if let screen = NSScreen.main {
             screenFrame = screen.frame
             let visibleFrame = screen.visibleFrame
             menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
             let x = screenFrame.midX - Self.panelWidth / 2
-            let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar
+            let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar - Self.recordingIndicatorClearance
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 
@@ -100,7 +107,7 @@ final class ModeSwitcherPanel {
                 showHint: viewModel.showHint
             )
             let x = self.screenFrame.midX - Self.panelWidth / 2
-            let y = self.screenFrame.maxY - self.menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar
+            let y = self.screenFrame.maxY - self.menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar - Self.recordingIndicatorClearance
             let newFrame = NSRect(x: x, y: y, width: Self.panelWidth, height: newHeight)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Self.resizeAnimationDuration
@@ -151,6 +158,7 @@ final class ModeSwitcherPanel {
     }
 
     func hide() {
+        let wasVisible = panel != nil
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
@@ -161,6 +169,9 @@ final class ModeSwitcherPanel {
         }
         panel?.close()
         panel = nil
+        if wasVisible {
+            onHide?()
+        }
     }
 
     var isVisible: Bool { panel != nil }
