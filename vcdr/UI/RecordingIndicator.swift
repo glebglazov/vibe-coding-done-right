@@ -105,31 +105,8 @@ final class RecordingIndicatorPanel {
         let hostingView = NSHostingView(rootView: CancelledIndicatorView())
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
 
-        let cancelPanel = NSPanel(
-            contentRect: hostingView.frame,
-            styleMask: [.nonactivatingPanel, .borderless],
-            backing: .buffered,
-            defer: false
-        )
-        cancelPanel.isOpaque = false
-        cancelPanel.backgroundColor = .clear
-        cancelPanel.hasShadow = false
-        cancelPanel.level = .statusBar
-        cancelPanel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        cancelPanel.contentView = hostingView
-        cancelPanel.isMovableByWindowBackground = false
-        cancelPanel.hidesOnDeactivate = false
-        cancelPanel.ignoresMouseEvents = true
-
-        if let screen = NSScreen.main ?? NSScreen.screens.first {
-            let screenFrame = screen.frame
-            let visibleFrame = screen.visibleFrame
-            let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
-            let x = screenFrame.midX - Self.panelWidth / 2
-            let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.menuBarGap
-            cancelPanel.setFrameOrigin(NSPoint(x: x, y: y))
-        }
-
+        let cancelPanel = makeEphemeralPanel(contentView: hostingView)
+        positionAtTopCenter(cancelPanel)
         cancelPanel.orderFrontRegardless()
         self.panel = cancelPanel
 
@@ -140,6 +117,87 @@ final class RecordingIndicatorPanel {
                 self.panel = nil
             }
         }
+    }
+
+    // MARK: - Copied Indicator
+
+    private static let copiedDisplayDuration: Duration = .seconds(1.5)
+
+    /// Show a brief "copied" indicator (clipboard icon → green checkmark) that auto-hides
+    func showCopied() {
+        hide()
+
+        let hostingView = NSHostingView(rootView: CopiedIndicatorView())
+        hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
+
+        let copiedPanel = makeEphemeralPanel(contentView: hostingView)
+        positionAtTopCenter(copiedPanel)
+        copiedPanel.orderFrontRegardless()
+        self.panel = copiedPanel
+
+        Task {
+            try? await Task.sleep(for: Self.copiedDisplayDuration)
+            copiedPanel.close()
+            if self.panel === copiedPanel {
+                self.panel = nil
+            }
+        }
+    }
+
+    // MARK: - Copy Error Indicator
+
+    private static let copyErrorDisplayDuration: Duration = .seconds(2)
+
+    /// Show a brief error indicator with a message that auto-hides
+    func showCopyError(_ message: String) {
+        hide()
+
+        let hostingView = NSHostingView(rootView: CopyErrorIndicatorView(message: message))
+        hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
+
+        let errorPanel = makeEphemeralPanel(contentView: hostingView)
+        positionAtTopCenter(errorPanel)
+        errorPanel.orderFrontRegardless()
+        self.panel = errorPanel
+
+        Task {
+            try? await Task.sleep(for: Self.copyErrorDisplayDuration)
+            errorPanel.close()
+            if self.panel === errorPanel {
+                self.panel = nil
+            }
+        }
+    }
+
+    // MARK: - Ephemeral Panel Helpers
+
+    private func makeEphemeralPanel(contentView: NSView) -> NSPanel {
+        let panel = NSPanel(
+            contentRect: contentView.frame,
+            styleMask: [.nonactivatingPanel, .borderless],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.contentView = contentView
+        panel.isMovableByWindowBackground = false
+        panel.hidesOnDeactivate = false
+        panel.ignoresMouseEvents = true
+        return panel
+    }
+
+    private func positionAtTopCenter(_ panel: NSPanel) {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let screenFrame = screen.frame
+        let visibleFrame = screen.visibleFrame
+        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+        let x = screenFrame.midX - Self.panelWidth / 2
+        let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.menuBarGap
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
     // MARK: - Constants (cancel indicator)
@@ -244,6 +302,85 @@ private struct CancelledIndicatorView: View {
                     .font(.system(size: Self.iconSize, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+// MARK: - Copied Indicator View
+
+private struct CopiedIndicatorView: View {
+    private static let circleSize: CGFloat = 44
+    private static let iconSize: CGFloat = 20
+    private static let transitionDelay: Duration = .milliseconds(300)
+
+    @State private var showCheckmark = false
+
+    var body: some View {
+        VStack {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: Self.circleSize, height: Self.circleSize)
+                    .shadow(radius: 2)
+
+                if showCheckmark {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: Self.iconSize, weight: .semibold))
+                        .foregroundStyle(.green)
+                        .transition(.opacity)
+                } else {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: Self.iconSize, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: showCheckmark)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .task {
+            try? await Task.sleep(for: Self.transitionDelay)
+            showCheckmark = true
+        }
+    }
+}
+
+// MARK: - Copy Error Indicator View
+
+private struct CopyErrorIndicatorView: View {
+    private static let circleSize: CGFloat = 44
+    private static let iconSize: CGFloat = 20
+    private static let pillHPadding: CGFloat = 8
+    private static let pillVPadding: CGFloat = 3
+    private static let pillCornerRadius: CGFloat = 6
+    private static let pillFontSize: CGFloat = 11
+    private static let pillSpacing: CGFloat = 4
+
+    let message: String
+
+    var body: some View {
+        VStack(spacing: Self.pillSpacing) {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: Self.circleSize, height: Self.circleSize)
+                    .shadow(radius: 2)
+
+                Image(systemName: "xmark")
+                    .font(.system(size: Self.iconSize, weight: .semibold))
+                    .foregroundStyle(.red)
+            }
+
+            Text(message)
+                .font(.system(size: Self.pillFontSize))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Self.pillHPadding)
+                .padding(.vertical, Self.pillVPadding)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.pillCornerRadius))
+                .shadow(radius: 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }

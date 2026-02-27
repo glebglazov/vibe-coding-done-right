@@ -3,6 +3,7 @@ import Foundation
 struct TranscriptionRecord: Identifiable, Codable, Equatable {
     let id: UUID
     let text: String
+    let processedText: String?  // Final text after all transforms, sent to the output action
     let modelName: String
     let recordingDuration: TimeInterval  // seconds
     let timestamp: Date
@@ -11,6 +12,7 @@ struct TranscriptionRecord: Identifiable, Codable, Equatable {
 
     init(
         text: String,
+        processedText: String? = nil,
         modelName: String,
         recordingDuration: TimeInterval,
         actionResult: String? = nil,
@@ -19,6 +21,7 @@ struct TranscriptionRecord: Identifiable, Codable, Equatable {
     ) {
         self.id = UUID()
         self.text = text
+        self.processedText = processedText
         self.modelName = modelName
         self.recordingDuration = recordingDuration
         self.actionResult = actionResult

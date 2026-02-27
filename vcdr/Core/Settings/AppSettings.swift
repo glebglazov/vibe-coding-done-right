@@ -50,6 +50,9 @@ final class AppSettings {
     var toggleRecordingHotkey: HotkeyBinding {
         didSet { save() }
     }
+    var copyLatestCaptureHotkey: HotkeyBinding {
+        didSet { save() }
+    }
     var modes: [Mode] {
         didSet { save() }
     }
@@ -85,6 +88,7 @@ final class AppSettings {
         static let modeSwitcherHotkey = "modeSwitcherHotkey"
         static let pushToTypeHotkey = "pushToTypeHotkey"
         static let toggleRecordingHotkey = "toggleRecordingHotkey"
+        static let copyLatestCaptureHotkey = "copyLatestCaptureHotkey"
         static let modes = "modes"
         static let activeModeID = "activeModeID"
         static let outputDestinations = "outputDestinations"
@@ -140,6 +144,14 @@ final class AppSettings {
             self.toggleRecordingHotkey = decoded
         } else {
             self.toggleRecordingHotkey = .unassigned
+        }
+
+        // Load copy latest capture hotkey (default: unassigned)
+        if let data = userDefaults.data(forKey: Keys.copyLatestCaptureHotkey),
+           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
+            self.copyLatestCaptureHotkey = decoded
+        } else {
+            self.copyLatestCaptureHotkey = .unassigned
         }
 
         // Load modes into local var first (can't use self.modes before all properties init)
@@ -212,6 +224,9 @@ final class AppSettings {
         }
         if let encoded = try? JSONEncoder().encode(toggleRecordingHotkey) {
             userDefaults.set(encoded, forKey: Keys.toggleRecordingHotkey)
+        }
+        if let encoded = try? JSONEncoder().encode(copyLatestCaptureHotkey) {
+            userDefaults.set(encoded, forKey: Keys.copyLatestCaptureHotkey)
         }
         userDefaults.set(activeModeID.uuidString, forKey: Keys.activeModeID)
         if let encoded = try? JSONEncoder().encode(modes) {

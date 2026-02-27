@@ -153,6 +153,23 @@ struct HomeTabView: View {
                         }
                     )
                 )
+                ShortcutRecorderRow(
+                    label: "Copy Latest Capture",
+                    keyCode: Binding(
+                        get: { dependencies.settings.copyLatestCaptureHotkey.keyCode },
+                        set: {
+                            dependencies.settings.copyLatestCaptureHotkey.keyCode = $0
+                            dependencies.copyLatestCaptureHandler.updateHotkey()
+                        }
+                    ),
+                    modifiers: Binding(
+                        get: { dependencies.settings.copyLatestCaptureHotkey.modifiers },
+                        set: {
+                            dependencies.settings.copyLatestCaptureHotkey.modifiers = $0
+                            dependencies.copyLatestCaptureHandler.updateHotkey()
+                        }
+                    )
+                )
             }
         }
         .formStyle(.grouped)

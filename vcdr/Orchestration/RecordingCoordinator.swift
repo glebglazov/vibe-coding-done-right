@@ -262,6 +262,7 @@ final class RecordingCoordinator {
             } ?? 0
             let record = TranscriptionRecord(
                 text: text,
+                processedText: processedText,
                 modelName: transcriptionProvider.name,
                 recordingDuration: durationSeconds,
                 actionResult: nil,

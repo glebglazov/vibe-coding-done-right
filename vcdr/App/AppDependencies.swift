@@ -14,6 +14,7 @@ final class AppDependencies {
     let pushToTypeCoordinator: PushToTypeCoordinator
     let mediaPlaybackController: MediaPlaybackController
     let transcriptionHistory: TranscriptionHistory
+    let copyLatestCaptureHandler: CopyLatestCaptureHandler
 
     private(set) var isTranscriptionReady = false
     private(set) var initializationStatus = "Loading model..."
@@ -57,6 +58,12 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator,
             selectionCapturer: selectionCapturer,
             transcriptionHistory: history
+        )
+
+        self.copyLatestCaptureHandler = CopyLatestCaptureHandler(
+            settings: settings,
+            transcriptionHistory: history,
+            recordingIndicator: recordingIndicator
         )
 
         // Wire output destination override from mode switcher to both coordinators
@@ -108,6 +115,7 @@ final class AppDependencies {
                 coordinator.setupEscCancel()
                 modeSwitcherCoordinator.setupHotkey()
                 pushToTypeCoordinator.setupHotkey()
+                copyLatestCaptureHandler.setupHotkey()
             }
             Logger.app.info("App fully initialized")
         } catch {
@@ -142,6 +150,7 @@ final class AppDependencies {
                 self.coordinator.setupEscCancel()
                 self.modeSwitcherCoordinator.setupHotkey()
                 self.pushToTypeCoordinator.setupHotkey()
+                self.copyLatestCaptureHandler.setupHotkey()
                 Logger.app.info("Accessibility granted, hotkeys registered")
             }
 
