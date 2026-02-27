@@ -76,15 +76,6 @@ final class AppDependencies {
             recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
 
-        // When either coordinator consumes the override (after dictation/error/cancel),
-        // clear the mode switcher's tracking so reopening the panel shows no override.
-        coordinator.onOverrideConsumed = { [weak self] in
-            self?.modeSwitcherCoordinator.clearOutputDestinationOverride()
-        }
-        pushToTypeCoordinator.onOverrideConsumed = { [weak self] in
-            self?.modeSwitcherCoordinator.clearOutputDestinationOverride()
-        }
-
         // Suspend esc-cancel while mode switcher is open so Escape dismisses the switcher,
         // then re-enable it once the switcher closes (if still recording).
         modeSwitcherCoordinator.onPanelShow = { [weak self] in

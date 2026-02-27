@@ -16,9 +16,6 @@ final class PushToTypeCoordinator {
     /// Temporary output destination override set via mode switcher
     var outputDestinationOverride: UUID?
 
-    /// Called when the override is consumed or cleared (after submission or error).
-    var onOverrideConsumed: (() -> Void)?
-
     func updateOutputDestinationOverride(_ id: UUID?) {
         outputDestinationOverride = id
         panel.updateOutputDestinationOverride(id)
@@ -131,7 +128,7 @@ final class PushToTypeCoordinator {
 
                 // Step 3: Output
                 let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
-                clearOverride()
+                outputDestinationOverride = nil
                 let destination = settings.outputDestination(for: destinationID)
 
                 if destination.type == .outputPanel {
@@ -161,7 +158,7 @@ final class PushToTypeCoordinator {
 
                 Logger.app.info("Push-to-type: complete")
             } catch {
-                clearOverride()
+                outputDestinationOverride = nil
                 recordingIndicator.update(phase: .error, message: error.localizedDescription)
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
                 Logger.app.error("Push-to-type failed: \(error)")
@@ -186,11 +183,6 @@ final class PushToTypeCoordinator {
             Logger.app.warning("makeOutputAction called for outputPanel type — falling back to paste")
             return PasteAction(targetAppPID: targetPID)
         }
-    }
-
-    private func clearOverride() {
-        outputDestinationOverride = nil
-        onOverrideConsumed?()
     }
 
     private func dismissIndicatorAfterDelay(_ duration: Duration) {
