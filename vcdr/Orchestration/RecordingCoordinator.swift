@@ -30,6 +30,11 @@ final class RecordingCoordinator {
     /// Cleared after one transcription completes (or on error/cancel).
     var outputDestinationOverride: UUID?
 
+    /// Follow-up context from the output panel. Contains the previous capture's
+    /// processed text, injected between system prompt and new dictation.
+    /// Cleared after one transcription completes (or on error/cancel).
+    var followUpContext: String?
+
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
     private var recordingStartInstant: ContinuousClock.Instant?
@@ -228,6 +233,7 @@ final class RecordingCoordinator {
             guard !text.isEmpty else {
                 capturedSelection = nil
                 outputDestinationOverride = nil
+                followUpContext = nil
                 state = .error("No speech detected")
                 recordingIndicator.update(phase: .error, message: "No speech detected")
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -238,9 +244,11 @@ final class RecordingCoordinator {
             let mode = settings.activeMode
             let selection = capturedSelection
             capturedSelection = nil
+            let context = followUpContext
+            followUpContext = nil
 
-            // Step 1: Pre-processing (terminator, system prompt, captured selection)
-            let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection)
+            // Step 1: Pre-processing (terminator, system prompt, follow-up context, captured selection)
+            let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection, followUpContext: context)
 
             // Step 2: Processing (optional bash script)
             let processedText: String
@@ -268,7 +276,8 @@ final class RecordingCoordinator {
                 outputPanel.show(
                     text: processedText,
                     outputDestinations: settings.outputDestinations,
-                    targetAppPID: previousActiveApp?.processIdentifier
+                    targetAppPID: previousActiveApp?.processIdentifier,
+                    modeID: mode.id
                 )
             } else {
                 let action = makeOutputAction(for: destination)
@@ -296,6 +305,7 @@ final class RecordingCoordinator {
         } catch {
             capturedSelection = nil
             outputDestinationOverride = nil
+            followUpContext = nil
             state = .error(error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -390,6 +400,7 @@ final class RecordingCoordinator {
         Task { await mediaPlaybackController.resumeIfNeeded() }
         capturedSelection = nil
         outputDestinationOverride = nil
+        followUpContext = nil
         recordingStartInstant = nil
 
         recordingIndicator.showCancelled()

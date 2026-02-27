@@ -8,6 +8,11 @@ final class OutputPanelPanel {
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
 
+    /// Called when "f" is pressed — start voice dictation follow-up with (text, modeID)
+    var onFollowUpDictation: ((String, UUID) -> Void)?
+    /// Called when "F" is pressed — start push-to-type follow-up with (text, modeID)
+    var onFollowUpType: ((String, UUID) -> Void)?
+
     // MARK: - Constants
 
     private static let panelWidth: CGFloat = 400
@@ -24,7 +29,8 @@ final class OutputPanelPanel {
     func show(
         text: String,
         outputDestinations: [OutputDestination],
-        targetAppPID: pid_t?
+        targetAppPID: pid_t?,
+        modeID: UUID
     ) {
         hide()
 
@@ -38,6 +44,14 @@ final class OutputPanelPanel {
             },
             onFireDestination: { [weak self] destination in
                 self?.fireDestination(destination, text: text, targetAppPID: targetAppPID)
+            },
+            onFollowUpDictation: { [weak self] in
+                self?.hide()
+                self?.onFollowUpDictation?(text, modeID)
+            },
+            onFollowUpType: { [weak self] in
+                self?.hide()
+                self?.onFollowUpType?(text, modeID)
             },
             onDismiss: { [weak self] in
                 self?.hide()
@@ -160,6 +174,8 @@ private final class OutputPanelViewModel {
     let outputDestinations: [OutputDestination]
     let onCopy: () -> Void
     let onFireDestination: (OutputDestination) -> Void
+    let onFollowUpDictation: () -> Void
+    let onFollowUpType: () -> Void
     let onDismiss: () -> Void
 
     init(
@@ -167,18 +183,24 @@ private final class OutputPanelViewModel {
         outputDestinations: [OutputDestination],
         onCopy: @escaping () -> Void,
         onFireDestination: @escaping (OutputDestination) -> Void,
+        onFollowUpDictation: @escaping () -> Void,
+        onFollowUpType: @escaping () -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.text = text
         self.outputDestinations = outputDestinations
         self.onCopy = onCopy
         self.onFireDestination = onFireDestination
+        self.onFollowUpDictation = onFollowUpDictation
+        self.onFollowUpType = onFollowUpType
         self.onDismiss = onDismiss
     }
 
     /// Returns true if the event was handled (consumed)
     func handleKeyEvent(_ event: NSEvent) -> Bool {
         let chars = event.charactersIgnoringModifiers ?? ""
+        // Use `characters` (not `charactersIgnoringModifiers`) to detect "F" (Shift+F)
+        let rawChars = event.characters ?? ""
 
         switch event.keyCode {
         case 53: // Escape
@@ -188,6 +210,17 @@ private final class OutputPanelViewModel {
             if chars == "c" {
                 onCopy()
                 onDismiss()
+                return true
+            }
+            // Follow-up shortcuts: "F" (Shift+F) = type, "f" = dictation
+            // Check rawChars which reflects Shift state, before destination
+            // activation keys which use charactersIgnoringModifiers
+            if rawChars == "F" {
+                onFollowUpType()
+                return true
+            }
+            if rawChars == "f" {
+                onFollowUpDictation()
                 return true
             }
             // Check destination activation keys
@@ -233,6 +266,8 @@ private struct OutputPanelView: View {
 
             HStack(spacing: Self.hintSpacing) {
                 hintLabel("c", "copy")
+                hintLabel("f", "follow-up")
+                hintLabel("F", "type")
                 ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
                     hintLabel(dest.activationKey, dest.name.lowercased())
                 }

@@ -15,11 +15,12 @@ final class PushToTypePanel {
     private static let panelHeight: CGFloat = 140
     private static let panelOffsetBelowMenuBar: CGFloat = 8
 
-    func show(settings: AppSettings, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
+    func show(settings: AppSettings, initialText: String? = nil, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
         hide()
 
         let viewModel = PushToTypeViewModel(
             settings: settings,
+            initialText: initialText,
             onSubmit: { [weak self] text in
                 onSubmit(text)
                 self?.hide()
@@ -67,7 +68,8 @@ final class PushToTypePanel {
         // Focus the TextEditor's underlying NSTextView directly via AppKit.
         // @FocusState in NSHostingView inside a .nonActivatingPanel is unreliable
         // because SwiftUI's focus system may not connect to the panel's responder chain.
-        Self.focusFirstTextView(in: hostingView, panel: panel)
+        let cursorAtStart = initialText != nil
+        Self.focusFirstTextView(in: hostingView, panel: panel, cursorAtStart: cursorAtStart)
 
         // Intercept Return (submit) and Escape (dismiss) before they reach the text field.
         // Only handle events when this panel is key — if another panel (e.g. mode switcher)
@@ -81,14 +83,15 @@ final class PushToTypePanel {
         }
 
         // Re-focus the text view when this panel regains key status (e.g. after
-        // the mode switcher panel closes and key window falls back to this panel)
+        // the mode switcher panel closes and key window falls back to this panel).
+        // Don't reposition cursor on re-focus — only on initial show.
         becameKeyObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: panel,
             queue: .main
         ) { [weak hostingView, weak panel] _ in
             guard let hostingView, let panel else { return }
-            Self.focusFirstTextView(in: hostingView, panel: panel)
+            Self.focusFirstTextView(in: hostingView, panel: panel, cursorAtStart: false)
         }
 
         // Dismiss if the user clicks outside the panel
@@ -123,10 +126,15 @@ final class PushToTypePanel {
 
     /// Walks the view hierarchy to find the NSTextView created by SwiftUI's TextEditor
     /// and makes it the panel's first responder for immediate keyboard input.
-    private static func focusFirstTextView(in view: NSView, panel: NSPanel) {
+    /// When `cursorAtStart` is true, positions the cursor at the beginning of the text
+    /// (used for follow-up pre-fill so the user types above the previous context).
+    private static func focusFirstTextView(in view: NSView, panel: NSPanel, cursorAtStart: Bool = false) {
         DispatchQueue.main.async {
             if let textView = Self.findFirstTextView(in: view) {
                 panel.makeFirstResponder(textView)
+                if cursorAtStart {
+                    textView.setSelectedRange(NSRange(location: 0, length: 0))
+                }
             }
         }
     }
@@ -166,10 +174,13 @@ final class PushToTypeViewModel {
         return "\(settings.activeMode.name) · \(destination.symbol)"
     }
 
-    init(settings: AppSettings, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
+    init(settings: AppSettings, initialText: String? = nil, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
         self.settings = settings
         self.onSubmit = onSubmit
         self.onDismiss = onDismiss
+        if let initialText {
+            self.text = initialText
+        }
     }
 
     /// Returns true if the event was handled (consumed)

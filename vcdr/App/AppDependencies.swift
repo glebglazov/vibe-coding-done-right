@@ -85,6 +85,32 @@ final class AppDependencies {
             self?.coordinator.resumeEscCancel()
         }
 
+        // Wire follow-up from output panel to voice dictation
+        outputPanel.onFollowUpDictation = { [weak self] text, modeID in
+            guard let self else { return }
+            // Switch to the mode that produced the result
+            self.settings.activeModeID = modeID
+            // Set follow-up context for the pipeline
+            self.coordinator.followUpContext = text
+            // Route output to the output panel
+            self.coordinator.outputDestinationOverride = OutputDestination.builtInOutputPanelID
+            recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
+            // Start recording in toggle mode
+            self.coordinator.toggleRecording()
+        }
+
+        // Wire follow-up from output panel to push-to-type
+        outputPanel.onFollowUpType = { [weak self] text, modeID in
+            guard let self else { return }
+            // Switch to the mode that produced the result
+            self.settings.activeModeID = modeID
+            // Route output to the output panel
+            self.pushToTypeCoordinator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
+            recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
+            // Open push-to-type with previous text pre-filled
+            self.pushToTypeCoordinator.showFollowUpOverlay(previousText: text)
+        }
+
     }
 
     func initialize() async {

@@ -27,13 +27,19 @@ struct Mode: Identifiable, Codable, Equatable {
 
     // MARK: - Text Pipeline
 
-    /// Pre-processes transcription text by applying terminator, system prompt
-    /// (bash processing only), and appending any captured selection.
+    /// Pre-processes transcription text by applying terminator, follow-up context
+    /// (previous capture), system prompt (bash processing only), and appending
+    /// any captured selection.
     /// This is step 1 of the pipeline — before the optional processing script.
-    func applyPreProcessing(_ text: String, capturedSelection: String?) -> String {
+    func applyPreProcessing(_ text: String, capturedSelection: String?, followUpContext: String? = nil) -> String {
         var result = terminatorTemplateEnabled
             ? Self.applyTerminator(text, terminator: terminatorTemplate)
             : text
+
+        // Prepend follow-up context (previous capture result) before new dictation
+        if let context = followUpContext {
+            result = context + "\n\n" + result
+        }
 
         if processingType == .bashScript && systemPromptEnabled && !systemPrompt.isEmpty {
             result = systemPrompt + "\n\n" + result

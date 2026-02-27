@@ -97,6 +97,30 @@ final class PushToTypeCoordinator {
         Logger.app.info("Push-to-type: overlay shown")
     }
 
+    /// Opens the push-to-type overlay pre-filled with follow-up context.
+    /// The cursor is positioned at the start so the user can type their follow-up
+    /// above the previous capture result.
+    func showFollowUpOverlay(previousText: String) {
+        previousActiveApp = NSWorkspace.shared.frontmostApplication
+        capturedSelection = selectionCapturer.capture()
+
+        let initialText = "\n\n" + previousText
+
+        panel.show(
+            settings: settings,
+            initialText: initialText,
+            onSubmit: { [weak self] text in
+                self?.submitText(text)
+            },
+            onDismiss: { [weak self] in
+                self?.capturedSelection = nil
+                self?.previousActiveApp = nil
+                Logger.app.info("Push-to-type follow-up: overlay dismissed")
+            }
+        )
+        Logger.app.info("Push-to-type follow-up: overlay shown with previous context")
+    }
+
     // MARK: - Text Submission Pipeline
 
     private func submitText(_ text: String) {
@@ -136,7 +160,8 @@ final class PushToTypeCoordinator {
                     outputPanel.show(
                         text: processedText,
                         outputDestinations: settings.outputDestinations,
-                        targetAppPID: previousActiveApp?.processIdentifier
+                        targetAppPID: previousActiveApp?.processIdentifier,
+                        modeID: mode.id
                     )
                 } else {
                     let action = makeOutputAction(for: destination)
