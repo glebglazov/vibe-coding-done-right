@@ -69,10 +69,10 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator
         )
 
-        // Wire output destination override from mode switcher to both coordinators + indicator label
+        // Wire output destination override from mode switcher to both coordinators + indicator labels
         modeSwitcherCoordinator.onOutputDestinationOverride = { [weak self] destinationID in
             self?.coordinator.outputDestinationOverride = destinationID
-            self?.pushToTypeCoordinator.outputDestinationOverride = destinationID
+            self?.pushToTypeCoordinator.updateOutputDestinationOverride(destinationID)
             recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
 

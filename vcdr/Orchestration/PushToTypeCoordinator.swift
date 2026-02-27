@@ -16,6 +16,11 @@ final class PushToTypeCoordinator {
     /// Temporary output destination override set via mode switcher
     var outputDestinationOverride: UUID?
 
+    func updateOutputDestinationOverride(_ id: UUID?) {
+        outputDestinationOverride = id
+        panel.updateOutputDestinationOverride(id)
+    }
+
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
 

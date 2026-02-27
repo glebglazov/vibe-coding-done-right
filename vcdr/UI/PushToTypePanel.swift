@@ -4,6 +4,7 @@ import OSLog
 
 final class PushToTypePanel {
     private var panel: NSPanel?
+    private var viewModel: PushToTypeViewModel?
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
     private var becameKeyObserver: NSObjectProtocol?
@@ -28,6 +29,7 @@ final class PushToTypePanel {
                 self?.hide()
             }
         )
+        self.viewModel = viewModel
 
         let view = PushToTypeView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
@@ -110,9 +112,14 @@ final class PushToTypePanel {
         }
         panel?.close()
         panel = nil
+        viewModel = nil
     }
 
     var isVisible: Bool { panel != nil }
+
+    func updateOutputDestinationOverride(_ id: UUID?) {
+        viewModel?.outputDestinationOverrideID = id
+    }
 
     /// Walks the view hierarchy to find the NSTextView created by SwiftUI's TextEditor
     /// and makes it the panel's first responder for immediate keyboard input.
@@ -146,14 +153,17 @@ private final class KeyablePanel: NSPanel {
 // MARK: - View Model
 
 @Observable
-private final class PushToTypeViewModel {
+final class PushToTypeViewModel {
     var text: String = ""
+    var outputDestinationOverrideID: UUID?
     let settings: AppSettings
     let onSubmit: (String) -> Void
     let onDismiss: () -> Void
 
-    var modeName: String {
-        settings.activeMode.name
+    var modeLabel: String {
+        let destinationID = outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
+        let destination = settings.outputDestination(for: destinationID)
+        return "\(settings.activeMode.name) · \(destination.symbol)"
     }
 
     init(settings: AppSettings, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
@@ -200,7 +210,7 @@ private struct PushToTypeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(viewModel.modeName)
+                Text(viewModel.modeLabel)
                     .font(.system(size: Self.modeNameFontSize, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
