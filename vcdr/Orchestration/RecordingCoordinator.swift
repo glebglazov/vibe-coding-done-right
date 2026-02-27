@@ -131,8 +131,7 @@ final class RecordingCoordinator {
         capturedSelection = selectionCapturer.capture()
 
         if settings.audioSettings.pauseMediaDuringRecording {
-            mediaPlaybackController.snapshotAudioState()
-            mediaPlaybackController.pauseIfNeeded()
+            await mediaPlaybackController.pauseIfNeeded()
         }
 
         let started = await audioRecorder.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID)
@@ -151,7 +150,7 @@ final class RecordingCoordinator {
                 stopRecordingAndTranscribe()
             }
         } else {
-            mediaPlaybackController.resumeIfNeeded()
+            await mediaPlaybackController.resumeIfNeeded()
             escCancelManager.isEnabled = false
             state = .error("Failed to start recording")
             recordingIndicator.show()
@@ -168,7 +167,7 @@ final class RecordingCoordinator {
     /// Called from both the UI button and the hotkey-up event.
     private func stopRecordingAndTranscribe() {
         guard state == .recording else {
-            mediaPlaybackController.resumeIfNeeded()
+            Task { await mediaPlaybackController.resumeIfNeeded() }
             // Only hide the indicator if we're NOT in a processing state —
             // during transcribing/executing the indicator should stay visible
             if state != .transcribing && state != .executing {
@@ -183,7 +182,7 @@ final class RecordingCoordinator {
         recordingStartInstant = nil
 
         guard let audioURL = audioRecorder.stopRecording() else {
-            mediaPlaybackController.resumeIfNeeded()
+            Task { await mediaPlaybackController.resumeIfNeeded() }
             state = .error("No audio recorded")
             recordingIndicator.update(phase: .error, message: "No audio recorded")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -200,7 +199,7 @@ final class RecordingCoordinator {
         // with an active input, which avoids degraded audio quality on resume.
         Task { @MainActor in
             try? await Task.sleep(for: Self.audioSettleDelayBeforeResume)
-            self.mediaPlaybackController.resumeIfNeeded()
+            await self.mediaPlaybackController.resumeIfNeeded()
         }
 
         Task { @MainActor in await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration) }
@@ -331,7 +330,7 @@ final class RecordingCoordinator {
             try? FileManager.default.removeItem(at: audioURL)
         }
 
-        mediaPlaybackController.resumeIfNeeded()
+        Task { await mediaPlaybackController.resumeIfNeeded() }
         capturedSelection = nil
         recordingStartInstant = nil
 

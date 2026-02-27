@@ -1,109 +1,128 @@
+import Foundation
 import AppKit
-import CoreAudio
 import OSLog
 
 @MainActor
 final class MediaPlaybackController {
-    private var didPauseMedia = false
+    /// Apps that were paused by us during recording, to be resumed afterwards.
+    private var pausedApps: Set<MediaApp> = []
 
-    // MARK: - Media key constants
+    // MARK: - Supported media apps
 
-    /// NX_KEYTYPE_PLAY — the system play/pause media key
-    private static let mediaPlayPauseKeyCode: Int32 = 16
-    private static let keyDownFlags: UInt32 = 0xA00
-    private static let keyUpFlags: UInt32 = 0xB00
-    private static let systemDefinedSubtype: Int16 = 8
+    private enum MediaApp: String, CaseIterable, Hashable {
+        case music = "Music"
+        case spotify = "Spotify"
 
-    /// Snapshots whether audio output is active. Must be called BEFORE the
-    /// AVAudioRecorder session starts, because recording can activate the output
-    /// device and cause false positives.
-    func snapshotAudioState() {
-        audioWasActive = Self.isAudioOutputActive()
-        Logger.audio.info("Audio output snapshot: active=\(self.audioWasActive)")
-    }
-
-    private var audioWasActive = false
-
-    /// Pauses media only if audio output was active at the time of the snapshot
-    /// (i.e. something was actually producing sound before we started recording).
-    /// This avoids the bug where toggling play/pause with nothing playing would
-    /// accidentally START playback on resume.
-    func pauseIfNeeded() {
-        guard audioWasActive else {
-            Logger.audio.info("No audio output was active before recording, skipping pause")
-            return
+        /// AppleScript that checks if the app is running and currently playing,
+        /// and pauses it if so. Returns "paused" when it actually paused the app,
+        /// "skipped" otherwise. The `application is running` guard prevents macOS
+        /// from launching the app just to send it a command.
+        var pauseScript: String {
+            """
+            if application "\(rawValue)" is running then
+                tell application "\(rawValue)"
+                    if player state is playing then
+                        pause
+                        return "paused"
+                    end if
+                end tell
+            end if
+            return "skipped"
+            """
         }
 
-        didPauseMedia = true
-        Self.sendMediaKeyEvent()
-        Logger.audio.info("Sent media pause key")
+        /// AppleScript that resumes playback if the app is still running.
+        var resumeScript: String {
+            """
+            if application "\(rawValue)" is running then
+                tell application "\(rawValue)"
+                    play
+                end tell
+            end if
+            """
+        }
     }
 
-    func resumeIfNeeded() {
-        guard didPauseMedia else { return }
-        didPauseMedia = false
-        Self.sendMediaKeyEvent()
-        Logger.audio.info("Sent media resume key")
+    // MARK: - Constants
+
+    private static let osascriptPath = "/usr/bin/osascript"
+
+    // MARK: - Pause / Resume
+
+    /// Pauses any currently-playing media apps. Tracks which apps were paused
+    /// so that only those apps are resumed later. Unlike the previous CGEvent
+    /// media key approach, this sends explicit pause commands via AppleScript —
+    /// it will never accidentally start playback or launch an app.
+    func pauseIfNeeded() async {
+        pausedApps = []
+
+        await withTaskGroup(of: MediaApp?.self) { group in
+            for app in MediaApp.allCases {
+                group.addTask {
+                    let result = await self.runAppleScript(app.pauseScript)
+                    return result == "paused" ? app : nil
+                }
+            }
+
+            for await app in group {
+                if let app {
+                    pausedApps.insert(app)
+                }
+            }
+        }
+
+        if pausedApps.isEmpty {
+            Logger.audio.info("No media apps were playing, nothing paused")
+        } else {
+            let names = pausedApps.map(\.rawValue).sorted().joined(separator: ", ")
+            Logger.audio.info("Paused media apps: \(names)")
+        }
     }
 
-    // MARK: - CoreAudio output detection
+    /// Resumes playback in any apps that were paused by ``pauseIfNeeded()``.
+    func resumeIfNeeded() async {
+        guard !pausedApps.isEmpty else { return }
 
-    /// Checks whether any process is currently sending audio to the default output device.
-    /// Uses the public CoreAudio API — no private frameworks or entitlements required.
-    private static func isAudioOutputActive() -> Bool {
-        var defaultDevice = AudioObjectID(0)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let appsToResume = pausedApps
+        pausedApps = []
 
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0, nil,
-            &size,
-            &defaultDevice
-        )
-        guard status == noErr, defaultDevice != kAudioObjectUnknown else { return false }
+        await withTaskGroup(of: Void.self) { group in
+            for app in appsToResume {
+                group.addTask {
+                    _ = await self.runAppleScript(app.resumeScript)
+                }
+            }
+        }
 
-        var isRunning: UInt32 = 0
-        address.mSelector = kAudioDevicePropertyDeviceIsRunningSomewhere
-        size = UInt32(MemoryLayout<UInt32>.size)
-
-        let status2 = AudioObjectGetPropertyData(
-            defaultDevice,
-            &address,
-            0, nil,
-            &size,
-            &isRunning
-        )
-        guard status2 == noErr else { return false }
-
-        return isRunning != 0
+        let names = appsToResume.map(\.rawValue).sorted().joined(separator: ", ")
+        Logger.audio.info("Resumed media apps: \(names)")
     }
 
-    // MARK: - Media key simulation
+    // MARK: - AppleScript execution
 
-    private static func sendMediaKeyEvent() {
-        postMediaKey(flags: keyDownFlags)
-        postMediaKey(flags: keyUpFlags)
-    }
+    /// Runs an AppleScript via `/usr/bin/osascript` off the main thread and
+    /// returns the trimmed stdout. Returns `nil` on failure.
+    private func runAppleScript(_ source: String) async -> String? {
+        await Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: MediaPlaybackController.osascriptPath)
+            process.arguments = ["-e", source]
 
-    private static func postMediaKey(flags: UInt32) {
-        let data1 = Int((mediaPlayPauseKeyCode << 16) | Int32(bitPattern: flags))
-        let event = NSEvent.otherEvent(
-            with: .systemDefined,
-            location: .zero,
-            modifierFlags: NSEvent.ModifierFlags(rawValue: UInt(flags)),
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            subtype: systemDefinedSubtype,
-            data1: data1,
-            data2: -1
-        )
-        event?.cgEvent?.post(tap: .cghidEventTap)
+            let stdout = Pipe()
+            process.standardOutput = stdout
+            process.standardError = Pipe()
+
+            do {
+                try process.run()
+            } catch {
+                Logger.audio.error("Failed to launch osascript: \(error)")
+                return nil as String?
+            }
+
+            process.waitUntilExit()
+            let data = stdout.fileHandleForReading.readDataToEndOfFile()
+            return String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }.value
     }
 }

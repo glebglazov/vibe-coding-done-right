@@ -4,5 +4,7 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>VCDR needs microphone access for voice recording and transcription.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>VCDR needs Automation access to pause and resume media players (Music, Spotify) during voice recording.</string>
 </dict>
 </plist>
