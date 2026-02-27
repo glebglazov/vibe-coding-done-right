@@ -39,6 +39,7 @@ final class AppDependencies {
         let audioRecorder = AudioRecorder()
         let hotkeyManager = GlobalHotkeyManager()
         let recordingIndicator = RecordingIndicatorPanel(settings: settings)
+        let outputPanel = OutputPanelPanel()
         let selectionCapturer = SelectionCapturer()
         self.coordinator = RecordingCoordinator(
             settings: settings,
@@ -47,6 +48,7 @@ final class AppDependencies {
             hotkeyManager: hotkeyManager,
             mediaPlaybackController: mediaPlayback,
             recordingIndicator: recordingIndicator,
+            outputPanel: outputPanel,
             selectionCapturer: selectionCapturer,
             transcriptionHistory: history
         )
@@ -56,6 +58,7 @@ final class AppDependencies {
         self.pushToTypeCoordinator = PushToTypeCoordinator(
             settings: settings,
             recordingIndicator: recordingIndicator,
+            outputPanel: outputPanel,
             selectionCapturer: selectionCapturer,
             transcriptionHistory: history
         )

@@ -3,6 +3,7 @@ import Foundation
 enum OutputDestinationType: String, Codable, CaseIterable {
     case paste
     case bashScript
+    case outputPanel
 
     /// Types available for user-created destinations (excludes special built-in types)
     static var userCreatable: [OutputDestinationType] {
@@ -13,6 +14,7 @@ enum OutputDestinationType: String, Codable, CaseIterable {
         switch self {
         case .paste: "Paste (Cmd+V)"
         case .bashScript: "Bash Script"
+        case .outputPanel: "Output Panel"
         }
     }
 }
@@ -25,7 +27,7 @@ struct OutputDestination: Identifiable, Codable, Equatable {
     var symbol: String
     var activationKey: String
 
-    var isBuiltIn: Bool { type == .paste }
+    var isBuiltIn: Bool { type == .paste || type == .outputPanel }
 
     // MARK: - Constants
 
@@ -41,6 +43,20 @@ struct OutputDestination: Identifiable, Codable, Equatable {
             bashCommand: "",
             symbol: "📋",
             activationKey: "p"
+        )
+    }
+
+    /// Well-known ID for the built-in Output Panel destination.
+    static let builtInOutputPanelID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+
+    static func makeDefaultOutputPanel() -> OutputDestination {
+        OutputDestination(
+            id: builtInOutputPanelID,
+            name: "Output Panel",
+            type: .outputPanel,
+            bashCommand: "",
+            symbol: "👁",
+            activationKey: "o"
         )
     }
 

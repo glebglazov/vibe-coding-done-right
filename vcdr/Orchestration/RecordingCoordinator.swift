@@ -22,6 +22,7 @@ final class RecordingCoordinator {
     private let escCancelManager = GlobalHotkeyManager()
     private let mediaPlaybackController: MediaPlaybackController
     private let recordingIndicator: RecordingIndicatorPanel
+    private let outputPanel: OutputPanelPanel
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
 
@@ -45,6 +46,7 @@ final class RecordingCoordinator {
         hotkeyManager: GlobalHotkeyManager,
         mediaPlaybackController: MediaPlaybackController,
         recordingIndicator: RecordingIndicatorPanel,
+        outputPanel: OutputPanelPanel,
         selectionCapturer: SelectionCapturer,
         transcriptionHistory: TranscriptionHistory
     ) {
@@ -54,6 +56,7 @@ final class RecordingCoordinator {
         self.hotkeyManager = hotkeyManager
         self.mediaPlaybackController = mediaPlaybackController
         self.recordingIndicator = recordingIndicator
+        self.outputPanel = outputPanel
         self.selectionCapturer = selectionCapturer
         self.transcriptionHistory = transcriptionHistory
     }
@@ -254,9 +257,25 @@ final class RecordingCoordinator {
             state = .executing
             Logger.app.info("Pipeline: executing output action")
 
-            // Step 3: Output (paste or bash script destination)
-            let action = makeOutputAction()
-            try await action.execute(text: processedText)
+            // Step 3: Output
+            let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
+            outputDestinationOverride = nil
+            let destination = settings.outputDestination(for: destinationID)
+
+            if destination.type == .outputPanel {
+                // Output panel handles its own lifecycle — no success indicator needed
+                recordingIndicator.hide()
+                outputPanel.show(
+                    text: processedText,
+                    outputDestinations: settings.outputDestinations,
+                    targetAppPID: previousActiveApp?.processIdentifier
+                )
+            } else {
+                let action = makeOutputAction(for: destination)
+                try await action.execute(text: processedText)
+                recordingIndicator.update(phase: .success)
+                dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+            }
 
             // Record in history (raw transcription text, before any transforms)
             let durationSeconds = recordingDuration.map {
@@ -273,8 +292,6 @@ final class RecordingCoordinator {
             transcriptionHistory.addRecord(record)
 
             state = .idle
-            recordingIndicator.update(phase: .success)
-            dismissIndicatorAfterDelay(Self.successIndicatorDuration)
             Logger.app.info("Pipeline: complete")
         } catch {
             capturedSelection = nil
@@ -287,15 +304,8 @@ final class RecordingCoordinator {
         }
     }
 
-    private func makeOutputAction() -> any PostTranscriptionAction {
-        let mode = settings.activeMode
+    private func makeOutputAction(for destination: OutputDestination) -> any PostTranscriptionAction {
         let targetPID = previousActiveApp?.processIdentifier
-
-        // Use temporary override if set, otherwise mode's default destination
-        let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
-        outputDestinationOverride = nil
-
-        let destination = settings.outputDestination(for: destinationID)
 
         switch destination.type {
         case .paste:
@@ -305,6 +315,10 @@ final class RecordingCoordinator {
                 name: destination.name,
                 commandTemplate: destination.bashCommand
             )
+        case .outputPanel:
+            // Handled separately in processTranscription — should not reach here
+            Logger.app.warning("makeOutputAction called for outputPanel type — falling back to paste")
+            return PasteAction(targetAppPID: targetPID)
         }
     }
 

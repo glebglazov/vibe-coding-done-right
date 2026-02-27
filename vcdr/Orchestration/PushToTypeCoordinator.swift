@@ -9,6 +9,7 @@ final class PushToTypeCoordinator {
     private let hotkeyManager = GlobalHotkeyManager()
     private let panel = PushToTypePanel()
     private let recordingIndicator: RecordingIndicatorPanel
+    private let outputPanel: OutputPanelPanel
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
 
@@ -26,11 +27,13 @@ final class PushToTypeCoordinator {
     init(
         settings: AppSettings,
         recordingIndicator: RecordingIndicatorPanel,
+        outputPanel: OutputPanelPanel,
         selectionCapturer: SelectionCapturer,
         transcriptionHistory: TranscriptionHistory
     ) {
         self.settings = settings
         self.recordingIndicator = recordingIndicator
+        self.outputPanel = outputPanel
         self.selectionCapturer = selectionCapturer
         self.transcriptionHistory = transcriptionHistory
     }
@@ -119,8 +122,23 @@ final class PushToTypeCoordinator {
                 }
 
                 // Step 3: Output
-                let action = makeOutputAction()
-                try await action.execute(text: processedText)
+                let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
+                outputDestinationOverride = nil
+                let destination = settings.outputDestination(for: destinationID)
+
+                if destination.type == .outputPanel {
+                    recordingIndicator.hide()
+                    outputPanel.show(
+                        text: processedText,
+                        outputDestinations: settings.outputDestinations,
+                        targetAppPID: previousActiveApp?.processIdentifier
+                    )
+                } else {
+                    let action = makeOutputAction(for: destination)
+                    try await action.execute(text: processedText)
+                    recordingIndicator.update(phase: .success)
+                    dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+                }
 
                 // Record in history
                 let record = TranscriptionRecord(
@@ -133,8 +151,6 @@ final class PushToTypeCoordinator {
                 )
                 transcriptionHistory.addRecord(record)
 
-                recordingIndicator.update(phase: .success)
-                dismissIndicatorAfterDelay(Self.successIndicatorDuration)
                 Logger.app.info("Push-to-type: complete")
             } catch {
                 outputDestinationOverride = nil
@@ -147,14 +163,8 @@ final class PushToTypeCoordinator {
         }
     }
 
-    private func makeOutputAction() -> any PostTranscriptionAction {
-        let mode = settings.activeMode
+    private func makeOutputAction(for destination: OutputDestination) -> any PostTranscriptionAction {
         let targetPID = previousActiveApp?.processIdentifier
-
-        let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
-        outputDestinationOverride = nil
-
-        let destination = settings.outputDestination(for: destinationID)
 
         switch destination.type {
         case .paste:
@@ -164,6 +174,9 @@ final class PushToTypeCoordinator {
                 name: destination.name,
                 commandTemplate: destination.bashCommand
             )
+        case .outputPanel:
+            Logger.app.warning("makeOutputAction called for outputPanel type — falling back to paste")
+            return PasteAction(targetAppPID: targetPID)
         }
     }
 

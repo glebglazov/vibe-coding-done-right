@@ -210,6 +210,11 @@ final class AppSettings {
                 pauseMediaDuringRecording: true
             )
         }
+
+        // Ensure built-in Output Panel destination exists (migration for existing installs)
+        if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInOutputPanelID }) {
+            outputDestinations.append(OutputDestination.makeDefaultOutputPanel())
+        }
     }
 
     private func save() {
