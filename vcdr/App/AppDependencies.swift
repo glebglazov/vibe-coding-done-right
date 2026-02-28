@@ -108,7 +108,9 @@ final class AppDependencies {
             self.pushToTypeCoordinator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
             recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
             // Open push-to-type with previous text pre-filled
-            self.pushToTypeCoordinator.showFollowUpOverlay(previousText: text)
+            Task { @MainActor in
+                await self.pushToTypeCoordinator.showFollowUpOverlay(previousText: text)
+            }
         }
 
     }

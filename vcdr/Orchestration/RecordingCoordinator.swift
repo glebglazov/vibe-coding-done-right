@@ -140,7 +140,7 @@ final class RecordingCoordinator {
         }
 
         previousActiveApp = NSWorkspace.shared.frontmostApplication
-        capturedSelection = selectionCapturer.capture()
+        capturedSelection = await selectionCapturer.capture(bundleIdentifier: previousActiveApp?.bundleIdentifier)
 
         // Show indicator immediately for visual feedback — the media pause
         // and recording start below are async and can take 200-400ms.

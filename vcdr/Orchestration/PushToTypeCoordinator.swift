@@ -53,7 +53,7 @@ final class PushToTypeCoordinator {
 
         hotkeyManager.onKeyDown = { [weak self] in
             Task { @MainActor in
-                self?.toggleOverlay()
+                await self?.toggleOverlay()
             }
         }
         hotkeyManager.onKeyUp = nil
@@ -69,19 +69,19 @@ final class PushToTypeCoordinator {
 
     // MARK: - Overlay Lifecycle
 
-    private func toggleOverlay() {
+    private func toggleOverlay() async {
         if panel.isVisible {
             panel.hide()
             Logger.app.info("Push-to-type: overlay dismissed via hotkey")
         } else {
-            showOverlay()
+            await showOverlay()
         }
     }
 
-    private func showOverlay() {
+    private func showOverlay() async {
         // Capture context from the frontmost app before showing the overlay
         previousActiveApp = NSWorkspace.shared.frontmostApplication
-        capturedSelection = selectionCapturer.capture()
+        capturedSelection = await selectionCapturer.capture(bundleIdentifier: previousActiveApp?.bundleIdentifier)
 
         panel.show(
             settings: settings,
@@ -100,9 +100,9 @@ final class PushToTypeCoordinator {
     /// Opens the push-to-type overlay pre-filled with follow-up context.
     /// The cursor is positioned at the start so the user can type their follow-up
     /// above the previous capture result.
-    func showFollowUpOverlay(previousText: String) {
+    func showFollowUpOverlay(previousText: String) async {
         previousActiveApp = NSWorkspace.shared.frontmostApplication
-        capturedSelection = selectionCapturer.capture()
+        capturedSelection = await selectionCapturer.capture(bundleIdentifier: previousActiveApp?.bundleIdentifier)
 
         let initialText = "\n\n" + previousText
 
