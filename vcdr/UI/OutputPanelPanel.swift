@@ -15,9 +15,9 @@ final class OutputPanelPanel {
 
     // MARK: - Constants
 
-    private static let panelWidth: CGFloat = 400
-    private static let panelMinHeight: CGFloat = 80
-    private static let panelMaxHeight: CGFloat = 300
+    private static let panelWidth: CGFloat = 480
+    private static let panelMinHeight: CGFloat = 96
+    private static let panelMaxHeight: CGFloat = 360
     private static let panelOffsetBelowMenuBar: CGFloat = 8
     /// Approximate height per line of monospaced body text
     private static let lineHeight: CGFloat = 20
