@@ -16,6 +16,20 @@ final class PushToTypeCoordinator {
     /// Temporary output destination override set via mode switcher
     var outputDestinationOverride: UUID?
 
+    /// Conversation UUID for follow-up pipeline runs.
+    /// Cleared after pipeline completes.
+    var conversationID: UUID?
+
+    /// Accumulated conversation turns from previous follow-ups.
+    /// Passed to the output panel so it can display the full conversation history.
+    /// Cleared after one pipeline run completes (or on error).
+    var conversationTurns: [ConversationTurn] = []
+
+    /// Follow-up context from the output panel. Contains the previous capture's
+    /// processed text, injected between system prompt and new input.
+    /// Cleared after one pipeline run completes (or on error).
+    var followUpContext: String?
+
     func updateOutputDestinationOverride(_ id: UUID?) {
         outputDestinationOverride = id
         panel.updateOutputDestinationOverride(id)
@@ -74,6 +88,16 @@ final class PushToTypeCoordinator {
             panel.hide()
             Logger.app.info("Push-to-type: overlay dismissed via hotkey")
         } else {
+            // If the output panel is visible, this is an implicit follow-up.
+            // Capture its state before showing the overlay.
+            if let followUp = outputPanel.captureFollowUpState() {
+                followUpContext = followUp.text
+                conversationTurns = followUp.turns
+                conversationID = followUp.conversationID
+                settings.activeModeID = followUp.modeID
+                outputDestinationOverride = OutputDestination.builtInOutputPanelID
+                recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
+            }
             await showOverlay()
         }
     }
@@ -85,40 +109,20 @@ final class PushToTypeCoordinator {
 
         panel.show(
             settings: settings,
+            conversationTurns: conversationTurns,
             onSubmit: { [weak self] text in
                 self?.submitText(text)
             },
             onDismiss: { [weak self] in
                 self?.capturedSelection = nil
                 self?.previousActiveApp = nil
+                self?.followUpContext = nil
+                self?.conversationTurns = []
+                self?.conversationID = nil
                 Logger.app.info("Push-to-type: overlay dismissed")
             }
         )
         Logger.app.info("Push-to-type: overlay shown")
-    }
-
-    /// Opens the push-to-type overlay pre-filled with follow-up context.
-    /// The cursor is positioned at the start so the user can type their follow-up
-    /// above the previous capture result.
-    func showFollowUpOverlay(previousText: String) async {
-        previousActiveApp = NSWorkspace.shared.frontmostApplication
-        capturedSelection = await selectionCapturer.capture(bundleIdentifier: previousActiveApp?.bundleIdentifier)
-
-        let initialText = "\n\n" + previousText
-
-        panel.show(
-            settings: settings,
-            initialText: initialText,
-            onSubmit: { [weak self] text in
-                self?.submitText(text)
-            },
-            onDismiss: { [weak self] in
-                self?.capturedSelection = nil
-                self?.previousActiveApp = nil
-                Logger.app.info("Push-to-type follow-up: overlay dismissed")
-            }
-        )
-        Logger.app.info("Push-to-type follow-up: overlay shown with previous context")
     }
 
     // MARK: - Text Submission Pipeline
@@ -127,6 +131,12 @@ final class PushToTypeCoordinator {
         let mode = settings.activeMode
         let selection = capturedSelection
         capturedSelection = nil
+        let activeConversationID = conversationID ?? UUID()
+        conversationID = nil
+        let currentTurns = conversationTurns
+        conversationTurns = []
+        let context = followUpContext
+        followUpContext = nil
 
         // Show processing indicator
         recordingIndicator.show()
@@ -136,7 +146,7 @@ final class PushToTypeCoordinator {
         Task { @MainActor in
             do {
                 // Step 1: Pre-processing
-                let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection)
+                let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection, followUpContext: context)
 
                 // Step 2: Processing (optional bash script)
                 let processedText: String
@@ -146,7 +156,8 @@ final class PushToTypeCoordinator {
                 case .bashScript:
                     processedText = try await BashRunner.run(
                         command: mode.processingCommand,
-                        text: preprocessedText
+                        text: preprocessedText,
+                        conversationID: activeConversationID.uuidString
                     )
                 }
 
@@ -158,13 +169,16 @@ final class PushToTypeCoordinator {
                 if destination.type == .outputPanel {
                     recordingIndicator.hide()
                     outputPanel.show(
+                        inputText: text,
                         text: processedText,
+                        conversationTurns: currentTurns,
                         outputDestinations: settings.outputDestinations,
                         targetAppPID: previousActiveApp?.processIdentifier,
-                        modeID: mode.id
+                        modeID: mode.id,
+                        conversationID: activeConversationID
                     )
                 } else {
-                    let action = makeOutputAction(for: destination)
+                    let action = makeOutputAction(for: destination, conversationID: activeConversationID)
                     try await action.execute(text: processedText)
                     recordingIndicator.update(phase: .success)
                     dismissIndicatorAfterDelay(Self.successIndicatorDuration)
@@ -184,6 +198,9 @@ final class PushToTypeCoordinator {
                 Logger.app.info("Push-to-type: complete")
             } catch {
                 outputDestinationOverride = nil
+                conversationID = nil
+                conversationTurns = []
+                followUpContext = nil
                 recordingIndicator.update(phase: .error, message: error.localizedDescription)
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
                 Logger.app.error("Push-to-type failed: \(error)")
@@ -193,7 +210,7 @@ final class PushToTypeCoordinator {
         }
     }
 
-    private func makeOutputAction(for destination: OutputDestination) -> any PostTranscriptionAction {
+    private func makeOutputAction(for destination: OutputDestination, conversationID: UUID) -> any PostTranscriptionAction {
         let targetPID = previousActiveApp?.processIdentifier
 
         switch destination.type {
@@ -202,7 +219,8 @@ final class PushToTypeCoordinator {
         case .bashScript:
             return OutputBashAction(
                 name: destination.name,
-                commandTemplate: destination.bashCommand
+                commandTemplate: destination.bashCommand,
+                conversationID: conversationID.uuidString
             )
         case .outputPanel:
             Logger.app.warning("makeOutputAction called for outputPanel type — falling back to paste")

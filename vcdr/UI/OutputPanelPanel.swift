@@ -5,19 +5,30 @@ import OSLog
 @MainActor
 final class OutputPanelPanel {
     private var panel: NSPanel?
+    private var viewModel: OutputPanelViewModel?
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
+    private var becameKeyObserver: NSObjectProtocol?
 
-    /// Called when "f" is pressed — start voice dictation follow-up with (text, modeID)
-    var onFollowUpDictation: ((String, UUID) -> Void)?
-    /// Called when "F" is pressed — start push-to-type follow-up with (text, modeID)
-    var onFollowUpType: ((String, UUID) -> Void)?
+    /// Callback invoked when the user submits inline text via Return key
+    var onSubmitText: ((String) -> Void)?
+
+    // MARK: - Current Session State
+
+    /// Conversation turns including the latest, for follow-up continuation.
+    private(set) var currentTurns: [ConversationTurn] = []
+    /// The latest processed output text, used as follow-up context for the next recording.
+    private(set) var currentText: String?
+    /// Mode that produced the current output.
+    private(set) var currentModeID: UUID?
+    /// Conversation ID for the current session.
+    private(set) var currentConversationID: UUID?
 
     // MARK: - Constants
 
     private static let panelWidth: CGFloat = 480
     private static let panelMinHeight: CGFloat = 96
-    private static let panelMaxHeight: CGFloat = 360
+    private static let panelMaxHeight: CGFloat = 600
     private static let panelOffsetBelowMenuBar: CGFloat = 8
     /// Approximate height per line of monospaced body text
     private static let lineHeight: CGFloat = 20
@@ -25,42 +36,56 @@ final class OutputPanelPanel {
     private static let contentPadding: CGFloat = 32
     /// Height of the hint bar at the bottom
     private static let hintBarHeight: CGFloat = 30
+    /// Height of a "You:" or "Result:" label line
+    private static let labelLineHeight: CGFloat = 18
+    /// Height of a divider between turns
+    private static let turnDividerHeight: CGFloat = 10
+    /// Height of the inline text input area (TextEditor 60pt + divider 8pt)
+    private static let textInputHeight: CGFloat = 68
 
     func show(
+        inputText: String,
         text: String,
+        conversationTurns: [ConversationTurn],
         outputDestinations: [OutputDestination],
         targetAppPID: pid_t?,
-        modeID: UUID
+        modeID: UUID,
+        conversationID: UUID
     ) {
         hide()
 
+        let allTurns = conversationTurns + [ConversationTurn(input: inputText, output: text)]
         let filteredDestinations = outputDestinations.filter { $0.type != .outputPanel }
 
+        // Store session state for follow-up continuation
+        self.currentTurns = allTurns
+        self.currentText = text
+        self.currentModeID = modeID
+        self.currentConversationID = conversationID
+
         let viewModel = OutputPanelViewModel(
-            text: text,
+            conversationTurns: allTurns,
             outputDestinations: filteredDestinations,
             onCopy: { [weak self] in
-                self?.copyToClipboard(text)
+                guard let self, let latestText = self.currentText else { return }
+                self.copyToClipboard(latestText)
             },
             onFireDestination: { [weak self] destination in
-                self?.fireDestination(destination, text: text, targetAppPID: targetAppPID)
-            },
-            onFollowUpDictation: { [weak self] in
-                self?.hide()
-                self?.onFollowUpDictation?(text, modeID)
-            },
-            onFollowUpType: { [weak self] in
-                self?.hide()
-                self?.onFollowUpType?(text, modeID)
+                guard let self, let latestText = self.currentText else { return }
+                self.fireDestination(destination, text: latestText, targetAppPID: targetAppPID, conversationID: self.currentConversationID ?? conversationID)
             },
             onDismiss: { [weak self] in
                 self?.hide()
+            },
+            onSubmitText: { [weak self] text in
+                self?.onSubmitText?(text)
             }
         )
+        self.viewModel = viewModel
 
         let view = OutputPanelView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
-        let panelHeight = Self.calculateHeight(for: text)
+        let panelHeight = Self.calculateHeight(for: allTurns)
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: panelHeight)
 
         let panel = KeyablePanel(
@@ -91,13 +116,28 @@ final class OutputPanelPanel {
         panel.makeKey()
         self.panel = panel
 
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
-            guard let viewModel else { return event }
+        // Focus the TextEditor's underlying NSTextView for immediate keyboard input
+        if let contentView = panel.contentView {
+            Self.focusFirstTextView(in: contentView, panel: panel)
+        }
+
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel, weak panel] event in
+            guard let viewModel, panel?.isKeyWindow == true else { return event }
             return viewModel.handleKeyEvent(event) ? nil : event
         }
 
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             self?.hide()
+        }
+
+        // Re-focus the text view when this panel regains key status
+        becameKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, let contentView = self.panel?.contentView, let panel = self.panel else { return }
+            Self.focusFirstTextView(in: contentView, panel: panel)
         }
 
         Logger.actions.info("Output panel shown")
@@ -112,19 +152,139 @@ final class OutputPanelPanel {
             NSEvent.removeMonitor(monitor)
             globalEventMonitor = nil
         }
+        if let observer = becameKeyObserver {
+            NotificationCenter.default.removeObserver(observer)
+            becameKeyObserver = nil
+        }
         panel?.close()
         panel = nil
+        viewModel = nil
+
+        // Clear session state
+        currentTurns = []
+        currentText = nil
+        currentModeID = nil
+        currentConversationID = nil
     }
 
     var isVisible: Bool { panel != nil }
 
+    // MARK: - Follow-up State Capture
+
+    /// Captures the current session state and hides the panel.
+    /// Returns nil if the panel is not visible.
+    struct FollowUpState {
+        let turns: [ConversationTurn]
+        let text: String
+        let modeID: UUID
+        let conversationID: UUID
+    }
+
+    func captureFollowUpState() -> FollowUpState? {
+        guard isVisible,
+              let text = currentText,
+              let modeID = currentModeID,
+              let conversationID = currentConversationID else {
+            return nil
+        }
+        let turns = currentTurns
+        hide()
+        return FollowUpState(turns: turns, text: text, modeID: modeID, conversationID: conversationID)
+    }
+
     // MARK: - Height Calculation
 
-    private static func calculateHeight(for text: String) -> CGFloat {
-        let lineCount = CGFloat(text.components(separatedBy: .newlines).count)
-        let estimatedTextHeight = lineCount * lineHeight
-        let totalHeight = estimatedTextHeight + contentPadding + hintBarHeight
+    private static func calculateHeight(for turns: [ConversationTurn]) -> CGFloat {
+        var totalLines: CGFloat = 0
+        // Show labels when multiple turns or when input was transformed by processing
+        let showLabels = turns.count > 1 || (turns.first.map { $0.input != $0.output } ?? false)
+
+        for (index, turn) in turns.enumerated() {
+            if showLabels {
+                // "You:" label + input lines + "Result:" label
+                totalLines += CGFloat(turn.input.components(separatedBy: .newlines).count)
+                let labelOverhead = 2 * labelLineHeight / lineHeight // Two labels per turn
+                totalLines += labelOverhead
+            }
+            totalLines += CGFloat(turn.output.components(separatedBy: .newlines).count)
+
+            // Divider between turns (not after last)
+            if index < turns.count - 1 {
+                totalLines += turnDividerHeight / lineHeight
+            }
+        }
+
+        let estimatedTextHeight = totalLines * lineHeight
+        let totalHeight = estimatedTextHeight + contentPadding + hintBarHeight + textInputHeight
         return min(max(totalHeight, panelMinHeight), panelMaxHeight)
+    }
+
+    // MARK: - In-Place Processing
+
+    func startProcessing(inputText: String) {
+        let pendingTurn = ConversationTurn(input: inputText, output: "...")
+        viewModel?.conversationTurns.append(pendingTurn)
+        viewModel?.isProcessing = true
+        viewModel?.inlineText = ""
+        currentTurns = viewModel?.conversationTurns ?? currentTurns
+        viewModel?.scrollTrigger += 1
+        resizePanel()
+    }
+
+    func finishProcessing(outputText: String) {
+        guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
+        let lastIndex = viewModel.conversationTurns.count - 1
+        let lastTurn = viewModel.conversationTurns[lastIndex]
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(input: lastTurn.input, output: outputText)
+        currentText = outputText
+        viewModel.isProcessing = false
+        currentTurns = viewModel.conversationTurns
+        viewModel.scrollTrigger += 1
+        resizePanel()
+    }
+
+    func showProcessingError(_ message: String) {
+        guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
+        viewModel.conversationTurns.removeLast()
+        currentTurns = viewModel.conversationTurns
+        viewModel.isProcessing = false
+        resizePanel()
+        Logger.actions.error("Output panel inline processing failed: \(message)")
+    }
+
+    /// Recalculates and animates panel height based on current conversation turns
+    private func resizePanel() {
+        guard let panel else { return }
+        let newHeight = Self.calculateHeight(for: currentTurns)
+        let currentFrame = panel.frame
+        // Grow/shrink upward: keep top edge pinned
+        let newY = currentFrame.maxY - newHeight
+        let newFrame = NSRect(x: currentFrame.origin.x, y: newY, width: currentFrame.width, height: newHeight)
+        panel.setFrame(newFrame, display: true, animate: true)
+    }
+
+    // MARK: - Focus Management
+
+    /// Walks the view hierarchy to find the NSTextView created by SwiftUI's TextEditor
+    /// and makes it the panel's first responder for immediate keyboard input.
+    private static func focusFirstTextView(in view: NSView, panel: NSPanel) {
+        DispatchQueue.main.async {
+            if let textView = findFirstTextView(in: view) {
+                panel.makeFirstResponder(textView)
+            }
+        }
+    }
+
+    private static func findFirstTextView(in view: NSView) -> NSTextView? {
+        if let textView = view as? NSTextView {
+            return textView
+        }
+        for subview in view.subviews {
+            if let found = findFirstTextView(in: subview) {
+                return found
+            }
+        }
+        return nil
     }
 
     // MARK: - Actions
@@ -135,7 +295,7 @@ final class OutputPanelPanel {
         Logger.actions.info("Output panel: text copied to clipboard")
     }
 
-    private func fireDestination(_ destination: OutputDestination, text: String, targetAppPID: pid_t?) {
+    private func fireDestination(_ destination: OutputDestination, text: String, targetAppPID: pid_t?, conversationID: UUID) {
         hide()
         Task {
             do {
@@ -146,7 +306,8 @@ final class OutputPanelPanel {
                 case .bashScript:
                     action = OutputBashAction(
                         name: destination.name,
-                        commandTemplate: destination.bashCommand
+                        commandTemplate: destination.bashCommand,
+                        conversationID: conversationID.uuidString
                     )
                 case .outputPanel:
                     return
@@ -164,132 +325,4 @@ final class OutputPanelPanel {
 
 private final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
-}
-
-// MARK: - View Model
-
-@Observable
-private final class OutputPanelViewModel {
-    let text: String
-    let outputDestinations: [OutputDestination]
-    let onCopy: () -> Void
-    let onFireDestination: (OutputDestination) -> Void
-    let onFollowUpDictation: () -> Void
-    let onFollowUpType: () -> Void
-    let onDismiss: () -> Void
-
-    init(
-        text: String,
-        outputDestinations: [OutputDestination],
-        onCopy: @escaping () -> Void,
-        onFireDestination: @escaping (OutputDestination) -> Void,
-        onFollowUpDictation: @escaping () -> Void,
-        onFollowUpType: @escaping () -> Void,
-        onDismiss: @escaping () -> Void
-    ) {
-        self.text = text
-        self.outputDestinations = outputDestinations
-        self.onCopy = onCopy
-        self.onFireDestination = onFireDestination
-        self.onFollowUpDictation = onFollowUpDictation
-        self.onFollowUpType = onFollowUpType
-        self.onDismiss = onDismiss
-    }
-
-    /// Returns true if the event was handled (consumed)
-    func handleKeyEvent(_ event: NSEvent) -> Bool {
-        let chars = event.charactersIgnoringModifiers ?? ""
-        // Use `characters` (not `charactersIgnoringModifiers`) to detect "F" (Shift+F)
-        let rawChars = event.characters ?? ""
-
-        switch event.keyCode {
-        case 53: // Escape
-            onDismiss()
-            return true
-        default:
-            if chars == "c" {
-                onCopy()
-                onDismiss()
-                return true
-            }
-            // Follow-up shortcuts: "F" (Shift+F) = type, "f" = dictation
-            // Check rawChars which reflects Shift state, before destination
-            // activation keys which use charactersIgnoringModifiers
-            if rawChars == "F" {
-                onFollowUpType()
-                return true
-            }
-            if rawChars == "f" {
-                onFollowUpDictation()
-                return true
-            }
-            // Check destination activation keys
-            if let char = chars.first {
-                let key = String(char)
-                if let destination = outputDestinations.first(where: { $0.activationKey == key }) {
-                    onFireDestination(destination)
-                    return true
-                }
-            }
-            return false
-        }
-    }
-}
-
-// MARK: - SwiftUI View
-
-private struct OutputPanelView: View {
-    let viewModel: OutputPanelViewModel
-
-    // MARK: - Constants
-
-    private static let cornerRadius: CGFloat = 10
-    private static let textPadding: CGFloat = 12
-    private static let hintBarHPadding: CGFloat = 10
-    private static let hintBarVPadding: CGFloat = 6
-    private static let hintSpacing: CGFloat = 12
-    private static let keyCornerRadius: CGFloat = 3
-    private static let keyHPadding: CGFloat = 4
-    private static let keyVPadding: CGFloat = 1
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                Text(viewModel.text)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(Self.textPadding)
-            }
-
-            Divider()
-
-            HStack(spacing: Self.hintSpacing) {
-                hintLabel("c", "copy")
-                hintLabel("f", "follow-up")
-                hintLabel("F", "type")
-                ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
-                    hintLabel(dest.activationKey, dest.name.lowercased())
-                }
-                Spacer()
-                hintLabel("esc", "dismiss")
-            }
-            .padding(.horizontal, Self.hintBarHPadding)
-            .padding(.vertical, Self.hintBarVPadding)
-        }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
-    }
-
-    private func hintLabel(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 2) {
-            Text(key)
-                .font(.system(.caption, design: .monospaced))
-                .padding(.horizontal, Self.keyHPadding)
-                .padding(.vertical, Self.keyVPadding)
-                .background(Color.secondary.opacity(0.2), in: RoundedRectangle(cornerRadius: Self.keyCornerRadius))
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
 }

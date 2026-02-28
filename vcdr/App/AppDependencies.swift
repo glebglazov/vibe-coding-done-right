@@ -85,31 +85,34 @@ final class AppDependencies {
             self?.coordinator.resumeEscCancel()
         }
 
-        // Wire follow-up from output panel to voice dictation
-        outputPanel.onFollowUpDictation = { [weak self] text, modeID in
+        // Wire inline text submission from the output panel
+        outputPanel.onSubmitText = { [weak self] text in
             guard let self else { return }
-            // Switch to the mode that produced the result
-            self.settings.activeModeID = modeID
-            // Set follow-up context for the pipeline
-            self.coordinator.followUpContext = text
-            // Route output to the output panel
-            self.coordinator.outputDestinationOverride = OutputDestination.builtInOutputPanelID
-            recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
-            // Start recording in toggle mode
-            self.coordinator.toggleRecording()
-        }
+            let modeID = outputPanel.currentModeID ?? self.settings.activeModeID
+            let mode = self.settings.modes.first(where: { $0.id == modeID }) ?? self.settings.activeMode
+            let followUpContext = outputPanel.currentText
+            let conversationID = outputPanel.currentConversationID ?? UUID()
 
-        // Wire follow-up from output panel to push-to-type
-        outputPanel.onFollowUpType = { [weak self] text, modeID in
-            guard let self else { return }
-            // Switch to the mode that produced the result
-            self.settings.activeModeID = modeID
-            // Route output to the output panel
-            self.pushToTypeCoordinator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
-            recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
-            // Open push-to-type with previous text pre-filled
+            outputPanel.startProcessing(inputText: text)
+
             Task { @MainActor in
-                await self.pushToTypeCoordinator.showFollowUpOverlay(previousText: text)
+                do {
+                    let preprocessed = mode.applyPreProcessing(text, capturedSelection: nil, followUpContext: followUpContext)
+                    let processed: String
+                    switch mode.processingType {
+                    case .none:
+                        processed = preprocessed
+                    case .bashScript:
+                        processed = try await BashRunner.run(
+                            command: mode.processingCommand,
+                            text: preprocessed,
+                            conversationID: conversationID.uuidString
+                        )
+                    }
+                    outputPanel.finishProcessing(outputText: processed)
+                } catch {
+                    outputPanel.showProcessingError(error.localizedDescription)
+                }
             }
         }
 

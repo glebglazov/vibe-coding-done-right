@@ -12,15 +12,29 @@ final class PushToTypePanel {
     // MARK: - Constants
 
     private static let panelWidth: CGFloat = 400
-    private static let panelHeight: CGFloat = 140
+    private static let panelBaseHeight: CGFloat = 140
+    private static let panelMaxHeight: CGFloat = 600
     private static let panelOffsetBelowMenuBar: CGFloat = 8
+    /// Approximate height per line of monospaced body text
+    private static let lineHeight: CGFloat = 20
+    /// Height of a "You:" or "Result:" label line
+    private static let labelLineHeight: CGFloat = 18
+    /// Height of a divider between turns
+    private static let turnDividerHeight: CGFloat = 10
+    /// Padding around the conversation history section
+    private static let conversationPadding: CGFloat = 24
 
-    func show(settings: AppSettings, initialText: String? = nil, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
+    func show(
+        settings: AppSettings,
+        conversationTurns: [ConversationTurn] = [],
+        onSubmit: @escaping (String) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
         hide()
 
         let viewModel = PushToTypeViewModel(
             settings: settings,
-            initialText: initialText,
+            conversationTurns: conversationTurns,
             onSubmit: { [weak self] text in
                 onSubmit(text)
                 self?.hide()
@@ -34,7 +48,8 @@ final class PushToTypePanel {
 
         let view = PushToTypeView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
+        let panelHeight = Self.calculateHeight(for: conversationTurns)
+        hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: panelHeight)
 
         let panel = KeyablePanel(
             contentRect: hostingView.frame,
@@ -57,7 +72,7 @@ final class PushToTypePanel {
             let visibleFrame = screen.visibleFrame
             let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
             let x = screenFrame.midX - Self.panelWidth / 2
-            let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.panelOffsetBelowMenuBar
+            let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 
@@ -68,8 +83,7 @@ final class PushToTypePanel {
         // Focus the TextEditor's underlying NSTextView directly via AppKit.
         // @FocusState in NSHostingView inside a .nonActivatingPanel is unreliable
         // because SwiftUI's focus system may not connect to the panel's responder chain.
-        let cursorAtStart = initialText != nil
-        Self.focusFirstTextView(in: hostingView, panel: panel, cursorAtStart: cursorAtStart)
+        Self.focusFirstTextView(in: hostingView, panel: panel)
 
         // Intercept Return (submit) and Escape (dismiss) before they reach the text field.
         // Only handle events when this panel is key — if another panel (e.g. mode switcher)
@@ -91,7 +105,7 @@ final class PushToTypePanel {
             queue: .main
         ) { [weak hostingView, weak panel] _ in
             guard let hostingView, let panel else { return }
-            Self.focusFirstTextView(in: hostingView, panel: panel, cursorAtStart: false)
+            Self.focusFirstTextView(in: hostingView, panel: panel)
         }
 
         // Dismiss if the user clicks outside the panel
@@ -124,17 +138,36 @@ final class PushToTypePanel {
         viewModel?.outputDestinationOverrideID = id
     }
 
+    // MARK: - Height Calculation
+
+    private static func calculateHeight(for turns: [ConversationTurn]) -> CGFloat {
+        guard !turns.isEmpty else { return panelBaseHeight }
+
+        var conversationLines: CGFloat = 0
+        for (index, turn) in turns.enumerated() {
+            // "You:" label + input lines + "Result:" label + output lines
+            conversationLines += labelLineHeight / lineHeight
+            conversationLines += CGFloat(turn.input.components(separatedBy: .newlines).count)
+            conversationLines += labelLineHeight / lineHeight
+            conversationLines += CGFloat(turn.output.components(separatedBy: .newlines).count)
+
+            if index < turns.count - 1 {
+                conversationLines += turnDividerHeight / lineHeight
+            }
+        }
+
+        let conversationHeight = conversationLines * lineHeight + conversationPadding
+        return min(panelBaseHeight + conversationHeight, panelMaxHeight)
+    }
+
+    // MARK: - Focus Management
+
     /// Walks the view hierarchy to find the NSTextView created by SwiftUI's TextEditor
     /// and makes it the panel's first responder for immediate keyboard input.
-    /// When `cursorAtStart` is true, positions the cursor at the beginning of the text
-    /// (used for follow-up pre-fill so the user types above the previous context).
-    private static func focusFirstTextView(in view: NSView, panel: NSPanel, cursorAtStart: Bool = false) {
+    private static func focusFirstTextView(in view: NSView, panel: NSPanel) {
         DispatchQueue.main.async {
             if let textView = Self.findFirstTextView(in: view) {
                 panel.makeFirstResponder(textView)
-                if cursorAtStart {
-                    textView.setSelectedRange(NSRange(location: 0, length: 0))
-                }
             }
         }
     }
@@ -164,6 +197,7 @@ private final class KeyablePanel: NSPanel {
 final class PushToTypeViewModel {
     var text: String = ""
     var outputDestinationOverrideID: UUID?
+    let conversationTurns: [ConversationTurn]
     let settings: AppSettings
     let onSubmit: (String) -> Void
     let onDismiss: () -> Void
@@ -174,13 +208,11 @@ final class PushToTypeViewModel {
         return "\(settings.activeMode.name) · \(destination.symbol)"
     }
 
-    init(settings: AppSettings, initialText: String? = nil, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
+    init(settings: AppSettings, conversationTurns: [ConversationTurn] = [], onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
         self.settings = settings
+        self.conversationTurns = conversationTurns
         self.onSubmit = onSubmit
         self.onDismiss = onDismiss
-        if let initialText {
-            self.text = initialText
-        }
     }
 
     /// Returns true if the event was handled (consumed)
@@ -221,9 +253,16 @@ private struct PushToTypeView: View {
     private static let keyCornerRadius: CGFloat = 3
     private static let keyHPadding: CGFloat = 4
     private static let keyVPadding: CGFloat = 1
+    private static let labelVPadding: CGFloat = 4
+    private static let turnDividerVPadding: CGFloat = 4
 
     var body: some View {
         VStack(spacing: 0) {
+            if !viewModel.conversationTurns.isEmpty {
+                conversationHistorySection
+                Divider()
+            }
+
             TextEditor(text: $viewModel.text)
                 .font(.system(size: 13))
                 .scrollContentBackground(.hidden)
@@ -246,6 +285,41 @@ private struct PushToTypeView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
         .onAppear {
             isTextFieldFocused = true
+        }
+    }
+
+    private var conversationHistorySection: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(viewModel.conversationTurns.enumerated()), id: \.element.id) { index, turn in
+                    Text("You:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, Self.labelVPadding)
+
+                    Text(turn.input)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, Self.labelVPadding)
+
+                    Text("Result:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, Self.labelVPadding)
+
+                    Text(turn.output)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if index < viewModel.conversationTurns.count - 1 {
+                        Divider()
+                            .padding(.vertical, Self.turnDividerVPadding)
+                    }
+                }
+            }
+            .padding(Self.textPadding)
         }
     }
 

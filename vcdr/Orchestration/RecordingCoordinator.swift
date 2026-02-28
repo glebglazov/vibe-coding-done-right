@@ -35,6 +35,16 @@ final class RecordingCoordinator {
     /// Cleared after one transcription completes (or on error/cancel).
     var followUpContext: String?
 
+    /// Accumulated conversation turns from previous follow-ups.
+    /// Passed to the output panel so it can display the full conversation history.
+    /// Cleared after one transcription completes (or on error/cancel).
+    var conversationTurns: [ConversationTurn] = []
+
+    /// Conversation UUID for the current pipeline run. Generated fresh for new
+    /// recordings, preserved across follow-ups via the output panel callbacks.
+    /// Cleared after pipeline completes (but passed to the output panel for follow-up reuse).
+    var conversationID: UUID?
+
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
     private var recordingStartInstant: ContinuousClock.Instant?
@@ -128,6 +138,17 @@ final class RecordingCoordinator {
 
         isPreparingToRecord = true
         defer { isPreparingToRecord = false }
+
+        // If the output panel is visible, this is an implicit follow-up.
+        // Capture its state before hiding so the pipeline continues the conversation.
+        if let followUp = outputPanel.captureFollowUpState() {
+            followUpContext = followUp.text
+            conversationTurns = followUp.turns
+            conversationID = followUp.conversationID
+            settings.activeModeID = followUp.modeID
+            outputDestinationOverride = OutputDestination.builtInOutputPanelID
+            recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
+        }
 
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
@@ -234,6 +255,8 @@ final class RecordingCoordinator {
                 capturedSelection = nil
                 outputDestinationOverride = nil
                 followUpContext = nil
+                conversationTurns = []
+                conversationID = nil
                 state = .error("No speech detected")
                 recordingIndicator.update(phase: .error, message: "No speech detected")
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -246,6 +269,12 @@ final class RecordingCoordinator {
             capturedSelection = nil
             let context = followUpContext
             followUpContext = nil
+            let currentTurns = conversationTurns
+            conversationTurns = []
+            // Generate a new conversation ID for fresh recordings,
+            // reuse existing one for follow-ups
+            let activeConversationID = conversationID ?? UUID()
+            conversationID = nil
 
             // Step 1: Pre-processing (terminator, system prompt, follow-up context, captured selection)
             let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection, followUpContext: context)
@@ -258,7 +287,8 @@ final class RecordingCoordinator {
             case .bashScript:
                 processedText = try await BashRunner.run(
                     command: mode.processingCommand,
-                    text: preprocessedText
+                    text: preprocessedText,
+                    conversationID: activeConversationID.uuidString
                 )
             }
 
@@ -274,13 +304,16 @@ final class RecordingCoordinator {
                 // Output panel handles its own lifecycle — no success indicator needed
                 recordingIndicator.hide()
                 outputPanel.show(
+                    inputText: text,
                     text: processedText,
+                    conversationTurns: currentTurns,
                     outputDestinations: settings.outputDestinations,
                     targetAppPID: previousActiveApp?.processIdentifier,
-                    modeID: mode.id
+                    modeID: mode.id,
+                    conversationID: activeConversationID
                 )
             } else {
-                let action = makeOutputAction(for: destination)
+                let action = makeOutputAction(for: destination, conversationID: activeConversationID)
                 try await action.execute(text: processedText)
                 recordingIndicator.update(phase: .success)
                 dismissIndicatorAfterDelay(Self.successIndicatorDuration)
@@ -306,6 +339,8 @@ final class RecordingCoordinator {
             capturedSelection = nil
             outputDestinationOverride = nil
             followUpContext = nil
+            conversationTurns = []
+            conversationID = nil
             state = .error(error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -314,7 +349,7 @@ final class RecordingCoordinator {
         }
     }
 
-    private func makeOutputAction(for destination: OutputDestination) -> any PostTranscriptionAction {
+    private func makeOutputAction(for destination: OutputDestination, conversationID: UUID) -> any PostTranscriptionAction {
         let targetPID = previousActiveApp?.processIdentifier
 
         switch destination.type {
@@ -323,7 +358,8 @@ final class RecordingCoordinator {
         case .bashScript:
             return OutputBashAction(
                 name: destination.name,
-                commandTemplate: destination.bashCommand
+                commandTemplate: destination.bashCommand,
+                conversationID: conversationID.uuidString
             )
         case .outputPanel:
             // Handled separately in processTranscription — should not reach here
@@ -401,6 +437,8 @@ final class RecordingCoordinator {
         capturedSelection = nil
         outputDestinationOverride = nil
         followUpContext = nil
+        conversationTurns = []
+        conversationID = nil
         recordingStartInstant = nil
 
         recordingIndicator.showCancelled()
