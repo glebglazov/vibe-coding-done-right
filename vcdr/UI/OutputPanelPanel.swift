@@ -313,15 +313,32 @@ final class OutputPanelPanel {
         panel.setFrame(newFrame, display: true, animate: true)
     }
 
+    // MARK: - Constants (Focus)
+
+    /// Maximum number of attempts to find and focus the NSTextView
+    private static let focusMaxAttempts = 10
+    /// Delay between focus retry attempts, giving SwiftUI time to lay out the view hierarchy
+    private static let focusRetryDelay: Duration = .milliseconds(10)
+
     // MARK: - Focus Management
 
     /// Walks the view hierarchy to find the NSTextView created by SwiftUI's TextEditor
     /// and makes it the panel's first responder for immediate keyboard input.
+    /// Retries with a short delay because SwiftUI may need multiple run loop iterations
+    /// to fully insert the NSTextView into the hosting view's hierarchy.
     private static func focusFirstTextView(in view: NSView, panel: NSPanel) {
-        DispatchQueue.main.async {
-            if let textView = findFirstTextView(in: view) {
-                panel.makeFirstResponder(textView)
+        Task { @MainActor in
+            for _ in 0..<focusMaxAttempts {
+                if let textView = findFirstTextView(in: view) {
+                    panel.makeFirstResponder(textView)
+                    // Verify focus actually took — another responder may have stolen it
+                    if panel.firstResponder === textView {
+                        return
+                    }
+                }
+                try? await Task.sleep(for: focusRetryDelay)
             }
+            Logger.ui.warning("Output panel: failed to focus text view after \(focusMaxAttempts) attempts")
         }
     }
 
