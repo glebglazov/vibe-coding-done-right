@@ -39,16 +39,20 @@ final class RecordingIndicatorPanel {
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
     private let settings: AppSettings
+    /// Stored top offset for positioning below the output panel during follow-ups.
+    /// Used by showCancelled() so the cancelled indicator appears in the same spot.
+    private var currentTopOffset: CGFloat = 0
 
     init(settings: AppSettings) {
         self.settings = settings
     }
 
-    func show(withBorder: Bool = false) {
+    func show(withBorder: Bool = false, topOffset: CGFloat = 0) {
         phaseState.phase = .recording
         phaseState.showBorder = withBorder
         phaseState.errorMessage = nil
         phaseState.outputDestinationOverrideID = nil
+        currentTopOffset = topOffset
 
         // Always recreate the panel — the existing one may be a CancelledIndicatorView
         // from a recent Esc cancel, which doesn't reference phaseState at all.
@@ -73,15 +77,7 @@ final class RecordingIndicatorPanel {
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = true
 
-        // Position at top center of the main screen, just below the menu bar
-        if let screen = NSScreen.main ?? NSScreen.screens.first {
-            let screenFrame = screen.frame
-            let visibleFrame = screen.visibleFrame
-            let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
-            let x = screenFrame.midX - Self.panelWidth / 2
-            let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.menuBarGap
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
-        }
+        positionAtTopCenter(panel, topOffset: topOffset)
 
         panel.orderFrontRegardless()
         self.panel = panel
@@ -110,15 +106,18 @@ final class RecordingIndicatorPanel {
         panel = nil
     }
 
-    /// Show a brief "cancelled" indicator (grey X) that auto-hides
+    /// Show a brief "cancelled" indicator (grey X) that auto-hides.
+    /// Uses the stored topOffset so it appears where the recording indicator was.
     func showCancelled() {
+        let offset = currentTopOffset
+        currentTopOffset = 0
         hide()
 
         let hostingView = NSHostingView(rootView: CancelledIndicatorView())
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
 
         let cancelPanel = makeEphemeralPanel(contentView: hostingView)
-        positionAtTopCenter(cancelPanel)
+        positionAtTopCenter(cancelPanel, topOffset: offset)
         cancelPanel.orderFrontRegardless()
         self.panel = cancelPanel
 
@@ -202,13 +201,13 @@ final class RecordingIndicatorPanel {
         return panel
     }
 
-    private func positionAtTopCenter(_ panel: NSPanel) {
+    private func positionAtTopCenter(_ panel: NSPanel, topOffset: CGFloat = 0) {
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let screenFrame = screen.frame
         let visibleFrame = screen.visibleFrame
         let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
         let x = screenFrame.midX - Self.panelWidth / 2
-        let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.menuBarGap
+        let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.menuBarGap - topOffset
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 

@@ -27,6 +27,7 @@ final class PushToTypePanel {
     func show(
         settings: AppSettings,
         conversationTurns: [ConversationTurn] = [],
+        topOffset: CGFloat = 0,
         onSubmit: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -66,13 +67,13 @@ final class PushToTypePanel {
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
 
-        // Position at top center, just below the menu bar
+        // Position at top center, just below the menu bar (or below the output panel)
         if let screen = NSScreen.main ?? NSScreen.screens.first {
             let screenFrame = screen.frame
             let visibleFrame = screen.visibleFrame
             let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
             let x = screenFrame.midX - Self.panelWidth / 2
-            let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar
+            let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar - topOffset
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 

@@ -53,6 +53,12 @@ final class RecordingCoordinator {
     /// Guards against concurrent onHotkeyDown() calls racing during the async gap
     /// between state == .idle check and state = .recording assignment.
     private var isPreparingToRecord = false
+    /// True when the current recording is a follow-up triggered while the output panel was visible.
+    /// The output panel stays visible and the recording indicator is positioned below it.
+    private var isFollowUpFromVisibleOutputPanel = false
+
+    /// Gap between the bottom of the output panel and the top of the recording indicator
+    private static let panelGap: CGFloat = 8
 
     init(
         settings: AppSettings,
@@ -140,19 +146,23 @@ final class RecordingCoordinator {
         defer { isPreparingToRecord = false }
 
         // If the output panel is visible, this is an implicit follow-up.
-        // Capture its state before hiding so the pipeline continues the conversation.
-        if let followUp = outputPanel.captureFollowUpState() {
+        // Read state without hiding so the user sees conversation history while recording.
+        if let followUp = outputPanel.readFollowUpState() {
             followUpContext = followUp.text
             conversationTurns = followUp.turns
             conversationID = followUp.conversationID
             settings.activeModeID = followUp.modeID
             outputDestinationOverride = OutputDestination.builtInOutputPanelID
             recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
+            isFollowUpFromVisibleOutputPanel = true
+            outputPanel.lockForFollowUp()
         }
 
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
             state = .error("Model still loading...")
+            isFollowUpFromVisibleOutputPanel = false
+            outputPanel.unlockFollowUp()
             recordingIndicator.show()
             recordingIndicator.update(phase: .error, message: "Model still loading...")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -165,7 +175,11 @@ final class RecordingCoordinator {
 
         // Show indicator immediately for visual feedback — the media pause
         // and recording start below are async and can take 200-400ms.
-        recordingIndicator.show(withBorder: isToggleMode)
+        // Position below the output panel when it's a visible follow-up.
+        let topOffset = isFollowUpFromVisibleOutputPanel
+            ? outputPanel.currentPanelHeight + Self.panelGap
+            : 0
+        recordingIndicator.show(withBorder: isToggleMode, topOffset: topOffset)
 
         if settings.audioSettings.pauseMediaDuringRecording {
             await mediaPlaybackController.pauseIfNeeded()
@@ -257,6 +271,8 @@ final class RecordingCoordinator {
                 followUpContext = nil
                 conversationTurns = []
                 conversationID = nil
+                isFollowUpFromVisibleOutputPanel = false
+                outputPanel.unlockFollowUp()
                 state = .error("No speech detected")
                 recordingIndicator.update(phase: .error, message: "No speech detected")
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -275,6 +291,13 @@ final class RecordingCoordinator {
             // reuse existing one for follow-ups
             let activeConversationID = conversationID ?? UUID()
             conversationID = nil
+            let wasFollowUpFromOutputPanel = isFollowUpFromVisibleOutputPanel
+            isFollowUpFromVisibleOutputPanel = false
+
+            // Show the pending "..." turn in the output panel while processing
+            if wasFollowUpFromOutputPanel {
+                outputPanel.startProcessing(inputText: text)
+            }
 
             // Step 1: Pre-processing (terminator, system prompt, follow-up context, captured selection)
             let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection, followUpContext: context)
@@ -301,18 +324,24 @@ final class RecordingCoordinator {
             let destination = settings.outputDestination(for: destinationID)
 
             if destination.type == .outputPanel {
-                // Output panel handles its own lifecycle — no success indicator needed
                 recordingIndicator.hide()
-                outputPanel.show(
-                    inputText: text,
-                    text: processedText,
-                    conversationTurns: currentTurns,
-                    outputDestinations: settings.outputDestinations,
-                    targetAppPID: previousActiveApp?.processIdentifier,
-                    modeID: mode.id,
-                    conversationID: activeConversationID
-                )
+                if wasFollowUpFromOutputPanel {
+                    // Update the existing output panel in-place
+                    outputPanel.finishProcessing(outputText: processedText)
+                    outputPanel.unlockFollowUp()
+                } else {
+                    outputPanel.show(
+                        inputText: text,
+                        text: processedText,
+                        conversationTurns: currentTurns,
+                        outputDestinations: settings.outputDestinations,
+                        targetAppPID: previousActiveApp?.processIdentifier,
+                        modeID: mode.id,
+                        conversationID: activeConversationID
+                    )
+                }
             } else {
+                outputPanel.unlockFollowUp()
                 let action = makeOutputAction(for: destination, conversationID: activeConversationID)
                 try await action.execute(text: processedText)
                 recordingIndicator.update(phase: .success)
@@ -336,11 +365,16 @@ final class RecordingCoordinator {
             state = .idle
             Logger.app.info("Pipeline: complete")
         } catch {
+            if outputPanel.isLockedForFollowUp {
+                outputPanel.showProcessingError(error.localizedDescription)
+            }
+            outputPanel.unlockFollowUp()
             capturedSelection = nil
             outputDestinationOverride = nil
             followUpContext = nil
             conversationTurns = []
             conversationID = nil
+            isFollowUpFromVisibleOutputPanel = false
             state = .error(error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -440,7 +474,11 @@ final class RecordingCoordinator {
         conversationTurns = []
         conversationID = nil
         recordingStartInstant = nil
+        isFollowUpFromVisibleOutputPanel = false
+        outputPanel.unlockFollowUp()
 
+        // showCancelled() uses stored currentTopOffset so the indicator
+        // appears where the recording indicator was, then resets it to 0.
         recordingIndicator.showCancelled()
         Logger.app.info("Recording cancelled via Esc")
     }

@@ -13,6 +13,10 @@ final class OutputPanelPanel {
     /// Callback invoked when the user submits inline text via Return key
     var onSubmitText: ((String) -> Void)?
 
+    /// When true, the panel ignores dismiss triggers (global clicks, Escape, Cmd+C).
+    /// Set during follow-up recording/typing so the panel stays visible.
+    private(set) var isLockedForFollowUp = false
+
     // MARK: - Current Session State
 
     /// Conversation turns including the latest, for follow-up continuation.
@@ -52,7 +56,7 @@ final class OutputPanelPanel {
         modeID: UUID,
         conversationID: UUID
     ) {
-        hide()
+        tearDown()
 
         let allTurns = conversationTurns + [ConversationTurn(input: inputText, output: text)]
         let filteredDestinations = outputDestinations.filter { $0.type != .outputPanel }
@@ -144,6 +148,16 @@ final class OutputPanelPanel {
     }
 
     func hide() {
+        // When locked for follow-up, ignore dismiss requests (global clicks, Escape, Cmd+C).
+        // The panel stays visible so the user sees conversation history during dictation.
+        guard !isLockedForFollowUp else { return }
+        tearDown()
+    }
+
+    /// Unconditionally closes the panel and clears all state, ignoring the follow-up lock.
+    /// Used by `show()` to tear down the previous panel before creating a new one.
+    private func tearDown() {
+        isLockedForFollowUp = false
         if let monitor = localEventMonitor {
             NSEvent.removeMonitor(monitor)
             localEventMonitor = nil
@@ -188,8 +202,44 @@ final class OutputPanelPanel {
             return nil
         }
         let turns = currentTurns
-        hide()
+        tearDown()
         return FollowUpState(turns: turns, text: text, modeID: modeID, conversationID: conversationID)
+    }
+
+    /// Reads the current follow-up state without hiding the panel.
+    /// Use when the output panel should remain visible during follow-up recording/typing.
+    func readFollowUpState() -> FollowUpState? {
+        guard isVisible,
+              let text = currentText,
+              let modeID = currentModeID,
+              let conversationID = currentConversationID else {
+            return nil
+        }
+        return FollowUpState(turns: currentTurns, text: text, modeID: modeID, conversationID: conversationID)
+    }
+
+    /// Prevents the panel from auto-dismissing (global clicks, Escape, Cmd+C).
+    /// Call when starting a follow-up recording or push-to-type session.
+    func lockForFollowUp() {
+        isLockedForFollowUp = true
+    }
+
+    /// Re-enables normal dismiss behavior.
+    /// Call when the follow-up recording/typing session ends.
+    func unlockFollowUp() {
+        isLockedForFollowUp = false
+    }
+
+    /// Current height of the panel, for offset calculations when positioning other panels below.
+    var currentPanelHeight: CGFloat { panel?.frame.height ?? 0 }
+
+    /// Reclaims key window status so the inline text input receives focus.
+    func makeKeyIfVisible() {
+        guard let panel, isVisible else { return }
+        panel.makeKey()
+        if let contentView = panel.contentView {
+            Self.focusFirstTextView(in: contentView, panel: panel)
+        }
     }
 
     // MARK: - Height Calculation
@@ -296,7 +346,7 @@ final class OutputPanelPanel {
     }
 
     private func fireDestination(_ destination: OutputDestination, text: String, targetAppPID: pid_t?, conversationID: UUID) {
-        hide()
+        tearDown()
         Task {
             do {
                 let action: any PostTranscriptionAction

@@ -37,11 +37,16 @@ final class PushToTypeCoordinator {
 
     private var previousActiveApp: NSRunningApplication?
     private var capturedSelection: String?
+    /// True when the current submission is a follow-up triggered while the output panel was visible.
+    /// The output panel stays visible and the push-to-type overlay is positioned below it.
+    private var isFollowUpFromVisibleOutputPanel = false
 
     // MARK: - Constants
 
     private static let successIndicatorDuration: Duration = .seconds(2)
     private static let errorIndicatorDuration: Duration = .seconds(10)
+    /// Gap between the bottom of the output panel and the top of the push-to-type overlay
+    private static let panelGap: CGFloat = 8
 
     init(
         settings: AppSettings,
@@ -86,17 +91,21 @@ final class PushToTypeCoordinator {
     private func toggleOverlay() async {
         if panel.isVisible {
             panel.hide()
+            isFollowUpFromVisibleOutputPanel = false
+            outputPanel.unlockFollowUp()
             Logger.app.info("Push-to-type: overlay dismissed via hotkey")
         } else {
             // If the output panel is visible, this is an implicit follow-up.
-            // Capture its state before showing the overlay.
-            if let followUp = outputPanel.captureFollowUpState() {
+            // Read state without hiding so the user sees conversation history while typing.
+            if let followUp = outputPanel.readFollowUpState() {
                 followUpContext = followUp.text
                 conversationTurns = followUp.turns
                 conversationID = followUp.conversationID
                 settings.activeModeID = followUp.modeID
                 outputDestinationOverride = OutputDestination.builtInOutputPanelID
                 recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
+                isFollowUpFromVisibleOutputPanel = true
+                outputPanel.lockForFollowUp()
             }
             await showOverlay()
         }
@@ -107,9 +116,17 @@ final class PushToTypeCoordinator {
         previousActiveApp = NSWorkspace.shared.frontmostApplication
         capturedSelection = await selectionCapturer.capture(bundleIdentifier: previousActiveApp?.bundleIdentifier)
 
+        // When the output panel is visible, position below it and skip duplicate
+        // conversation turns (the output panel already shows them).
+        let topOffset = isFollowUpFromVisibleOutputPanel
+            ? outputPanel.currentPanelHeight + Self.panelGap
+            : 0
+        let overlayTurns = isFollowUpFromVisibleOutputPanel ? [] : conversationTurns
+
         panel.show(
             settings: settings,
-            conversationTurns: conversationTurns,
+            conversationTurns: overlayTurns,
+            topOffset: topOffset,
             onSubmit: { [weak self] text in
                 self?.submitText(text)
             },
@@ -119,6 +136,8 @@ final class PushToTypeCoordinator {
                 self?.followUpContext = nil
                 self?.conversationTurns = []
                 self?.conversationID = nil
+                self?.isFollowUpFromVisibleOutputPanel = false
+                self?.outputPanel.unlockFollowUp()
                 Logger.app.info("Push-to-type: overlay dismissed")
             }
         )
@@ -137,10 +156,16 @@ final class PushToTypeCoordinator {
         conversationTurns = []
         let context = followUpContext
         followUpContext = nil
+        let wasFollowUpFromOutputPanel = isFollowUpFromVisibleOutputPanel
+        isFollowUpFromVisibleOutputPanel = false
 
-        // Show processing indicator
-        recordingIndicator.show()
-        recordingIndicator.update(phase: .processing)
+        if wasFollowUpFromOutputPanel {
+            // Use the output panel's "..." turn as the processing indicator
+            outputPanel.startProcessing(inputText: text)
+        } else {
+            recordingIndicator.show()
+            recordingIndicator.update(phase: .processing)
+        }
         Logger.app.info("Push-to-type: executing pipeline")
 
         Task { @MainActor in
@@ -168,16 +193,24 @@ final class PushToTypeCoordinator {
 
                 if destination.type == .outputPanel {
                     recordingIndicator.hide()
-                    outputPanel.show(
-                        inputText: text,
-                        text: processedText,
-                        conversationTurns: currentTurns,
-                        outputDestinations: settings.outputDestinations,
-                        targetAppPID: previousActiveApp?.processIdentifier,
-                        modeID: mode.id,
-                        conversationID: activeConversationID
-                    )
+                    if wasFollowUpFromOutputPanel {
+                        // Update the existing output panel in-place
+                        outputPanel.finishProcessing(outputText: processedText)
+                        outputPanel.unlockFollowUp()
+                        outputPanel.makeKeyIfVisible()
+                    } else {
+                        outputPanel.show(
+                            inputText: text,
+                            text: processedText,
+                            conversationTurns: currentTurns,
+                            outputDestinations: settings.outputDestinations,
+                            targetAppPID: previousActiveApp?.processIdentifier,
+                            modeID: mode.id,
+                            conversationID: activeConversationID
+                        )
+                    }
                 } else {
+                    outputPanel.unlockFollowUp()
                     let action = makeOutputAction(for: destination, conversationID: activeConversationID)
                     try await action.execute(text: processedText)
                     recordingIndicator.update(phase: .success)
@@ -197,10 +230,15 @@ final class PushToTypeCoordinator {
 
                 Logger.app.info("Push-to-type: complete")
             } catch {
+                if wasFollowUpFromOutputPanel {
+                    outputPanel.showProcessingError(error.localizedDescription)
+                }
+                outputPanel.unlockFollowUp()
                 outputDestinationOverride = nil
                 conversationID = nil
                 conversationTurns = []
                 followUpContext = nil
+                isFollowUpFromVisibleOutputPanel = false
                 recordingIndicator.update(phase: .error, message: error.localizedDescription)
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
                 Logger.app.error("Push-to-type failed: \(error)")
