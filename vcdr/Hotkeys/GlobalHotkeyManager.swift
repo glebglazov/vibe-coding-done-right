@@ -79,6 +79,20 @@ final class GlobalHotkeyManager {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             Logger.hotkeys.warning("Event tap disabled, re-enabling")
             if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+
+            // If the hotkey was active but the key is no longer physically held,
+            // we missed the key-up while the tap was disabled. Fire it now.
+            if isHotkeyActive {
+                let keyStillDown = CGEventSource.keyState(.combinedSessionState, key: targetKeyCode)
+                if !keyStillDown {
+                    Logger.hotkeys.warning("Recovering missed key-up after tap re-enable")
+                    isHotkeyActive = false
+                    if isEnabled {
+                        onKeyUp?()
+                    }
+                }
+            }
+
             return Unmanaged.passUnretained(event)
         }
 
