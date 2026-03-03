@@ -100,72 +100,84 @@ struct OutputPanelView: View {
     private static let keyVPadding: CGFloat = 1
     private static let labelVPadding: CGFloat = 4
     private static let turnDividerVPadding: CGFloat = 4
+    private static let closeButtonPadding: CGFloat = 8
+    private static let closeButtonSize: CGFloat = 16
+    private static let copyButtonSize: CGFloat = 12
 
     /// ID for the bottom anchor used to auto-scroll
     private static let bottomAnchorID = "bottom"
     private static let textInputHeight: CGFloat = 60
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(viewModel.conversationTurns.enumerated()), id: \.element.id) { index, turn in
-                            turnView(turn, showLabels: viewModel.showConversationLabels)
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(viewModel.conversationTurns.enumerated()), id: \.element.id) { index, turn in
+                                turnView(turn, showLabels: viewModel.showConversationLabels)
 
-                            if index < viewModel.conversationTurns.count - 1 {
-                                Divider()
-                                    .padding(.vertical, Self.turnDividerVPadding)
+                                if index < viewModel.conversationTurns.count - 1 {
+                                    Divider()
+                                        .padding(.vertical, Self.turnDividerVPadding)
+                                }
                             }
+
+                            // Invisible anchor for scrolling to bottom
+                            Color.clear
+                                .frame(height: 1)
+                                .id(Self.bottomAnchorID)
                         }
-
-                        // Invisible anchor for scrolling to bottom
-                        Color.clear
-                            .frame(height: 1)
-                            .id(Self.bottomAnchorID)
+                        .padding(Self.textPadding)
                     }
-                    .padding(Self.textPadding)
+                    .onAppear {
+                        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+                    }
+                    .onChange(of: viewModel.scrollTrigger) {
+                        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+                    }
                 }
-                .onAppear {
-                    proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
-                }
-                .onChange(of: viewModel.scrollTrigger) {
-                    proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
-                }
-            }
 
-            Divider()
+                Divider()
 
-            ZStack(alignment: .topLeading) {
-                if viewModel.inlineText.isEmpty && !viewModel.isProcessing {
-                    Text("Type a follow-up...")
+                ZStack(alignment: .topLeading) {
+                    if viewModel.inlineText.isEmpty && !viewModel.isProcessing {
+                        Text("Type a follow-up...")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, Self.textPadding)
+                            .padding(.top, 8)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $viewModel.inlineText)
                         .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, Self.textPadding)
-                        .padding(.top, 8)
-                        .allowsHitTesting(false)
+                        .scrollContentBackground(.hidden)
+                        .disabled(viewModel.isProcessing)
+                        .padding(.horizontal, Self.textPadding - 5)
                 }
-                TextEditor(text: $viewModel.inlineText)
-                    .font(.system(size: 13))
-                    .scrollContentBackground(.hidden)
-                    .disabled(viewModel.isProcessing)
-                    .padding(.horizontal, Self.textPadding - 5)
-            }
-            .frame(height: Self.textInputHeight)
+                .frame(height: Self.textInputHeight)
 
-            Divider()
+                Divider()
 
-            HStack(spacing: Self.hintSpacing) {
-                hintLabel("\u{2318}C", "copy")
-                ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
-                    hintLabel("\u{2318}\(dest.activationKey.uppercased())", dest.name.lowercased())
+                HStack(spacing: Self.hintSpacing) {
+                    hintLabel("\u{2318}C", "copy")
+                    ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
+                        hintLabel("\u{2318}\(dest.activationKey.uppercased())", dest.name.lowercased())
+                    }
+                    Spacer()
+                    hintLabel("\u{21B5}", "submit")
                 }
-                Spacer()
-                hintLabel("\u{21B5}", "submit")
-                hintLabel("esc", "dismiss")
+                .padding(.horizontal, Self.hintBarHPadding)
+                .padding(.vertical, Self.hintBarVPadding)
             }
-            .padding(.horizontal, Self.hintBarHPadding)
-            .padding(.vertical, Self.hintBarVPadding)
+
+            Button(action: viewModel.onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: Self.closeButtonSize))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(Self.closeButtonPadding)
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
     }
@@ -184,16 +196,42 @@ struct OutputPanelView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, Self.labelVPadding)
 
-            Text("Result:")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, Self.labelVPadding)
+            HStack {
+                Text("Result:")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                copyButton(for: turn.output)
+            }
+            .padding(.bottom, Self.labelVPadding)
         }
 
-        Text(turn.output)
-            .font(.system(.body, design: .monospaced))
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        if showLabels {
+            Text(turn.output)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: .top) {
+                Text(turn.output)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                copyButton(for: turn.output)
+            }
+        }
+    }
+
+    private func copyButton(for text: String) -> some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        } label: {
+            Image(systemName: "doc.on.doc")
+                .font(.system(size: Self.copyButtonSize))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
     }
 
     private func hintLabel(_ key: String, _ label: String) -> some View {

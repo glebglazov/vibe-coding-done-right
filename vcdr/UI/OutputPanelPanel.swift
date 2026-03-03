@@ -7,7 +7,6 @@ final class OutputPanelPanel {
     private var panel: NSPanel?
     private var viewModel: OutputPanelViewModel?
     private var localEventMonitor: Any?
-    private var globalEventMonitor: Any?
     private var becameKeyObserver: NSObjectProtocol?
 
     /// Callback invoked when the user submits inline text via Return key
@@ -130,10 +129,6 @@ final class OutputPanelPanel {
             return viewModel.handleKeyEvent(event) ? nil : event
         }
 
-        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.hide()
-        }
-
         // Re-focus the text view when this panel regains key status
         becameKeyObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
@@ -161,10 +156,6 @@ final class OutputPanelPanel {
         if let monitor = localEventMonitor {
             NSEvent.removeMonitor(monitor)
             localEventMonitor = nil
-        }
-        if let monitor = globalEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalEventMonitor = nil
         }
         if let observer = becameKeyObserver {
             NotificationCenter.default.removeObserver(observer)
