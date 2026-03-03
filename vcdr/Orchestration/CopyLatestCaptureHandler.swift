@@ -41,14 +41,13 @@ final class CopyLatestCaptureHandler {
     }
 
     private func copyLatestCapture() {
-        guard let record = transcriptionHistory.latestRecord else {
+        guard let conversation = transcriptionHistory.latestConversation else {
             recordingIndicator.showCopyError("No captures yet")
             Logger.actions.info("Copy latest: no captures available")
             return
         }
 
-        // Use processedText if available, fall back to fullCapture for old records
-        let textToCopy = record.processedText ?? record.fullCapture
+        let textToCopy = conversation.latestOutput
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(textToCopy, forType: .string)
 

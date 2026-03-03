@@ -2,24 +2,31 @@ import SwiftUI
 
 struct HistoryTabView: View {
     let history: TranscriptionHistory
+    let settings: AppSettings
+    let onOpenConversation: (Conversation) -> Void
 
     var body: some View {
         Group {
-            if history.records.isEmpty {
+            if history.conversations.isEmpty {
                 ContentUnavailableView(
-                    "No Transcriptions Yet",
+                    "No Conversations Yet",
                     systemImage: "text.bubble",
-                    description: Text("Your transcription history will appear here.")
+                    description: Text("Your conversation history will appear here.")
                 )
             } else {
                 List {
-                    ForEach(history.records) { record in
-                        HistoryRowView(record: record, onDelete: { history.removeRecord(record) })
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button("Delete", role: .destructive) {
-                                    history.removeRecord(record)
-                                }
+                    ForEach(history.conversations) { conversation in
+                        ConversationRowView(
+                            conversation: conversation,
+                            canContinue: canContinue(conversation),
+                            onOpen: { onOpenConversation(conversation) },
+                            onDelete: { history.removeConversation(conversation) }
+                        )
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("Delete", role: .destructive) {
+                                history.removeConversation(conversation)
                             }
+                        }
                     }
                 }
                 .listStyle(.inset)
@@ -27,7 +34,7 @@ struct HistoryTabView: View {
         }
         .navigationTitle("History")
         .toolbar {
-            if !history.records.isEmpty {
+            if !history.conversations.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Clear All") {
                         history.clearAll()
@@ -36,112 +43,96 @@ struct HistoryTabView: View {
             }
         }
     }
+
+    private func canContinue(_ conversation: Conversation) -> Bool {
+        settings.modes.contains(where: { $0.id == conversation.modeID && $0.processingType == .bashScript })
+    }
 }
 
-private struct HistoryRowView: View {
-    let record: TranscriptionRecord
+private struct ConversationRowView: View {
+    let conversation: Conversation
+    let canContinue: Bool
+    let onOpen: () -> Void
     let onDelete: () -> Void
 
     // MARK: - Constants
-    private static let textLineLimit = 3
-    /// Extra trailing padding on the plain copy button to align with the menu
-    /// copy button, which has a system chevron taking up space to its right.
-    private static let copyButtonTrailingPadding: CGFloat = 15
+    private static let previewLineLimit = 3
     private static let copiedFeedbackDuration: Duration = .seconds(1.5)
 
     @State private var showCopied = false
-    @State private var showSelectionCopied = false
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(record.text)
-                    .lineLimit(Self.textLineLimit)
-
-                if let selection = record.capturedSelection {
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Image(systemName: showSelectionCopied ? "checkmark" : "text.cursor")
+        Button(action: onOpen) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    // Mode badge + turn count
+                    HStack(spacing: 6) {
+                        Text(conversation.modeName)
                             .font(.caption)
-                            .foregroundStyle(showSelectionCopied ? Color.green : Color.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.15), in: Capsule())
 
-                        Text(selection)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(Self.textLineLimit)
-                    }
-                    .onTapGesture {
-                        copyToClipboard(selection)
-                        showSelectionCopied = true
-                        Task {
-                            try? await Task.sleep(for: Self.copiedFeedbackDuration)
-                            showSelectionCopied = false
+                        if conversation.turns.count > 1 {
+                            Text("\(conversation.turns.count) turns")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if canContinue {
+                            Image(systemName: "arrow.uturn.forward")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                }
 
-                if let result = record.actionResult {
-                    // Script entry: transcription is primary (the question),
-                    // script output shown below with a subtle terminal icon
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Image(systemName: "terminal")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                    // Preview text (first turn's input)
+                    Text(conversation.previewText)
+                        .lineLimit(Self.previewLineLimit)
 
-                        Text(result)
+                    // If there are multiple turns, show last turn's output as secondary preview
+                    if conversation.turns.count > 1 {
+                        Text(conversation.latestOutput)
                             .font(.callout)
                             .foregroundStyle(.secondary)
-                            .lineLimit(Self.textLineLimit)
+                            .lineLimit(Self.previewLineLimit)
                     }
+
+                    // Timestamp
+                    Text(conversation.lastUpdated.formatted(
+                        .dateTime.month(.abbreviated).day().hour().minute()
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
 
-                HStack(spacing: 12) {
-                    Label(record.modelName, systemImage: "cpu")
-                    Label(record.formattedDuration, systemImage: "timer")
-                    Label(
-                        record.timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
-                        systemImage: "clock"
-                    )
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
+                Spacer()
 
-            Spacer()
-
-            if record.actionResult != nil {
-                Menu {
-                    Button("Copy Capture") {
-                        copyToClipboard(record.fullCapture)
-                    }
-                    Button("Copy Result") {
-                        copyToClipboard(record.actionResult ?? "")
-                    }
-                } label: {
-                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                }
-                .menuStyle(.borderlessButton)
-                .tint(showCopied ? .green : .secondary)
-                .fixedSize()
-            } else {
+                // Copy latest output button
                 Button {
-                    copyToClipboard(record.fullCapture)
+                    copyToClipboard(conversation.latestOutput)
                 } label: {
                     Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.borderless)
                 .tint(showCopied ? .green : .secondary)
-                .padding(.trailing, Self.copyButtonTrailingPadding)
             }
+            .padding(.vertical, 2)
         }
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
         .contextMenu {
-            Button("Copy Capture") {
-                copyToClipboard(record.fullCapture)
-            }
-            if let result = record.actionResult {
-                Button("Copy Result") {
-                    copyToClipboard(result)
+            if canContinue {
+                Button("Continue Conversation") {
+                    onOpen()
                 }
+            } else {
+                Button("View Conversation") {
+                    onOpen()
+                }
+            }
+
+            Button("Copy Latest Output") {
+                copyToClipboard(conversation.latestOutput)
             }
 
             Divider()
@@ -155,7 +146,6 @@ private struct HistoryRowView: View {
     private func copyToClipboard(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-
         showCopied = true
         Task {
             try? await Task.sleep(for: Self.copiedFeedbackDuration)

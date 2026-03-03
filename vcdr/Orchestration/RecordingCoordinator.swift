@@ -348,19 +348,15 @@ final class RecordingCoordinator {
                 dismissIndicatorAfterDelay(Self.successIndicatorDuration)
             }
 
-            // Record in history (raw transcription text, before any transforms)
-            let durationSeconds = recordingDuration.map {
-                Double($0.components.seconds) + Double($0.components.attoseconds) / 1e18
-            } ?? 0
-            let record = TranscriptionRecord(
-                text: text,
-                processedText: processedText,
-                modelName: transcriptionProvider.name,
-                recordingDuration: durationSeconds,
-                actionResult: nil,
-                capturedSelection: selection
+            // Record in history
+            transcriptionHistory.recordTurn(
+                conversationID: activeConversationID,
+                input: text,
+                output: processedText,
+                capturedSelection: selection,
+                modeID: mode.id,
+                modeName: mode.name
             )
-            transcriptionHistory.addRecord(record)
 
             state = .idle
             Logger.app.info("Pipeline: complete")

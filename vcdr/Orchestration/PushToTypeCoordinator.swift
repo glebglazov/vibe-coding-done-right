@@ -218,15 +218,14 @@ final class PushToTypeCoordinator {
                 }
 
                 // Record in history
-                let record = TranscriptionRecord(
-                    text: text,
-                    processedText: processedText,
-                    modelName: "Push-to-Type",
-                    recordingDuration: 0,
-                    actionResult: nil,
-                    capturedSelection: selection
+                transcriptionHistory.recordTurn(
+                    conversationID: activeConversationID,
+                    input: text,
+                    output: processedText,
+                    capturedSelection: selection,
+                    modeID: mode.id,
+                    modeName: mode.name
                 )
-                transcriptionHistory.addRecord(record)
 
                 Logger.app.info("Push-to-type: complete")
             } catch {

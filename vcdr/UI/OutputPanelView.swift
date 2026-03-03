@@ -6,6 +6,7 @@ import SwiftUI
 final class OutputPanelViewModel {
     var conversationTurns: [ConversationTurn]
     let outputDestinations: [OutputDestination]
+    let isReadOnly: Bool
     let onCopy: () -> Void
     let onFireDestination: (OutputDestination) -> Void
     let onDismiss: () -> Void
@@ -32,6 +33,7 @@ final class OutputPanelViewModel {
     init(
         conversationTurns: [ConversationTurn],
         outputDestinations: [OutputDestination],
+        isReadOnly: Bool = false,
         onCopy: @escaping () -> Void,
         onFireDestination: @escaping (OutputDestination) -> Void,
         onDismiss: @escaping () -> Void,
@@ -39,6 +41,7 @@ final class OutputPanelViewModel {
     ) {
         self.conversationTurns = conversationTurns
         self.outputDestinations = outputDestinations
+        self.isReadOnly = isReadOnly
         self.onCopy = onCopy
         self.onFireDestination = onFireDestination
         self.onDismiss = onDismiss
@@ -52,6 +55,7 @@ final class OutputPanelViewModel {
 
         switch event.keyCode {
         case 36: // Return
+            guard !isReadOnly else { return true }
             // Shift+Return inserts newline (pass through to text editor)
             if event.modifierFlags.contains(.shift) { return false }
             guard !isProcessing else { return true }
@@ -70,6 +74,7 @@ final class OutputPanelViewModel {
                 onDismiss()
                 return true
             }
+            guard !isReadOnly else { return false }
             // Check destination activation keys (Cmd + key)
             if let char = chars.first {
                 let key = String(char)
@@ -138,34 +143,40 @@ struct OutputPanelView: View {
                     }
                 }
 
-                Divider()
+                if !viewModel.isReadOnly {
+                    Divider()
 
-                ZStack(alignment: .topLeading) {
-                    if viewModel.inlineText.isEmpty && !viewModel.isProcessing {
-                        Text("Type a follow-up...")
+                    ZStack(alignment: .topLeading) {
+                        if viewModel.inlineText.isEmpty && !viewModel.isProcessing {
+                            Text("Type a follow-up...")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, Self.textPadding)
+                                .padding(.top, 8)
+                                .allowsHitTesting(false)
+                        }
+                        TextEditor(text: $viewModel.inlineText)
                             .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, Self.textPadding)
-                            .padding(.top, 8)
-                            .allowsHitTesting(false)
+                            .scrollContentBackground(.hidden)
+                            .disabled(viewModel.isProcessing)
+                            .padding(.horizontal, Self.textPadding - 5)
                     }
-                    TextEditor(text: $viewModel.inlineText)
-                        .font(.system(size: 13))
-                        .scrollContentBackground(.hidden)
-                        .disabled(viewModel.isProcessing)
-                        .padding(.horizontal, Self.textPadding - 5)
+                    .frame(height: Self.textInputHeight)
                 }
-                .frame(height: Self.textInputHeight)
 
                 Divider()
 
                 HStack(spacing: Self.hintSpacing) {
                     hintLabel("\u{2318}C", "copy")
-                    ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
-                        hintLabel("\u{2318}\(dest.activationKey.uppercased())", dest.name.lowercased())
+                    if !viewModel.isReadOnly {
+                        ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
+                            hintLabel("\u{2318}\(dest.activationKey.uppercased())", dest.name.lowercased())
+                        }
                     }
                     Spacer()
-                    hintLabel("\u{21B5}", "submit")
+                    if !viewModel.isReadOnly {
+                        hintLabel("\u{21B5}", "submit")
+                    }
                 }
                 .padding(.horizontal, Self.hintBarHPadding)
                 .padding(.vertical, Self.hintBarVPadding)

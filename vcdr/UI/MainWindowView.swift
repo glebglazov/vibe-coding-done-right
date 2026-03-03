@@ -72,7 +72,13 @@ struct MainWindowView: View {
                     case .transcription:
                         TranscriptionTabView(dependencies: dependencies)
                     case .history:
-                        HistoryTabView(history: dependencies.transcriptionHistory)
+                        HistoryTabView(
+                            history: dependencies.transcriptionHistory,
+                            settings: dependencies.settings,
+                            onOpenConversation: { conversation in
+                                dependencies.openConversationFromHistory(conversation)
+                            }
+                        )
                     case .none:
                         Text("Select a section")
                             .foregroundStyle(.secondary)

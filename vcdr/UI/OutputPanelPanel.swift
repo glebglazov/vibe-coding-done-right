@@ -86,9 +86,69 @@ final class OutputPanelPanel {
         )
         self.viewModel = viewModel
 
+        presentPanel(viewModel: viewModel, turns: allTurns, isReadOnly: false)
+        Logger.actions.info("Output panel shown")
+    }
+
+    /// Opens the output panel displaying a conversation loaded from history.
+    /// If `canContinue` is true, follow-up input is enabled and the panel
+    /// is set up for conversation continuation. If false, the panel is read-only.
+    func showFromHistory(
+        conversation: Conversation,
+        outputDestinations: [OutputDestination],
+        canContinue: Bool
+    ) {
+        tearDown()
+
+        let turns = conversation.turns.map { turn in
+            ConversationTurn(input: turn.input, output: turn.output)
+        }
+        let filteredDestinations = outputDestinations.filter { $0.type != .outputPanel }
+
+        // Store session state for follow-up continuation
+        self.currentTurns = turns
+        self.currentText = conversation.latestOutput
+        self.currentModeID = canContinue ? conversation.modeID : nil
+        self.currentConversationID = conversation.id
+
+        let viewModel = OutputPanelViewModel(
+            conversationTurns: turns,
+            outputDestinations: filteredDestinations,
+            isReadOnly: !canContinue,
+            onCopy: { [weak self] in
+                guard let self, let latestText = self.currentText else { return }
+                self.copyToClipboard(latestText)
+            },
+            onFireDestination: { [weak self] destination in
+                guard let self, let latestText = self.currentText else { return }
+                self.fireDestination(
+                    destination,
+                    text: latestText,
+                    targetAppPID: nil,
+                    conversationID: self.currentConversationID ?? conversation.id
+                )
+            },
+            onDismiss: { [weak self] in
+                self?.hide()
+            },
+            onSubmitText: { [weak self] text in
+                self?.onSubmitText?(text)
+            }
+        )
+        self.viewModel = viewModel
+
+        presentPanel(viewModel: viewModel, turns: turns, isReadOnly: !canContinue)
+        Logger.actions.info("Output panel shown from history (canContinue=\(canContinue))")
+    }
+
+    // MARK: - Panel Presentation
+
+    /// Creates the NSPanel, positions it below the menu bar, sets up event monitoring,
+    /// and focuses the text view. Shared by `show()` and `showFromHistory()`.
+    private func presentPanel(viewModel: OutputPanelViewModel, turns: [ConversationTurn], isReadOnly: Bool) {
         let view = OutputPanelView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
-        let panelHeight = Self.calculateHeight(for: allTurns)
+        let panelHeight = Self.calculateHeight(for: turns, isReadOnly: isReadOnly)
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: panelHeight)
 
         let panel = KeyablePanel(
@@ -120,7 +180,8 @@ final class OutputPanelPanel {
         self.panel = panel
 
         // Focus the TextEditor's underlying NSTextView for immediate keyboard input
-        if let contentView = panel.contentView {
+        // (only when not read-only — read-only panels have no text editor)
+        if !isReadOnly, let contentView = panel.contentView {
             Self.focusFirstTextView(in: contentView, panel: panel)
         }
 
@@ -129,17 +190,17 @@ final class OutputPanelPanel {
             return viewModel.handleKeyEvent(event) ? nil : event
         }
 
-        // Re-focus the text view when this panel regains key status
-        becameKeyObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: panel,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self, let contentView = self.panel?.contentView, let panel = self.panel else { return }
-            Self.focusFirstTextView(in: contentView, panel: panel)
+        // Re-focus the text view when this panel regains key status (only when not read-only)
+        if !isReadOnly {
+            becameKeyObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didBecomeKeyNotification,
+                object: panel,
+                queue: .main
+            ) { [weak self] _ in
+                guard let self, let contentView = self.panel?.contentView, let panel = self.panel else { return }
+                Self.focusFirstTextView(in: contentView, panel: panel)
+            }
         }
-
-        Logger.actions.info("Output panel shown")
     }
 
     func hide() {
@@ -235,7 +296,7 @@ final class OutputPanelPanel {
 
     // MARK: - Height Calculation
 
-    private static func calculateHeight(for turns: [ConversationTurn]) -> CGFloat {
+    private static func calculateHeight(for turns: [ConversationTurn], isReadOnly: Bool = false) -> CGFloat {
         var totalLines: CGFloat = 0
         // Show labels when multiple turns or when input was transformed by processing
         let showLabels = turns.count > 1 || (turns.first.map { $0.input != $0.output } ?? false)
@@ -256,7 +317,8 @@ final class OutputPanelPanel {
         }
 
         let estimatedTextHeight = totalLines * lineHeight
-        let totalHeight = estimatedTextHeight + contentPadding + hintBarHeight + textInputHeight
+        let inputHeight: CGFloat = isReadOnly ? 0 : textInputHeight
+        let totalHeight = estimatedTextHeight + contentPadding + hintBarHeight + inputHeight
         return min(max(totalHeight, panelMinHeight), panelMaxHeight)
     }
 
@@ -296,7 +358,8 @@ final class OutputPanelPanel {
     /// Recalculates and animates panel height based on current conversation turns
     private func resizePanel() {
         guard let panel else { return }
-        let newHeight = Self.calculateHeight(for: currentTurns)
+        let isReadOnly = viewModel?.isReadOnly ?? false
+        let newHeight = Self.calculateHeight(for: currentTurns, isReadOnly: isReadOnly)
         let currentFrame = panel.frame
         // Grow/shrink upward: keep top edge pinned
         let newY = currentFrame.maxY - newHeight

@@ -19,12 +19,12 @@ struct MenuBarView: View {
                 Text(statusText)
             }
 
-            if let latest = dependencies.transcriptionHistory.latestRecord {
+            if let latest = dependencies.transcriptionHistory.latestConversation {
                 Divider()
 
                 Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(latest.text, forType: .string)
+                    NSPasteboard.general.setString(latest.latestOutput, forType: .string)
                     showCopied = true
                     Task {
                         try? await Task.sleep(for: Self.copiedFeedbackDuration)
@@ -32,7 +32,7 @@ struct MenuBarView: View {
                     }
                 } label: {
                     VStack(alignment: .leading) {
-                        Text(latest.text)
+                        Text(latest.previewText)
                             .lineLimit(Self.previewLineLimit)
                             .truncationMode(.tail)
                         Group {

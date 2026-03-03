@@ -3,47 +3,81 @@ import OSLog
 
 @Observable
 final class TranscriptionHistory {
-    private(set) var records: [TranscriptionRecord] = []
+    private(set) var conversations: [Conversation] = []
 
     private let fileURL: URL
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
     // MARK: - Constants
-    static let maxRecords = 500
+    static let maxConversations = 500
 
     init(directory: URL = TranscriptionHistory.defaultDirectory) {
         self.fileURL = directory.appendingPathComponent("history.json")
-        self.records = Self.load(from: fileURL, decoder: decoder)
+        self.conversations = Self.load(from: fileURL, decoder: decoder)
     }
 
-    func addRecord(_ record: TranscriptionRecord) {
-        records.insert(record, at: 0)
-        if records.count > Self.maxRecords {
-            records = Array(records.prefix(Self.maxRecords))
+    /// Records a turn in a conversation. Creates a new conversation if one
+    /// with the given ID doesn't exist yet; appends to existing otherwise.
+    func recordTurn(
+        conversationID: UUID,
+        input: String,
+        output: String,
+        capturedSelection: String?,
+        modeID: UUID,
+        modeName: String
+    ) {
+        let turn = Conversation.Turn(
+            id: UUID(),
+            input: input,
+            output: output,
+            capturedSelection: capturedSelection,
+            timestamp: .now
+        )
+
+        if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
+            conversations[index].turns.append(turn)
+            conversations[index].lastUpdated = .now
+            // Move to front (most recent)
+            let conversation = conversations.remove(at: index)
+            conversations.insert(conversation, at: 0)
+        } else {
+            let conversation = Conversation(
+                id: conversationID,
+                turns: [turn],
+                modeID: modeID,
+                modeName: modeName,
+                lastUpdated: .now
+            )
+            conversations.insert(conversation, at: 0)
+        }
+
+        if conversations.count > Self.maxConversations {
+            conversations = Array(conversations.prefix(Self.maxConversations))
         }
         save()
     }
 
-    func removeRecord(_ record: TranscriptionRecord) {
-        records.removeAll { $0.id == record.id }
+    func removeConversation(_ conversation: Conversation) {
+        conversations.removeAll { $0.id == conversation.id }
         save()
     }
 
     func clearAll() {
-        records.removeAll()
+        conversations.removeAll()
         save()
     }
 
-    var latestRecord: TranscriptionRecord? {
-        records.first
+    /// Latest conversation (newest first)
+    var latestConversation: Conversation? {
+        conversations.first
     }
 
     // MARK: - Persistence
 
     private func save() {
         do {
-            let data = try encoder.encode(records)
+            let data = try encoder.encode(conversations)
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
@@ -54,9 +88,35 @@ final class TranscriptionHistory {
         }
     }
 
-    private static func load(from url: URL, decoder: JSONDecoder) -> [TranscriptionRecord] {
+    private static func load(from url: URL, decoder: JSONDecoder) -> [Conversation] {
         guard let data = try? Data(contentsOf: url) else { return [] }
-        return (try? decoder.decode([TranscriptionRecord].self, from: data)) ?? []
+
+        // Try new format first
+        if let conversations = try? decoder.decode([Conversation].self, from: data) {
+            return conversations
+        }
+
+        // Fall back to legacy format migration
+        if let legacyRecords = try? decoder.decode([TranscriptionRecord].self, from: data) {
+            return legacyRecords.map { record in
+                let turn = Conversation.Turn(
+                    id: UUID(),
+                    input: record.text,
+                    output: record.processedText ?? record.text,
+                    capturedSelection: record.capturedSelection,
+                    timestamp: record.timestamp
+                )
+                return Conversation(
+                    id: UUID(),
+                    turns: [turn],
+                    modeID: UUID(), // Unknown — legacy records have no mode reference
+                    modeName: "Unknown",
+                    lastUpdated: record.timestamp
+                )
+            }
+        }
+
+        return []
     }
 
     private static var defaultDirectory: URL {

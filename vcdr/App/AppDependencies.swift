@@ -15,6 +15,7 @@ final class AppDependencies {
     let mediaPlaybackController: MediaPlaybackController
     let transcriptionHistory: TranscriptionHistory
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
+    let outputPanel: OutputPanelPanel
 
     private(set) var isTranscriptionReady = false
     private(set) var initializationStatus = "Loading model..."
@@ -40,6 +41,7 @@ final class AppDependencies {
         let hotkeyManager = GlobalHotkeyManager()
         let recordingIndicator = RecordingIndicatorPanel(settings: settings)
         let outputPanel = OutputPanelPanel()
+        self.outputPanel = outputPanel
         let selectionCapturer = SelectionCapturer()
         self.coordinator = RecordingCoordinator(
             settings: settings,
@@ -110,6 +112,16 @@ final class AppDependencies {
                         )
                     }
                     outputPanel.finishProcessing(outputText: processed)
+
+                    // Record inline follow-up in history
+                    history.recordTurn(
+                        conversationID: conversationID,
+                        input: text,
+                        output: processed,
+                        capturedSelection: nil,
+                        modeID: mode.id,
+                        modeName: mode.name
+                    )
                 } catch {
                     outputPanel.showProcessingError(error.localizedDescription)
                 }
@@ -195,6 +207,18 @@ final class AppDependencies {
                 self.permissionTimer = nil
             }
         }
+    }
+
+    func openConversationFromHistory(_ conversation: Conversation) {
+        let canContinue = settings.modes.contains(where: { $0.id == conversation.modeID && $0.processingType == .bashScript })
+        if canContinue {
+            settings.activeModeID = conversation.modeID
+        }
+        outputPanel.showFromHistory(
+            conversation: conversation,
+            outputDestinations: settings.outputDestinations,
+            canContinue: canContinue
+        )
     }
 
     deinit {
