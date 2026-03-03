@@ -16,7 +16,6 @@ enum IndicatorPhase: Equatable {
 @MainActor
 final class IndicatorPhaseState {
     var phase: IndicatorPhase = .recording
-    var showBorder: Bool = false
     var rejectCount: Int = 0
     var errorMessage: String?
     /// Output destination override set via mode switcher; nil means use mode default
@@ -47,9 +46,8 @@ final class RecordingIndicatorPanel {
         self.settings = settings
     }
 
-    func show(withBorder: Bool = false, topOffset: CGFloat = 0) {
+    func show(topOffset: CGFloat = 0) {
         phaseState.phase = .recording
-        phaseState.showBorder = withBorder
         phaseState.errorMessage = nil
         phaseState.outputDestinationOverrideID = nil
         currentTopOffset = topOffset
@@ -246,7 +244,7 @@ private struct RecordingIndicatorView: View {
                     .fill(.ultraThinMaterial)
                     .frame(width: Self.circleSize, height: Self.circleSize)
                     .overlay(
-                        Circle().strokeBorder(.red, lineWidth: phaseState.showBorder ? Self.toggleBorderWidth : 0)
+                        Circle().strokeBorder(.secondary, lineWidth: Self.toggleBorderWidth)
                     )
                     .shadow(radius: 2)
 
@@ -318,6 +316,7 @@ private struct RecordingIndicatorView: View {
 private struct CancelledIndicatorView: View {
     private static let circleSize: CGFloat = 44
     private static let iconSize: CGFloat = 20
+    private static let borderWidth: CGFloat = 2
 
     var body: some View {
         VStack {
@@ -325,6 +324,9 @@ private struct CancelledIndicatorView: View {
                 Circle()
                     .fill(.ultraThinMaterial)
                     .frame(width: Self.circleSize, height: Self.circleSize)
+                    .overlay(
+                        Circle().strokeBorder(.secondary, lineWidth: Self.borderWidth)
+                    )
                     .shadow(radius: 2)
 
                 Image(systemName: "xmark")

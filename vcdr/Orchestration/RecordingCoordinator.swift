@@ -56,6 +56,8 @@ final class RecordingCoordinator {
     /// True when the current recording is a follow-up triggered while the output panel was visible.
     /// The output panel stays visible and the recording indicator is positioned below it.
     private var isFollowUpFromVisibleOutputPanel = false
+    /// The in-flight processing Task, stored so it can be cancelled via Esc.
+    private var processingTask: Task<Void, Never>?
 
     /// Gap between the bottom of the output panel and the top of the recording indicator
     private static let panelGap: CGFloat = 8
@@ -179,7 +181,7 @@ final class RecordingCoordinator {
         let topOffset = isFollowUpFromVisibleOutputPanel
             ? outputPanel.currentPanelHeight + Self.panelGap
             : 0
-        recordingIndicator.show(withBorder: isToggleMode, topOffset: topOffset)
+        recordingIndicator.show(topOffset: topOffset)
 
         if settings.audioSettings.pauseMediaDuringRecording {
             await mediaPlaybackController.pauseIfNeeded()
@@ -241,6 +243,8 @@ final class RecordingCoordinator {
 
         state = .transcribing
         recordingIndicator.update(phase: .processing)
+        // Keep Esc active so the user can cancel during processing
+        escCancelManager.isEnabled = true
         Logger.app.info("Push-to-talk: transcribing...")
 
         // Resume media playback after stopping the mic. The delay lets CoreAudio
@@ -251,7 +255,7 @@ final class RecordingCoordinator {
             await self.mediaPlaybackController.resumeIfNeeded()
         }
 
-        Task { @MainActor in await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration) }
+        processingTask = Task { @MainActor in await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration) }
     }
 
     // MARK: - Transcription + Action (async)
@@ -260,6 +264,7 @@ final class RecordingCoordinator {
         do {
             let transcriptionStart = ContinuousClock.now
             let text = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
+            try Task.checkCancellation()
             let elapsed = transcriptionStart.duration(to: .now)
             Logger.app.info("Transcribed in \(elapsed): \(text)")
 
@@ -315,6 +320,7 @@ final class RecordingCoordinator {
                 )
             }
 
+            try Task.checkCancellation()
             state = .executing
             Logger.app.info("Pipeline: executing output action")
 
@@ -358,9 +364,17 @@ final class RecordingCoordinator {
                 modeName: mode.name
             )
 
+            escCancelManager.isEnabled = false
+            processingTask = nil
             state = .idle
             Logger.app.info("Pipeline: complete")
+        } catch is CancellationError {
+            // Task was cancelled via Esc — cancelRecording() already cleaned up state
+            processingTask = nil
+            Logger.app.info("Processing task cancelled")
         } catch {
+            escCancelManager.isEnabled = false
+            processingTask = nil
             if outputPanel.isLockedForFollowUp {
                 outputPanel.showProcessingError(error.localizedDescription)
             }
@@ -453,14 +467,22 @@ final class RecordingCoordinator {
     }
 
     private func cancelRecording() {
-        guard state == .recording else { return }
+        guard state == .recording || state == .transcribing || state == .executing else { return }
+
+        let wasProcessing = state == .transcribing || state == .executing
 
         escCancelManager.isEnabled = false
         state = .idle
 
-        // Stop and discard the audio file without transcribing
-        if let audioURL = audioRecorder.stopRecording() {
-            try? FileManager.default.removeItem(at: audioURL)
+        if wasProcessing {
+            // Cancel the in-flight transcription/action Task
+            processingTask?.cancel()
+            processingTask = nil
+        } else {
+            // Stop and discard the audio file without transcribing
+            if let audioURL = audioRecorder.stopRecording() {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
         }
 
         Task { await mediaPlaybackController.resumeIfNeeded() }
@@ -476,7 +498,11 @@ final class RecordingCoordinator {
         // showCancelled() uses stored currentTopOffset so the indicator
         // appears where the recording indicator was, then resets it to 0.
         recordingIndicator.showCancelled()
-        Logger.app.info("Recording cancelled via Esc")
+        if wasProcessing {
+            Logger.app.info("Processing cancelled via Esc")
+        } else {
+            Logger.app.info("Recording cancelled via Esc")
+        }
     }
 
     // MARK: - Constants
