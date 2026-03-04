@@ -19,10 +19,12 @@ final class OutputPanelViewModel {
 
     /// Show "You:" / "Result:" labels when there are multiple turns or
     /// when the single turn's input was transformed by processing.
+    /// Captured selection alone only triggers labels when follow-up is enabled,
+    /// so non-conversation modes show plain output even with selected text.
     var showConversationLabels: Bool {
         if conversationTurns.count > 1 { return true }
         guard let turn = conversationTurns.first else { return false }
-        if turn.capturedSelection != nil { return true }
+        if !isReadOnly && turn.capturedSelection != nil { return true }
         return turn.input != turn.output
     }
 
