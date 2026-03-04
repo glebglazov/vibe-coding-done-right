@@ -299,17 +299,17 @@ private struct PushToTypeView: View {
                 Divider()
             }
 
-            if let selection = viewModel.capturedSelection {
-                selectionBlockquote(selection)
-                    .padding(Self.textPadding)
-                Divider()
-            }
-
             TextEditor(text: $viewModel.text)
                 .font(.system(size: 13))
                 .scrollContentBackground(.hidden)
                 .focused($isTextFieldFocused)
                 .padding(Self.textPadding)
+
+            if let selection = viewModel.capturedSelection {
+                Divider()
+                selectionBlockquote(selection)
+                    .padding(Self.textPadding)
+            }
 
             Divider()
 
