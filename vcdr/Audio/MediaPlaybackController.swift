@@ -29,7 +29,9 @@ final class MediaPlaybackController {
     /// On first call, detects whether the MediaRemote adapter is available
     /// and caches the result for all subsequent calls.
     func pauseIfNeeded() async {
+        let start = ContinuousClock.now
         let backend = await resolveBackend()
+        Logger.audio.info("pauseIfNeeded: resolveBackend done (+\(start.duration(to: .now)))")
 
         switch backend {
         case .mediaRemote:
@@ -37,6 +39,7 @@ final class MediaPlaybackController {
         case .appleScript:
             await pauseViaAppleScript()
         }
+        Logger.audio.info("pauseIfNeeded: complete (+\(start.duration(to: .now)))")
     }
 
     /// Resumes playback in any apps that were paused by ``pauseIfNeeded()``.
@@ -54,9 +57,14 @@ final class MediaPlaybackController {
     // MARK: - Backend Resolution
 
     private func resolveBackend() async -> Backend {
-        if let backend { return backend }
+        if let backend {
+            Logger.audio.info("resolveBackend: cached (\(String(describing: backend)))")
+            return backend
+        }
 
+        let testStart = ContinuousClock.now
         let available = await mediaRemoteClient.test()
+        Logger.audio.info("resolveBackend: test() done (+\(testStart.duration(to: .now))), available=\(available)")
         let resolved: Backend = available ? .mediaRemote : .appleScript
         backend = resolved
 
@@ -69,9 +77,10 @@ final class MediaPlaybackController {
     private func pauseViaMediaRemote() async {
         didPauseViaMediaRemote = false
 
+        let getNowPlayingStart = ContinuousClock.now
         guard let nowPlaying = await mediaRemoteClient.getNowPlaying(),
               nowPlaying.isPlaying else {
-            Logger.audio.info("MediaRemote: nothing playing, skipping pause")
+            Logger.audio.info("MediaRemote: nothing playing, skipping pause (+\(getNowPlayingStart.duration(to: .now)) for getNowPlaying)")
             return
         }
 

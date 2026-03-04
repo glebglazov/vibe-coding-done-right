@@ -113,7 +113,9 @@ final class MediaRemoteClient: Sendable {
         command: String,
         arguments: [String] = []
     ) async -> ProcessResult? {
-        await Task.detached {
+        let callerStart = ContinuousClock.now
+        let result = await Task.detached {
+            let processStart = ContinuousClock.now
             let process = Process()
             process.executableURL = URL(fileURLWithPath: Self.perlPath)
             process.arguments = [scriptPath, libraryPath, command] + arguments
@@ -138,8 +140,11 @@ final class MediaRemoteClient: Sendable {
             let stdout = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
+            Logger.audio.info("runAdapter(\(command)): subprocess done (+\(processStart.duration(to: .now)))")
             return ProcessResult(stdout: stdout, exitCode: process.terminationStatus)
         }.value
+        Logger.audio.info("runAdapter(\(command)): caller resumed (+\(callerStart.duration(to: .now)) total)")
+        return result
     }
 
     // MARK: - JSON Parsing

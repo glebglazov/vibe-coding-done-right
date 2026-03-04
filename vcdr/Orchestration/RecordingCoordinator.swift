@@ -121,6 +121,7 @@ final class RecordingCoordinator {
     func toggleRecording() {
         switch state {
         case .idle, .error:
+            guard !isPreparingToRecord else { return }
             isToggleMode = true
             Task { await onHotkeyDown() }
         case .recording:
@@ -193,7 +194,6 @@ final class RecordingCoordinator {
             state = .recording
             recordingStartInstant = .now
             escCancelManager.isEnabled = true
-            Logger.app.info("Recording started (toggle=\(self.isToggleMode))")
 
             // If the hotkey was released while we were awaiting startRecording(),
             // the synchronous onKeyUp callback may have already called
@@ -246,7 +246,7 @@ final class RecordingCoordinator {
         recordingIndicator.update(phase: .processing)
         // Keep Esc active so the user can cancel during processing
         escCancelManager.isEnabled = true
-        Logger.app.info("Push-to-talk: transcribing...")
+        Logger.app.info("Recording stopped, transcribing...")
 
         // Resume media playback after stopping the mic. The delay lets CoreAudio
         // fully release the recording session so the output device is not contending
