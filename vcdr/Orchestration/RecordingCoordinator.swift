@@ -232,6 +232,7 @@ final class RecordingCoordinator {
 
         guard let audioURL = audioRecorder.stopRecording() else {
             Task { await mediaPlaybackController.resumeIfNeeded() }
+            escCancelManager.isEnabled = false
             state = .error("No audio recorded")
             recordingIndicator.update(phase: .error, message: "No audio recorded")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -267,6 +268,7 @@ final class RecordingCoordinator {
             try? FileManager.default.removeItem(at: audioURL)
 
             guard !text.isEmpty else {
+                escCancelManager.isEnabled = false
                 capturedSelection = nil
                 outputDestinationOverride = nil
                 followUpContext = nil
@@ -456,11 +458,13 @@ final class RecordingCoordinator {
     }
 
     func cancelRecording() {
+        // Always disable the global Escape tap first — even if the guard below
+        // rejects the cancel (e.g. state is .error), we must stop swallowing Escape.
+        escCancelManager.isEnabled = false
+
         guard state == .recording || state == .transcribing || state == .executing else { return }
 
         let wasProcessing = state == .transcribing || state == .executing
-
-        escCancelManager.isEnabled = false
         state = .idle
 
         if wasProcessing {
