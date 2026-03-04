@@ -20,7 +20,6 @@ final class RecordingCoordinator {
     private let audioRecorder: AudioRecorder
     private let hotkeyManager: GlobalHotkeyManager
     private let toggleRecordingHotkeyManager = GlobalHotkeyManager()
-    private let escCancelManager = GlobalHotkeyManager()
     private let mediaPlaybackController: MediaPlaybackController
     private let recordingIndicator: RecordingIndicatorPanel
     private let outputPanel: OutputPanelPanel
@@ -57,7 +56,7 @@ final class RecordingCoordinator {
     /// True when the current recording is a follow-up triggered while the output panel was visible.
     /// The output panel stays visible and the recording indicator is positioned below it.
     private var isFollowUpFromVisibleOutputPanel = false
-    /// The in-flight processing Task, stored so it can be cancelled via Esc.
+    /// The in-flight processing Task, stored so it can be cancelled via cancelRecording().
     private var processingTask: Task<Void, Never>?
 
     /// Gap between the bottom of the output panel and the top of the recording indicator
@@ -193,7 +192,7 @@ final class RecordingCoordinator {
         if started {
             state = .recording
             recordingStartInstant = .now
-            escCancelManager.isEnabled = true
+
 
             // If the hotkey was released while we were awaiting startRecording(),
             // the synchronous onKeyUp callback may have already called
@@ -204,7 +203,7 @@ final class RecordingCoordinator {
             }
         } else {
             await mediaPlaybackController.resumeIfNeeded()
-            escCancelManager.isEnabled = false
+
             state = .error("Failed to start recording")
             recordingIndicator.update(phase: .error, message: "Failed to start recording")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -228,8 +227,6 @@ final class RecordingCoordinator {
             return
         }
 
-        escCancelManager.isEnabled = false
-
         let recordingDuration = recordingStartInstant.map { $0.duration(to: .now) }
         recordingStartInstant = nil
 
@@ -244,8 +241,6 @@ final class RecordingCoordinator {
 
         state = .transcribing
         recordingIndicator.update(phase: .processing)
-        // Keep Esc active so the user can cancel during processing
-        escCancelManager.isEnabled = true
         Logger.app.info("Recording stopped, transcribing...")
 
         // Resume media playback after stopping the mic. The delay lets CoreAudio
@@ -367,7 +362,7 @@ final class RecordingCoordinator {
                 modeName: mode.name
             )
 
-            escCancelManager.isEnabled = false
+
             processingTask = nil
             state = .idle
             Logger.app.info("Pipeline: complete")
@@ -376,7 +371,7 @@ final class RecordingCoordinator {
             processingTask = nil
             Logger.app.info("Processing task cancelled")
         } catch {
-            escCancelManager.isEnabled = false
+
             processingTask = nil
             if outputPanel.isLockedForFollowUp {
                 outputPanel.showProcessingError(error.localizedDescription)
@@ -440,41 +435,13 @@ final class RecordingCoordinator {
         setupToggleRecordingHotkey()
     }
 
-    // MARK: - Esc Cancel Suspend/Resume
+    // MARK: - Cancel Recording
 
-    /// Temporarily disables the Escape-to-cancel tap so another panel (e.g. mode switcher)
-    /// can handle Escape via its own NSEvent monitor.
-    func suspendEscCancel() {
-        escCancelManager.isEnabled = false
-    }
-
-    /// Re-enables the Escape-to-cancel tap, but only while actively recording.
-    func resumeEscCancel() {
-        guard state == .recording else { return }
-        escCancelManager.isEnabled = true
-    }
-
-    // MARK: - Esc Cancel
-
-    private static let escapeKeyCode: CGKeyCode = 53
-    private static let cancelledIndicatorDisplayDuration: Duration = .seconds(1)
-
-    func setupEscCancel() {
-        escCancelManager.isEnabled = false
-        escCancelManager.onKeyDown = { [weak self] in
-            self?.cancelRecording()
-        }
-        escCancelManager.onKeyUp = nil
-
-        _ = escCancelManager.register(keyCode: Self.escapeKeyCode, modifiers: [])
-    }
-
-    private func cancelRecording() {
+    func cancelRecording() {
         guard state == .recording || state == .transcribing || state == .executing else { return }
 
         let wasProcessing = state == .transcribing || state == .executing
 
-        escCancelManager.isEnabled = false
         state = .idle
 
         if wasProcessing {

@@ -78,13 +78,10 @@ final class AppDependencies {
             recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
 
-        // Suspend esc-cancel while mode switcher is open so Escape dismisses the switcher,
-        // then re-enable it once the switcher closes (if still recording).
-        modeSwitcherCoordinator.onPanelShow = { [weak self] in
-            self?.coordinator.suspendEscCancel()
-        }
-        modeSwitcherCoordinator.onPanelHide = { [weak self] in
-            self?.coordinator.resumeEscCancel()
+        // Wire Escape-to-cancel: when the output panel is locked for follow-up
+        // (recording/processing in progress), Escape cancels the recording.
+        outputPanel.onCancelRecording = { [weak self] in
+            self?.coordinator.cancelRecording()
         }
 
         // Wire inline text submission from the output panel
@@ -159,7 +156,6 @@ final class AppDependencies {
             if hasAccessibilityPermission {
                 coordinator.setupHotkey()
                 coordinator.setupToggleRecordingHotkey()
-                coordinator.setupEscCancel()
                 modeSwitcherCoordinator.setupHotkey()
                 pushToTypeCoordinator.setupHotkey()
                 copyLatestCaptureHandler.setupHotkey()
@@ -194,7 +190,6 @@ final class AppDependencies {
             if !wasAccessible && self.hasAccessibilityPermission {
                 self.coordinator.setupHotkey()
                 self.coordinator.setupToggleRecordingHotkey()
-                self.coordinator.setupEscCancel()
                 self.modeSwitcherCoordinator.setupHotkey()
                 self.pushToTypeCoordinator.setupHotkey()
                 self.copyLatestCaptureHandler.setupHotkey()

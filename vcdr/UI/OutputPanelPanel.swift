@@ -12,6 +12,10 @@ final class OutputPanelPanel {
     /// Callback invoked when the user submits inline text via Return key
     var onSubmitText: ((String) -> Void)?
 
+    /// Callback invoked when the user presses Escape while the panel is locked for follow-up
+    /// (recording/processing in progress). Cancels the in-flight recording or processing.
+    var onCancelRecording: (() -> Void)?
+
     /// When true, the panel ignores dismiss triggers (global clicks, Escape, Cmd+C).
     /// Set during follow-up recording/typing so the panel stays visible.
     private(set) var isLockedForFollowUp = false
@@ -211,9 +215,12 @@ final class OutputPanelPanel {
     }
 
     func hide() {
-        // When locked for follow-up, ignore dismiss requests (global clicks, Escape, Cmd+C).
-        // The panel stays visible so the user sees conversation history during dictation.
-        guard !isLockedForFollowUp else { return }
+        // When locked for follow-up (recording/processing in progress), cancel the recording
+        // instead of dismissing. The panel stays visible — cancelRecording() will unlock it.
+        if isLockedForFollowUp {
+            onCancelRecording?()
+            return
+        }
         tearDown()
     }
 

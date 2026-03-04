@@ -12,17 +12,8 @@ final class ModeSwitcherCoordinator {
     /// Callback to set a temporary output destination override on the active coordinators
     var onOutputDestinationOverride: ((UUID) -> Void)?
 
-    /// Called when the mode switcher panel becomes visible
-    var onPanelShow: (() -> Void)?
-
-    /// Called when the mode switcher panel is dismissed (any path: selection, escape, click outside, toggle)
-    var onPanelHide: (() -> Void)?
-
     init(settings: AppSettings) {
         self.settings = settings
-        panel.onHide = { [weak self] in
-            self?.onPanelHide?()
-        }
     }
 
     func setupHotkey() {
@@ -70,7 +61,6 @@ final class ModeSwitcherCoordinator {
                 Logger.settings.info("Output destination override set to \(destinationID)")
             }
         )
-        onPanelShow?()
     }
 
     private func toggleSwitcher() {

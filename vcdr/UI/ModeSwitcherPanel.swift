@@ -6,9 +6,6 @@ final class ModeSwitcherPanel {
     private var eventMonitor: Any?
     private var localEventMonitor: Any?
 
-    /// Called when the panel is hidden (by any dismiss path: selection, escape, click outside, toggle).
-    var onHide: (() -> Void)?
-
     // MARK: - Constants
 
     private static let panelWidth: CGFloat = 220
@@ -159,7 +156,6 @@ final class ModeSwitcherPanel {
     }
 
     func hide() {
-        let wasVisible = panel != nil
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
@@ -170,9 +166,6 @@ final class ModeSwitcherPanel {
         }
         panel?.close()
         panel = nil
-        if wasVisible {
-            onHide?()
-        }
     }
 
     var isVisible: Bool { panel != nil }
