@@ -93,7 +93,7 @@ struct Mode: Identifiable, Codable, Equatable {
         terminatorTemplate: String = defaultTerminatorTemplate,
         systemPromptEnabled: Bool = false,
         systemPrompt: String = "",
-        defaultOutputDestinationID: UUID = OutputDestination.builtInPasteID
+        defaultOutputDestinationID: UUID = OutputDestination.builtInOutputPanelID
     ) {
         self.id = id
         self.name = name
@@ -141,7 +141,7 @@ struct Mode: Identifiable, Codable, Equatable {
         terminatorTemplate = try container.decodeIfPresent(String.self, forKey: .terminatorTemplate) ?? Self.defaultTerminatorTemplate
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
-        defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteID
+        defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInOutputPanelID
 
         // New fields
         if let newProcessingType = try container.decodeIfPresent(ProcessingType.self, forKey: .processingType) {

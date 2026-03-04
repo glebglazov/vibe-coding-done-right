@@ -181,7 +181,7 @@ final class AppSettings {
            !decoded.isEmpty {
             self.outputDestinations = decoded
         } else {
-            self.outputDestinations = [OutputDestination.makeDefaultPaste()]
+            self.outputDestinations = [OutputDestination.makeDefaultOutputPanel(), OutputDestination.makeDefaultPaste()]
         }
 
         // Load active mode ID, defaulting to first mode

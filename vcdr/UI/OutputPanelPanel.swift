@@ -26,6 +26,8 @@ final class OutputPanelPanel {
     private(set) var currentModeID: UUID?
     /// Conversation ID for the current session.
     private(set) var currentConversationID: UUID?
+    /// Whether this session supports follow-up (only true for modes with bash processing).
+    private var canFollowUp = false
 
     // MARK: - Constants
 
@@ -53,7 +55,8 @@ final class OutputPanelPanel {
         outputDestinations: [OutputDestination],
         targetAppPID: pid_t?,
         modeID: UUID,
-        conversationID: UUID
+        conversationID: UUID,
+        canFollowUp: Bool
     ) {
         tearDown()
 
@@ -65,10 +68,12 @@ final class OutputPanelPanel {
         self.currentText = text
         self.currentModeID = modeID
         self.currentConversationID = conversationID
+        self.canFollowUp = canFollowUp
 
         let viewModel = OutputPanelViewModel(
             conversationTurns: allTurns,
             outputDestinations: filteredDestinations,
+            isReadOnly: !canFollowUp,
             onCopy: { [weak self] in
                 guard let self, let latestText = self.currentText else { return }
                 self.copyToClipboard(latestText)
@@ -86,7 +91,7 @@ final class OutputPanelPanel {
         )
         self.viewModel = viewModel
 
-        presentPanel(viewModel: viewModel, turns: allTurns, isReadOnly: false)
+        presentPanel(viewModel: viewModel, turns: allTurns, isReadOnly: !canFollowUp)
         Logger.actions.info("Output panel shown")
     }
 
@@ -110,6 +115,7 @@ final class OutputPanelPanel {
         self.currentText = conversation.latestOutput
         self.currentModeID = canContinue ? conversation.modeID : nil
         self.currentConversationID = conversation.id
+        self.canFollowUp = canContinue
 
         let viewModel = OutputPanelViewModel(
             conversationTurns: turns,
@@ -231,6 +237,7 @@ final class OutputPanelPanel {
         currentText = nil
         currentModeID = nil
         currentConversationID = nil
+        canFollowUp = false
     }
 
     var isVisible: Bool { panel != nil }
@@ -247,7 +254,8 @@ final class OutputPanelPanel {
     }
 
     func captureFollowUpState() -> FollowUpState? {
-        guard isVisible,
+        guard canFollowUp,
+              isVisible,
               let text = currentText,
               let modeID = currentModeID,
               let conversationID = currentConversationID else {
@@ -261,7 +269,8 @@ final class OutputPanelPanel {
     /// Reads the current follow-up state without hiding the panel.
     /// Use when the output panel should remain visible during follow-up recording/typing.
     func readFollowUpState() -> FollowUpState? {
-        guard isVisible,
+        guard canFollowUp,
+              isVisible,
               let text = currentText,
               let modeID = currentModeID,
               let conversationID = currentConversationID else {

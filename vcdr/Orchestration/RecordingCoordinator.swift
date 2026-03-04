@@ -1,3 +1,4 @@
+
 import Foundation
 import AppKit
 import OSLog
@@ -343,7 +344,8 @@ final class RecordingCoordinator {
                         outputDestinations: settings.outputDestinations,
                         targetAppPID: previousActiveApp?.processIdentifier,
                         modeID: mode.id,
-                        conversationID: activeConversationID
+                        conversationID: activeConversationID,
+                        canFollowUp: mode.processingType == .bashScript
                     )
                 }
             } else {

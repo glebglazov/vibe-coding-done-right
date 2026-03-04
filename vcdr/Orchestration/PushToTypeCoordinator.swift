@@ -206,7 +206,8 @@ final class PushToTypeCoordinator {
                             outputDestinations: settings.outputDestinations,
                             targetAppPID: previousActiveApp?.processIdentifier,
                             modeID: mode.id,
-                            conversationID: activeConversationID
+                            conversationID: activeConversationID,
+                            canFollowUp: mode.processingType == .bashScript
                         )
                     }
                 } else {

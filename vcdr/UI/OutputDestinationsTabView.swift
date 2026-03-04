@@ -173,7 +173,7 @@ struct OutputDestinationDetailView: View {
                                 destination.activationKey = String(newValue.prefix(Self.maxActivationKeyLength))
                             }
                         }
-                        .help("Press this key in the mode switcher to override the output destination")
+                        .help("Used as \u{2318}+key shortcut in the Output Panel and as activation key in the mode switcher")
                 }
 
                 if destination.type == .bashScript {

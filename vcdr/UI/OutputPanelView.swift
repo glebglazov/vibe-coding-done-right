@@ -74,8 +74,7 @@ final class OutputPanelViewModel {
                 onDismiss()
                 return true
             }
-            guard !isReadOnly else { return false }
-            // Check destination activation keys (Cmd + key)
+            // Check destination activation keys (Cmd + key) — always available
             if let char = chars.first {
                 let key = String(char)
                 if let destination = outputDestinations.first(where: { $0.activationKey == key }) {
@@ -168,10 +167,8 @@ struct OutputPanelView: View {
 
                 HStack(spacing: Self.hintSpacing) {
                     hintLabel("\u{2318}C", "copy")
-                    if !viewModel.isReadOnly {
-                        ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
-                            hintLabel("\u{2318}\(dest.activationKey.uppercased())", dest.name.lowercased())
-                        }
+                    ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
+                        hintLabel("\u{2318}\(dest.activationKey.uppercased())", dest.name.lowercased())
                     }
                     Spacer()
                     if !viewModel.isReadOnly {
@@ -223,13 +220,10 @@ struct OutputPanelView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            HStack(alignment: .top) {
-                Text(turn.output)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                copyButton(for: turn.output)
-            }
+            Text(turn.output)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
