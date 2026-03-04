@@ -162,8 +162,10 @@ struct ModeDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Command")
                             .foregroundStyle(.secondary)
-                        TextField("Command", text: $mode.processingCommand)
-                            .labelsHidden()
+                        TextEditor(text: $mode.processingCommand)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 80)
+                            .border(Color.secondary.opacity(0.3))
                             .help("Use {} as placeholder for transcribed text. Text also available as $VCDR_TEXT.")
                     }
 

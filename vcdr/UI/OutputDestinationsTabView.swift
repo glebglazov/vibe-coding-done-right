@@ -180,8 +180,10 @@ struct OutputDestinationDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Command")
                             .foregroundStyle(.secondary)
-                        TextField("Command", text: $destination.bashCommand)
-                            .labelsHidden()
+                        TextEditor(text: $destination.bashCommand)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 80)
+                            .border(Color.secondary.opacity(0.3))
                             .help("The script receives text via $VCDR_TEXT. Use {} as placeholder.")
                     }
                 }
