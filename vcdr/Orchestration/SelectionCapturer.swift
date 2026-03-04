@@ -15,7 +15,7 @@ struct SelectionCapturer: Sendable {
     /// Virtual key code for C key
     private static let cKeyCode: UInt16 = 8
     /// Maximum time to wait for the clipboard to update after simulating Cmd+C
-    private static let clipboardPollTimeout: Duration = .milliseconds(500)
+    private static let clipboardPollTimeout: Duration = .milliseconds(100)
     /// Interval between clipboard changeCount polls
     private static let clipboardPollInterval: Duration = .milliseconds(20)
 
