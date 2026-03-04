@@ -23,8 +23,9 @@ final class OutputPanelViewModel {
     /// so non-conversation modes show plain output even with selected text.
     var showConversationLabels: Bool {
         if conversationTurns.count > 1 { return true }
+        if isReadOnly { return false }
         guard let turn = conversationTurns.first else { return false }
-        if !isReadOnly && turn.capturedSelection != nil { return true }
+        if turn.capturedSelection != nil { return true }
         return turn.input != turn.output
     }
 

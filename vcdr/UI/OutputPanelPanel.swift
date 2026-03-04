@@ -315,11 +315,12 @@ final class OutputPanelPanel {
 
     private static func calculateHeight(for turns: [ConversationTurn], isReadOnly: Bool = false) -> CGFloat {
         var totalLines: CGFloat = 0
-        // Show labels when multiple turns, input was transformed, or captured selection is present
-        // (captured selection only triggers labels when follow-up is enabled)
+        // Show labels when multiple turns, or (for non-read-only modes) input was transformed
+        // or captured selection is present. Read-only (non-processing) modes never show labels
+        // for a single turn — the user just wants to see the final text.
         let showLabels = turns.count > 1
-            || (turns.first.map { $0.input != $0.output } ?? false)
-            || (!isReadOnly && turns.contains(where: { $0.capturedSelection != nil }))
+            || (!isReadOnly && ((turns.first.map { $0.input != $0.output } ?? false)
+                || turns.contains(where: { $0.capturedSelection != nil })))
 
         for (index, turn) in turns.enumerated() {
             if showLabels {
