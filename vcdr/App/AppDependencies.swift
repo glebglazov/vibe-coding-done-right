@@ -156,6 +156,7 @@ final class AppDependencies {
             if hasAccessibilityPermission {
                 coordinator.setupHotkey()
                 coordinator.setupToggleRecordingHotkey()
+                coordinator.setupEscCancel()
                 modeSwitcherCoordinator.setupHotkey()
                 pushToTypeCoordinator.setupHotkey()
                 copyLatestCaptureHandler.setupHotkey()
@@ -190,6 +191,7 @@ final class AppDependencies {
             if !wasAccessible && self.hasAccessibilityPermission {
                 self.coordinator.setupHotkey()
                 self.coordinator.setupToggleRecordingHotkey()
+                self.coordinator.setupEscCancel()
                 self.modeSwitcherCoordinator.setupHotkey()
                 self.pushToTypeCoordinator.setupHotkey()
                 self.copyLatestCaptureHandler.setupHotkey()
