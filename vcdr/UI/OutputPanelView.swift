@@ -22,6 +22,7 @@ final class OutputPanelViewModel {
     var showConversationLabels: Bool {
         if conversationTurns.count > 1 { return true }
         guard let turn = conversationTurns.first else { return false }
+        if turn.capturedSelection != nil { return true }
         return turn.input != turn.output
     }
 
@@ -107,6 +108,10 @@ struct OutputPanelView: View {
     private static let closeButtonPadding: CGFloat = 8
     private static let closeButtonSize: CGFloat = 16
     private static let copyButtonSize: CGFloat = 12
+    private static let blockquoteBorderWidth: CGFloat = 2
+    private static let blockquoteBorderSpacing: CGFloat = 6
+    private static let blockquoteBorderOpacity: Double = 0.4
+    private static let blockquoteLeadingPadding: CGFloat = 4
 
     /// ID for the bottom anchor used to auto-scroll
     private static let bottomAnchorID = "bottom"
@@ -204,6 +209,12 @@ struct OutputPanelView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, Self.labelVPadding)
 
+            // Captured selection blockquote
+            if let selection = turn.capturedSelection {
+                selectionBlockquote(selection)
+                    .padding(.bottom, Self.labelVPadding)
+            }
+
             HStack {
                 Text("Result:")
                     .font(.caption)
@@ -214,17 +225,31 @@ struct OutputPanelView: View {
             .padding(.bottom, Self.labelVPadding)
         }
 
-        if showLabels {
-            Text(turn.output)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text(turn.output)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        Text(turn.output)
+            .font(.system(.body, design: .monospaced))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func selectionBlockquote(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: Self.blockquoteBorderSpacing) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.secondary.opacity(Self.blockquoteBorderOpacity))
+                .frame(width: Self.blockquoteBorderWidth)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Context:")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                Text(text)
+                    .font(.system(.callout))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+        .padding(.leading, Self.blockquoteLeadingPadding)
     }
 
     private func copyButton(for text: String) -> some View {

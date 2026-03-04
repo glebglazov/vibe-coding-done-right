@@ -57,6 +57,7 @@ private struct ConversationRowView: View {
 
     // MARK: - Constants
     private static let previewLineLimit = 3
+    private static let selectionPreviewLineLimit = 2
     private static let copiedFeedbackDuration: Duration = .seconds(1.5)
 
     @State private var showCopied = false
@@ -89,6 +90,19 @@ private struct ConversationRowView: View {
                     // Preview text (first turn's input)
                     Text(conversation.previewText)
                         .lineLimit(Self.previewLineLimit)
+
+                    // Captured selection context (first turn only)
+                    if let selection = conversation.turns.first?.capturedSelection {
+                        HStack(alignment: .top, spacing: 4) {
+                            Image(systemName: "text.quote")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text(selection)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(Self.selectionPreviewLineLimit)
+                        }
+                    }
 
                     // If there are multiple turns, show last turn's output as secondary preview
                     if conversation.turns.count > 1 {

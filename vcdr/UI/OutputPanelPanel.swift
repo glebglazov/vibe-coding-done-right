@@ -51,6 +51,7 @@ final class OutputPanelPanel {
     func show(
         inputText: String,
         text: String,
+        capturedSelection: String?,
         conversationTurns: [ConversationTurn],
         outputDestinations: [OutputDestination],
         targetAppPID: pid_t?,
@@ -60,7 +61,7 @@ final class OutputPanelPanel {
     ) {
         tearDown()
 
-        let allTurns = conversationTurns + [ConversationTurn(input: inputText, output: text)]
+        let allTurns = conversationTurns + [ConversationTurn(input: inputText, output: text, capturedSelection: capturedSelection)]
         let filteredDestinations = outputDestinations.filter { $0.type != .outputPanel }
 
         // Store session state for follow-up continuation
@@ -106,7 +107,7 @@ final class OutputPanelPanel {
         tearDown()
 
         let turns = conversation.turns.map { turn in
-            ConversationTurn(input: turn.input, output: turn.output)
+            ConversationTurn(input: turn.input, output: turn.output, capturedSelection: turn.capturedSelection)
         }
         let filteredDestinations = outputDestinations.filter { $0.type != .outputPanel }
 
@@ -307,8 +308,10 @@ final class OutputPanelPanel {
 
     private static func calculateHeight(for turns: [ConversationTurn], isReadOnly: Bool = false) -> CGFloat {
         var totalLines: CGFloat = 0
-        // Show labels when multiple turns or when input was transformed by processing
-        let showLabels = turns.count > 1 || (turns.first.map { $0.input != $0.output } ?? false)
+        // Show labels when multiple turns, input was transformed, or captured selection is present
+        let showLabels = turns.count > 1
+            || (turns.first.map { $0.input != $0.output } ?? false)
+            || turns.contains(where: { $0.capturedSelection != nil })
 
         for (index, turn) in turns.enumerated() {
             if showLabels {
@@ -317,6 +320,13 @@ final class OutputPanelPanel {
                 let labelOverhead = 2 * labelLineHeight / lineHeight // Two labels per turn
                 totalLines += labelOverhead
             }
+            // Captured selection blockquote ("Context:" label + selection lines)
+            if showLabels, let selection = turn.capturedSelection {
+                totalLines += labelLineHeight / lineHeight  // "Context:" label
+                let selectionLines = CGFloat(selection.components(separatedBy: .newlines).count)
+                totalLines += selectionLines * 0.9  // callout font is slightly smaller than body
+            }
+
             totalLines += CGFloat(turn.output.components(separatedBy: .newlines).count)
 
             // Divider between turns (not after last)

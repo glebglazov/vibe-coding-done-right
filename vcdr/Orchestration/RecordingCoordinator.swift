@@ -340,6 +340,7 @@ final class RecordingCoordinator {
                     outputPanel.show(
                         inputText: text,
                         text: processedText,
+                        capturedSelection: selection,
                         conversationTurns: currentTurns,
                         outputDestinations: settings.outputDestinations,
                         targetAppPID: previousActiveApp?.processIdentifier,

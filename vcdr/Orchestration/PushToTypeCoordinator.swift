@@ -126,6 +126,7 @@ final class PushToTypeCoordinator {
         panel.show(
             settings: settings,
             conversationTurns: overlayTurns,
+            capturedSelection: capturedSelection,
             topOffset: topOffset,
             onSubmit: { [weak self] text in
                 self?.submitText(text)
@@ -202,6 +203,7 @@ final class PushToTypeCoordinator {
                         outputPanel.show(
                             inputText: text,
                             text: processedText,
+                            capturedSelection: selection,
                             conversationTurns: currentTurns,
                             outputDestinations: settings.outputDestinations,
                             targetAppPID: previousActiveApp?.processIdentifier,

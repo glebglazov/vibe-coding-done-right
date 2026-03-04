@@ -27,6 +27,7 @@ final class PushToTypePanel {
     func show(
         settings: AppSettings,
         conversationTurns: [ConversationTurn] = [],
+        capturedSelection: String? = nil,
         topOffset: CGFloat = 0,
         onSubmit: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void
@@ -36,6 +37,7 @@ final class PushToTypePanel {
         let viewModel = PushToTypeViewModel(
             settings: settings,
             conversationTurns: conversationTurns,
+            capturedSelection: capturedSelection,
             onSubmit: { [weak self] text in
                 onSubmit(text)
                 self?.hide()
@@ -49,7 +51,7 @@ final class PushToTypePanel {
 
         let view = PushToTypeView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
-        let panelHeight = Self.calculateHeight(for: conversationTurns)
+        let panelHeight = Self.calculateHeight(for: conversationTurns, capturedSelection: capturedSelection)
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: panelHeight)
 
         let panel = KeyablePanel(
@@ -141,8 +143,18 @@ final class PushToTypePanel {
 
     // MARK: - Height Calculation
 
-    private static func calculateHeight(for turns: [ConversationTurn]) -> CGFloat {
-        guard !turns.isEmpty else { return panelBaseHeight }
+    private static func calculateHeight(for turns: [ConversationTurn], capturedSelection: String? = nil) -> CGFloat {
+        var extraHeight: CGFloat = 0
+
+        // Captured selection blockquote ("Context:" label + selection lines + padding)
+        if let selection = capturedSelection {
+            let selectionLines = CGFloat(selection.components(separatedBy: .newlines).count)
+            extraHeight += labelLineHeight  // "Context:" label
+            extraHeight += selectionLines * lineHeight * 0.9  // callout font is slightly smaller
+            extraHeight += conversationPadding
+        }
+
+        guard !turns.isEmpty else { return min(panelBaseHeight + extraHeight, panelMaxHeight) }
 
         var conversationLines: CGFloat = 0
         for (index, turn) in turns.enumerated() {
@@ -158,7 +170,7 @@ final class PushToTypePanel {
         }
 
         let conversationHeight = conversationLines * lineHeight + conversationPadding
-        return min(panelBaseHeight + conversationHeight, panelMaxHeight)
+        return min(panelBaseHeight + conversationHeight + extraHeight, panelMaxHeight)
     }
 
     // MARK: - Constants (Focus)
@@ -216,6 +228,7 @@ final class PushToTypeViewModel {
     var text: String = ""
     var outputDestinationOverrideID: UUID?
     let conversationTurns: [ConversationTurn]
+    let capturedSelection: String?
     let settings: AppSettings
     let onSubmit: (String) -> Void
     let onDismiss: () -> Void
@@ -226,9 +239,10 @@ final class PushToTypeViewModel {
         return "\(settings.activeMode.name) · \(destination.symbol)"
     }
 
-    init(settings: AppSettings, conversationTurns: [ConversationTurn] = [], onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
+    init(settings: AppSettings, conversationTurns: [ConversationTurn] = [], capturedSelection: String? = nil, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
         self.settings = settings
         self.conversationTurns = conversationTurns
+        self.capturedSelection = capturedSelection
         self.onSubmit = onSubmit
         self.onDismiss = onDismiss
     }
@@ -273,11 +287,21 @@ private struct PushToTypeView: View {
     private static let keyVPadding: CGFloat = 1
     private static let labelVPadding: CGFloat = 4
     private static let turnDividerVPadding: CGFloat = 4
+    private static let blockquoteBorderWidth: CGFloat = 2
+    private static let blockquoteBorderSpacing: CGFloat = 6
+    private static let blockquoteBorderOpacity: Double = 0.4
+    private static let blockquoteLeadingPadding: CGFloat = 4
 
     var body: some View {
         VStack(spacing: 0) {
             if !viewModel.conversationTurns.isEmpty {
                 conversationHistorySection
+                Divider()
+            }
+
+            if let selection = viewModel.capturedSelection {
+                selectionBlockquote(selection)
+                    .padding(Self.textPadding)
                 Divider()
             }
 
@@ -339,6 +363,27 @@ private struct PushToTypeView: View {
             }
             .padding(Self.textPadding)
         }
+    }
+
+    private func selectionBlockquote(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: Self.blockquoteBorderSpacing) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.secondary.opacity(Self.blockquoteBorderOpacity))
+                .frame(width: Self.blockquoteBorderWidth)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Context:")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                Text(text)
+                    .font(.system(.callout))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.leading, Self.blockquoteLeadingPadding)
     }
 
     private func hintLabel(_ key: String, _ label: String) -> some View {
