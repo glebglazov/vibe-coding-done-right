@@ -260,10 +260,13 @@ final class RecordingCoordinator {
     private func processTranscription(audioURL: URL, recordingDuration: Duration?) async {
         do {
             let transcriptionStart = ContinuousClock.now
-            let text = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
+            let rawText = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
             try Task.checkCancellation()
             let elapsed = transcriptionStart.duration(to: .now)
-            Logger.app.info("Transcribed in \(elapsed): \(text)")
+            Logger.app.info("Transcribed in \(elapsed): \(rawText)")
+
+            // Apply filler word removal before any mode-specific processing
+            let text = settings.removeFillerWords ? FillerWordRemover.remove(from: rawText) : rawText
 
             try? FileManager.default.removeItem(at: audioURL)
 

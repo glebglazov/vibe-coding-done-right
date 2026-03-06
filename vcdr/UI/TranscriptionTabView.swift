@@ -23,6 +23,13 @@ struct TranscriptionTabView: View {
                     )
                 }
             }
+
+            Section("Post-Processing") {
+                Toggle("Remove filler words (um, uh, etc.)", isOn: Binding(
+                    get: { dependencies.settings.removeFillerWords },
+                    set: { dependencies.settings.removeFillerWords = $0 }
+                ))
+            }
         }
         .formStyle(.grouped)
         .navigationTitle("Transcription")

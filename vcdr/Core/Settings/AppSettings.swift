@@ -68,6 +68,9 @@ final class AppSettings {
     var showModeSwitcherHint: Bool {
         didSet { save() }
     }
+    var removeFillerWords: Bool {
+        didSet { save() }
+    }
 
     /// Active mode looked up by ID, falling back to first mode
     var activeMode: Mode {
@@ -94,6 +97,7 @@ final class AppSettings {
         static let outputDestinations = "outputDestinations"
         static let audioSettings = "audioSettings"
         static let showModeSwitcherHint = "showModeSwitcherHint"
+        static let removeFillerWords = "removeFillerWords"
         // Legacy key for migration
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         // Legacy keys for migration
@@ -199,6 +203,13 @@ final class AppSettings {
             self.showModeSwitcherHint = true
         }
 
+        // Load filler word removal preference (default: true)
+        if userDefaults.object(forKey: Keys.removeFillerWords) != nil {
+            self.removeFillerWords = userDefaults.bool(forKey: Keys.removeFillerWords)
+        } else {
+            self.removeFillerWords = true
+        }
+
         // Load audio settings (with migration from legacy preferredInputDeviceID)
         if let data = userDefaults.data(forKey: Keys.audioSettings),
            let decoded = try? JSONDecoder().decode(AudioSettings.self, from: data) {
@@ -244,6 +255,7 @@ final class AppSettings {
             userDefaults.set(encoded, forKey: Keys.audioSettings)
         }
         userDefaults.set(showModeSwitcherHint, forKey: Keys.showModeSwitcherHint)
+        userDefaults.set(removeFillerWords, forKey: Keys.removeFillerWords)
         Logger.settings.info("Settings saved")
     }
 }
