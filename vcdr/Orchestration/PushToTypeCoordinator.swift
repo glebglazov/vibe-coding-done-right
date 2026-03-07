@@ -23,6 +23,10 @@ final class PushToTypeCoordinator {
     /// Resolves parameter labels for display (e.g. "Sonnet, English")
     var resolveParameterLabels: ((Mode) -> String?)?
 
+    /// Called when the push-to-type overlay is about to show.
+    /// Used to dismiss the mode switcher overlay.
+    var onWillStartInput: (() -> Void)?
+
     func updateOutputDestinationOverride(_ id: UUID?) {
         if let id {
             if session == nil { session = PipelineSession() }
@@ -87,6 +91,8 @@ final class PushToTypeCoordinator {
             outputPanel.unlockFollowUp()
             Logger.app.info("Push-to-type: overlay dismissed via hotkey")
         } else {
+            onWillStartInput?()
+
             // If the output panel is visible, this is an implicit follow-up.
             // Read state without hiding so the user sees conversation history while typing.
             if let followUp = outputPanel.readFollowUpState() {

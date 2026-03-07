@@ -75,6 +75,17 @@ final class ModeSwitcherCoordinator {
         )
     }
 
+    func hideSwitcher() {
+        panel.hide()
+    }
+
+    /// Confirms the currently highlighted mode and hides the switcher.
+    /// Acts as if the user pressed Enter.
+    func confirmAndHideSwitcher() {
+        guard panel.isVisible else { return }
+        panel.confirmAndHide()
+    }
+
     private func toggleSwitcher() {
         if panel.isVisible {
             panel.hide()

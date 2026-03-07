@@ -60,6 +60,10 @@ final class RecordingCoordinator {
         return result
     }
 
+    /// Called when recording is about to start (push-to-talk down or toggle start).
+    /// Used to dismiss the mode switcher overlay.
+    var onWillStartRecording: (() -> Void)?
+
     /// Per-pipeline-run state. Non-nil while a pipeline is in progress or follow-up
     /// state has been captured from the output panel. Cleared on completion/error/cancel.
     var session: PipelineSession?
@@ -161,6 +165,8 @@ final class RecordingCoordinator {
     // MARK: - Recording Start (async — needs mic permission check)
 
     private func onHotkeyDown(fromHotkey: Bool = false) async {
+        onWillStartRecording?()
+
         if case .error = state {
             state = .idle
         }

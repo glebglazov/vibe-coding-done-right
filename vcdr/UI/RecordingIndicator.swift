@@ -287,10 +287,10 @@ private struct RecordingIndicatorView: View {
                 let labelParts = [settings.activeMode.name, phaseState.parameterLabels, destination.symbol].compactMap { $0 }
                 Text(labelParts.joined(separator: " · "))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, Self.modeLabelHPadding)
                     .padding(.vertical, Self.modeLabelVPadding)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.modeLabelCornerRadius))
+                    .background(.thickMaterial, in: RoundedRectangle(cornerRadius: Self.modeLabelCornerRadius))
                     .shadow(radius: 2)
                     .transition(.opacity)
             }

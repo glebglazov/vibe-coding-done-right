@@ -11,6 +11,7 @@ final class ModeSwitcherPanel {
     private var panel: NSPanel?
     private var eventMonitor: Any?
     private var localEventMonitor: Any?
+    private var viewModel: ModeSwitcherViewModel?
 
     // MARK: - Constants
 
@@ -105,6 +106,7 @@ final class ModeSwitcherPanel {
         panel.orderFrontRegardless()
         panel.makeKey()
         self.panel = panel
+        self.viewModel = viewModel
 
         // Wire resize callback — recalculate height when destinations are toggled
         viewModel.onResize = { [weak self, weak viewModel] in
@@ -181,6 +183,31 @@ final class ModeSwitcherPanel {
         }
     }
 
+    /// Confirms the currently highlighted mode (applying any pending destination override) and hides.
+    /// If browsing parameters/options, applies the highlighted option first.
+    func confirmAndHide() {
+        if let viewModel {
+            // Apply the highlighted option if drilling into parameters
+            switch viewModel.navigationLevel {
+            case .options(let modeIndex, let parameterIndex):
+                let parameter = viewModel.modes[modeIndex].parameters[parameterIndex]
+                let options = parameter.options
+                if viewModel.subHighlightedIndex < options.count {
+                    let option = options[viewModel.subHighlightedIndex]
+                    viewModel.parameterOverrides[parameter.id] = option.value
+                    viewModel.onParameterOverride(parameter.id, option.value)
+                }
+            case .modes, .parameters:
+                break
+            }
+
+            let mode = viewModel.modes[viewModel.highlightedIndex]
+            viewModel.confirmMode(mode.id)
+        } else {
+            hide()
+        }
+    }
+
     func hide() {
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
@@ -192,6 +219,7 @@ final class ModeSwitcherPanel {
         }
         panel?.close()
         panel = nil
+        viewModel = nil
     }
 
     var isVisible: Bool { panel != nil }
@@ -206,7 +234,7 @@ private final class KeyablePanel: NSPanel {
 // MARK: - View Model (shared between NSEvent monitor and SwiftUI view)
 
 @Observable
-private final class ModeSwitcherViewModel {
+fileprivate final class ModeSwitcherViewModel {
     let modes: [Mode]
     var highlightedIndex: Int
     let outputDestinations: [OutputDestination]

@@ -79,6 +79,14 @@ final class AppDependencies {
             self?.coordinator.resolvedParameterLabels(for: mode)
         }
 
+        // Dismiss mode switcher when recording or push-to-type starts
+        coordinator.onWillStartRecording = { [weak self] in
+            self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
+        }
+        pushToTypeCoordinator.onWillStartInput = { [weak self] in
+            self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
+        }
+
         // Wire parameter override from mode switcher to recording coordinator
         modeSwitcherCoordinator.onParameterOverride = { [weak self] parameterID, value in
             self?.coordinator.conversationParameterOverrides[parameterID] = value
