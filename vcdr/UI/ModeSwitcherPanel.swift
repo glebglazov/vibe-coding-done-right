@@ -23,11 +23,6 @@ final class ModeSwitcherPanel {
     private static let hintRowHeight: CGFloat = 24
     private static let resizeAnimationDuration: CGFloat = 0.15
 
-    /// Vertical offset so the mode switcher always appears below where the recording
-    /// indicator circle and mode label sit (8pt menu bar gap + 44pt circle + 4pt spacing
-    /// + ~16pt label + 8pt spacing), ensuring a consistent position whether recording
-    /// is active or not.
-    private static let recordingIndicatorClearance: CGFloat = 80
 
     /// Stored screen positioning state for reuse during resize
     private var screenFrame: NSRect = .zero
@@ -99,7 +94,7 @@ final class ModeSwitcherPanel {
             let visibleFrame = screen.visibleFrame
             menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
             let x = screenFrame.midX - Self.panelWidth / 2
-            let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar - Self.recordingIndicatorClearance
+            let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 
@@ -119,7 +114,7 @@ final class ModeSwitcherPanel {
                 showHint: viewModel.showHint
             )
             let x = self.screenFrame.midX - Self.panelWidth / 2
-            let y = self.screenFrame.maxY - self.menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar - Self.recordingIndicatorClearance
+            let y = self.screenFrame.maxY - self.menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar
             let newFrame = NSRect(x: x, y: y, width: Self.panelWidth, height: newHeight)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Self.resizeAnimationDuration
@@ -233,6 +228,21 @@ private final class KeyablePanel: NSPanel {
 
 // MARK: - View Model (shared between NSEvent monitor and SwiftUI view)
 
+// MARK: - Key Codes
+
+private enum KeyCode {
+    static let returnKey: UInt16 = 36
+    static let escape: UInt16 = 53
+    static let leftArrow: UInt16 = 123
+    static let rightArrow: UInt16 = 124
+    static let downArrow: UInt16 = 125
+    static let upArrow: UInt16 = 126
+    static let h: UInt16 = 4
+    static let j: UInt16 = 38
+    static let k: UInt16 = 40
+    static let l: UInt16 = 37
+}
+
 @Observable
 fileprivate final class ModeSwitcherViewModel {
     let modes: [Mode]
@@ -308,8 +318,7 @@ fileprivate final class ModeSwitcherViewModel {
         // Use `characters` (not `charactersIgnoringModifiers`) to detect "?" which is Shift+/
         let chars = event.characters ?? ""
 
-        // Escape always dismisses entirely
-        if keyCode == 53 {
+        if keyCode == KeyCode.escape {
             onDismiss()
             return true
         }
@@ -333,15 +342,26 @@ fileprivate final class ModeSwitcherViewModel {
         }
 
         switch keyCode {
-        case 125, 38: // Down / J
+        case KeyCode.downArrow, KeyCode.j:
             highlightedIndex = min(highlightedIndex + 1, modes.count - 1)
             return true
-        case 126, 40: // Up / K
+        case KeyCode.upArrow, KeyCode.k:
             highlightedIndex = max(highlightedIndex - 1, 0)
             return true
-        case 124, 37: // Right arrow / L — drill into parameters
+        case KeyCode.leftArrow, KeyCode.h:
+            onDismiss()
+            return true
+        case KeyCode.rightArrow, KeyCode.l:
+            // Shift+L confirms immediately without drilling into parameters
+            if keyCode == KeyCode.l && chars == "L" {
+                confirmMode(modes[highlightedIndex].id)
+                return true
+            }
             let mode = modes[highlightedIndex]
-            guard !mode.parameters.isEmpty else { return true }
+            guard !mode.parameters.isEmpty else {
+                confirmMode(mode.id)
+                return true
+            }
             if mode.parameters.count == 1 {
                 navigationLevel = .options(modeIndex: highlightedIndex, parameterIndex: 0)
             } else {
@@ -351,7 +371,7 @@ fileprivate final class ModeSwitcherViewModel {
             showingDestinations = false
             onResize?()
             return true
-        case 36: // Return
+        case KeyCode.returnKey:
             confirmMode(modes[highlightedIndex].id)
             return true
         default:
@@ -378,18 +398,21 @@ fileprivate final class ModeSwitcherViewModel {
         let paramCount = mode.parameters.count
 
         switch keyCode {
-        case 125, 38: // Down / J
+        case KeyCode.downArrow, KeyCode.j:
             subHighlightedIndex = min(subHighlightedIndex + 1, paramCount - 1)
             return true
-        case 126, 40: // Up / K
+        case KeyCode.upArrow, KeyCode.k:
             subHighlightedIndex = max(subHighlightedIndex - 1, 0)
             return true
-        case 124, 37, 36: // Right / L / Return — drill into options
+        case KeyCode.returnKey:
             navigationLevel = .options(modeIndex: modeIndex, parameterIndex: subHighlightedIndex)
             subHighlightedIndex = 0
             onResize?()
             return true
-        case 123, 4: // Left / H — back to modes
+        case KeyCode.rightArrow, KeyCode.l:
+            confirmMode(mode.id)
+            return true
+        case KeyCode.leftArrow, KeyCode.h:
             navigationLevel = .modes
             subHighlightedIndex = 0
             onResize?()
@@ -405,20 +428,20 @@ fileprivate final class ModeSwitcherViewModel {
         let optionCount = parameter.options.count
 
         switch keyCode {
-        case 125, 38: // Down / J
+        case KeyCode.downArrow, KeyCode.j:
             subHighlightedIndex = min(subHighlightedIndex + 1, optionCount - 1)
             return true
-        case 126, 40: // Up / K
+        case KeyCode.upArrow, KeyCode.k:
             subHighlightedIndex = max(subHighlightedIndex - 1, 0)
             return true
-        case 36: // Return — select option
+        case KeyCode.returnKey:
             guard subHighlightedIndex < optionCount else { return true }
             let option = parameter.options[subHighlightedIndex]
             parameterOverrides[parameter.id] = option.value
             onParameterOverride(parameter.id, option.value)
             goBackFromOptions(modeIndex: modeIndex)
             return true
-        case 123, 4: // Left / H — back without selecting
+        case KeyCode.leftArrow, KeyCode.h:
             goBackFromOptions(modeIndex: modeIndex)
             return true
         default:
