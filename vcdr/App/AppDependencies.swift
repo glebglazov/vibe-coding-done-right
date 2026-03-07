@@ -73,7 +73,7 @@ final class AppDependencies {
 
         // Wire output destination override from mode switcher to both coordinators + indicator labels
         modeSwitcherCoordinator.onOutputDestinationOverride = { [weak self] destinationID in
-            self?.coordinator.outputDestinationOverride = destinationID
+            self?.coordinator.setOutputDestinationOverride(destinationID)
             self?.pushToTypeCoordinator.updateOutputDestinationOverride(destinationID)
             recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
@@ -96,18 +96,13 @@ final class AppDependencies {
 
             Task { @MainActor in
                 do {
-                    let preprocessed = mode.applyPreProcessing(text, capturedSelection: nil, followUpContext: followUpContext)
-                    let processed: String
-                    switch mode.processingType {
-                    case .none:
-                        processed = preprocessed
-                    case .bashScript:
-                        processed = try await BashRunner.run(
-                            command: mode.processingCommand,
-                            text: preprocessed,
-                            conversationID: conversationID.uuidString
-                        )
-                    }
+                    let processed = try await TextProcessingPipeline.run(
+                        mode: mode,
+                        text: text,
+                        capturedSelection: nil,
+                        followUpContext: followUpContext,
+                        conversationID: conversationID
+                    )
                     outputPanel.finishProcessing(outputText: processed)
 
                     // Record inline follow-up in history
@@ -207,7 +202,7 @@ final class AppDependencies {
     }
 
     func openConversationFromHistory(_ conversation: Conversation) {
-        let canContinue = settings.modes.contains(where: { $0.id == conversation.modeID && $0.processingType == .bashScript })
+        let canContinue = settings.modes.contains(where: { $0.id == conversation.modeID && $0.canFollowUp })
         if canContinue {
             settings.activeModeID = conversation.modeID
         }

@@ -27,36 +27,16 @@ final class RecordingCoordinator {
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
 
-    /// Temporary output destination override set via mode switcher.
-    /// Cleared after one transcription completes (or on error/cancel).
-    var outputDestinationOverride: UUID?
+    /// Per-pipeline-run state. Non-nil while a pipeline is in progress or follow-up
+    /// state has been captured from the output panel. Cleared on completion/error/cancel.
+    var session: PipelineSession?
 
-    /// Follow-up context from the output panel. Contains the previous capture's
-    /// processed text, injected between system prompt and new dictation.
-    /// Cleared after one transcription completes (or on error/cancel).
-    var followUpContext: String?
-
-    /// Accumulated conversation turns from previous follow-ups.
-    /// Passed to the output panel so it can display the full conversation history.
-    /// Cleared after one transcription completes (or on error/cancel).
-    var conversationTurns: [ConversationTurn] = []
-
-    /// Conversation UUID for the current pipeline run. Generated fresh for new
-    /// recordings, preserved across follow-ups via the output panel callbacks.
-    /// Cleared after pipeline completes (but passed to the output panel for follow-up reuse).
-    var conversationID: UUID?
-
-    private var previousActiveApp: NSRunningApplication?
-    private var capturedSelection: String?
     private var recordingStartInstant: ContinuousClock.Instant?
     /// Tracks whether the current recording was started via toggle (vs push-to-talk)
     private var isToggleMode = false
     /// Guards against concurrent onHotkeyDown() calls racing during the async gap
     /// between state == .idle check and state = .recording assignment.
     private var isPreparingToRecord = false
-    /// True when the current recording is a follow-up triggered while the output panel was visible.
-    /// The output panel stays visible and the recording indicator is positioned below it.
-    private var isFollowUpFromVisibleOutputPanel = false
     /// The in-flight processing Task, stored so it can be cancelled via cancelRecording().
     private var processingTask: Task<Void, Never>?
 
@@ -83,6 +63,17 @@ final class RecordingCoordinator {
         self.outputPanel = outputPanel
         self.selectionCapturer = selectionCapturer
         self.transcriptionHistory = transcriptionHistory
+    }
+
+    /// Sets the output destination override from the mode switcher.
+    /// Creates a session if one doesn't exist yet.
+    func setOutputDestinationOverride(_ id: UUID?) {
+        if let id {
+            if session == nil { session = PipelineSession() }
+            session?.outputDestinationOverride = id
+        } else {
+            session?.outputDestinationOverride = nil
+        }
     }
 
     func setupHotkey() {
@@ -152,20 +143,24 @@ final class RecordingCoordinator {
         // If the output panel is visible, this is an implicit follow-up.
         // Read state without hiding so the user sees conversation history while recording.
         if let followUp = outputPanel.readFollowUpState() {
-            followUpContext = followUp.text
-            conversationTurns = followUp.turns
-            conversationID = followUp.conversationID
+            session = PipelineSession(
+                outputDestinationOverride: OutputDestination.builtInOutputPanelID,
+                followUpContext: followUp.text,
+                conversationTurns: followUp.turns,
+                conversationID: followUp.conversationID,
+                isFollowUpFromVisibleOutputPanel: true
+            )
             settings.activeModeID = followUp.modeID
-            outputDestinationOverride = OutputDestination.builtInOutputPanelID
             recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
-            isFollowUpFromVisibleOutputPanel = true
             outputPanel.lockForFollowUp()
+        } else if session == nil {
+            session = PipelineSession()
         }
 
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
             state = .error("Model still loading...")
-            isFollowUpFromVisibleOutputPanel = false
+            session = nil
             outputPanel.unlockFollowUp()
             recordingIndicator.show()
             recordingIndicator.update(phase: .error, message: "Model still loading...")
@@ -174,13 +169,15 @@ final class RecordingCoordinator {
             return
         }
 
-        previousActiveApp = NSWorkspace.shared.frontmostApplication
-        capturedSelection = await selectionCapturer.capture(bundleIdentifier: previousActiveApp?.bundleIdentifier)
+        let frontmostApp = NSWorkspace.shared.frontmostApplication
+        session?.previousActiveApp = frontmostApp
+        session?.capturedSelection = await selectionCapturer.capture(bundleIdentifier: frontmostApp?.bundleIdentifier)
 
         // Show indicator immediately for visual feedback — the media pause
         // and recording start below are async and can take 200-400ms.
         // Position below the output panel when it's a visible follow-up.
-        let topOffset = isFollowUpFromVisibleOutputPanel
+        let isFollowUp = session?.isFollowUpFromVisibleOutputPanel ?? false
+        let topOffset = isFollowUp
             ? outputPanel.currentPanelHeight + Self.panelGap
             : 0
         recordingIndicator.show(topOffset: topOffset)
@@ -270,14 +267,21 @@ final class RecordingCoordinator {
 
             try? FileManager.default.removeItem(at: audioURL)
 
+            // Consume session state into locals for use throughout the pipeline
+            let pipelineSession = session ?? PipelineSession()
+            let selection = pipelineSession.capturedSelection
+            let context = pipelineSession.followUpContext
+            let currentTurns = pipelineSession.conversationTurns
+            // Generate a new conversation ID for fresh recordings,
+            // reuse existing one for follow-ups
+            let activeConversationID = pipelineSession.conversationID ?? UUID()
+            let wasFollowUpFromOutputPanel = pipelineSession.isFollowUpFromVisibleOutputPanel
+            let targetAppPID = pipelineSession.previousActiveApp?.processIdentifier
+            let destinationID = pipelineSession.outputDestinationOverride ?? settings.activeMode.defaultOutputDestinationID
+            session = nil
+
             guard !text.isEmpty else {
                 escCancelManager.isEnabled = false
-                capturedSelection = nil
-                outputDestinationOverride = nil
-                followUpContext = nil
-                conversationTurns = []
-                conversationID = nil
-                isFollowUpFromVisibleOutputPanel = false
                 outputPanel.unlockFollowUp()
                 state = .error("No speech detected")
                 recordingIndicator.update(phase: .error, message: "No speech detected")
@@ -287,47 +291,25 @@ final class RecordingCoordinator {
             }
 
             let mode = settings.activeMode
-            let selection = capturedSelection
-            capturedSelection = nil
-            let context = followUpContext
-            followUpContext = nil
-            let currentTurns = conversationTurns
-            conversationTurns = []
-            // Generate a new conversation ID for fresh recordings,
-            // reuse existing one for follow-ups
-            let activeConversationID = conversationID ?? UUID()
-            conversationID = nil
-            let wasFollowUpFromOutputPanel = isFollowUpFromVisibleOutputPanel
-            isFollowUpFromVisibleOutputPanel = false
 
             // Show the pending "..." turn in the output panel while processing
             if wasFollowUpFromOutputPanel {
                 outputPanel.startProcessing(inputText: text)
             }
 
-            // Step 1: Pre-processing (terminator, system prompt, follow-up context, captured selection)
-            let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection, followUpContext: context)
-
-            // Step 2: Processing (optional bash script)
-            let processedText: String
-            switch mode.processingType {
-            case .none:
-                processedText = preprocessedText
-            case .bashScript:
-                processedText = try await BashRunner.run(
-                    command: mode.processingCommand,
-                    text: preprocessedText,
-                    conversationID: activeConversationID.uuidString
-                )
-            }
+            let processedText = try await TextProcessingPipeline.run(
+                mode: mode,
+                text: text,
+                capturedSelection: selection,
+                followUpContext: context,
+                conversationID: activeConversationID
+            )
 
             try Task.checkCancellation()
             state = .executing
             Logger.app.info("Pipeline: executing output action")
 
             // Step 3: Output
-            let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
-            outputDestinationOverride = nil
             let destination = settings.outputDestination(for: destinationID)
 
             if destination.type == .outputPanel {
@@ -343,16 +325,17 @@ final class RecordingCoordinator {
                         capturedSelection: selection,
                         conversationTurns: currentTurns,
                         outputDestinations: settings.outputDestinations,
-                        targetAppPID: previousActiveApp?.processIdentifier,
+                        targetAppPID: targetAppPID,
                         modeID: mode.id,
                         conversationID: activeConversationID,
-                        canFollowUp: mode.processingType == .bashScript
+                        canFollowUp: mode.canFollowUp
                     )
                 }
             } else {
                 outputPanel.unlockFollowUp()
-                let action = makeOutputAction(for: destination, conversationID: activeConversationID)
-                try await action.execute(text: processedText)
+                if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
+                    try await action.execute(text: processedText)
+                }
                 recordingIndicator.update(phase: .success)
                 dismissIndicatorAfterDelay(Self.successIndicatorDuration)
             }
@@ -382,12 +365,7 @@ final class RecordingCoordinator {
                 outputPanel.showProcessingError(error.localizedDescription)
             }
             outputPanel.unlockFollowUp()
-            capturedSelection = nil
-            outputDestinationOverride = nil
-            followUpContext = nil
-            conversationTurns = []
-            conversationID = nil
-            isFollowUpFromVisibleOutputPanel = false
+            session = nil
             state = .error(error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -396,24 +374,6 @@ final class RecordingCoordinator {
         }
     }
 
-    private func makeOutputAction(for destination: OutputDestination, conversationID: UUID) -> any PostTranscriptionAction {
-        let targetPID = previousActiveApp?.processIdentifier
-
-        switch destination.type {
-        case .paste:
-            return PasteAction(targetAppPID: targetPID)
-        case .bashScript:
-            return OutputBashAction(
-                name: destination.name,
-                commandTemplate: destination.bashCommand,
-                conversationID: conversationID.uuidString
-            )
-        case .outputPanel:
-            // Handled separately in processTranscription — should not reach here
-            Logger.app.warning("makeOutputAction called for outputPanel type — falling back to paste")
-            return PasteAction(targetAppPID: targetPID)
-        }
-    }
 
     // MARK: - Toggle Recording Hotkey
 
@@ -457,7 +417,7 @@ final class RecordingCoordinator {
     /// without the output panel (which handles Escape via its own local monitor).
     private func updateEscCancel() {
         escCancelManager.isEnabled = (state == .recording || state == .transcribing || state == .executing)
-            && !isFollowUpFromVisibleOutputPanel
+            && !(session?.isFollowUpFromVisibleOutputPanel ?? false)
     }
 
     func cancelRecording() {
@@ -482,13 +442,8 @@ final class RecordingCoordinator {
         }
 
         Task { await mediaPlaybackController.resumeIfNeeded() }
-        capturedSelection = nil
-        outputDestinationOverride = nil
-        followUpContext = nil
-        conversationTurns = []
-        conversationID = nil
+        session = nil
         recordingStartInstant = nil
-        isFollowUpFromVisibleOutputPanel = false
         outputPanel.unlockFollowUp()
 
         // showCancelled() uses stored currentTopOffset so the indicator
@@ -533,9 +488,11 @@ final class RecordingCoordinator {
     }
 
     var isHotkeyRegistered: Bool { hotkeyManager.isRegistered }
+}
 
+extension RecordingCoordinator.State {
     var menuBarIcon: String {
-        switch state {
+        switch self {
         case .idle: "waveform.circle"
         case .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"

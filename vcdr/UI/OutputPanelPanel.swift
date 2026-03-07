@@ -448,19 +448,7 @@ final class OutputPanelPanel {
         tearDown()
         Task {
             do {
-                let action: any PostTranscriptionAction
-                switch destination.type {
-                case .paste:
-                    action = PasteAction(targetAppPID: targetAppPID)
-                case .bashScript:
-                    action = OutputBashAction(
-                        name: destination.name,
-                        commandTemplate: destination.bashCommand,
-                        conversationID: conversationID.uuidString
-                    )
-                case .outputPanel:
-                    return
-                }
+                guard let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: conversationID) else { return }
                 try await action.execute(text: text)
                 Logger.actions.info("Output panel: fired destination '\(destination.name)'")
             } catch {

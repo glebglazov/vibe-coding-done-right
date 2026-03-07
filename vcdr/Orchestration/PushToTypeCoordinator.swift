@@ -13,33 +13,19 @@ final class PushToTypeCoordinator {
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
 
-    /// Temporary output destination override set via mode switcher
-    var outputDestinationOverride: UUID?
-
-    /// Conversation UUID for follow-up pipeline runs.
-    /// Cleared after pipeline completes.
-    var conversationID: UUID?
-
-    /// Accumulated conversation turns from previous follow-ups.
-    /// Passed to the output panel so it can display the full conversation history.
-    /// Cleared after one pipeline run completes (or on error).
-    var conversationTurns: [ConversationTurn] = []
-
-    /// Follow-up context from the output panel. Contains the previous capture's
-    /// processed text, injected between system prompt and new input.
-    /// Cleared after one pipeline run completes (or on error).
-    var followUpContext: String?
+    /// Per-pipeline-run state. Non-nil while a pipeline is in progress or follow-up
+    /// state has been captured from the output panel. Cleared on completion/error/cancel.
+    var session: PipelineSession?
 
     func updateOutputDestinationOverride(_ id: UUID?) {
-        outputDestinationOverride = id
+        if let id {
+            if session == nil { session = PipelineSession() }
+            session?.outputDestinationOverride = id
+        } else {
+            session?.outputDestinationOverride = nil
+        }
         panel.updateOutputDestinationOverride(id)
     }
-
-    private var previousActiveApp: NSRunningApplication?
-    private var capturedSelection: String?
-    /// True when the current submission is a follow-up triggered while the output panel was visible.
-    /// The output panel stays visible and the push-to-type overlay is positioned below it.
-    private var isFollowUpFromVisibleOutputPanel = false
 
     // MARK: - Constants
 
@@ -91,21 +77,25 @@ final class PushToTypeCoordinator {
     private func toggleOverlay() async {
         if panel.isVisible {
             panel.hide()
-            isFollowUpFromVisibleOutputPanel = false
+            session = nil
             outputPanel.unlockFollowUp()
             Logger.app.info("Push-to-type: overlay dismissed via hotkey")
         } else {
             // If the output panel is visible, this is an implicit follow-up.
             // Read state without hiding so the user sees conversation history while typing.
             if let followUp = outputPanel.readFollowUpState() {
-                followUpContext = followUp.text
-                conversationTurns = followUp.turns
-                conversationID = followUp.conversationID
+                session = PipelineSession(
+                    outputDestinationOverride: OutputDestination.builtInOutputPanelID,
+                    followUpContext: followUp.text,
+                    conversationTurns: followUp.turns,
+                    conversationID: followUp.conversationID,
+                    isFollowUpFromVisibleOutputPanel: true
+                )
                 settings.activeModeID = followUp.modeID
-                outputDestinationOverride = OutputDestination.builtInOutputPanelID
                 recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
-                isFollowUpFromVisibleOutputPanel = true
                 outputPanel.lockForFollowUp()
+            } else if session == nil {
+                session = PipelineSession()
             }
             await showOverlay()
         }
@@ -113,31 +103,28 @@ final class PushToTypeCoordinator {
 
     private func showOverlay() async {
         // Capture context from the frontmost app before showing the overlay
-        previousActiveApp = NSWorkspace.shared.frontmostApplication
-        capturedSelection = await selectionCapturer.capture(bundleIdentifier: previousActiveApp?.bundleIdentifier)
+        let frontmostApp = NSWorkspace.shared.frontmostApplication
+        session?.previousActiveApp = frontmostApp
+        session?.capturedSelection = await selectionCapturer.capture(bundleIdentifier: frontmostApp?.bundleIdentifier)
 
         // When the output panel is visible, position below it and skip duplicate
         // conversation turns (the output panel already shows them).
-        let topOffset = isFollowUpFromVisibleOutputPanel
+        let isFollowUp = session?.isFollowUpFromVisibleOutputPanel ?? false
+        let topOffset = isFollowUp
             ? outputPanel.currentPanelHeight + Self.panelGap
             : 0
-        let overlayTurns = isFollowUpFromVisibleOutputPanel ? [] : conversationTurns
+        let overlayTurns = isFollowUp ? [] : (session?.conversationTurns ?? [])
 
         panel.show(
             settings: settings,
             conversationTurns: overlayTurns,
-            capturedSelection: capturedSelection,
+            capturedSelection: session?.capturedSelection,
             topOffset: topOffset,
             onSubmit: { [weak self] text in
                 self?.submitText(text)
             },
             onDismiss: { [weak self] in
-                self?.capturedSelection = nil
-                self?.previousActiveApp = nil
-                self?.followUpContext = nil
-                self?.conversationTurns = []
-                self?.conversationID = nil
-                self?.isFollowUpFromVisibleOutputPanel = false
+                self?.session = nil
                 self?.outputPanel.unlockFollowUp()
                 Logger.app.info("Push-to-type: overlay dismissed")
             }
@@ -148,17 +135,17 @@ final class PushToTypeCoordinator {
     // MARK: - Text Submission Pipeline
 
     private func submitText(_ text: String) {
+        // Consume session state into locals for use throughout the pipeline
+        let pipelineSession = session ?? PipelineSession()
         let mode = settings.activeMode
-        let selection = capturedSelection
-        capturedSelection = nil
-        let activeConversationID = conversationID ?? UUID()
-        conversationID = nil
-        let currentTurns = conversationTurns
-        conversationTurns = []
-        let context = followUpContext
-        followUpContext = nil
-        let wasFollowUpFromOutputPanel = isFollowUpFromVisibleOutputPanel
-        isFollowUpFromVisibleOutputPanel = false
+        let selection = pipelineSession.capturedSelection
+        let activeConversationID = pipelineSession.conversationID ?? UUID()
+        let currentTurns = pipelineSession.conversationTurns
+        let context = pipelineSession.followUpContext
+        let wasFollowUpFromOutputPanel = pipelineSession.isFollowUpFromVisibleOutputPanel
+        let targetAppPID = pipelineSession.previousActiveApp?.processIdentifier
+        let destinationID = pipelineSession.outputDestinationOverride ?? mode.defaultOutputDestinationID
+        session = nil
 
         if wasFollowUpFromOutputPanel {
             // Use the output panel's "..." turn as the processing indicator
@@ -171,25 +158,15 @@ final class PushToTypeCoordinator {
 
         Task { @MainActor in
             do {
-                // Step 1: Pre-processing
-                let preprocessedText = mode.applyPreProcessing(text, capturedSelection: selection, followUpContext: context)
-
-                // Step 2: Processing (optional bash script)
-                let processedText: String
-                switch mode.processingType {
-                case .none:
-                    processedText = preprocessedText
-                case .bashScript:
-                    processedText = try await BashRunner.run(
-                        command: mode.processingCommand,
-                        text: preprocessedText,
-                        conversationID: activeConversationID.uuidString
-                    )
-                }
+                let processedText = try await TextProcessingPipeline.run(
+                    mode: mode,
+                    text: text,
+                    capturedSelection: selection,
+                    followUpContext: context,
+                    conversationID: activeConversationID
+                )
 
                 // Step 3: Output
-                let destinationID = outputDestinationOverride ?? mode.defaultOutputDestinationID
-                outputDestinationOverride = nil
                 let destination = settings.outputDestination(for: destinationID)
 
                 if destination.type == .outputPanel {
@@ -206,16 +183,17 @@ final class PushToTypeCoordinator {
                             capturedSelection: selection,
                             conversationTurns: currentTurns,
                             outputDestinations: settings.outputDestinations,
-                            targetAppPID: previousActiveApp?.processIdentifier,
+                            targetAppPID: targetAppPID,
                             modeID: mode.id,
                             conversationID: activeConversationID,
-                            canFollowUp: mode.processingType == .bashScript
+                            canFollowUp: mode.canFollowUp
                         )
                     }
                 } else {
                     outputPanel.unlockFollowUp()
-                    let action = makeOutputAction(for: destination, conversationID: activeConversationID)
-                    try await action.execute(text: processedText)
+                    if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
+                        try await action.execute(text: processedText)
+                    }
                     recordingIndicator.update(phase: .success)
                     dismissIndicatorAfterDelay(Self.successIndicatorDuration)
                 }
@@ -236,35 +214,11 @@ final class PushToTypeCoordinator {
                     outputPanel.showProcessingError(error.localizedDescription)
                 }
                 outputPanel.unlockFollowUp()
-                outputDestinationOverride = nil
-                conversationID = nil
-                conversationTurns = []
-                followUpContext = nil
-                isFollowUpFromVisibleOutputPanel = false
+                session = nil
                 recordingIndicator.update(phase: .error, message: error.localizedDescription)
                 dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
                 Logger.app.error("Push-to-type failed: \(error)")
             }
-
-            previousActiveApp = nil
-        }
-    }
-
-    private func makeOutputAction(for destination: OutputDestination, conversationID: UUID) -> any PostTranscriptionAction {
-        let targetPID = previousActiveApp?.processIdentifier
-
-        switch destination.type {
-        case .paste:
-            return PasteAction(targetAppPID: targetPID)
-        case .bashScript:
-            return OutputBashAction(
-                name: destination.name,
-                commandTemplate: destination.bashCommand,
-                conversationID: conversationID.uuidString
-            )
-        case .outputPanel:
-            Logger.app.warning("makeOutputAction called for outputPanel type — falling back to paste")
-            return PasteAction(targetAppPID: targetPID)
         }
     }
 

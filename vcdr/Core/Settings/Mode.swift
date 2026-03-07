@@ -20,6 +20,9 @@ struct Mode: Identifiable, Codable, Equatable {
     // Output
     var defaultOutputDestinationID: UUID
 
+    /// Whether this mode supports follow-up conversations (requires a processing script).
+    var canFollowUp: Bool { processingType == .bashScript }
+
     // MARK: - Constants
 
     static let defaultTerminatorTemplate = "<dot><space>"

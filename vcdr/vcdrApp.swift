@@ -56,7 +56,7 @@ struct vcdrApp: App {
             MenuBarView(dependencies: dependencies)
         } label: {
             MenuBarLabel(
-                iconName: dependencies.coordinator.menuBarIcon,
+                iconName: dependencies.coordinator.state.menuBarIcon,
                 appDelegate: appDelegate
             )
         }
