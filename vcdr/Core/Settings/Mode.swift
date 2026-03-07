@@ -27,6 +27,8 @@ struct ModeParameter: Identifiable, Codable, Equatable {
 struct Mode: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
+    var isDisabled: Bool
+    var templateID: String?
 
     // Processing
     var terminatorTemplateEnabled: Bool
@@ -112,6 +114,8 @@ struct Mode: Identifiable, Codable, Equatable {
     init(
         id: UUID,
         name: String,
+        isDisabled: Bool = false,
+        templateID: String? = nil,
         processingType: ProcessingType = .none,
         processingCommand: String = "",
         terminatorTemplateEnabled: Bool = false,
@@ -123,6 +127,8 @@ struct Mode: Identifiable, Codable, Equatable {
     ) {
         self.id = id
         self.name = name
+        self.isDisabled = isDisabled
+        self.templateID = templateID
         self.processingType = processingType
         self.processingCommand = processingCommand
         self.terminatorTemplateEnabled = terminatorTemplateEnabled
@@ -136,7 +142,7 @@ struct Mode: Identifiable, Codable, Equatable {
     // MARK: - Codable (backward-compatible)
 
     private enum CodingKeys: String, CodingKey {
-        case id, name
+        case id, name, isDisabled, templateID
         case terminatorTemplateEnabled, terminatorTemplate
         case processingType, processingCommand
         case systemPromptEnabled, systemPrompt
@@ -150,6 +156,8 @@ struct Mode: Identifiable, Codable, Equatable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
+        try container.encode(isDisabled, forKey: .isDisabled)
+        try container.encodeIfPresent(templateID, forKey: .templateID)
         try container.encode(terminatorTemplateEnabled, forKey: .terminatorTemplateEnabled)
         try container.encode(terminatorTemplate, forKey: .terminatorTemplate)
         try container.encode(processingType, forKey: .processingType)
@@ -166,6 +174,8 @@ struct Mode: Identifiable, Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
+        isDisabled = try container.decodeIfPresent(Bool.self, forKey: .isDisabled) ?? false
+        templateID = try container.decodeIfPresent(String.self, forKey: .templateID)
         terminatorTemplateEnabled = try container.decodeIfPresent(Bool.self, forKey: .terminatorTemplateEnabled) ?? false
         terminatorTemplate = try container.decodeIfPresent(String.self, forKey: .terminatorTemplate) ?? Self.defaultTerminatorTemplate
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false

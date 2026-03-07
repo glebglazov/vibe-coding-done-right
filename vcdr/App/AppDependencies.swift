@@ -30,6 +30,8 @@ final class AppDependencies {
 
     init() {
         let settings = AppSettings()
+        // Check tool availability and create template modes
+        settings.refreshTemplateAvailability()
         let provider = ParakeetProvider()
         self.settings = settings
         self.transcriptionProvider = provider

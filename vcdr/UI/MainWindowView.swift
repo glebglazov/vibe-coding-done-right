@@ -108,6 +108,9 @@ struct MainWindowView: View {
             }
         }
         .frame(minWidth: Self.windowMinWidth, minHeight: Self.windowMinHeight)
+        .onAppear {
+            dependencies.settings.refreshTemplateAvailability()
+        }
         .onChange(of: selection) {
             // Reset push navigation when switching tabs
             path = NavigationPath()

@@ -5,17 +5,28 @@ import SwiftUI
 struct ModesListView: View {
     @Bindable var settings: AppSettings
     @Binding var path: NavigationPath
+    @State private var showDisabledModes = false
 
     // MARK: - Constants
     private static let newModeBaseName = "New Mode"
 
+    /// Modes to display in the list, respecting the show-disabled toggle
+    private var displayedModes: [Mode] {
+        if showDisabledModes {
+            return settings.modes
+        }
+        return settings.visibleModes
+    }
+
     var body: some View {
         List {
-            ForEach(settings.modes) { mode in
+            ForEach(displayedModes) { mode in
                 NavigationLink(value: mode.id) {
                     ModeRowView(
                         mode: mode,
                         isActive: mode.id == settings.activeModeID,
+                        isHidden: !settings.visibleModes.contains(where: { $0.id == mode.id }),
+                        switcherNumber: switcherNumber(for: mode),
                         outputDestinationName: settings.outputDestination(for: mode.defaultOutputDestinationID).name
                     )
                 }
@@ -23,24 +34,50 @@ struct ModesListView: View {
                     Button("Set as Active") {
                         settings.activeModeID = mode.id
                     }
-                    .disabled(mode.id == settings.activeModeID)
+                    .disabled(mode.id == settings.activeModeID || mode.isDisabled)
 
                     Divider()
 
-                    Button("Delete", role: .destructive) {
-                        deleteMode(mode)
+                    if mode.isDisabled {
+                        Button("Enable") {
+                            toggleDisabled(mode, disabled: false)
+                        }
+                    } else {
+                        Button("Disable") {
+                            toggleDisabled(mode, disabled: true)
+                        }
+                        .disabled(settings.visibleModes.count <= 1)
                     }
-                    .disabled(settings.modes.count <= 1)
+
+                    if mode.templateID != nil {
+                        Divider()
+                        Button("Reset to Defaults") {
+                            resetToDefaults(mode)
+                        }
+                    } else {
+                        Divider()
+                        Button("Delete", role: .destructive) {
+                            deleteMode(mode)
+                        }
+                        .disabled(settings.modes.count <= 1)
+                    }
                 }
             }
             .onDelete { indexSet in
-                for index in indexSet {
-                    deleteMode(settings.modes[index])
+                let modesToDelete = indexSet.map { displayedModes[$0] }
+                for mode in modesToDelete where mode.templateID == nil {
+                    deleteMode(mode)
                 }
             }
             .onMove { source, destination in
                 settings.modes.move(fromOffsets: source, toOffset: destination)
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            Toggle("Show Disabled", isOn: $showDisabledModes)
+                .toggleStyle(.checkbox)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
         }
         .navigationTitle("Modes")
         .toolbar {
@@ -51,6 +88,32 @@ struct ModesListView: View {
                 .help("Add new mode")
             }
         }
+    }
+
+    /// Returns the 1-based switcher shortcut number for a mode, or nil if not in the switcher.
+    private func switcherNumber(for mode: Mode) -> Int? {
+        guard let index = settings.visibleModes.firstIndex(where: { $0.id == mode.id }),
+              index < 9 else { return nil }
+        return index + 1
+    }
+
+    private func toggleDisabled(_ mode: Mode, disabled: Bool) {
+        guard let index = settings.modes.firstIndex(where: { $0.id == mode.id }) else { return }
+        settings.modes[index].isDisabled = disabled
+
+        // If we disabled the active mode, switch to first visible
+        if disabled && settings.activeModeID == mode.id {
+            if let firstVisible = settings.visibleModes.first {
+                settings.activeModeID = firstVisible.id
+            }
+        }
+    }
+
+    private func resetToDefaults(_ mode: Mode) {
+        guard let templateID = mode.templateID,
+              let template = ModeTemplate.template(for: templateID),
+              let index = settings.modes.firstIndex(where: { $0.id == mode.id }) else { return }
+        template.resetMode(&settings.modes[index])
     }
 
     private func addMode() {
@@ -89,23 +152,43 @@ struct ModesListView: View {
 private struct ModeRowView: View {
     let mode: Mode
     let isActive: Bool
+    let isHidden: Bool
+    /// 1-based position in the mode switcher (1-9), or nil if not in switcher
+    let switcherNumber: Int?
     let outputDestinationName: String
 
     var body: some View {
         HStack {
+            // Switcher shortcut number (matches quick mode switcher keys 1-9)
+            if let number = switcherNumber {
+                Text("\(number)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 16, alignment: .center)
+            } else {
+                Color.clear.frame(width: 16)
+            }
+
             VStack(alignment: .leading) {
                 Text(mode.name)
+                    .foregroundStyle(isActive ? .green : .primary)
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if isActive {
-                Text("Active")
+            if mode.templateID != nil {
+                Text("Built-in")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if isHidden {
+                Text("Hidden")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
+        .opacity(isHidden ? 0.5 : 1.0)
     }
 
     private var subtitle: String {
@@ -129,6 +212,24 @@ struct ModeDetailView: View {
 
     var body: some View {
         Form {
+            // Template info section
+            if let templateID = mode.templateID {
+                Section {
+                    HStack {
+                        Label("Built-in mode — auto-created because the tool was detected on your system.", systemImage: "wand.and.stars")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Reset to Defaults") {
+                            if let template = ModeTemplate.template(for: templateID) {
+                                template.resetMode(&mode)
+                            }
+                        }
+                        .font(.caption)
+                    }
+                }
+            }
+
             // Name section
             Section {
                 VStack(alignment: .leading, spacing: 4) {
@@ -138,6 +239,11 @@ struct ModeDetailView: View {
                         .labelsHidden()
                         .focused($isNameFieldFocused)
                 }
+
+                Toggle("Enabled", isOn: Binding(
+                    get: { !mode.isDisabled },
+                    set: { mode.isDisabled = !$0 }
+                ))
             }
 
             // Pre-processing section

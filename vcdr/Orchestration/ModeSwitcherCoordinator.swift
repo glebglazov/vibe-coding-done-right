@@ -53,10 +53,11 @@ final class ModeSwitcherCoordinator {
     }
 
     func showSwitcher() {
-        guard !settings.modes.isEmpty else { return }
+        let modes = settings.visibleModes
+        guard !modes.isEmpty else { return }
         let currentOverrides = currentParameterOverrides?() ?? [:]
         panel.show(
-            modes: settings.modes,
+            modes: modes,
             activeModeID: settings.activeModeID,
             outputDestinations: settings.outputDestinations,
             showHint: settings.showModeSwitcherHint,

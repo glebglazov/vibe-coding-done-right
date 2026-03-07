@@ -72,9 +72,27 @@ final class AppSettings {
         didSet { save() }
     }
 
-    /// Active mode looked up by ID, falling back to first mode
+    /// Template IDs whose CLI tools are currently available. Not persisted.
+    var availableTemplateIDs: Set<String> = []
+
+    /// Modes visible in the mode switcher and default settings list.
+    /// Excludes disabled modes and template modes whose tools are unavailable.
+    var visibleModes: [Mode] {
+        modes.filter { mode in
+            guard !mode.isDisabled else { return false }
+            if let templateID = mode.templateID {
+                return availableTemplateIDs.contains(templateID)
+            }
+            return true
+        }
+    }
+
+    /// Active mode looked up by ID, falling back to first visible mode, then first mode overall
     var activeMode: Mode {
-        modes.first(where: { $0.id == activeModeID }) ?? modes.first ?? Mode.makeDefault()
+        modes.first(where: { $0.id == activeModeID })
+            ?? visibleModes.first
+            ?? modes.first
+            ?? Mode.makeDefault()
     }
 
     /// Resolves an output destination by ID, falling back to the built-in Paste
@@ -225,6 +243,27 @@ final class AppSettings {
         // Ensure built-in Output Panel destination exists (migration for existing installs)
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInOutputPanelID }) {
             outputDestinations.append(OutputDestination.makeDefaultOutputPanel())
+        }
+    }
+
+    /// Creates template modes for newly available tools and refreshes availability state.
+    func refreshTemplateAvailability() {
+        availableTemplateIDs = ToolAvailabilityChecker.checkAll()
+
+        // Create missing template modes for available tools
+        for template in ModeTemplate.all where availableTemplateIDs.contains(template.id) {
+            if !modes.contains(where: { $0.templateID == template.id }) {
+                modes.append(template.makeMode())
+                Logger.settings.info("Created template mode: \(template.defaultName)")
+            }
+        }
+
+        // Auto-switch if active mode is no longer visible
+        if !visibleModes.contains(where: { $0.id == activeModeID }) {
+            if let firstVisible = visibleModes.first {
+                activeModeID = firstVisible.id
+                Logger.settings.info("Active mode hidden, switched to: \(firstVisible.name)")
+            }
         }
     }
 
