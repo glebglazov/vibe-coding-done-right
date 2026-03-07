@@ -140,8 +140,8 @@ struct ModeDetailView: View {
                 }
             }
 
-            // Processing section
-            Section("Processing") {
+            // Pre-processing section
+            Section("Pre-processing") {
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle("Append terminator template", isOn: $mode.terminatorTemplateEnabled)
 
@@ -151,10 +151,15 @@ struct ModeDetailView: View {
                             .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
                     }
                 }
+            }
 
-                Picker("Processing", selection: $mode.processingType) {
+            // Processing section
+            Section("Processing") {
+                Picker(selection: $mode.processingType) {
                     Text("None").tag(ProcessingType.none)
                     Text("Bash Script").tag(ProcessingType.bashScript)
+                } label: {
+                    EmptyView()
                 }
                 .pickerStyle(.radioGroup)
 

@@ -24,7 +24,7 @@ struct TranscriptionTabView: View {
                 }
             }
 
-            Section("Post-Processing") {
+            Section("Pre-processing") {
                 Toggle("Remove filler words (um, uh, etc.)", isOn: Binding(
                     get: { dependencies.settings.removeFillerWords },
                     set: { dependencies.settings.removeFillerWords = $0 }
