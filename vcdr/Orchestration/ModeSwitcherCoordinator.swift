@@ -15,6 +15,9 @@ final class ModeSwitcherCoordinator {
     /// Callback to set parameter overrides on the recording coordinator
     var onParameterOverride: ((UUID, String) -> Void)?
 
+    /// Callback when a mode is selected (so the indicator can update parameter labels)
+    var onModeSelected: ((UUID) -> Void)?
+
     /// Reads current parameter overrides for display in the mode switcher
     var currentParameterOverrides: (() -> [UUID: String])?
 
@@ -61,6 +64,7 @@ final class ModeSwitcherCoordinator {
             onSelect: { [weak self] id in
                 guard let self else { return }
                 self.settings.activeModeID = id
+                self.onModeSelected?(id)
                 Logger.settings.info("Mode switched to \(id)")
             },
             onOutputDestinationSelect: { [weak self] destinationID in

@@ -54,6 +54,7 @@ final class RecordingIndicatorPanel {
         phaseState.phase = .recording
         phaseState.errorMessage = nil
         phaseState.outputDestinationOverrideID = nil
+        phaseState.parameterLabels = nil
         currentTopOffset = topOffset
 
         // Always recreate the panel — the existing one may be a CancelledIndicatorView

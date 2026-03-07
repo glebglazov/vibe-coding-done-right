@@ -91,6 +91,13 @@ final class AppDependencies {
         modeSwitcherCoordinator.onParameterOverride = { [weak self] parameterID, value in
             self?.coordinator.conversationParameterOverrides[parameterID] = value
         }
+
+        // Update recording indicator parameter labels when mode changes mid-recording
+        modeSwitcherCoordinator.onModeSelected = { [weak self] _ in
+            guard let self else { return }
+            let labels = self.coordinator.resolvedParameterLabels(for: self.settings.activeMode)
+            recordingIndicator.updateParameterLabels(labels)
+        }
         modeSwitcherCoordinator.currentParameterOverrides = { [weak self] in
             self?.coordinator.conversationParameterOverrides ?? [:]
         }
