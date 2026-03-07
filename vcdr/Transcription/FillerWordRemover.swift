@@ -9,7 +9,7 @@ enum FillerWordRemover {
     /// Pattern matching filler words with optional surrounding commas.
     /// Allows repeated characters (e.g. "ummm", "hmmm", "uhhh").
     /// Word boundaries prevent matching substrings (e.g. "umbrella").
-    private static let fillerPattern = #"(?i),?\s*\b(?:u+m+|u+h+|h+m+m+|m+h+m+|e+r+m+|er|a+h+)\b\s*,?"#
+    private static let fillerPattern = #"(?i),?\s*\b(?:u+m+|u+h+|h+m+m+|m{2,}|m+h+m+|e+r+m+|er|a+h+)\b\s*,?"#
 
     private static let fillerRegex = try! Regex(fillerPattern)
 

@@ -79,4 +79,10 @@ struct FillerWordRemoverTests {
     func fillerOnly() {
         #expect(FillerWordRemover.remove(from: "Um") == "")
     }
+
+    @Test("Handles mm and mmm filler words")
+    func mmFiller() {
+        #expect(FillerWordRemover.remove(from: "Mm, I think so") == "I think so")
+        #expect(FillerWordRemover.remove(from: "Mmm, that's good") == "That's good")
+    }
 }
