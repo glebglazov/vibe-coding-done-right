@@ -6,7 +6,10 @@ import OSLog
 @Observable
 final class AudioRecorder: NSObject {
     private(set) var isRecording = false
-    private(set) var audioLevel: Float = 0.0
+    /// Rolling buffer of recent audio level samples (0.0–1.0), one per meter tick.
+    /// Oldest sample at index 0, newest at the end. Used by the waveform visualizer
+    /// so each bar reflects a different point in time.
+    private(set) var audioLevels: [Float] = Array(repeating: 0, count: levelSampleCount)
 
     private var audioRecorder: AVAudioRecorder?
     private var levelTimer: Timer?
@@ -19,6 +22,10 @@ final class AudioRecorder: NSObject {
 
     // MARK: - Constants
 
+    /// Number of audio level samples kept for the waveform display
+    static let levelSampleCount = 5
+    /// How fast the displayed level drops when audio quiets down (0 = instant, 1 = no decay)
+    private static let levelDecayFactor: Float = 0.3
     /// Parakeet's native sample rate — all recordings use this to avoid resampling
     private static let sampleRate: Double = 16000
     /// Minimum frames Parakeet can process (1 second at 16kHz)
@@ -103,7 +110,7 @@ final class AudioRecorder: NSObject {
         let wasShort = recordingStartTime.map { $0.duration(to: .now) < Self.minimumRecordingDuration } ?? false
 
         isRecording = false
-        audioLevel = 0.0
+        audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
         audioRecorder = nil
         recordingStartTime = nil
 
@@ -154,7 +161,16 @@ final class AudioRecorder: NSObject {
             guard let self, let recorder = self.audioRecorder, recorder.isRecording else { return }
             recorder.updateMeters()
             let averagePower = recorder.averagePower(forChannel: 0)
-            self.audioLevel = max(0.0, (averagePower + 60) / 60)
+            let linear = max(0.0, (averagePower + 60) / 60)
+            // Square root curve expands the speech range (~0.4–0.8 linear)
+            // into a wider visual range, making the waveform more responsive
+            let curved = sqrt(linear)
+            // Fast attack, quick decay: jump to new level immediately when louder,
+            // but decay exponentially when quieter so bars drop fast after speech
+            let previous = self.audioLevels.last ?? 0
+            let smoothed = curved >= previous ? curved : previous * Self.levelDecayFactor + curved * (1 - Self.levelDecayFactor)
+            self.audioLevels.removeFirst()
+            self.audioLevels.append(smoothed)
         }
     }
 

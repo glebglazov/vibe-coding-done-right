@@ -39,7 +39,7 @@ final class AppDependencies {
         self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
         let hotkeyManager = GlobalHotkeyManager()
-        let recordingIndicator = RecordingIndicatorPanel(settings: settings)
+        let recordingIndicator = RecordingIndicatorPanel(settings: settings, audioRecorder: audioRecorder)
         let outputPanel = OutputPanelPanel()
         self.outputPanel = outputPanel
         let selectionCapturer = SelectionCapturer()

@@ -38,12 +38,14 @@ final class RecordingIndicatorPanel {
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
     private let settings: AppSettings
+    private let audioRecorder: AudioRecorder
     /// Stored top offset for positioning below the output panel during follow-ups.
     /// Used by showCancelled() so the cancelled indicator appears in the same spot.
     private var currentTopOffset: CGFloat = 0
 
-    init(settings: AppSettings) {
+    init(settings: AppSettings, audioRecorder: AudioRecorder) {
         self.settings = settings
+        self.audioRecorder = audioRecorder
     }
 
     func show(topOffset: CGFloat = 0) {
@@ -56,7 +58,7 @@ final class RecordingIndicatorPanel {
         // from a recent Esc cancel, which doesn't reference phaseState at all.
         hide()
 
-        let hostingView = NSHostingView(rootView: RecordingIndicatorView(phaseState: phaseState, settings: settings))
+        let hostingView = NSHostingView(rootView: RecordingIndicatorView(phaseState: phaseState, settings: settings, audioRecorder: audioRecorder))
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
 
         let panel = NSPanel(
@@ -235,7 +237,7 @@ private struct RecordingIndicatorView: View {
 
     let phaseState: IndicatorPhaseState
     let settings: AppSettings
-    @State private var animating = false
+    let audioRecorder: AudioRecorder
 
     var body: some View {
         VStack(spacing: Self.errorPillSpacing) {
@@ -250,10 +252,7 @@ private struct RecordingIndicatorView: View {
 
                 switch phaseState.phase {
                 case .recording:
-                    Image(systemName: "waveform")
-                        .font(.system(size: Self.iconSize, weight: .medium))
-                        .foregroundStyle(.red)
-                        .symbolEffect(.variableColor.iterative, options: .repeating, isActive: animating)
+                    AudioWaveformView(audioLevels: audioRecorder.audioLevels)
                         .transition(.opacity)
 
                 case .processing:
@@ -307,7 +306,37 @@ private struct RecordingIndicatorView: View {
         .modifier(ShakeEffect(shakeCount: phaseState.rejectCount))
         .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: phaseState.phase)
         .animation(.default, value: phaseState.rejectCount)
-        .onAppear { animating = true }
+    }
+}
+
+// MARK: - Audio Waveform View
+
+/// Visualizes real microphone input as vertical bars with a symmetric
+/// bell-curve shape — tallest in the center, tapering to the edges.
+private struct AudioWaveformView: View {
+    // MARK: - Constants
+
+    private static let barWidth: CGFloat = 3
+    private static let barSpacing: CGFloat = 2
+    private static let minBarHeight: CGFloat = 3
+    private static let maxBarHeight: CGFloat = 20
+    private static let animationDuration: Double = 0.06
+    /// Symmetric taper: edges are much shorter, center is tallest
+    private static let barScales: [CGFloat] = [0.25, 0.6, 1.0, 0.6, 0.25]
+
+    let audioLevels: [Float]
+
+    var body: some View {
+        HStack(spacing: Self.barSpacing) {
+            ForEach(Array(audioLevels.enumerated()), id: \.offset) { index, level in
+                let scale = Self.barScales[index]
+                let height = Self.minBarHeight + (Self.maxBarHeight - Self.minBarHeight) * CGFloat(level) * scale
+                Capsule()
+                    .fill(.red)
+                    .frame(width: Self.barWidth, height: height)
+            }
+        }
+        .animation(.easeOut(duration: Self.animationDuration), value: audioLevels)
     }
 }
 
