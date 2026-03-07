@@ -441,6 +441,14 @@ fileprivate final class ModeSwitcherViewModel {
             onParameterOverride(parameter.id, option.value)
             goBackFromOptions(modeIndex: modeIndex)
             return true
+        case KeyCode.rightArrow, KeyCode.l:
+            if subHighlightedIndex < optionCount {
+                let option = parameter.options[subHighlightedIndex]
+                parameterOverrides[parameter.id] = option.value
+                onParameterOverride(parameter.id, option.value)
+            }
+            confirmMode(mode.id)
+            return true
         case KeyCode.leftArrow, KeyCode.h:
             goBackFromOptions(modeIndex: modeIndex)
             return true
