@@ -85,4 +85,62 @@ struct FillerWordRemoverTests {
         #expect(FillerWordRemover.remove(from: "Mm, I think so") == "I think so")
         #expect(FillerWordRemover.remove(from: "Mmm, that's good") == "That's good")
     }
+
+    @Test("Collapses double period when filler is its own sentence")
+    func fillerAsSeparateSentence() {
+        #expect(FillerWordRemover.remove(from: "I think so. Um.") == "I think so.")
+        #expect(FillerWordRemover.remove(from: "I think so. Mm.") == "I think so.")
+        #expect(FillerWordRemover.remove(from: "I think so. Er.") == "I think so.")
+        #expect(FillerWordRemover.remove(from: "I think so. Ah.") == "I think so.")
+    }
+
+    @Test("Handles filler sentence between two sentences")
+    func fillerBetweenSentences() {
+        #expect(FillerWordRemover.remove(from: "First. Um. Second.") == "First. Second.")
+    }
+
+    @Test("Returns empty string for filler-only input with period")
+    func fillerOnlyWithPeriod() {
+        #expect(FillerWordRemover.remove(from: "Um.") == "")
+    }
+
+    @Test("Preserves sentence boundary when comma-wrapped filler precedes uppercase")
+    func sentenceBoundaryPreservation() {
+        #expect(FillerWordRemover.remove(from: "What, um, Yeah") == "What. Yeah")
+        #expect(FillerWordRemover.remove(from: "So, uh, That works") == "So. That works")
+        #expect(FillerWordRemover.remove(from: "OK, hmm, Let me think") == "OK. Let me think")
+    }
+
+    @Test("Does not add period when comma-wrapped filler precedes lowercase")
+    func noSentenceBoundaryForLowercase() {
+        #expect(FillerWordRemover.remove(from: "I was, um, going") == "I was going")
+        #expect(FillerWordRemover.remove(from: "So, uh, yeah that works") == "So yeah that works")
+    }
+
+    // MARK: - Russian Fillers
+
+    @Test("Removes Russian эм filler")
+    func russianEmFiller() {
+        #expect(FillerWordRemover.remove(from: "Я думаю, эм, что да") == "Я думаю что да")
+    }
+
+    @Test("Removes Russian э filler")
+    func russianEFiller() {
+        #expect(FillerWordRemover.remove(from: "Э, подожди") == "Подожди")
+    }
+
+    @Test("Does not match э inside Russian words")
+    func russianSubstringNoMatch() {
+        #expect(FillerWordRemover.remove(from: "Это хорошо") == "Это хорошо")
+    }
+
+    @Test("Handles repeated Russian fillers")
+    func russianRepeatedFillers() {
+        #expect(FillerWordRemover.remove(from: "Ээм, ладно") == "Ладно")
+    }
+
+    @Test("Preserves sentence boundary for Russian comma-wrapped filler before uppercase")
+    func russianSentenceBoundary() {
+        #expect(FillerWordRemover.remove(from: "Ладно, эм, Давай попробуем") == "Ладно. Давай попробуем")
+    }
 }
