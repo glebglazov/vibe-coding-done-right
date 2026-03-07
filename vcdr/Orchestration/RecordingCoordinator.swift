@@ -302,6 +302,7 @@ final class RecordingCoordinator {
                 text: text,
                 capturedSelection: selection,
                 followUpContext: context,
+                conversationTurns: currentTurns,
                 conversationID: activeConversationID
             )
 

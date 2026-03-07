@@ -163,6 +163,7 @@ final class PushToTypeCoordinator {
                     text: text,
                     capturedSelection: selection,
                     followUpContext: context,
+                    conversationTurns: currentTurns,
                     conversationID: activeConversationID
                 )
 

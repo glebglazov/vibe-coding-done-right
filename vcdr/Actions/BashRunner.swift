@@ -10,14 +10,28 @@ enum BashRunner {
 
     private static let textPlaceholder = "{}"
     private static let textEnvironmentVariable = "VCDR_TEXT"
+    private static let dictationEnvironmentVariable = "VCDR_DICTATION"
+    private static let conversationEnvironmentVariable = "VCDR_CONVERSATION"
     private static let conversationIDEnvironmentVariable = "VCDR_CONV_ID"
     private static let shellPath = "/bin/bash"
 
     /// Runs a bash command with the given text passed as $VCDR_TEXT environment variable.
     /// The `{}` placeholder in the command is replaced with `$VCDR_TEXT`.
+    ///
+    /// Optional environment variables:
+    /// - `$VCDR_DICTATION`: Alias for `$VCDR_TEXT` (preferred going forward)
+    /// - `$VCDR_CONVERSATION`: JSON array of messages in OpenAI chat format
+    ///   (`[{"role":"system","content":"..."},{"role":"user","content":"..."},...]`)
+    /// - `$VCDR_CONV_ID`: Conversation UUID for stateful scripts
+    ///
     /// Returns the command's stdout as a String.
     @discardableResult
-    static func run(command: String, text: String, conversationID: String? = nil) async throws -> String {
+    static func run(
+        command: String,
+        text: String,
+        conversationMessages: String? = nil,
+        conversationID: String? = nil
+    ) async throws -> String {
         let resolvedCommand = command.replacingOccurrences(of: textPlaceholder, with: "$\(textEnvironmentVariable)")
 
         Logger.actions.info("Executing bash command")
@@ -28,6 +42,10 @@ enum BashRunner {
 
         var env = ProcessInfo.processInfo.environment
         env[textEnvironmentVariable] = text
+        env[dictationEnvironmentVariable] = text
+        if let conversationMessages {
+            env[conversationEnvironmentVariable] = conversationMessages
+        }
         if let conversationID {
             env[conversationIDEnvironmentVariable] = conversationID
         }

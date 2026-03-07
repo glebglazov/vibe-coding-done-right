@@ -101,6 +101,7 @@ final class AppDependencies {
                         text: text,
                         capturedSelection: nil,
                         followUpContext: followUpContext,
+                        conversationTurns: outputPanel.currentTurns,
                         conversationID: conversationID
                     )
                     outputPanel.finishProcessing(outputText: processed)
