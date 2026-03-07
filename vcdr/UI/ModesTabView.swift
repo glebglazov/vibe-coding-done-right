@@ -159,6 +159,8 @@ struct ModeDetailView: View {
                 .pickerStyle(.radioGroup)
 
                 if mode.processingType == .bashScript {
+                    parametersSections
+
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Command")
                             .foregroundStyle(.secondary)
@@ -201,6 +203,145 @@ struct ModeDetailView: View {
                 try? await Task.sleep(for: Self.selectAllDelay)
                 NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
             }
+        }
+    }
+
+    // MARK: - Parameters
+
+    @ViewBuilder
+    private var parametersSections: some View {
+        ForEach(Array(mode.parameters.enumerated()), id: \.element.id) { index, _ in
+            ParameterEditorView(
+                parameter: $mode.parameters[index],
+                onDelete: {
+                    mode.parameters.remove(at: index)
+                },
+                onMoveUp: index > 0 ? {
+                    mode.parameters.swapAt(index, index - 1)
+                } : nil,
+                onMoveDown: index < mode.parameters.count - 1 ? {
+                    mode.parameters.swapAt(index, index + 1)
+                } : nil
+            )
+        }
+
+        Button("Add Parameter") {
+            mode.parameters.append(
+                ModeParameter(id: UUID(), name: "", options: [
+                    ModeParameterOption(id: UUID(), label: "", value: "")
+                ])
+            )
+        }
+    }
+}
+
+// MARK: - Parameter Editor
+
+private struct ParameterEditorView: View {
+    @Binding var parameter: ModeParameter
+    let onDelete: () -> Void
+    let onMoveUp: (() -> Void)?
+    let onMoveDown: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header: env var label + name field + reorder/delete buttons
+            HStack {
+                Text("$VCDR_PARAM_\(parameter.environmentVariableSuffix)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 120, alignment: .leading)
+
+                TextField("Parameter name", text: $parameter.name)
+                    .textFieldStyle(.roundedBorder)
+                    .fontWeight(.medium)
+
+                Button {
+                    onMoveUp?()
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(onMoveUp == nil)
+                .help("Move parameter up")
+
+                Button {
+                    onMoveDown?()
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(onMoveDown == nil)
+                .help("Move parameter down")
+
+                Button {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.borderless)
+                .help("Remove parameter")
+            }
+
+            // Options
+            ForEach(Array(parameter.options.enumerated()), id: \.element.id) { index, _ in
+                optionRow(index: index)
+            }
+
+            Button {
+                parameter.options.append(
+                    ModeParameterOption(id: UUID(), label: "", value: "")
+                )
+            } label: {
+                Label("Add Option", systemImage: "plus")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func optionRow(index: Int) -> some View {
+        HStack(spacing: 6) {
+            TextField("label", text: $parameter.options[index].label)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 120)
+
+            TextField("value", text: $parameter.options[index].value)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+
+            Button {
+                guard index > 0 else { return }
+                parameter.options.swapAt(index, index - 1)
+            } label: {
+                Image(systemName: "chevron.up")
+                    .font(.caption2)
+            }
+            .buttonStyle(.borderless)
+            .disabled(index == 0)
+
+            Button {
+                guard index < parameter.options.count - 1 else { return }
+                parameter.options.swapAt(index, index + 1)
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+            }
+            .buttonStyle(.borderless)
+            .disabled(index >= parameter.options.count - 1)
+
+            Button {
+                parameter.options.remove(at: index)
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(.red.opacity(0.7))
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .help("Remove option")
         }
     }
 }

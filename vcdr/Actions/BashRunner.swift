@@ -30,11 +30,16 @@ enum BashRunner {
         command: String,
         text: String,
         conversationMessages: String? = nil,
-        conversationID: String? = nil
+        conversationID: String? = nil,
+        extraEnvironment: [String: String] = [:]
     ) async throws -> String {
         let resolvedCommand = command.replacingOccurrences(of: textPlaceholder, with: "$\(textEnvironmentVariable)")
 
-        Logger.actions.info("Executing bash command")
+        if !extraEnvironment.isEmpty {
+            Logger.actions.info("Executing bash command with extra env: \(extraEnvironment)")
+        } else {
+            Logger.actions.info("Executing bash command")
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
@@ -48,6 +53,9 @@ enum BashRunner {
         }
         if let conversationID {
             env[conversationIDEnvironmentVariable] = conversationID
+        }
+        for (key, value) in extraEnvironment {
+            env[key] = value
         }
         process.environment = env
 

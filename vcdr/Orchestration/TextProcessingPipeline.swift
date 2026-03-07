@@ -9,7 +9,8 @@ enum TextProcessingPipeline {
         capturedSelection: String?,
         followUpContext: String?,
         conversationTurns: [ConversationTurn],
-        conversationID: UUID
+        conversationID: UUID,
+        parameterValues: [String: String] = [:]
     ) async throws -> String {
         // Step 1: Pre-processing (terminator, system prompt, follow-up context, captured selection)
         let preprocessedText = mode.applyPreProcessing(text, capturedSelection: capturedSelection, followUpContext: followUpContext)
@@ -25,11 +26,15 @@ enum TextProcessingPipeline {
                 currentCapturedSelection: capturedSelection,
                 turns: conversationTurns
             )
+            let paramEnv = Dictionary(
+                uniqueKeysWithValues: parameterValues.map { ("VCDR_PARAM_\($0.key)", $0.value) }
+            )
             return try await BashRunner.run(
                 command: mode.processingCommand,
                 text: preprocessedText,
                 conversationMessages: conversationJSON,
-                conversationID: conversationID.uuidString
+                conversationID: conversationID.uuidString,
+                extraEnvironment: paramEnv
             )
         }
     }

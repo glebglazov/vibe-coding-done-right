@@ -1,6 +1,12 @@
 import AppKit
 import SwiftUI
 
+private enum NavigationLevel: Equatable {
+    case modes
+    case parameters(modeIndex: Int)
+    case options(modeIndex: Int, parameterIndex: Int)
+}
+
 final class ModeSwitcherPanel {
     private var panel: NSPanel?
     private var eventMonitor: Any?
@@ -31,8 +37,10 @@ final class ModeSwitcherPanel {
         activeModeID: UUID,
         outputDestinations: [OutputDestination],
         showHint: Bool,
+        parameterOverrides: [UUID: String],
         onSelect: @escaping (UUID) -> Void,
-        onOutputDestinationSelect: @escaping (UUID) -> Void
+        onOutputDestinationSelect: @escaping (UUID) -> Void,
+        onParameterOverride: @escaping (UUID, String) -> Void
     ) {
         hide()
 
@@ -43,6 +51,7 @@ final class ModeSwitcherPanel {
             highlightedIndex: activeIndex,
             outputDestinations: outputDestinations,
             showHint: showHint,
+            parameterOverrides: parameterOverrides,
             onSelect: { [weak self] id in
                 onSelect(id)
                 self?.hide()
@@ -51,13 +60,15 @@ final class ModeSwitcherPanel {
                 onOutputDestinationSelect(id)
                 self?.hide()
             },
+            onParameterOverride: onParameterOverride,
             onDismiss: { [weak self] in
                 self?.hide()
             }
         )
 
         let panelHeight = Self.calculateHeight(
-            modeCount: modes.count,
+            navigationLevel: viewModel.navigationLevel,
+            modes: modes,
             destinationCount: outputDestinations.count,
             showingDestinations: viewModel.showingDestinations,
             showHint: showHint
@@ -99,7 +110,8 @@ final class ModeSwitcherPanel {
         viewModel.onResize = { [weak self, weak viewModel] in
             guard let self, let viewModel, let panel = self.panel else { return }
             let newHeight = Self.calculateHeight(
-                modeCount: viewModel.modes.count,
+                navigationLevel: viewModel.navigationLevel,
+                modes: viewModel.modes,
                 destinationCount: viewModel.outputDestinations.count,
                 showingDestinations: viewModel.showingDestinations,
                 showHint: viewModel.showHint
@@ -131,28 +143,42 @@ final class ModeSwitcherPanel {
     // MARK: - Height Calculation
 
     private static func calculateHeight(
-        modeCount: Int,
+        navigationLevel: NavigationLevel,
+        modes: [Mode],
         destinationCount: Int,
         showingDestinations: Bool,
         showHint: Bool
     ) -> CGFloat {
-        let modeRowsHeight = rowHeight * CGFloat(modeCount)
-        let hasDestinations = destinationCount > 0
+        let headerHeight: CGFloat = 24
 
-        if !hasDestinations {
+        switch navigationLevel {
+        case .modes:
+            let modeRowsHeight = rowHeight * CGFloat(min(modes.count, 9))
+            let hasDestinations = destinationCount > 0
+
+            if !hasDestinations {
+                return verticalPadding * 2 + modeRowsHeight
+            }
+
+            if showingDestinations {
+                let destinationRowsHeight = rowHeight * CGFloat(destinationCount)
+                return verticalPadding * 2 + modeRowsHeight + separatorHeight + destinationRowsHeight
+            }
+
+            if showHint {
+                return verticalPadding * 2 + modeRowsHeight + separatorHeight + hintRowHeight
+            }
+
             return verticalPadding * 2 + modeRowsHeight
-        }
 
-        if showingDestinations {
-            let destinationRowsHeight = rowHeight * CGFloat(destinationCount)
-            return verticalPadding * 2 + modeRowsHeight + separatorHeight + destinationRowsHeight
-        }
+        case .parameters(let modeIndex):
+            let paramCount = modes[modeIndex].parameters.count
+            return verticalPadding * 2 + headerHeight + rowHeight * CGFloat(paramCount)
 
-        if showHint {
-            return verticalPadding * 2 + modeRowsHeight + separatorHeight + hintRowHeight
+        case .options(let modeIndex, let parameterIndex):
+            let optionCount = modes[modeIndex].parameters[parameterIndex].options.count
+            return verticalPadding * 2 + headerHeight + rowHeight * CGFloat(optionCount)
         }
-
-        return verticalPadding * 2 + modeRowsHeight
     }
 
     func hide() {
@@ -187,7 +213,15 @@ private final class ModeSwitcherViewModel {
     let showHint: Bool
     let onSelect: (UUID) -> Void
     let onOutputDestinationSelect: (UUID) -> Void
+    let onParameterOverride: (UUID, String) -> Void
     let onDismiss: () -> Void
+
+    /// Current navigation level in the mode switcher
+    var navigationLevel: NavigationLevel = .modes
+    /// Highlighted row index in sub-levels (parameters or options)
+    var subHighlightedIndex: Int = 0
+    /// Parameter value overrides, keyed by parameter ID -> option value
+    var parameterOverrides: [UUID: String]
 
     /// Whether the destination rows are currently expanded (toggled by "?" key)
     var showingDestinations = false
@@ -205,16 +239,20 @@ private final class ModeSwitcherViewModel {
         highlightedIndex: Int,
         outputDestinations: [OutputDestination],
         showHint: Bool,
+        parameterOverrides: [UUID: String],
         onSelect: @escaping (UUID) -> Void,
         onOutputDestinationSelect: @escaping (UUID) -> Void,
+        onParameterOverride: @escaping (UUID, String) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.modes = modes
         self.highlightedIndex = highlightedIndex
         self.outputDestinations = outputDestinations
         self.showHint = showHint
+        self.parameterOverrides = parameterOverrides
         self.onSelect = onSelect
         self.onOutputDestinationSelect = onOutputDestinationSelect
+        self.onParameterOverride = onParameterOverride
         self.onDismiss = onDismiss
     }
 
@@ -242,6 +280,23 @@ private final class ModeSwitcherViewModel {
         // Use `characters` (not `charactersIgnoringModifiers`) to detect "?" which is Shift+/
         let chars = event.characters ?? ""
 
+        // Escape always dismisses entirely
+        if keyCode == 53 {
+            onDismiss()
+            return true
+        }
+
+        switch navigationLevel {
+        case .modes:
+            return handleModesKeyEvent(keyCode: keyCode, chars: chars, charsIgnoringModifiers: charsIgnoringModifiers)
+        case .parameters(let modeIndex):
+            return handleParametersKeyEvent(keyCode: keyCode, modeIndex: modeIndex)
+        case .options(let modeIndex, let parameterIndex):
+            return handleOptionsKeyEvent(keyCode: keyCode, charsIgnoringModifiers: charsIgnoringModifiers, modeIndex: modeIndex, parameterIndex: parameterIndex)
+        }
+    }
+
+    private func handleModesKeyEvent(keyCode: UInt16, chars: String, charsIgnoringModifiers: String) -> Bool {
         // Toggle destination list with "?" key
         if chars == "?" && !outputDestinations.isEmpty {
             showingDestinations.toggle()
@@ -250,17 +305,26 @@ private final class ModeSwitcherViewModel {
         }
 
         switch keyCode {
-        case 125, 38: // Down arrow, J
+        case 125, 38: // Down / J
             highlightedIndex = min(highlightedIndex + 1, modes.count - 1)
             return true
-        case 126, 40: // Up arrow, K
+        case 126, 40: // Up / K
             highlightedIndex = max(highlightedIndex - 1, 0)
+            return true
+        case 124, 37: // Right arrow / L — drill into parameters
+            let mode = modes[highlightedIndex]
+            guard !mode.parameters.isEmpty else { return true }
+            if mode.parameters.count == 1 {
+                navigationLevel = .options(modeIndex: highlightedIndex, parameterIndex: 0)
+            } else {
+                navigationLevel = .parameters(modeIndex: highlightedIndex)
+            }
+            subHighlightedIndex = 0
+            showingDestinations = false
+            onResize?()
             return true
         case 36: // Return
             confirmMode(modes[highlightedIndex].id)
-            return true
-        case 53: // Escape
-            onDismiss()
             return true
         default:
             // Number keys 1-9 for modes
@@ -280,6 +344,80 @@ private final class ModeSwitcherViewModel {
             return false
         }
     }
+
+    private func handleParametersKeyEvent(keyCode: UInt16, modeIndex: Int) -> Bool {
+        let mode = modes[modeIndex]
+        let paramCount = mode.parameters.count
+
+        switch keyCode {
+        case 125, 38: // Down / J
+            subHighlightedIndex = min(subHighlightedIndex + 1, paramCount - 1)
+            return true
+        case 126, 40: // Up / K
+            subHighlightedIndex = max(subHighlightedIndex - 1, 0)
+            return true
+        case 124, 37, 36: // Right / L / Return — drill into options
+            navigationLevel = .options(modeIndex: modeIndex, parameterIndex: subHighlightedIndex)
+            subHighlightedIndex = 0
+            onResize?()
+            return true
+        case 123, 4: // Left / H — back to modes
+            navigationLevel = .modes
+            subHighlightedIndex = 0
+            onResize?()
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func handleOptionsKeyEvent(keyCode: UInt16, charsIgnoringModifiers: String, modeIndex: Int, parameterIndex: Int) -> Bool {
+        let mode = modes[modeIndex]
+        let parameter = mode.parameters[parameterIndex]
+        let optionCount = parameter.options.count
+
+        switch keyCode {
+        case 125, 38: // Down / J
+            subHighlightedIndex = min(subHighlightedIndex + 1, optionCount - 1)
+            return true
+        case 126, 40: // Up / K
+            subHighlightedIndex = max(subHighlightedIndex - 1, 0)
+            return true
+        case 36: // Return — select option
+            guard subHighlightedIndex < optionCount else { return true }
+            let option = parameter.options[subHighlightedIndex]
+            parameterOverrides[parameter.id] = option.value
+            onParameterOverride(parameter.id, option.value)
+            goBackFromOptions(modeIndex: modeIndex)
+            return true
+        case 123, 4: // Left / H — back without selecting
+            goBackFromOptions(modeIndex: modeIndex)
+            return true
+        default:
+            // Number keys 1-9 for direct option selection
+            if let number = charsIgnoringModifiers.first?.wholeNumberValue,
+               number >= 1, number <= optionCount {
+                let option = parameter.options[number - 1]
+                parameterOverrides[parameter.id] = option.value
+                onParameterOverride(parameter.id, option.value)
+                goBackFromOptions(modeIndex: modeIndex)
+                return true
+            }
+            return false
+        }
+    }
+
+    /// After selecting an option: back to parameter list (multi-param) or mode list (single param)
+    func goBackFromOptions(modeIndex: Int) {
+        let mode = modes[modeIndex]
+        if mode.parameters.count > 1 {
+            navigationLevel = .parameters(modeIndex: modeIndex)
+        } else {
+            navigationLevel = .modes
+        }
+        subHighlightedIndex = 0
+        onResize?()
+    }
 }
 
 // MARK: - SwiftUI View
@@ -296,41 +434,51 @@ private struct ModeSwitcherView: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            // Modes section
-            ForEach(Array(viewModel.modes.enumerated().prefix(9)), id: \.element.id) { index, mode in
-                modeRow(index: index, mode: mode)
-                    .onHover { hovering in
-                        if hovering { viewModel.highlightedIndex = index }
-                    }
-                    .onTapGesture { viewModel.confirmMode(mode.id) }
-            }
-
-            // Output destinations section (conditional)
-            if !viewModel.outputDestinations.isEmpty {
-                if viewModel.showingDestinations {
-                    Divider()
-                        .padding(.vertical, 4)
-
-                    ForEach(viewModel.outputDestinations) { destination in
-                        destinationRow(destination: destination)
-                            .onTapGesture {
-                                viewModel.toggleDestinationOverride(destination.id)
-                            }
-                    }
-                } else if viewModel.showHint {
-                    Divider()
-                        .padding(.vertical, 4)
-
-                    Text("Press ? for output options")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
-                }
+            switch viewModel.navigationLevel {
+            case .modes:
+                modesContent
+            case .parameters(let modeIndex):
+                parametersContent(modeIndex: modeIndex)
+            case .options(let modeIndex, let parameterIndex):
+                optionsContent(modeIndex: modeIndex, parameterIndex: parameterIndex)
             }
         }
         .padding(.horizontal, Self.horizontalPadding)
         .padding(.vertical, Self.verticalPadding)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
+    }
+
+    @ViewBuilder
+    private var modesContent: some View {
+        ForEach(Array(viewModel.modes.enumerated().prefix(9)), id: \.element.id) { index, mode in
+            modeRow(index: index, mode: mode)
+                .onHover { hovering in
+                    if hovering { viewModel.highlightedIndex = index }
+                }
+                .onTapGesture { viewModel.confirmMode(mode.id) }
+        }
+
+        if !viewModel.outputDestinations.isEmpty {
+            if viewModel.showingDestinations {
+                Divider()
+                    .padding(.vertical, 4)
+
+                ForEach(viewModel.outputDestinations) { destination in
+                    destinationRow(destination: destination)
+                        .onTapGesture {
+                            viewModel.toggleDestinationOverride(destination.id)
+                        }
+                }
+            } else if viewModel.showHint {
+                Divider()
+                    .padding(.vertical, 4)
+
+                Text("Press ? for output options")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity)
+            }
+        }
     }
 
     private func modeRow(index: Int, mode: Mode) -> some View {
@@ -354,6 +502,10 @@ private struct ModeSwitcherView: View {
                 .lineLimit(1)
 
             Spacer()
+
+            if !mode.parameters.isEmpty {
+                parameterIndicator(for: mode)
+            }
 
             Text(displayedDestination?.symbol ?? "")
                 .font(.caption)
@@ -398,5 +550,137 @@ private struct ModeSwitcherView: View {
                 .fill(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
         )
         .contentShape(Rectangle())
+    }
+
+    // MARK: - Parameter Indicator
+
+    private func parameterIndicator(for mode: Mode) -> some View {
+        let labels = mode.parameters.compactMap { param -> String? in
+            if let overrideValue = viewModel.parameterOverrides[param.id],
+               let option = param.options.first(where: { $0.value == overrideValue }) {
+                return option.label
+            }
+            return param.options.first?.label
+        }
+        let text = labels.joined(separator: ", ")
+        return Text(text)
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+    }
+
+    // MARK: - Parameters Content
+
+    private func parametersContent(modeIndex: Int) -> some View {
+        let mode = viewModel.modes[modeIndex]
+        return VStack(spacing: 2) {
+            headerRow(title: mode.name)
+            ForEach(Array(mode.parameters.enumerated()), id: \.element.id) { index, parameter in
+                parameterRow(index: index, parameter: parameter)
+                    .onHover { hovering in
+                        if hovering { viewModel.subHighlightedIndex = index }
+                    }
+                    .onTapGesture {
+                        viewModel.navigationLevel = .options(modeIndex: modeIndex, parameterIndex: index)
+                        viewModel.subHighlightedIndex = 0
+                        viewModel.onResize?()
+                    }
+            }
+        }
+    }
+
+    private func parameterRow(index: Int, parameter: ModeParameter) -> some View {
+        let isHighlighted = index == viewModel.subHighlightedIndex
+        let currentValue = viewModel.parameterOverrides[parameter.id]
+            ?? parameter.options.first?.value ?? ""
+        let currentLabel = parameter.options.first(where: { $0.value == currentValue })?.label ?? currentValue
+
+        return HStack(spacing: 8) {
+            Text("\(index + 1)")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Text(parameter.name)
+                .lineLimit(1)
+            Spacer()
+            Text(currentLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: Self.rowCornerRadius)
+                .fill(isHighlighted ? Color.accentColor.opacity(0.3) : Color.clear)
+        )
+        .contentShape(Rectangle())
+    }
+
+    // MARK: - Options Content
+
+    private func optionsContent(modeIndex: Int, parameterIndex: Int) -> some View {
+        let mode = viewModel.modes[modeIndex]
+        let parameter = mode.parameters[parameterIndex]
+        let selectedValue = viewModel.parameterOverrides[parameter.id]
+            ?? parameter.options.first?.value ?? ""
+
+        return VStack(spacing: 2) {
+            headerRow(title: parameter.name)
+            ForEach(Array(parameter.options.enumerated()), id: \.element.id) { index, option in
+                optionRow(index: index, option: option, isSelected: option.value == selectedValue)
+                    .onHover { hovering in
+                        if hovering { viewModel.subHighlightedIndex = index }
+                    }
+                    .onTapGesture {
+                        viewModel.parameterOverrides[parameter.id] = option.value
+                        viewModel.onParameterOverride(parameter.id, option.value)
+                        viewModel.goBackFromOptions(modeIndex: modeIndex)
+                    }
+            }
+        }
+    }
+
+    private func optionRow(index: Int, option: ModeParameterOption, isSelected: Bool) -> some View {
+        let isHighlighted = index == viewModel.subHighlightedIndex
+        return HStack(spacing: 8) {
+            Text("\(index + 1)")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Text(option.label)
+                .lineLimit(1)
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: Self.rowCornerRadius)
+                .fill(isHighlighted ? Color.accentColor.opacity(0.3) : Color.clear)
+        )
+        .contentShape(Rectangle())
+    }
+
+    // MARK: - Header Row
+
+    private func headerRow(title: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "chevron.left")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     }
 }

@@ -141,6 +141,10 @@ final class PushToTypePanel {
         viewModel?.outputDestinationOverrideID = id
     }
 
+    func updateParameterLabels(_ labels: String?) {
+        viewModel?.parameterLabels = labels
+    }
+
     // MARK: - Height Calculation
 
     private static func calculateHeight(for turns: [ConversationTurn], capturedSelection: String? = nil) -> CGFloat {
@@ -227,6 +231,7 @@ private final class KeyablePanel: NSPanel {
 final class PushToTypeViewModel {
     var text: String = ""
     var outputDestinationOverrideID: UUID?
+    var parameterLabels: String?
     let conversationTurns: [ConversationTurn]
     let capturedSelection: String?
     let settings: AppSettings
@@ -236,7 +241,8 @@ final class PushToTypeViewModel {
     var modeLabel: String {
         let destinationID = outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
         let destination = settings.outputDestination(for: destinationID)
-        return "\(settings.activeMode.name) · \(destination.symbol)"
+        let parts = [settings.activeMode.name, parameterLabels, destination.symbol].compactMap { $0 }
+        return parts.joined(separator: " · ")
     }
 
     init(settings: AppSettings, conversationTurns: [ConversationTurn] = [], capturedSelection: String? = nil, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {

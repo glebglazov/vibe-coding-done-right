@@ -12,6 +12,12 @@ final class ModeSwitcherCoordinator {
     /// Callback to set a temporary output destination override on the active coordinators
     var onOutputDestinationOverride: ((UUID) -> Void)?
 
+    /// Callback to set parameter overrides on the recording coordinator
+    var onParameterOverride: ((UUID, String) -> Void)?
+
+    /// Reads current parameter overrides for display in the mode switcher
+    var currentParameterOverrides: (() -> [UUID: String])?
+
     init(settings: AppSettings) {
         self.settings = settings
     }
@@ -45,11 +51,13 @@ final class ModeSwitcherCoordinator {
 
     func showSwitcher() {
         guard !settings.modes.isEmpty else { return }
+        let currentOverrides = currentParameterOverrides?() ?? [:]
         panel.show(
             modes: settings.modes,
             activeModeID: settings.activeModeID,
             outputDestinations: settings.outputDestinations,
             showHint: settings.showModeSwitcherHint,
+            parameterOverrides: currentOverrides,
             onSelect: { [weak self] id in
                 guard let self else { return }
                 self.settings.activeModeID = id
@@ -59,6 +67,10 @@ final class ModeSwitcherCoordinator {
                 guard let self else { return }
                 self.onOutputDestinationOverride?(destinationID)
                 Logger.settings.info("Output destination override set to \(destinationID)")
+            },
+            onParameterOverride: { [weak self] parameterID, value in
+                guard let self else { return }
+                self.onParameterOverride?(parameterID, value)
             }
         )
     }

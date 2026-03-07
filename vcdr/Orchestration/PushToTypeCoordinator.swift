@@ -17,6 +17,12 @@ final class PushToTypeCoordinator {
     /// state has been captured from the output panel. Cleared on completion/error/cancel.
     var session: PipelineSession?
 
+    /// Resolves parameter values for a mode using the recording coordinator's overrides
+    var resolveParameterValues: ((Mode) -> [String: String])?
+
+    /// Resolves parameter labels for display (e.g. "Sonnet, English")
+    var resolveParameterLabels: ((Mode) -> String?)?
+
     func updateOutputDestinationOverride(_ id: UUID?) {
         if let id {
             if session == nil { session = PipelineSession() }
@@ -129,6 +135,7 @@ final class PushToTypeCoordinator {
                 Logger.app.info("Push-to-type: overlay dismissed")
             }
         )
+        panel.updateParameterLabels(resolveParameterLabels?(settings.activeMode))
         Logger.app.info("Push-to-type: overlay shown")
     }
 
@@ -158,13 +165,15 @@ final class PushToTypeCoordinator {
 
         Task { @MainActor in
             do {
+                let parameterValues = self.resolveParameterValues?(mode) ?? [:]
                 let processedText = try await TextProcessingPipeline.run(
                     mode: mode,
                     text: text,
                     capturedSelection: selection,
                     followUpContext: context,
                     conversationTurns: currentTurns,
-                    conversationID: activeConversationID
+                    conversationID: activeConversationID,
+                    parameterValues: parameterValues
                 )
 
                 // Step 3: Output

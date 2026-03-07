@@ -27,6 +27,39 @@ final class RecordingCoordinator {
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
 
+    /// Parameter value overrides for the current conversation.
+    /// Keyed by parameter ID -> selected option value string.
+    /// Set by the mode switcher, consumed by the pipeline, cleared on conversation end.
+    var conversationParameterOverrides: [UUID: String] = [:]
+
+    /// Resolves parameter labels for display (e.g. "Sonnet, English"). Returns nil if no parameters.
+    func resolvedParameterLabels(for mode: Mode) -> String? {
+        let labels = mode.parameters.compactMap { param -> String? in
+            guard !param.options.isEmpty else { return nil }
+            if let override = conversationParameterOverrides[param.id],
+               let option = param.options.first(where: { $0.value == override }) {
+                return option.label
+            }
+            return param.options.first?.label
+        }
+        return labels.isEmpty ? nil : labels.joined(separator: ", ")
+    }
+
+    /// Resolves parameter values for the active mode: overrides take precedence, then defaults.
+    func resolvedParameterValues(for mode: Mode) -> [String: String] {
+        var result: [String: String] = [:]
+        for parameter in mode.parameters {
+            let suffix = parameter.environmentVariableSuffix
+            guard !suffix.isEmpty else { continue }
+            if let override = conversationParameterOverrides[parameter.id] {
+                result[suffix] = override
+            } else {
+                result[suffix] = parameter.options.first?.value ?? ""
+            }
+        }
+        return result
+    }
+
     /// Per-pipeline-run state. Non-nil while a pipeline is in progress or follow-up
     /// state has been captured from the output panel. Cleared on completion/error/cancel.
     var session: PipelineSession?
@@ -39,6 +72,9 @@ final class RecordingCoordinator {
     private var isPreparingToRecord = false
     /// The in-flight processing Task, stored so it can be cancelled via cancelRecording().
     private var processingTask: Task<Void, Never>?
+    /// Whether a pipeline has completed with active parameter overrides.
+    /// Used to clear next-conversation overrides on the next fresh recording.
+    private var hasCompletedPipelineWithOverrides = false
 
     /// Gap between the bottom of the output panel and the top of the recording indicator
     private static let panelGap: CGFloat = 8
@@ -153,8 +189,16 @@ final class RecordingCoordinator {
             settings.activeModeID = followUp.modeID
             recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
             outputPanel.lockForFollowUp()
-        } else if session == nil {
-            session = PipelineSession()
+        } else {
+            // Fresh recording — clear next-conversation parameter overrides
+            // if a conversation already completed with overrides active
+            if hasCompletedPipelineWithOverrides {
+                conversationParameterOverrides = [:]
+                hasCompletedPipelineWithOverrides = false
+            }
+            if session == nil {
+                session = PipelineSession()
+            }
         }
 
         guard await transcriptionProvider.isReady else {
@@ -181,6 +225,7 @@ final class RecordingCoordinator {
             ? outputPanel.currentPanelHeight + Self.panelGap
             : 0
         recordingIndicator.show(topOffset: topOffset)
+        recordingIndicator.updateParameterLabels(resolvedParameterLabels(for: settings.activeMode))
 
         if settings.audioSettings.pauseMediaDuringRecording {
             await mediaPlaybackController.pauseIfNeeded()
@@ -291,6 +336,7 @@ final class RecordingCoordinator {
             }
 
             let mode = settings.activeMode
+            let parameterValues = resolvedParameterValues(for: mode)
 
             // Show the pending "..." turn in the output panel while processing
             if wasFollowUpFromOutputPanel {
@@ -303,7 +349,8 @@ final class RecordingCoordinator {
                 capturedSelection: selection,
                 followUpContext: context,
                 conversationTurns: currentTurns,
-                conversationID: activeConversationID
+                conversationID: activeConversationID,
+                parameterValues: parameterValues
             )
 
             try Task.checkCancellation()
@@ -350,6 +397,10 @@ final class RecordingCoordinator {
                 modeID: mode.id,
                 modeName: mode.name
             )
+
+            if !conversationParameterOverrides.isEmpty {
+                hasCompletedPipelineWithOverrides = true
+            }
 
             escCancelManager.isEnabled = false
             processingTask = nil
@@ -445,6 +496,8 @@ final class RecordingCoordinator {
         Task { await mediaPlaybackController.resumeIfNeeded() }
         session = nil
         recordingStartInstant = nil
+        conversationParameterOverrides = [:]
+        hasCompletedPipelineWithOverrides = false
         outputPanel.unlockFollowUp()
 
         // showCancelled() uses stored currentTopOffset so the indicator

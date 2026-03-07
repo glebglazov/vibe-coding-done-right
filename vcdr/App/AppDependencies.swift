@@ -71,6 +71,22 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator
         )
 
+        // Wire parameter resolution for push-to-type
+        pushToTypeCoordinator.resolveParameterValues = { [weak self] mode in
+            self?.coordinator.resolvedParameterValues(for: mode) ?? [:]
+        }
+        pushToTypeCoordinator.resolveParameterLabels = { [weak self] mode in
+            self?.coordinator.resolvedParameterLabels(for: mode)
+        }
+
+        // Wire parameter override from mode switcher to recording coordinator
+        modeSwitcherCoordinator.onParameterOverride = { [weak self] parameterID, value in
+            self?.coordinator.conversationParameterOverrides[parameterID] = value
+        }
+        modeSwitcherCoordinator.currentParameterOverrides = { [weak self] in
+            self?.coordinator.conversationParameterOverrides ?? [:]
+        }
+
         // Wire output destination override from mode switcher to both coordinators + indicator labels
         modeSwitcherCoordinator.onOutputDestinationOverride = { [weak self] destinationID in
             self?.coordinator.setOutputDestinationOverride(destinationID)
@@ -91,6 +107,7 @@ final class AppDependencies {
             let mode = self.settings.modes.first(where: { $0.id == modeID }) ?? self.settings.activeMode
             let followUpContext = outputPanel.currentText
             let conversationID = outputPanel.currentConversationID ?? UUID()
+            let parameterValues = self.coordinator.resolvedParameterValues(for: mode)
 
             outputPanel.startProcessing(inputText: text)
 
@@ -102,7 +119,8 @@ final class AppDependencies {
                         capturedSelection: nil,
                         followUpContext: followUpContext,
                         conversationTurns: outputPanel.currentTurns,
-                        conversationID: conversationID
+                        conversationID: conversationID,
+                        parameterValues: parameterValues
                     )
                     outputPanel.finishProcessing(outputText: processed)
 

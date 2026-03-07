@@ -5,6 +5,25 @@ enum ProcessingType: String, Codable, CaseIterable {
     case bashScript
 }
 
+struct ModeParameterOption: Identifiable, Codable, Equatable {
+    let id: UUID
+    var label: String
+    var value: String
+}
+
+struct ModeParameter: Identifiable, Codable, Equatable {
+    let id: UUID
+    var name: String
+    var options: [ModeParameterOption]
+
+    /// Sanitized name for use as environment variable suffix: VCDR_PARAM_{suffix}
+    var environmentVariableSuffix: String {
+        name.uppercased()
+            .filter { $0.isLetter || $0.isNumber || $0 == " " }
+            .replacingOccurrences(of: " ", with: "_")
+    }
+}
+
 struct Mode: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
@@ -16,6 +35,9 @@ struct Mode: Identifiable, Codable, Equatable {
     var processingCommand: String
     var systemPromptEnabled: Bool
     var systemPrompt: String
+
+    // Parameters
+    var parameters: [ModeParameter]
 
     // Output
     var defaultOutputDestinationID: UUID
@@ -96,7 +118,8 @@ struct Mode: Identifiable, Codable, Equatable {
         terminatorTemplate: String = defaultTerminatorTemplate,
         systemPromptEnabled: Bool = false,
         systemPrompt: String = "",
-        defaultOutputDestinationID: UUID = OutputDestination.builtInOutputPanelID
+        defaultOutputDestinationID: UUID = OutputDestination.builtInOutputPanelID,
+        parameters: [ModeParameter] = []
     ) {
         self.id = id
         self.name = name
@@ -107,6 +130,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.systemPromptEnabled = systemPromptEnabled
         self.systemPrompt = systemPrompt
         self.defaultOutputDestinationID = defaultOutputDestinationID
+        self.parameters = parameters
     }
 
     // MARK: - Codable (backward-compatible)
@@ -117,6 +141,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case processingType, processingCommand
         case systemPromptEnabled, systemPrompt
         case defaultOutputDestinationID
+        case parameters
         // Legacy keys (read-only, for migration)
         case actionType, bashCommand, pasteScriptOutput
     }
@@ -132,6 +157,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(systemPromptEnabled, forKey: .systemPromptEnabled)
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
+        try container.encode(parameters, forKey: .parameters)
         // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
         // Once saved in new format, old keys are gone (one-way migration).
     }
@@ -145,6 +171,7 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInOutputPanelID
+        parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
 
         // New fields
         if let newProcessingType = try container.decodeIfPresent(ProcessingType.self, forKey: .processingType) {

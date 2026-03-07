@@ -20,6 +20,8 @@ final class IndicatorPhaseState {
     var errorMessage: String?
     /// Output destination override set via mode switcher; nil means use mode default
     var outputDestinationOverrideID: UUID?
+    /// Resolved parameter labels for display (e.g. "Sonnet, English")
+    var parameterLabels: String?
 }
 
 // MARK: - Panel
@@ -99,6 +101,10 @@ final class RecordingIndicatorPanel {
 
     func updateOutputDestinationOverride(_ id: UUID?) {
         phaseState.outputDestinationOverrideID = id
+    }
+
+    func updateParameterLabels(_ labels: String?) {
+        phaseState.parameterLabels = labels
     }
 
     func hide() {
@@ -278,7 +284,8 @@ private struct RecordingIndicatorView: View {
             if phaseState.phase == .recording {
                 let destinationID = phaseState.outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
                 let destination = settings.outputDestination(for: destinationID)
-                Text("\(settings.activeMode.name) · \(destination.symbol)")
+                let labelParts = [settings.activeMode.name, phaseState.parameterLabels, destination.symbol].compactMap { $0 }
+                Text(labelParts.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, Self.modeLabelHPadding)
