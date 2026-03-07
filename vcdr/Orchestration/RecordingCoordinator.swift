@@ -221,7 +221,15 @@ final class RecordingCoordinator {
 
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         session?.previousActiveApp = frontmostApp
-        session?.capturedSelection = await selectionCapturer.capture(bundleIdentifier: frontmostApp?.bundleIdentifier)
+        Logger.recording.info("Capturing selection from app: \(frontmostApp?.bundleIdentifier ?? "unknown")")
+        // Fire capture concurrently so it doesn't delay recording start.
+        // The Cmd+C fallback path polls the clipboard for up to 100ms — we don't
+        // want that blocking the recording. The result is awaited in processTranscription.
+        let capturer = selectionCapturer
+        let bundleID = frontmostApp?.bundleIdentifier
+        session?.capturedSelectionTask = Task {
+            await capturer.capture(bundleIdentifier: bundleID)
+        }
 
         // Show indicator immediately for visual feedback — the media pause
         // and recording start below are async and can take 200-400ms.
@@ -319,7 +327,14 @@ final class RecordingCoordinator {
             try? FileManager.default.removeItem(at: audioURL)
 
             // Consume session state into locals for use throughout the pipeline
-            let pipelineSession = session ?? PipelineSession()
+            var pipelineSession = session ?? PipelineSession()
+            // Resolve any in-flight capture task (Cmd+C fallback polling)
+            if let captureTask = pipelineSession.capturedSelectionTask {
+                pipelineSession.capturedSelection = await captureTask.value
+                pipelineSession.capturedSelectionTask = nil
+                let capturedCount = pipelineSession.capturedSelection.map { "\($0.count) chars" } ?? "nil"
+                Logger.recording.info("Captured selection: \(capturedCount)")
+            }
             let selection = pipelineSession.capturedSelection
             let context = pipelineSession.followUpContext
             let currentTurns = pipelineSession.conversationTurns

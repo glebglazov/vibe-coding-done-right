@@ -6,8 +6,8 @@ struct SelectionCapturer: Sendable {
 
     // MARK: - Constants
 
-    /// Apps that don't support kAXSelectedTextAttribute and need Cmd+C simulation instead.
-    private static let cmdCFallbackBundleIDs: Set<String> = [
+    /// Apps that skip AX entirely and go straight to Cmd+C simulation.
+    private static let cmdCOnlyBundleIDs: Set<String> = [
         "ru.keepcoder.Telegram",
         "org.alacritty",
     ]
@@ -15,24 +15,24 @@ struct SelectionCapturer: Sendable {
     /// Virtual key code for C key
     private static let cKeyCode: UInt16 = 8
     /// Maximum time to wait for the clipboard to update after simulating Cmd+C
-    private static let clipboardPollTimeout: Duration = .milliseconds(100)
+    private static let clipboardPollTimeout: Duration = .milliseconds(300)
     /// Interval between clipboard changeCount polls
     private static let clipboardPollInterval: Duration = .milliseconds(20)
 
     /// Reads the currently selected text in the frontmost app.
     ///
-    /// For most apps, uses the Accessibility API (kAXSelectedTextAttribute), which avoids
-    /// touching the clipboard. For apps in `cmdCFallbackBundleIDs` that don't support this
-    /// attribute, simulates Cmd+C and reads the result from the clipboard.
+    /// Tries the Accessibility API first (avoids touching the clipboard), then falls back
+    /// to simulating Cmd+C for apps where AX doesn't expose selected text (e.g. WebKit views).
+    /// Apps in `cmdCOnlyBundleIDs` skip AX entirely.
     ///
-    /// - Parameter bundleIdentifier: The bundle ID of the frontmost app, used to decide
-    ///   whether to use the Cmd+C fallback path.
+    /// - Parameter bundleIdentifier: The bundle ID of the frontmost app.
     /// - Returns: The selected text, or nil if nothing is selected.
     func capture(bundleIdentifier: String?) async -> String? {
-        if let bundleID = bundleIdentifier, Self.cmdCFallbackBundleIDs.contains(bundleID) {
-            return await captureViaCmdC()
+        let skipAX = bundleIdentifier.map { Self.cmdCOnlyBundleIDs.contains($0) } ?? false
+        if !skipAX, let text = captureViaAccessibility() {
+            return text
         }
-        return captureViaAccessibility()
+        return await captureViaCmdC()
     }
 
     // MARK: - Accessibility Path
@@ -43,27 +43,37 @@ struct SelectionCapturer: Sendable {
         let systemWide = AXUIElementCreateSystemWide()
 
         var focusedElementRef: AnyObject?
-        guard AXUIElementCopyAttributeValue(
+        let focusedResult = AXUIElementCopyAttributeValue(
             systemWide,
             kAXFocusedUIElementAttribute as CFString,
             &focusedElementRef
-        ) == .success else {
+        )
+        guard focusedResult == .success else {
+            Logger.actions.warning("AX capture: failed to get focused element (error: \(focusedResult.rawValue))")
             return nil
         }
 
         // AXUIElementCopyAttributeValue returns AnyObject; cast to AXUIElement
         let focusedElement = focusedElementRef as! AXUIElement
 
+        var roleRef: AnyObject?
+        if AXUIElementCopyAttributeValue(focusedElement, kAXRoleAttribute as CFString, &roleRef) == .success {
+            Logger.actions.info("AX capture: focused element role = \(roleRef as? String ?? "unknown")")
+        }
+
         var selectedTextRef: AnyObject?
-        guard AXUIElementCopyAttributeValue(
+        let selectedResult = AXUIElementCopyAttributeValue(
             focusedElement,
             kAXSelectedTextAttribute as CFString,
             &selectedTextRef
-        ) == .success else {
+        )
+        guard selectedResult == .success else {
+            Logger.actions.warning("AX capture: failed to get selected text (error: \(selectedResult.rawValue))")
             return nil
         }
 
         guard let text = selectedTextRef as? String, !text.isEmpty else {
+            Logger.actions.info("AX capture: selected text attribute returned empty or non-string")
             return nil
         }
 
