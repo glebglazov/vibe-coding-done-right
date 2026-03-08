@@ -24,6 +24,15 @@ final class IndicatorPhaseState {
     var parameterLabels: String?
 }
 
+// MARK: - Indicator Mode Switcher State
+
+/// Separate observable for mode switcher state, to avoid exceeding IndicatorPhaseState's 5-property limit.
+@Observable
+@MainActor
+final class IndicatorModeSwitcherState {
+    var viewModel: ModeSwitcherViewModel?
+}
+
 // MARK: - Panel
 
 @MainActor
@@ -36,14 +45,22 @@ final class RecordingIndicatorPanel {
     private static let panelHeight: CGFloat = 120
     /// Gap between bottom of menu bar and top of indicator panel
     private static let menuBarGap: CGFloat = 8
+    /// Gap between pill and mode switcher list
+    private static let modeSwitcherGap: CGFloat = 4
+    private static let resizeAnimationDuration: CGFloat = 0.15
 
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
+    private let modeSwitcherState = IndicatorModeSwitcherState()
     private let settings: AppSettings
     private let audioRecorder: AudioRecorder
     /// Stored top offset for positioning below the output panel during follow-ups.
     /// Used by showCancelled() so the cancelled indicator appears in the same spot.
     private var currentTopOffset: CGFloat = 0
+    private var localEventMonitor: Any?
+    private var globalClickMonitor: Any?
+
+    var isVisible: Bool { panel != nil }
 
     init(settings: AppSettings, audioRecorder: AudioRecorder) {
         self.settings = settings
@@ -61,10 +78,15 @@ final class RecordingIndicatorPanel {
         // from a recent Esc cancel, which doesn't reference phaseState at all.
         hide()
 
-        let hostingView = NSHostingView(rootView: RecordingIndicatorView(phaseState: phaseState, settings: settings, audioRecorder: audioRecorder))
+        let hostingView = NSHostingView(rootView: RecordingIndicatorView(
+            phaseState: phaseState,
+            modeSwitcherState: modeSwitcherState,
+            settings: settings,
+            audioRecorder: audioRecorder
+        ))
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
 
-        let panel = NSPanel(
+        let panel = KeyablePanel(
             contentRect: hostingView.frame,
             styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
@@ -109,8 +131,94 @@ final class RecordingIndicatorPanel {
     }
 
     func hide() {
+        hideModeSwitcherCleanup()
         panel?.close()
         panel = nil
+    }
+
+    // MARK: - Contextual Mode Switcher
+
+    func showModeSwitcher(viewModel: ModeSwitcherViewModel) {
+        modeSwitcherState.viewModel = viewModel
+        panel?.ignoresMouseEvents = false
+        panel?.makeKey()
+
+        // Resize panel to fit the mode list below the pill
+        resizeForModeSwitcher(viewModel: viewModel)
+
+        // Wire resize callback so parameter/destination drilling updates panel height
+        viewModel.onResize = { [weak self, weak viewModel] in
+            guard let self, let viewModel else { return }
+            self.resizeForModeSwitcher(viewModel: viewModel)
+        }
+
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
+            guard let viewModel else { return event }
+            return viewModel.handleKeyEvent(event) ? nil : event
+        }
+
+        // Dismiss via the VM's onDismiss callback so the coordinator is notified
+        // (e.g. to resume the Escape cancel tap)
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak viewModel] _ in
+            viewModel?.onDismiss()
+        }
+    }
+
+    func hideModeSwitcher() {
+        hideModeSwitcherCleanup()
+        resizeToNormal()
+    }
+
+    var isModeSwitcherVisible: Bool {
+        modeSwitcherState.viewModel != nil
+    }
+
+    private func hideModeSwitcherCleanup() {
+        modeSwitcherState.viewModel = nil
+        panel?.ignoresMouseEvents = true
+        if let monitor = localEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localEventMonitor = nil
+        }
+        if let monitor = globalClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalClickMonitor = nil
+        }
+    }
+
+    private func resizeForModeSwitcher(viewModel: ModeSwitcherViewModel) {
+        guard let panel else { return }
+        let modeSwitcherHeight = ModeSwitcherPanel.calculateHeight(
+            navigationLevel: viewModel.navigationLevel,
+            modes: viewModel.modes,
+            destinationCount: viewModel.outputDestinations.count,
+            showingDestinations: viewModel.showingDestinations,
+            showHint: viewModel.showHint
+        )
+        let totalHeight = Self.panelHeight + Self.modeSwitcherGap + modeSwitcherHeight
+        // Use mode switcher width since it's wider than the pill
+        let width = max(Self.panelWidth, ModeSwitcherPanel.panelWidth)
+        let currentFrame = panel.frame
+        // Keep top edge pinned, grow downward
+        let newY = currentFrame.maxY - totalHeight
+        let newX = currentFrame.midX - width / 2
+        let newFrame = NSRect(x: newX, y: newY, width: width, height: totalHeight)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.resizeAnimationDuration
+            panel.animator().setFrame(newFrame, display: true)
+        }
+    }
+
+    private func resizeToNormal() {
+        guard let panel else { return }
+        let currentFrame = panel.frame
+        let newY = currentFrame.maxY - Self.panelHeight
+        let newX = currentFrame.midX - Self.panelWidth / 2
+        let newFrame = NSRect(x: newX, y: newY, width: Self.panelWidth, height: Self.panelHeight)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.resizeAnimationDuration
+            panel.animator().setFrame(newFrame, display: true)
+        }
     }
 
     /// Show a brief "cancelled" indicator (grey X pill) that auto-hides.
@@ -240,6 +348,7 @@ private struct RecordingIndicatorView: View {
     private static let errorPillFontSize: CGFloat = 11
 
     let phaseState: IndicatorPhaseState
+    let modeSwitcherState: IndicatorModeSwitcherState
     let settings: AppSettings
     let audioRecorder: AudioRecorder
 
@@ -296,6 +405,12 @@ private struct RecordingIndicatorView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
                     .shadow(radius: 2)
                     .transition(.opacity)
+            }
+
+            if let vm = modeSwitcherState.viewModel {
+                ModeSwitcherView(viewModel: vm)
+                    .frame(width: ModeSwitcherPanel.panelWidth)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -369,129 +484,3 @@ struct AnimatedDotsView: View {
     }
 }
 
-// MARK: - Cancelled Indicator View
-
-private struct CancelledIndicatorView: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
-    private static let iconSize: CGFloat = 16
-
-    var body: some View {
-        VStack {
-            HStack {
-                Image(systemName: "xmark")
-                    .font(.system(size: Self.iconSize, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, Self.pillHPadding)
-            .frame(height: Self.pillHeight)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-            .shadow(radius: 2)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-}
-
-// MARK: - Copied Indicator View
-
-private struct CopiedIndicatorView: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
-    private static let iconSize: CGFloat = 16
-    private static let transitionDelay: Duration = .milliseconds(300)
-
-    @State private var showCheckmark = false
-
-    var body: some View {
-        VStack {
-            HStack {
-                if showCheckmark {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: Self.iconSize, weight: .semibold))
-                        .foregroundStyle(.green)
-                        .transition(.opacity)
-                } else {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: Self.iconSize, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                }
-            }
-            .padding(.horizontal, Self.pillHPadding)
-            .frame(height: Self.pillHeight)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-            .shadow(radius: 2)
-            .animation(.easeInOut(duration: 0.2), value: showCheckmark)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task {
-            try? await Task.sleep(for: Self.transitionDelay)
-            showCheckmark = true
-        }
-    }
-}
-
-// MARK: - Copy Error Indicator View
-
-private struct CopyErrorIndicatorView: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
-    private static let iconSize: CGFloat = 16
-    private static let errorPillHPadding: CGFloat = 8
-    private static let errorPillVPadding: CGFloat = 3
-    private static let errorPillCornerRadius: CGFloat = 6
-    private static let errorPillFontSize: CGFloat = 11
-    private static let pillSpacing: CGFloat = 4
-
-    let message: String
-
-    var body: some View {
-        VStack(spacing: Self.pillSpacing) {
-            HStack {
-                Image(systemName: "xmark")
-                    .font(.system(size: Self.iconSize, weight: .semibold))
-                    .foregroundStyle(.red)
-            }
-            .padding(.horizontal, Self.pillHPadding)
-            .frame(height: Self.pillHeight)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-            .shadow(radius: 2)
-
-            Text(message)
-                .font(.system(size: Self.errorPillFontSize))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Self.errorPillHPadding)
-                .padding(.vertical, Self.errorPillVPadding)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
-                .shadow(radius: 2)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-}
-
-// MARK: - Shake Effect
-
-/// Horizontal shake effect triggered by incrementing `shakeCount`.
-/// Each increment produces a brief left-right oscillation.
-private struct ShakeEffect: GeometryEffect {
-    private static let amplitude: CGFloat = 4
-    private static let oscillations: CGFloat = 3
-
-    // Must be a plain CGFloat — not derived from Int — so SwiftUI can
-    // interpolate smoothly between old and new values during animation.
-    var animatableData: CGFloat
-
-    init(shakeCount: Int) {
-        self.animatableData = CGFloat(shakeCount)
-    }
-
-    func effectValue(size: CGSize) -> ProjectionTransform {
-        let translation = Self.amplitude * sin(animatableData * .pi * Self.oscillations)
-        return ProjectionTransform(CGAffineTransform(translationX: translation, y: 0))
-    }
-}

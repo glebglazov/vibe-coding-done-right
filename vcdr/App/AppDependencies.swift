@@ -111,6 +111,49 @@ final class AppDependencies {
             recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
 
+        // Wire contextual mode switcher: show mode list inside recording indicator or push-to-type
+        modeSwitcherCoordinator.showContextual = { [weak self] in
+            guard let self else { return false }
+            if recordingIndicator.isVisible {
+                let vm = self.modeSwitcherCoordinator.makeViewModel(onDismiss: {
+                    recordingIndicator.hideModeSwitcher()
+                    self.modeSwitcherCoordinator.onContextualSwitcherHidden?()
+                })
+                recordingIndicator.showModeSwitcher(viewModel: vm)
+                return true
+            }
+            if self.pushToTypeCoordinator.isModeSwitcherHostVisible {
+                let vm = self.modeSwitcherCoordinator.makeViewModel(onDismiss: {
+                    self.pushToTypeCoordinator.hideModeSwitcher()
+                    self.modeSwitcherCoordinator.onContextualSwitcherHidden?()
+                })
+                self.pushToTypeCoordinator.showModeSwitcher(viewModel: vm)
+                return true
+            }
+            return false
+        }
+
+        modeSwitcherCoordinator.dismissContextual = { [weak self] in
+            guard let self else { return false }
+            if recordingIndicator.isModeSwitcherVisible {
+                recordingIndicator.hideModeSwitcher()
+                return true
+            }
+            if self.pushToTypeCoordinator.isModeSwitcherVisible {
+                self.pushToTypeCoordinator.hideModeSwitcher()
+                return true
+            }
+            return false
+        }
+
+        modeSwitcherCoordinator.onContextualSwitcherShown = { [weak self] in
+            self?.coordinator.suspendEscCancel()
+        }
+
+        modeSwitcherCoordinator.onContextualSwitcherHidden = { [weak self] in
+            self?.coordinator.resumeEscCancel()
+        }
+
         // Wire Escape-to-cancel: when the output panel is locked for follow-up
         // (recording/processing in progress), Escape cancels the recording.
         outputPanel.onCancelRecording = { [weak self] in

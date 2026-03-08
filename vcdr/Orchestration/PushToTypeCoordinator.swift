@@ -27,6 +27,20 @@ final class PushToTypeCoordinator {
     /// Used to dismiss the mode switcher overlay.
     var onWillStartInput: (() -> Void)?
 
+    /// Whether the push-to-type panel is visible and can host a contextual mode switcher
+    var isModeSwitcherHostVisible: Bool { panel.isVisible }
+
+    /// Whether a contextual mode switcher is currently showing inside the push-to-type panel
+    var isModeSwitcherVisible: Bool { panel.isModeSwitcherVisible }
+
+    func showModeSwitcher(viewModel: ModeSwitcherViewModel) {
+        panel.showModeSwitcher(viewModel: viewModel)
+    }
+
+    func hideModeSwitcher() {
+        panel.hideModeSwitcher()
+    }
+
     func updateOutputDestinationOverride(_ id: UUID?) {
         if let id {
             if session == nil { session = PipelineSession() }

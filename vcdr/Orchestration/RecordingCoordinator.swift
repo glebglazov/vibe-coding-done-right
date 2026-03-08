@@ -12,9 +12,9 @@ final class RecordingCoordinator {
         case executing
         case error(String)
     }
+    
 
     private(set) var state: State = .idle
-
     private let settings: AppSettings
     private let transcriptionProvider: any TranscriptionProvider
     private let audioRecorder: AudioRecorder
@@ -544,6 +544,18 @@ final class RecordingCoordinator {
     private func updateEscCancel() {
         escCancelManager.isEnabled = (state == .recording || state == .transcribing || state == .executing)
             && !(session?.isFollowUpFromVisibleOutputPanel ?? false)
+    }
+
+    /// Temporarily disables the global Escape tap so contextual mode switcher
+    /// can handle Escape via its own local event monitor without cancelling recording.
+    func suspendEscCancel() {
+        escCancelManager.isEnabled = false
+    }
+
+    /// Re-evaluates the global Escape tap based on current state.
+    /// Call after the contextual mode switcher is dismissed.
+    func resumeEscCancel() {
+        updateEscCancel()
     }
 
     func cancelRecording() {

@@ -145,6 +145,24 @@ final class PushToTypePanel {
         viewModel?.parameterLabels = labels
     }
 
+    // MARK: - Contextual Mode Switcher
+
+    func showModeSwitcher(viewModel: ModeSwitcherViewModel) {
+        self.viewModel?.modeSwitcherViewModel = viewModel
+    }
+
+    func hideModeSwitcher() {
+        self.viewModel?.modeSwitcherViewModel = nil
+        // Re-focus text view after mode list dismisses
+        if let contentView = panel?.contentView, let panel {
+            Self.focusFirstTextView(in: contentView, panel: panel)
+        }
+    }
+
+    var isModeSwitcherVisible: Bool {
+        viewModel?.modeSwitcherViewModel != nil
+    }
+
     // MARK: - Height Calculation
 
     private static func calculateHeight(for turns: [ConversationTurn], capturedSelection: String? = nil) -> CGFloat {
@@ -219,12 +237,6 @@ final class PushToTypePanel {
     }
 }
 
-// MARK: - NSPanel subclass that accepts key events
-
-private final class KeyablePanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-}
-
 // MARK: - View Model
 
 @Observable
@@ -232,6 +244,7 @@ final class PushToTypeViewModel {
     var text: String = ""
     var outputDestinationOverrideID: UUID?
     var parameterLabels: String?
+    var modeSwitcherViewModel: ModeSwitcherViewModel?
     let conversationTurns: [ConversationTurn]
     let capturedSelection: String?
     let settings: AppSettings
@@ -255,6 +268,11 @@ final class PushToTypeViewModel {
 
     /// Returns true if the event was handled (consumed)
     func handleKeyEvent(_ event: NSEvent) -> Bool {
+        // Delegate to mode switcher when it's showing
+        if let msVM = modeSwitcherViewModel {
+            return msVM.handleKeyEvent(event)
+        }
+
         switch event.keyCode {
         case 36: // Return
             // Shift+Return inserts newline (pass through to text field)
@@ -300,21 +318,26 @@ private struct PushToTypeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !viewModel.conversationTurns.isEmpty {
-                conversationHistorySection
-                Divider()
-            }
-
-            TextEditor(text: $viewModel.text)
-                .font(.system(size: 13))
-                .scrollContentBackground(.hidden)
-                .focused($isTextFieldFocused)
-                .padding(Self.textPadding)
-
-            if let selection = viewModel.capturedSelection {
-                Divider()
-                selectionBlockquote(selection)
+            if let msVM = viewModel.modeSwitcherViewModel {
+                ModeSwitcherView(viewModel: msVM)
                     .padding(Self.textPadding)
+            } else {
+                if !viewModel.conversationTurns.isEmpty {
+                    conversationHistorySection
+                    Divider()
+                }
+
+                TextEditor(text: $viewModel.text)
+                    .font(.system(size: 13))
+                    .scrollContentBackground(.hidden)
+                    .focused($isTextFieldFocused)
+                    .padding(Self.textPadding)
+
+                if let selection = viewModel.capturedSelection {
+                    Divider()
+                    selectionBlockquote(selection)
+                        .padding(Self.textPadding)
+                }
             }
 
             Divider()
