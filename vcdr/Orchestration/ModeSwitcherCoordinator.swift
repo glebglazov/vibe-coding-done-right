@@ -21,6 +21,18 @@ final class ModeSwitcherCoordinator {
     /// Reads current parameter overrides for display in the mode switcher
     var currentParameterOverrides: (() -> [UUID: String])?
 
+    /// Returns true if a contextual host is available and mode list was shown there
+    var showContextual: (() -> Bool)?
+
+    /// Returns true if a contextual mode list was visible and was dismissed
+    var dismissContextual: (() -> Bool)?
+
+    /// Called when contextual mode switcher is shown (to suspend Escape tap)
+    var onContextualSwitcherShown: (() -> Void)?
+
+    /// Called when contextual mode switcher is hidden (to resume Escape tap)
+    var onContextualSwitcherHidden: (() -> Void)?
+
     init(settings: AppSettings) {
         self.settings = settings
     }
@@ -52,12 +64,16 @@ final class ModeSwitcherCoordinator {
         setupHotkey()
     }
 
-    func showSwitcher() {
+    /// Creates a ModeSwitcherViewModel with standard callbacks.
+    /// `onDismiss` is caller-provided to handle context-specific cleanup.
+    func makeViewModel(onDismiss: @escaping () -> Void) -> ModeSwitcherViewModel {
         let modes = settings.visibleModes
-        guard !modes.isEmpty else { return }
+        let activeIndex = modes.firstIndex(where: { $0.id == settings.activeModeID }) ?? 0
         let currentOverrides = currentParameterOverrides?() ?? [:]
-        panel.show(
+
+        let vm = ModeSwitcherViewModel(
             modes: modes,
+            highlightedIndex: activeIndex,
             activeModeID: settings.activeModeID,
             outputDestinations: settings.outputDestinations,
             showHint: settings.showModeSwitcherHint,
@@ -66,18 +82,48 @@ final class ModeSwitcherCoordinator {
                 guard let self else { return }
                 self.settings.activeModeID = id
                 self.onModeSelected?(id)
+                onDismiss()
                 Logger.settings.info("Mode switched to \(id)")
+            },
+            onActivate: { [weak self] id in
+                guard let self else { return }
+                self.settings.activeModeID = id
+                self.onModeSelected?(id)
+                Logger.settings.info("Mode activated (no dismiss): \(id)")
             },
             onOutputDestinationSelect: { [weak self] destinationID in
                 guard let self else { return }
                 self.onOutputDestinationOverride?(destinationID)
                 Logger.settings.info("Output destination override set to \(destinationID)")
             },
-            onParameterOverride: { [weak self] parameterID, value in
-                guard let self else { return }
-                self.onParameterOverride?(parameterID, value)
-            }
+            onParameterOverride: { _ , _ in },
+            onDismiss: onDismiss
         )
+
+        vm.onParameterOverride = { [weak self, weak vm] parameterID, value in
+            guard let self else { return }
+            // Activate the mode whose parameters are being changed
+            if let vm, vm.modes[vm.highlightedIndex].id != self.settings.activeModeID {
+                let modeID = vm.modes[vm.highlightedIndex].id
+                self.settings.activeModeID = modeID
+                vm.activeModeID = modeID
+                self.onModeSelected?(modeID)
+                Logger.settings.info("Mode auto-activated via parameter change: \(modeID)")
+            }
+            self.onParameterOverride?(parameterID, value)
+        }
+
+        return vm
+    }
+
+    func showSwitcher() {
+        let modes = settings.visibleModes
+        guard !modes.isEmpty else { return }
+
+        let vm = makeViewModel(onDismiss: { [weak self] in
+            self?.panel.hide()
+        })
+        panel.show(viewModel: vm)
     }
 
     func hideSwitcher() {
@@ -85,17 +131,38 @@ final class ModeSwitcherCoordinator {
     }
 
     /// Confirms the currently highlighted mode and hides the switcher.
-    /// Acts as if the user pressed Enter.
+    /// Acts as if the user pressed Enter. Works for both standalone and contextual.
     func confirmAndHideSwitcher() {
-        guard panel.isVisible else { return }
-        panel.confirmAndHide()
+        if panel.isVisible {
+            panel.confirmAndHide()
+            return
+        }
+        // Try contextual dismiss (confirm is handled via the VM's onSelect callback)
+        if dismissContextual?() == true {
+            onContextualSwitcherHidden?()
+        }
     }
 
     private func toggleSwitcher() {
+        // 1. If contextual mode list is showing, dismiss it
+        if dismissContextual?() == true {
+            onContextualSwitcherHidden?()
+            return
+        }
+
+        // 2. If standalone panel is showing, hide it
         if panel.isVisible {
             panel.hide()
-        } else {
-            showSwitcher()
+            return
         }
+
+        // 3. Try contextual host first
+        if showContextual?() == true {
+            onContextualSwitcherShown?()
+            return
+        }
+
+        // 4. Standalone panel (existing behavior)
+        showSwitcher()
     }
 }
