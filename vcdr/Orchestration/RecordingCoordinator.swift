@@ -79,6 +79,9 @@ final class RecordingCoordinator {
     /// Whether a pipeline has completed with active parameter overrides.
     /// Used to clear next-conversation overrides on the next fresh recording.
     private var hasCompletedPipelineWithOverrides = false
+    /// Text accumulated from previous recordings in non-processing output panel sessions.
+    /// Prepended to the next transcription result to maintain chronological order.
+    private var accumulatedText: String?
 
     /// Gap between the bottom of the output panel and the top of the recording indicator
     private static let panelGap: CGFloat = 8
@@ -196,6 +199,18 @@ final class RecordingCoordinator {
             recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
             outputPanel.lockForFollowUp()
         } else {
+            // If the output panel is visible but doesn't support follow-up (non-processing mode),
+            // grab its text so we can prepend it to the next result (chronological accumulation).
+            // Also preserve the conversation ID so all accumulated recordings share one history entry.
+            // Dismiss the panel before selection capture to prevent AX from picking up panel text.
+            if outputPanel.isVisible, let panelText = outputPanel.currentText {
+                accumulatedText = panelText
+                let existingConversationID = outputPanel.currentConversationID
+                outputPanel.dismiss()
+                if session == nil { session = PipelineSession() }
+                session?.conversationID = existingConversationID
+            }
+
             // Fresh recording — clear next-conversation parameter overrides
             // if a conversation already completed with overrides active
             if hasCompletedPipelineWithOverrides {
@@ -378,6 +393,15 @@ final class RecordingCoordinator {
             state = .executing
             Logger.app.info("Pipeline: executing output action")
 
+            // Prepend accumulated text from previous non-processing output panel sessions
+            let finalText: String
+            if let accumulated = accumulatedText {
+                finalText = accumulated + "\n\n" + processedText
+            } else {
+                finalText = processedText
+            }
+            accumulatedText = nil
+
             // Step 3: Output
             let destination = settings.outputDestination(for: destinationID)
 
@@ -385,12 +409,12 @@ final class RecordingCoordinator {
                 recordingIndicator.hide()
                 if wasFollowUpFromOutputPanel {
                     // Update the existing output panel in-place
-                    outputPanel.finishProcessing(outputText: processedText)
+                    outputPanel.finishProcessing(outputText: finalText)
                     outputPanel.unlockFollowUp()
                 } else {
                     outputPanel.show(
                         inputText: text,
-                        text: processedText,
+                        text: finalText,
                         capturedSelection: selection,
                         conversationTurns: currentTurns,
                         outputDestinations: settings.outputDestinations,
@@ -403,17 +427,23 @@ final class RecordingCoordinator {
             } else {
                 outputPanel.unlockFollowUp()
                 if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
-                    try await action.execute(text: processedText)
+                    try await action.execute(text: finalText)
                 }
                 recordingIndicator.update(phase: .success)
                 dismissIndicatorAfterDelay(Self.successIndicatorDuration)
             }
 
-            // Record in history
+            // Record in history — when accumulating, the previous conversation entry
+            // already exists with partial text. Remove it so recordTurn creates a fresh
+            // single-turn entry with the full accumulated output, not a multi-turn one.
+            let isAccumulated = finalText != processedText
+            if isAccumulated, let existing = transcriptionHistory.conversations.first(where: { $0.id == activeConversationID }) {
+                transcriptionHistory.removeConversation(existing)
+            }
             transcriptionHistory.recordTurn(
                 conversationID: activeConversationID,
                 input: text,
-                output: processedText,
+                output: finalText,
                 capturedSelection: selection,
                 modeID: mode.id,
                 modeName: mode.name
@@ -430,10 +460,12 @@ final class RecordingCoordinator {
         } catch is CancellationError {
             // Task was cancelled via Esc — cancelRecording() already cleaned up state
             processingTask = nil
+            accumulatedText = nil
             Logger.app.info("Processing task cancelled")
         } catch {
             escCancelManager.isEnabled = false
             processingTask = nil
+            accumulatedText = nil
             if outputPanel.isLockedForFollowUp {
                 outputPanel.showProcessingError(error.localizedDescription)
             }
@@ -516,6 +548,7 @@ final class RecordingCoordinator {
 
         Task { await mediaPlaybackController.resumeIfNeeded() }
         session = nil
+        accumulatedText = nil
         recordingStartInstant = nil
         conversationParameterOverrides = [:]
         hasCompletedPipelineWithOverrides = false

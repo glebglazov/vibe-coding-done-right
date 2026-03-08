@@ -224,6 +224,13 @@ final class OutputPanelPanel {
         tearDown()
     }
 
+    /// Unconditionally closes the panel regardless of follow-up lock state.
+    /// Unlike `hide()`, this always tears down — used to dismiss the panel
+    /// before selection capture to prevent AX from picking up panel text.
+    func dismiss() {
+        tearDown()
+    }
+
     /// Unconditionally closes the panel and clears all state, ignoring the follow-up lock.
     /// Used by `show()` to tear down the previous panel before creating a new one.
     private func tearDown() {
