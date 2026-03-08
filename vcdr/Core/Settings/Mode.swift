@@ -44,6 +44,16 @@ struct Mode: Identifiable, Codable, Equatable {
     // Output
     var defaultOutputDestinationID: UUID
 
+    /// Joined labels from the first option of each parameter (the defaults, without overrides).
+    /// Used in static UI contexts (settings, menu bar, quick actions) where there's no active session.
+    var defaultParameterLabels: String? {
+        let labels = parameters.compactMap { param -> String? in
+            guard !param.options.isEmpty else { return nil }
+            return param.options.first?.label
+        }
+        return labels.isEmpty ? nil : labels.joined(separator: ", ")
+    }
+
     // MARK: - Constants
 
     static let defaultTerminatorTemplate = "<dot><space>"

@@ -64,7 +64,10 @@ struct HomeTabView: View {
                         .disabled(!canToggleRecording)
 
                         Button(action: { dependencies.modeSwitcherCoordinator.showSwitcher() }) {
-                            Text(dependencies.settings.activeMode.name)
+                            let mode = dependencies.settings.activeMode
+                            let dest = dependencies.settings.outputDestination(for: mode.defaultOutputDestinationID)
+                            let parts = [mode.name, mode.defaultParameterLabels, dest.symbol].compactMap { $0 }
+                            Text(parts.joined(separator: " · "))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

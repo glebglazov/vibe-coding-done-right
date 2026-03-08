@@ -193,6 +193,9 @@ private struct ModeRowView: View {
 
     private var subtitle: String {
         let processing = mode.processingType == .bashScript ? "Script" : "Direct"
+        if let params = mode.defaultParameterLabels {
+            return "\(processing) · \(params) → \(outputDestinationName)"
+        }
         return "\(processing) → \(outputDestinationName)"
     }
 }

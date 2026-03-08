@@ -163,6 +163,7 @@ final class PushToTypeCoordinator {
         } else {
             recordingIndicator.show()
             recordingIndicator.update(phase: .processing)
+            recordingIndicator.updateParameterLabels(resolveParameterLabels?(settings.activeMode))
         }
         Logger.app.info("Push-to-type: executing pipeline")
 
