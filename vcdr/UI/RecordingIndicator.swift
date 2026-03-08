@@ -30,7 +30,7 @@ final class IndicatorPhaseState {
 final class RecordingIndicatorPanel {
     // MARK: - Constants
 
-    /// Fixed panel size — large enough to fit the error message pill below the circle.
+    /// Fixed panel size — large enough to fit the error message pill below the indicator.
     /// The panel background is clear, so the extra space is invisible in non-error states.
     private static let panelWidth: CGFloat = 320
     private static let panelHeight: CGFloat = 120
@@ -113,7 +113,7 @@ final class RecordingIndicatorPanel {
         panel = nil
     }
 
-    /// Show a brief "cancelled" indicator (grey X) that auto-hides.
+    /// Show a brief "cancelled" indicator (grey X pill) that auto-hides.
     /// Uses the stored topOffset so it appears where the recording indicator was.
     func showCancelled() {
         let offset = currentTopOffset
@@ -141,7 +141,7 @@ final class RecordingIndicatorPanel {
 
     private static let copiedDisplayDuration: Duration = .seconds(1.5)
 
-    /// Show a brief "copied" indicator (clipboard icon → green checkmark) that auto-hides
+    /// Show a brief "copied" indicator (clipboard icon → green checkmark pill) that auto-hides
     func showCopied() {
         hide()
 
@@ -227,9 +227,10 @@ final class RecordingIndicatorPanel {
 private struct RecordingIndicatorView: View {
     // MARK: - Constants
 
-    private static let circleSize: CGFloat = 44
-    private static let iconSize: CGFloat = 20
-    private static let toggleBorderWidth: CGFloat = 2
+    private static let pillHeight: CGFloat = 32
+    private static let pillHPadding: CGFloat = 12
+    private static let pillSpacing: CGFloat = 6
+    private static let iconSize: CGFloat = 16
     private static let phaseTransitionDuration: Double = 0.2
 
     private static let errorPillSpacing: CGFloat = 4
@@ -238,34 +239,20 @@ private struct RecordingIndicatorView: View {
     private static let errorPillCornerRadius: CGFloat = 6
     private static let errorPillFontSize: CGFloat = 11
 
-    private static let modeLabelHPadding: CGFloat = 8
-    private static let modeLabelVPadding: CGFloat = 2
-    private static let modeLabelCornerRadius: CGFloat = 6
-
     let phaseState: IndicatorPhaseState
     let settings: AppSettings
     let audioRecorder: AudioRecorder
 
     var body: some View {
         VStack(spacing: Self.errorPillSpacing) {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: Self.circleSize, height: Self.circleSize)
-                    .overlay(
-                        Circle().strokeBorder(.secondary, lineWidth: Self.toggleBorderWidth)
-                    )
-                    .shadow(radius: 2)
-
+            HStack(spacing: Self.pillSpacing) {
                 switch phaseState.phase {
                 case .recording:
                     AudioWaveformView(audioLevels: audioRecorder.audioLevels)
                         .transition(.opacity)
 
                 case .processing:
-                    ProgressView()
-                        .controlSize(.small)
-                        .progressViewStyle(.circular)
+                    AnimatedDotsView()
                         .transition(.opacity)
 
                 case .success:
@@ -280,21 +267,22 @@ private struct RecordingIndicatorView: View {
                         .foregroundStyle(.red)
                         .transition(.opacity)
                 }
-            }
 
-            if phaseState.phase == .recording {
-                let destinationID = phaseState.outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
-                let destination = settings.outputDestination(for: destinationID)
-                let labelParts = [settings.activeMode.name, phaseState.parameterLabels, destination.symbol].compactMap { $0 }
-                Text(labelParts.joined(separator: " · "))
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, Self.modeLabelHPadding)
-                    .padding(.vertical, Self.modeLabelVPadding)
-                    .background(.thickMaterial, in: RoundedRectangle(cornerRadius: Self.modeLabelCornerRadius))
-                    .shadow(radius: 2)
-                    .transition(.opacity)
+                if phaseState.phase == .recording || phaseState.phase == .processing {
+                    let destinationID = phaseState.outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
+                    let destination = settings.outputDestination(for: destinationID)
+                    let labelParts = [settings.activeMode.name, phaseState.parameterLabels, destination.symbol].compactMap { $0 }
+                    Text(labelParts.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .transition(.opacity)
+                }
             }
+            .padding(.horizontal, Self.pillHPadding)
+            .frame(height: Self.pillHeight)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
+            .shadow(radius: 2)
 
             if let message = phaseState.errorMessage, phaseState.phase == .error {
                 Text(message)
@@ -305,7 +293,7 @@ private struct RecordingIndicatorView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Self.errorPillHPadding)
                     .padding(.vertical, Self.errorPillVPadding)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
                     .shadow(radius: 2)
                     .transition(.opacity)
             }
@@ -321,13 +309,13 @@ private struct RecordingIndicatorView: View {
 
 /// Visualizes real microphone input as vertical bars with a symmetric
 /// bell-curve shape — tallest in the center, tapering to the edges.
-private struct AudioWaveformView: View {
+struct AudioWaveformView: View {
     // MARK: - Constants
 
     private static let barWidth: CGFloat = 3
     private static let barSpacing: CGFloat = 2
     private static let minBarHeight: CGFloat = 3
-    private static let maxBarHeight: CGFloat = 20
+    private static let maxBarHeight: CGFloat = 14
     private static let animationDuration: Double = 0.06
     /// Symmetric taper: edges are much shorter, center is tallest
     private static let barScales: [CGFloat] = [0.25, 0.6, 1.0, 0.6, 0.25]
@@ -348,28 +336,58 @@ private struct AudioWaveformView: View {
     }
 }
 
+// MARK: - Animated Dots View
+
+/// Three bouncing dots with staggered animation for processing state.
+struct AnimatedDotsView: View {
+    // MARK: - Constants
+
+    private static let dotSize: CGFloat = 5
+    private static let dotSpacing: CGFloat = 3
+    private static let bounceHeight: CGFloat = 4
+    private static let animationDuration: Double = 0.4
+    private static let dotCount = 3
+
+    @State private var isAnimating = false
+
+    var body: some View {
+        HStack(spacing: Self.dotSpacing) {
+            ForEach(0..<Self.dotCount, id: \.self) { index in
+                Circle()
+                    .fill(.secondary)
+                    .frame(width: Self.dotSize, height: Self.dotSize)
+                    .offset(y: isAnimating ? -Self.bounceHeight : 0)
+                    .animation(
+                        .easeInOut(duration: Self.animationDuration)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index) * 0.15),
+                        value: isAnimating
+                    )
+            }
+        }
+        .onAppear { isAnimating = true }
+    }
+}
+
 // MARK: - Cancelled Indicator View
 
 private struct CancelledIndicatorView: View {
-    private static let circleSize: CGFloat = 44
-    private static let iconSize: CGFloat = 20
-    private static let borderWidth: CGFloat = 2
+    private static let pillHeight: CGFloat = 32
+    private static let pillHPadding: CGFloat = 12
+    private static let iconSize: CGFloat = 16
 
     var body: some View {
         VStack {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: Self.circleSize, height: Self.circleSize)
-                    .overlay(
-                        Circle().strokeBorder(.secondary, lineWidth: Self.borderWidth)
-                    )
-                    .shadow(radius: 2)
-
+            HStack {
                 Image(systemName: "xmark")
                     .font(.system(size: Self.iconSize, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, Self.pillHPadding)
+            .frame(height: Self.pillHeight)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
+            .shadow(radius: 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -378,20 +396,16 @@ private struct CancelledIndicatorView: View {
 // MARK: - Copied Indicator View
 
 private struct CopiedIndicatorView: View {
-    private static let circleSize: CGFloat = 44
-    private static let iconSize: CGFloat = 20
+    private static let pillHeight: CGFloat = 32
+    private static let pillHPadding: CGFloat = 12
+    private static let iconSize: CGFloat = 16
     private static let transitionDelay: Duration = .milliseconds(300)
 
     @State private var showCheckmark = false
 
     var body: some View {
         VStack {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: Self.circleSize, height: Self.circleSize)
-                    .shadow(radius: 2)
-
+            HStack {
                 if showCheckmark {
                     Image(systemName: "checkmark")
                         .font(.system(size: Self.iconSize, weight: .semibold))
@@ -404,6 +418,11 @@ private struct CopiedIndicatorView: View {
                         .transition(.opacity)
                 }
             }
+            .padding(.horizontal, Self.pillHPadding)
+            .frame(height: Self.pillHeight)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
+            .shadow(radius: 2)
             .animation(.easeInOut(duration: 0.2), value: showCheckmark)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -417,37 +436,38 @@ private struct CopiedIndicatorView: View {
 // MARK: - Copy Error Indicator View
 
 private struct CopyErrorIndicatorView: View {
-    private static let circleSize: CGFloat = 44
-    private static let iconSize: CGFloat = 20
-    private static let pillHPadding: CGFloat = 8
-    private static let pillVPadding: CGFloat = 3
-    private static let pillCornerRadius: CGFloat = 6
-    private static let pillFontSize: CGFloat = 11
+    private static let pillHeight: CGFloat = 32
+    private static let pillHPadding: CGFloat = 12
+    private static let iconSize: CGFloat = 16
+    private static let errorPillHPadding: CGFloat = 8
+    private static let errorPillVPadding: CGFloat = 3
+    private static let errorPillCornerRadius: CGFloat = 6
+    private static let errorPillFontSize: CGFloat = 11
     private static let pillSpacing: CGFloat = 4
 
     let message: String
 
     var body: some View {
         VStack(spacing: Self.pillSpacing) {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .frame(width: Self.circleSize, height: Self.circleSize)
-                    .shadow(radius: 2)
-
+            HStack {
                 Image(systemName: "xmark")
                     .font(.system(size: Self.iconSize, weight: .semibold))
                     .foregroundStyle(.red)
             }
+            .padding(.horizontal, Self.pillHPadding)
+            .frame(height: Self.pillHeight)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
+            .shadow(radius: 2)
 
             Text(message)
-                .font(.system(size: Self.pillFontSize))
+                .font(.system(size: Self.errorPillFontSize))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, Self.pillHPadding)
-                .padding(.vertical, Self.pillVPadding)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.pillCornerRadius))
+                .padding(.horizontal, Self.errorPillHPadding)
+                .padding(.vertical, Self.errorPillVPadding)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
                 .shadow(radius: 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

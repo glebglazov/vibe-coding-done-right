@@ -8,6 +8,8 @@ final class OutputPanelPanel {
     private var viewModel: OutputPanelViewModel?
     private var localEventMonitor: Any?
     private var becameKeyObserver: NSObjectProtocol?
+    private var resignKeyObserver: NSObjectProtocol?
+    private let audioRecorder: AudioRecorder
 
     /// Callback invoked when the user submits inline text via Return key
     var onSubmitText: ((String) -> Void)?
@@ -51,6 +53,14 @@ final class OutputPanelPanel {
     private static let turnDividerHeight: CGFloat = 10
     /// Height of the inline text input area (TextEditor 60pt + divider 8pt)
     private static let textInputHeight: CGFloat = 68
+    /// Width of the minimized pill panel
+    private static let minimizedPanelWidth: CGFloat = 200
+    /// Height of the minimized pill panel
+    private static let minimizedPanelHeight: CGFloat = 40
+
+    init(audioRecorder: AudioRecorder) {
+        self.audioRecorder = audioRecorder
+    }
 
     func show(
         inputText: String,
@@ -92,7 +102,11 @@ final class OutputPanelPanel {
             },
             onSubmitText: { [weak self] text in
                 self?.onSubmitText?(text)
-            }
+            },
+            onExpand: { [weak self] in
+                self?.expand()
+            },
+            audioRecorder: audioRecorder
         )
         self.viewModel = viewModel
 
@@ -144,7 +158,11 @@ final class OutputPanelPanel {
             },
             onSubmitText: { [weak self] text in
                 self?.onSubmitText?(text)
-            }
+            },
+            onExpand: { [weak self] in
+                self?.expand()
+            },
+            audioRecorder: audioRecorder
         )
         self.viewModel = viewModel
 
@@ -197,20 +215,34 @@ final class OutputPanelPanel {
         }
 
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel, weak panel] event in
-            guard let viewModel, panel?.isKeyWindow == true else { return event }
+            guard let viewModel, !viewModel.isMinimized, panel?.isKeyWindow == true else { return event }
             return viewModel.handleKeyEvent(event) ? nil : event
         }
 
-        // Re-focus the text view when this panel regains key status (only when not read-only)
+        // Re-focus the text view when this panel regains key status (only when not read-only
+        // and not minimized — the pill has no text editor to focus)
         if !isReadOnly {
             becameKeyObserver = NotificationCenter.default.addObserver(
                 forName: NSWindow.didBecomeKeyNotification,
                 object: panel,
                 queue: .main
             ) { [weak self] _ in
-                guard let self, let contentView = self.panel?.contentView, let panel = self.panel else { return }
+                guard let self,
+                      self.viewModel?.isMinimized != true,
+                      let contentView = self.panel?.contentView,
+                      let panel = self.panel else { return }
                 Self.focusFirstTextView(in: contentView, panel: panel)
             }
+        }
+
+        // Auto-minimize when the panel loses key window status
+        resignKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, !self.isLockedForFollowUp else { return }
+            self.minimize()
         }
     }
 
@@ -243,6 +275,10 @@ final class OutputPanelPanel {
             NotificationCenter.default.removeObserver(observer)
             becameKeyObserver = nil
         }
+        if let observer = resignKeyObserver {
+            NotificationCenter.default.removeObserver(observer)
+            resignKeyObserver = nil
+        }
         panel?.close()
         panel = nil
         viewModel = nil
@@ -256,6 +292,61 @@ final class OutputPanelPanel {
     }
 
     var isVisible: Bool { panel != nil }
+
+    /// Whether the panel is currently in minimized pill state.
+    var isMinimized: Bool { viewModel?.isMinimized ?? false }
+
+    // MARK: - Minimize / Expand
+
+    /// Minimizes the panel to a pill. Optionally sets the pill phase.
+    func minimize(phase: OutputPanelViewModel.OutputPillPhase = .idle) {
+        viewModel?.pillPhase = phase
+        guard viewModel?.isMinimized != true else { return }
+        viewModel?.isMinimized = true
+        resizePanelToMinimized()
+    }
+
+    /// Expands the panel from minimized pill to full size.
+    func expand() {
+        guard viewModel?.isMinimized == true else { return }
+        viewModel?.isMinimized = false
+        viewModel?.pillPhase = .idle
+        resizePanelToExpanded()
+        panel?.makeKey()
+        if !(viewModel?.isReadOnly ?? true) {
+            // Delay focus to let the resize animation finish and SwiftUI
+            // lay out the TextEditor in the expanded view hierarchy.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: Self.expandFocusDelay)
+                guard let self, let contentView = self.panel?.contentView, let panel = self.panel else { return }
+                Self.focusFirstTextView(in: contentView, panel: panel)
+            }
+        }
+    }
+
+    private func resizePanelToMinimized() {
+        guard let panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let screenFrame = screen.frame
+        let visibleFrame = screen.visibleFrame
+        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+        let x = screenFrame.midX - Self.minimizedPanelWidth / 2
+        let y = screenFrame.maxY - menuBarHeight - Self.minimizedPanelHeight - Self.panelOffsetBelowMenuBar
+        let newFrame = NSRect(x: x, y: y, width: Self.minimizedPanelWidth, height: Self.minimizedPanelHeight)
+        panel.setFrame(newFrame, display: true, animate: true)
+    }
+
+    private func resizePanelToExpanded() {
+        guard let panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let isReadOnly = viewModel?.isReadOnly ?? false
+        let newHeight = Self.calculateHeight(for: currentTurns, isReadOnly: isReadOnly)
+        let screenFrame = screen.frame
+        let visibleFrame = screen.visibleFrame
+        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+        let x = screenFrame.midX - Self.panelWidth / 2
+        let y = screenFrame.maxY - menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar
+        let newFrame = NSRect(x: x, y: y, width: Self.panelWidth, height: newHeight)
+        panel.setFrame(newFrame, display: true, animate: true)
+    }
 
     // MARK: - Follow-up State Capture
 
@@ -296,8 +387,10 @@ final class OutputPanelPanel {
 
     /// Prevents the panel from auto-dismissing (global clicks, Escape, Cmd+C).
     /// Call when starting a follow-up recording or push-to-type session.
+    /// Also minimizes the panel so the pill is visible during follow-up.
     func lockForFollowUp() {
         isLockedForFollowUp = true
+        minimize()
     }
 
     /// Re-enables normal dismiss behavior.
@@ -310,8 +403,13 @@ final class OutputPanelPanel {
     var currentPanelHeight: CGFloat { panel?.frame.height ?? 0 }
 
     /// Reclaims key window status so the inline text input receives focus.
+    /// If minimized, expands first.
     func makeKeyIfVisible() {
         guard let panel, isVisible else { return }
+        if isMinimized {
+            expand()
+            return
+        }
         panel.makeKey()
         if let contentView = panel.contentView {
             Self.focusFirstTextView(in: contentView, panel: panel)
@@ -366,7 +464,7 @@ final class OutputPanelPanel {
         viewModel?.inlineText = ""
         currentTurns = viewModel?.conversationTurns ?? currentTurns
         viewModel?.scrollTrigger += 1
-        resizePanel()
+        minimize(phase: .processing)
     }
 
     func finishProcessing(outputText: String) {
@@ -378,7 +476,7 @@ final class OutputPanelPanel {
         viewModel.isProcessing = false
         currentTurns = viewModel.conversationTurns
         viewModel.scrollTrigger += 1
-        resizePanel()
+        expand()
     }
 
     func showProcessingError(_ message: String) {
@@ -386,7 +484,7 @@ final class OutputPanelPanel {
         viewModel.conversationTurns.removeLast()
         currentTurns = viewModel.conversationTurns
         viewModel.isProcessing = false
-        resizePanel()
+        expand()
         Logger.actions.error("Output panel inline processing failed: \(message)")
     }
 
@@ -408,6 +506,10 @@ final class OutputPanelPanel {
     private static let focusMaxAttempts = 10
     /// Delay between focus retry attempts, giving SwiftUI time to lay out the view hierarchy
     private static let focusRetryDelay: Duration = .milliseconds(10)
+    /// Delay after expanding before attempting to focus the text view.
+    /// The resize animation + SwiftUI layout need time to insert the TextEditor
+    /// into the view hierarchy before we can find and focus the NSTextView.
+    private static let expandFocusDelay: Duration = .milliseconds(200)
 
     // MARK: - Focus Management
 
@@ -415,7 +517,7 @@ final class OutputPanelPanel {
     /// and makes it the panel's first responder for immediate keyboard input.
     /// Retries with a short delay because SwiftUI may need multiple run loop iterations
     /// to fully insert the NSTextView into the hosting view's hierarchy.
-    private static func focusFirstTextView(in view: NSView, panel: NSPanel) {
+    static func focusFirstTextView(in view: NSView, panel: NSPanel) {
         Task { @MainActor in
             for _ in 0..<focusMaxAttempts {
                 if let textView = findFirstTextView(in: view) {

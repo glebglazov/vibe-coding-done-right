@@ -4,6 +4,13 @@ import SwiftUI
 
 @Observable
 final class OutputPanelViewModel {
+    /// Pill phase controls what the minimized pill displays
+    enum OutputPillPhase {
+        case idle        // conversation icon (text.bubble)
+        case recording   // audio waveform
+        case processing  // animated bouncing dots
+    }
+
     var conversationTurns: [ConversationTurn]
     let outputDestinations: [OutputDestination]
     let isReadOnly: Bool
@@ -11,11 +18,15 @@ final class OutputPanelViewModel {
     let onFireDestination: (OutputDestination) -> Void
     let onDismiss: () -> Void
     let onSubmitText: (String) -> Void
+    let onExpand: () -> Void
+    let audioRecorder: AudioRecorder?
 
     var inlineText: String = ""
     var isProcessing: Bool = false
     /// Incremented to trigger scroll-to-bottom in the conversation ScrollView
     var scrollTrigger: Int = 0
+    var isMinimized: Bool = false
+    var pillPhase: OutputPillPhase = .idle
 
     /// Show "You:" / "Result:" labels when there are multiple turns or
     /// when the single turn's input was transformed by processing.
@@ -41,7 +52,9 @@ final class OutputPanelViewModel {
         onCopy: @escaping () -> Void,
         onFireDestination: @escaping (OutputDestination) -> Void,
         onDismiss: @escaping () -> Void,
-        onSubmitText: @escaping (String) -> Void
+        onSubmitText: @escaping (String) -> Void,
+        onExpand: @escaping () -> Void = {},
+        audioRecorder: AudioRecorder? = nil
     ) {
         self.conversationTurns = conversationTurns
         self.outputDestinations = outputDestinations
@@ -50,6 +63,8 @@ final class OutputPanelViewModel {
         self.onFireDestination = onFireDestination
         self.onDismiss = onDismiss
         self.onSubmitText = onSubmitText
+        self.onExpand = onExpand
+        self.audioRecorder = audioRecorder
     }
 
     /// Returns true if the event was handled (consumed)
@@ -120,7 +135,47 @@ struct OutputPanelView: View {
     private static let bottomAnchorID = "bottom"
     private static let textInputHeight: CGFloat = 60
 
+    // Minimized pill constants
+    private static let pillHeight: CGFloat = 32
+    private static let pillHPadding: CGFloat = 12
+    private static let pillIconSize: CGFloat = 12
+    private static let pillSpacing: CGFloat = 6
+
     var body: some View {
+        if viewModel.isMinimized {
+            minimizedPillView
+        } else {
+            expandedView
+        }
+    }
+
+    // MARK: - Minimized Pill
+
+    private var minimizedPillView: some View {
+        HStack(spacing: Self.pillSpacing) {
+            switch viewModel.pillPhase {
+            case .idle:
+                Image(systemName: "text.bubble")
+                    .font(.system(size: Self.pillIconSize))
+                    .foregroundStyle(.secondary)
+            case .recording:
+                AudioWaveformView(audioLevels: viewModel.audioRecorder?.audioLevels ?? [])
+            case .processing:
+                AnimatedDotsView()
+            }
+        }
+        .padding(.horizontal, Self.pillHPadding)
+        .frame(height: Self.pillHeight)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
+        .shadow(radius: 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onTapGesture { viewModel.onExpand() }
+    }
+
+    // MARK: - Expanded View
+
+    private var expandedView: some View {
         ZStack(alignment: .topTrailing) {
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in

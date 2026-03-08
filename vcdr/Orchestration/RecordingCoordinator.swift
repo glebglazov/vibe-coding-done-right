@@ -248,13 +248,14 @@ final class RecordingCoordinator {
 
         // Show indicator immediately for visual feedback — the media pause
         // and recording start below are async and can take 200-400ms.
-        // Position below the output panel when it's a visible follow-up.
+        // During follow-up, the output panel pill shows the waveform instead.
         let isFollowUp = session?.isFollowUpFromVisibleOutputPanel ?? false
-        let topOffset = isFollowUp
-            ? outputPanel.currentPanelHeight + Self.panelGap
-            : 0
-        recordingIndicator.show(topOffset: topOffset)
-        recordingIndicator.updateParameterLabels(resolvedParameterLabels(for: settings.activeMode))
+        if isFollowUp {
+            outputPanel.minimize(phase: .recording)
+        } else {
+            recordingIndicator.show()
+            recordingIndicator.updateParameterLabels(resolvedParameterLabels(for: settings.activeMode))
+        }
 
         if settings.audioSettings.pauseMediaDuringRecording {
             await mediaPlaybackController.pauseIfNeeded()
@@ -305,14 +306,23 @@ final class RecordingCoordinator {
             Task { await mediaPlaybackController.resumeIfNeeded() }
             escCancelManager.isEnabled = false
             state = .error("No audio recorded")
-            recordingIndicator.update(phase: .error, message: "No audio recorded")
-            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            if session?.isFollowUpFromVisibleOutputPanel == true {
+                outputPanel.unlockFollowUp()
+                outputPanel.expand()
+            } else {
+                recordingIndicator.update(phase: .error, message: "No audio recorded")
+                dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            }
             resetAfterDelay()
             return
         }
 
         state = .transcribing
-        recordingIndicator.update(phase: .processing)
+        if session?.isFollowUpFromVisibleOutputPanel == true {
+            outputPanel.minimize(phase: .processing)
+        } else {
+            recordingIndicator.update(phase: .processing)
+        }
         Logger.app.info("Recording stopped, transcribing...")
 
         // Resume media playback after stopping the mic. The delay lets CoreAudio
@@ -363,10 +373,15 @@ final class RecordingCoordinator {
 
             guard !text.isEmpty else {
                 escCancelManager.isEnabled = false
-                outputPanel.unlockFollowUp()
+                if wasFollowUpFromOutputPanel {
+                    outputPanel.unlockFollowUp()
+                    outputPanel.expand()
+                } else {
+                    outputPanel.unlockFollowUp()
+                    recordingIndicator.update(phase: .error, message: "No speech detected")
+                    dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+                }
                 state = .error("No speech detected")
-                recordingIndicator.update(phase: .error, message: "No speech detected")
-                dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
                 resetAfterDelay()
                 return
             }
@@ -469,14 +484,17 @@ final class RecordingCoordinator {
             escCancelManager.isEnabled = false
             processingTask = nil
             accumulatedText = nil
-            if outputPanel.isLockedForFollowUp {
+            let wasFollowUp = outputPanel.isLockedForFollowUp
+            if wasFollowUp {
                 outputPanel.showProcessingError(error.localizedDescription)
             }
             outputPanel.unlockFollowUp()
             session = nil
             state = .error(error.localizedDescription)
-            recordingIndicator.update(phase: .error, message: error.localizedDescription)
-            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            if !wasFollowUp {
+                recordingIndicator.update(phase: .error, message: error.localizedDescription)
+                dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            }
             Logger.app.error("Pipeline failed: \(error)")
             resetAfterDelay()
         }
@@ -550,6 +568,7 @@ final class RecordingCoordinator {
         }
 
         Task { await mediaPlaybackController.resumeIfNeeded() }
+        let wasFollowUp = outputPanel.isLockedForFollowUp
         session = nil
         accumulatedText = nil
         recordingStartInstant = nil
@@ -557,9 +576,11 @@ final class RecordingCoordinator {
         hasCompletedPipelineWithOverrides = false
         outputPanel.unlockFollowUp()
 
-        // showCancelled() uses stored currentTopOffset so the indicator
-        // appears where the recording indicator was, then resets it to 0.
-        recordingIndicator.showCancelled()
+        if wasFollowUp {
+            outputPanel.expand()
+        } else {
+            recordingIndicator.showCancelled()
+        }
         if wasProcessing {
             Logger.app.info("Processing cancelled via Esc")
         } else {

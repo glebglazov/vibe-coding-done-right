@@ -94,19 +94,16 @@ final class PushToTypeCoordinator {
             onWillStartInput?()
 
             // If the output panel is visible, this is an implicit follow-up.
-            // Read state without hiding so the user sees conversation history while typing.
+            // Expand the output panel instead of showing push-to-type —
+            // the output panel's inline text editor handles typed follow-up.
             if let followUp = outputPanel.readFollowUpState() {
-                session = PipelineSession(
-                    outputDestinationOverride: OutputDestination.builtInOutputPanelID,
-                    followUpContext: followUp.text,
-                    conversationTurns: followUp.turns,
-                    conversationID: followUp.conversationID,
-                    isFollowUpFromVisibleOutputPanel: true
-                )
                 settings.activeModeID = followUp.modeID
-                recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
-                outputPanel.lockForFollowUp()
-            } else if session == nil {
+                outputPanel.expand()
+                outputPanel.makeKeyIfVisible()
+                return
+            }
+
+            if session == nil {
                 session = PipelineSession()
             }
             await showOverlay()
@@ -161,7 +158,7 @@ final class PushToTypeCoordinator {
         session = nil
 
         if wasFollowUpFromOutputPanel {
-            // Use the output panel's "..." turn as the processing indicator
+            // Output panel pill shows animated dots during processing
             outputPanel.startProcessing(inputText: text)
         } else {
             recordingIndicator.show()
@@ -233,8 +230,10 @@ final class PushToTypeCoordinator {
                 }
                 outputPanel.unlockFollowUp()
                 session = nil
-                recordingIndicator.update(phase: .error, message: error.localizedDescription)
-                dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+                if !wasFollowUpFromOutputPanel {
+                    recordingIndicator.update(phase: .error, message: error.localizedDescription)
+                    dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+                }
                 Logger.app.error("Push-to-type failed: \(error)")
             }
         }
