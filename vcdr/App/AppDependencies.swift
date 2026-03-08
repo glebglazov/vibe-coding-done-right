@@ -130,7 +130,7 @@ final class AppDependencies {
 
             Task { @MainActor in
                 do {
-                    let processed = try await TextProcessingPipeline.run(
+                    let result = try await TextProcessingPipeline.run(
                         mode: mode,
                         text: text,
                         capturedSelection: nil,
@@ -139,16 +139,17 @@ final class AppDependencies {
                         conversationID: conversationID,
                         parameterValues: parameterValues
                     )
-                    outputPanel.finishProcessing(outputText: processed)
+                    outputPanel.finishProcessing(outputText: result.text)
 
                     // Record inline follow-up in history
                     history.recordTurn(
                         conversationID: conversationID,
                         input: text,
-                        output: processed,
+                        output: result.text,
                         capturedSelection: nil,
                         modeID: mode.id,
-                        modeName: mode.name
+                        modeName: mode.name,
+                        hadExternalProcessing: result.hadExternalProcessing
                     )
                 } catch {
                     outputPanel.showProcessingError(error.localizedDescription)
@@ -238,7 +239,8 @@ final class AppDependencies {
     }
 
     func openConversationFromHistory(_ conversation: Conversation) {
-        let canContinue = settings.modes.contains(where: { $0.id == conversation.modeID && $0.canFollowUp })
+        let canContinue = conversation.hadExternalProcessing
+            && settings.modes.contains(where: { $0.id == conversation.modeID && $0.processingType == .bashScript })
         if canContinue {
             settings.activeModeID = conversation.modeID
         }

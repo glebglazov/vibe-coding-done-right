@@ -1,5 +1,14 @@
 import Foundation
 
+/// Result of running the text processing pipeline, including metadata
+/// about whether external processing (e.g. a bash script) was invoked.
+struct PipelineResult {
+    let text: String
+    /// True when the pipeline executed an external command (bash script)
+    /// whose stdout became the output — making this a "conversation" turn.
+    let hadExternalProcessing: Bool
+}
+
 enum TextProcessingPipeline {
     /// Runs the text processing pipeline: pre-processing (terminator, system prompt,
     /// follow-up context, captured selection) followed by optional bash script execution.
@@ -11,14 +20,14 @@ enum TextProcessingPipeline {
         conversationTurns: [ConversationTurn],
         conversationID: UUID,
         parameterValues: [String: String] = [:]
-    ) async throws -> String {
+    ) async throws -> PipelineResult {
         // Step 1: Pre-processing (terminator, system prompt, follow-up context, captured selection)
         let preprocessedText = mode.applyPreProcessing(text, capturedSelection: capturedSelection, followUpContext: followUpContext)
 
         // Step 2: Processing (optional bash script)
         switch mode.processingType {
         case .none:
-            return preprocessedText
+            return PipelineResult(text: preprocessedText, hadExternalProcessing: false)
         case .bashScript:
             let conversationJSON = buildConversationMessages(
                 mode: mode,
@@ -29,13 +38,14 @@ enum TextProcessingPipeline {
             let paramEnv = Dictionary(
                 uniqueKeysWithValues: parameterValues.map { ("VCDR_PARAM_\($0.key)", $0.value) }
             )
-            return try await BashRunner.run(
+            let processedText = try await BashRunner.run(
                 command: mode.processingCommand,
                 text: preprocessedText,
                 conversationMessages: conversationJSON,
                 conversationID: conversationID.uuidString,
                 extraEnvironment: paramEnv
             )
+            return PipelineResult(text: processedText, hadExternalProcessing: true)
         }
     }
 

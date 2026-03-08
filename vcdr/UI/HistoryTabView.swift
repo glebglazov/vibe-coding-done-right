@@ -45,7 +45,8 @@ struct HistoryTabView: View {
     }
 
     private func canContinue(_ conversation: Conversation) -> Bool {
-        settings.modes.contains(where: { $0.id == conversation.modeID && $0.canFollowUp })
+        conversation.hadExternalProcessing
+            && settings.modes.contains(where: { $0.id == conversation.modeID && $0.processingType == .bashScript })
     }
 }
 

@@ -379,7 +379,7 @@ final class RecordingCoordinator {
                 outputPanel.startProcessing(inputText: text)
             }
 
-            let processedText = try await TextProcessingPipeline.run(
+            let result = try await TextProcessingPipeline.run(
                 mode: mode,
                 text: text,
                 capturedSelection: selection,
@@ -388,6 +388,8 @@ final class RecordingCoordinator {
                 conversationID: activeConversationID,
                 parameterValues: parameterValues
             )
+            let processedText = result.text
+            let hadExternalProcessing = result.hadExternalProcessing
 
             try Task.checkCancellation()
             state = .executing
@@ -421,7 +423,7 @@ final class RecordingCoordinator {
                         targetAppPID: targetAppPID,
                         modeID: mode.id,
                         conversationID: activeConversationID,
-                        canFollowUp: mode.canFollowUp
+                        canFollowUp: hadExternalProcessing
                     )
                 }
             } else {
@@ -446,7 +448,8 @@ final class RecordingCoordinator {
                 output: finalText,
                 capturedSelection: selection,
                 modeID: mode.id,
-                modeName: mode.name
+                modeName: mode.name,
+                hadExternalProcessing: hadExternalProcessing
             )
 
             if !conversationParameterOverrides.isEmpty {

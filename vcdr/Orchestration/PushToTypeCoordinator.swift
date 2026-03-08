@@ -172,7 +172,7 @@ final class PushToTypeCoordinator {
         Task { @MainActor in
             do {
                 let parameterValues = self.resolveParameterValues?(mode) ?? [:]
-                let processedText = try await TextProcessingPipeline.run(
+                let result = try await TextProcessingPipeline.run(
                     mode: mode,
                     text: text,
                     capturedSelection: selection,
@@ -181,6 +181,7 @@ final class PushToTypeCoordinator {
                     conversationID: activeConversationID,
                     parameterValues: parameterValues
                 )
+                let processedText = result.text
 
                 // Step 3: Output
                 let destination = settings.outputDestination(for: destinationID)
@@ -202,7 +203,7 @@ final class PushToTypeCoordinator {
                             targetAppPID: targetAppPID,
                             modeID: mode.id,
                             conversationID: activeConversationID,
-                            canFollowUp: mode.canFollowUp
+                            canFollowUp: result.hadExternalProcessing
                         )
                     }
                 } else {
@@ -221,7 +222,8 @@ final class PushToTypeCoordinator {
                     output: processedText,
                     capturedSelection: selection,
                     modeID: mode.id,
-                    modeName: mode.name
+                    modeName: mode.name,
+                    hadExternalProcessing: result.hadExternalProcessing
                 )
 
                 Logger.app.info("Push-to-type: complete")

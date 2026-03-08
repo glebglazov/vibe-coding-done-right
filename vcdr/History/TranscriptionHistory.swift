@@ -25,7 +25,8 @@ final class TranscriptionHistory {
         output: String,
         capturedSelection: String?,
         modeID: UUID,
-        modeName: String
+        modeName: String,
+        hadExternalProcessing: Bool = false
     ) {
         let turn = Conversation.Turn(
             id: UUID(),
@@ -47,7 +48,8 @@ final class TranscriptionHistory {
                 turns: [turn],
                 modeID: modeID,
                 modeName: modeName,
-                lastUpdated: .now
+                lastUpdated: .now,
+                hadExternalProcessing: hadExternalProcessing
             )
             conversations.insert(conversation, at: 0)
         }
@@ -111,7 +113,8 @@ final class TranscriptionHistory {
                     turns: [turn],
                     modeID: UUID(), // Unknown — legacy records have no mode reference
                     modeName: "Unknown",
-                    lastUpdated: record.timestamp
+                    lastUpdated: record.timestamp,
+                    hadExternalProcessing: record.processedText != nil && record.processedText != record.text
                 )
             }
         }
