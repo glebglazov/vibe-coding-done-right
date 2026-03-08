@@ -219,18 +219,24 @@ final class OutputPanelPanel {
             return viewModel.handleKeyEvent(event) ? nil : event
         }
 
-        // Re-focus the text view when this panel regains key status (only when not read-only
-        // and not minimized — the pill has no text editor to focus)
-        if !isReadOnly {
-            becameKeyObserver = NotificationCenter.default.addObserver(
-                forName: NSWindow.didBecomeKeyNotification,
-                object: panel,
-                queue: .main
-            ) { [weak self] _ in
-                guard let self,
-                      self.viewModel?.isMinimized != true,
-                      let contentView = self.panel?.contentView,
-                      let panel = self.panel else { return }
+        // When the panel becomes key while minimized, expand it immediately.
+        // This handles the first-click-on-pill case: .nonactivatingPanel consumes
+        // the mouse-down to make the panel key without delivering it to SwiftUI's
+        // onTapGesture. Expanding on becomeKey ensures a single click suffices.
+        // When already expanded (non-read-only), re-focus the text view.
+        becameKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            if self.viewModel?.isMinimized == true {
+                self.expand()
+                return
+            }
+            if !isReadOnly,
+               let contentView = self.panel?.contentView,
+               let panel = self.panel {
                 Self.focusFirstTextView(in: contentView, panel: panel)
             }
         }
@@ -567,8 +573,3 @@ final class OutputPanelPanel {
     }
 }
 
-// MARK: - NSPanel subclass that accepts key events
-
-private final class KeyablePanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-}
