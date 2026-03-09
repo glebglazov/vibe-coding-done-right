@@ -82,7 +82,7 @@ extension ModeTemplate {
         defaultName: "Claude Code",
         availabilityCommand: "claude",
         processingType: .bashScript,
-        processingCommand: "zsh -ic 'cd /tmp && (\n  claude --model $VCDR_PARAM_MODEL --resume $VCDR_CONV_ID \"$VCDR_DICTATION\" 2>/dev/null ||\n  claude --model $VCDR_PARAM_MODEL --session-id $VCDR_CONV_ID \"$VCDR_DICTATION\"\n)'",
+        processingCommand: "zsh -ic 'cd /tmp && (\n  claude --model $VCDR_PARAM_MODEL --resume $VCDR_CONV_ID \"$VCDR_TEXT\" 2>/dev/null ||\n  claude --model $VCDR_PARAM_MODEL --session-id $VCDR_CONV_ID \"$VCDR_TEXT\"\n)'",
         terminatorTemplateEnabled: false,
         systemPromptEnabled: true,
         systemPrompt: "Act immediately on the user's request without follow-up questions. Input is voice-dictated and may contain minor transcription errors — interpret the intent. Be concise.",
