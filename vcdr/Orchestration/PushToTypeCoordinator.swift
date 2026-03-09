@@ -163,86 +163,162 @@ final class PushToTypeCoordinator {
         let destinationID = overrides.resolvedDestinationID(for: mode)
         session = nil
 
+        let destination = settings.outputDestination(for: destinationID)
+        let useStreaming = destination.type == .outputPanel && mode.processingType == .bashScript
+
         if wasFollowUpFromOutputPanel {
             // Output panel pill shows animated dots during processing
             outputPanel.startProcessing(inputText: text)
-        } else {
-            recordingIndicator.show()
-            recordingIndicator.update(phase: .processing)
-            recordingIndicator.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
         }
         Logger.app.info("Push-to-type: executing pipeline")
 
-        Task { @MainActor in
-            do {
-                let parameterValues = self.overrides.resolvedParameterValues(for: mode)
-                let result = try await TextProcessingPipeline.run(
-                    mode: mode,
-                    text: text,
+        if useStreaming {
+            // --- Streaming path ---
+            let parameterValues = self.overrides.resolvedParameterValues(for: mode)
+            let streamResult = TextProcessingPipeline.runStreaming(
+                mode: mode,
+                text: text,
+                capturedSelection: selection,
+                followUpContext: context,
+                conversationTurns: currentTurns,
+                conversationID: activeConversationID,
+                parameterValues: parameterValues
+            )
+
+            if wasFollowUpFromOutputPanel {
+                outputPanel.expand()
+            } else {
+                outputPanel.show(
+                    inputText: text,
+                    text: "",
                     capturedSelection: selection,
-                    followUpContext: context,
                     conversationTurns: currentTurns,
+                    outputDestinations: settings.outputDestinations,
+                    targetAppPID: targetAppPID,
+                    modeID: mode.id,
                     conversationID: activeConversationID,
-                    parameterValues: parameterValues
+                    canFollowUp: true
                 )
-                let processedText = result.text
+                outputPanel.setProcessing(true)
+            }
+            recordingIndicator.hide()
 
-                // Step 3: Output
-                let destination = settings.outputDestination(for: destinationID)
+            Task { @MainActor in
+                var accumulated = ""
+                do {
+                    for try await chunk in streamResult.chunks {
+                        accumulated += chunk
+                        outputPanel.updateStreamingOutput(accumulated)
+                    }
 
-                if destination.type == .outputPanel {
-                    recordingIndicator.hide()
                     if wasFollowUpFromOutputPanel {
-                        // Update the existing output panel in-place
-                        outputPanel.finishProcessing(outputText: processedText)
+                        outputPanel.finishStreaming(outputText: accumulated)
                         outputPanel.unlockFollowUp()
                         outputPanel.makeKeyIfVisible()
                     } else {
-                        outputPanel.show(
-                            inputText: text,
-                            text: processedText,
-                            capturedSelection: selection,
-                            conversationTurns: currentTurns,
-                            outputDestinations: settings.outputDestinations,
-                            targetAppPID: targetAppPID,
-                            modeID: mode.id,
-                            conversationID: activeConversationID,
-                            canFollowUp: result.hadExternalProcessing
-                        )
+                        outputPanel.finishStreaming(outputText: accumulated)
                     }
-                } else {
+
+                    transcriptionHistory.recordTurn(
+                        conversationID: activeConversationID,
+                        input: text,
+                        output: accumulated,
+                        capturedSelection: selection,
+                        modeID: mode.id,
+                        modeName: mode.name,
+                        hadExternalProcessing: streamResult.hadExternalProcessing
+                    )
+
+                    self.overrides.markPipelineCompleted()
+                    Logger.app.info("Push-to-type: streaming complete")
+                } catch {
+                    streamResult.cancel()
+                    if wasFollowUpFromOutputPanel {
+                        if accumulated.isEmpty {
+                            outputPanel.showProcessingError(error.localizedDescription)
+                        } else {
+                            outputPanel.finishStreaming(outputText: accumulated)
+                        }
+                    }
                     outputPanel.unlockFollowUp()
-                    if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
-                        try await action.execute(text: processedText)
+                    session = nil
+                    Logger.app.error("Push-to-type streaming failed: \(error)")
+                }
+            }
+        } else {
+            // --- Non-streaming path ---
+            if !wasFollowUpFromOutputPanel {
+                recordingIndicator.show()
+                recordingIndicator.update(phase: .processing)
+                recordingIndicator.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
+            }
+
+            Task { @MainActor in
+                do {
+                    let parameterValues = self.overrides.resolvedParameterValues(for: mode)
+                    let result = try await TextProcessingPipeline.run(
+                        mode: mode,
+                        text: text,
+                        capturedSelection: selection,
+                        followUpContext: context,
+                        conversationTurns: currentTurns,
+                        conversationID: activeConversationID,
+                        parameterValues: parameterValues
+                    )
+                    let processedText = result.text
+
+                    if destination.type == .outputPanel {
+                        recordingIndicator.hide()
+                        if wasFollowUpFromOutputPanel {
+                            outputPanel.finishProcessing(outputText: processedText)
+                            outputPanel.unlockFollowUp()
+                            outputPanel.makeKeyIfVisible()
+                        } else {
+                            outputPanel.show(
+                                inputText: text,
+                                text: processedText,
+                                capturedSelection: selection,
+                                conversationTurns: currentTurns,
+                                outputDestinations: settings.outputDestinations,
+                                targetAppPID: targetAppPID,
+                                modeID: mode.id,
+                                conversationID: activeConversationID,
+                                canFollowUp: result.hadExternalProcessing
+                            )
+                        }
+                    } else {
+                        outputPanel.unlockFollowUp()
+                        if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
+                            try await action.execute(text: processedText)
+                        }
+                        recordingIndicator.update(phase: .success)
+                        dismissIndicatorAfterDelay(Self.successIndicatorDuration)
                     }
-                    recordingIndicator.update(phase: .success)
-                    dismissIndicatorAfterDelay(Self.successIndicatorDuration)
-                }
 
-                // Record in history
-                transcriptionHistory.recordTurn(
-                    conversationID: activeConversationID,
-                    input: text,
-                    output: processedText,
-                    capturedSelection: selection,
-                    modeID: mode.id,
-                    modeName: mode.name,
-                    hadExternalProcessing: result.hadExternalProcessing
-                )
+                    transcriptionHistory.recordTurn(
+                        conversationID: activeConversationID,
+                        input: text,
+                        output: processedText,
+                        capturedSelection: selection,
+                        modeID: mode.id,
+                        modeName: mode.name,
+                        hadExternalProcessing: result.hadExternalProcessing
+                    )
 
-                self.overrides.markPipelineCompleted()
-                Logger.app.info("Push-to-type: complete")
-            } catch {
-                if wasFollowUpFromOutputPanel {
-                    outputPanel.showProcessingError(error.localizedDescription)
+                    self.overrides.markPipelineCompleted()
+                    Logger.app.info("Push-to-type: complete")
+                } catch {
+                    if wasFollowUpFromOutputPanel {
+                        outputPanel.showProcessingError(error.localizedDescription)
+                    }
+                    outputPanel.unlockFollowUp()
+                    session = nil
+                    if !wasFollowUpFromOutputPanel {
+                        recordingIndicator.update(phase: .error, message: error.localizedDescription)
+                        dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+                    }
+                    Logger.app.error("Push-to-type failed: \(error)")
                 }
-                outputPanel.unlockFollowUp()
-                session = nil
-                if !wasFollowUpFromOutputPanel {
-                    recordingIndicator.update(phase: .error, message: error.localizedDescription)
-                    dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
-                }
-                Logger.app.error("Push-to-type failed: \(error)")
             }
         }
     }

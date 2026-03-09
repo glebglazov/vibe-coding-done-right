@@ -154,34 +154,78 @@ final class AppDependencies {
             let followUpContext = outputPanel.currentText
             let conversationID = outputPanel.currentConversationID ?? UUID()
             let parameterValues = overrides.resolvedParameterValues(for: mode)
+            let currentTurns = outputPanel.currentTurns
 
             outputPanel.startProcessing(inputText: text)
 
-            Task { @MainActor in
-                do {
-                    let result = try await TextProcessingPipeline.run(
-                        mode: mode,
-                        text: text,
-                        capturedSelection: nil,
-                        followUpContext: followUpContext,
-                        conversationTurns: outputPanel.currentTurns,
-                        conversationID: conversationID,
-                        parameterValues: parameterValues
-                    )
-                    outputPanel.finishProcessing(outputText: result.text)
+            if mode.processingType == .bashScript {
+                // Streaming path for bash-processed modes
+                let streamResult = TextProcessingPipeline.runStreaming(
+                    mode: mode,
+                    text: text,
+                    capturedSelection: nil,
+                    followUpContext: followUpContext,
+                    conversationTurns: currentTurns,
+                    conversationID: conversationID,
+                    parameterValues: parameterValues
+                )
+                outputPanel.expand()
 
-                    // Record inline follow-up in history
-                    history.recordTurn(
-                        conversationID: conversationID,
-                        input: text,
-                        output: result.text,
-                        capturedSelection: nil,
-                        modeID: mode.id,
-                        modeName: mode.name,
-                        hadExternalProcessing: result.hadExternalProcessing
-                    )
-                } catch {
-                    outputPanel.showProcessingError(error.localizedDescription)
+                Task { @MainActor in
+                    var accumulated = ""
+                    do {
+                        for try await chunk in streamResult.chunks {
+                            accumulated += chunk
+                            outputPanel.updateStreamingOutput(accumulated)
+                        }
+                        outputPanel.finishStreaming(outputText: accumulated)
+
+                        history.recordTurn(
+                            conversationID: conversationID,
+                            input: text,
+                            output: accumulated,
+                            capturedSelection: nil,
+                            modeID: mode.id,
+                            modeName: mode.name,
+                            hadExternalProcessing: streamResult.hadExternalProcessing
+                        )
+                    } catch {
+                        streamResult.cancel()
+                        if accumulated.isEmpty {
+                            outputPanel.showProcessingError(error.localizedDescription)
+                        } else {
+                            // Show partial output on error
+                            outputPanel.finishStreaming(outputText: accumulated)
+                        }
+                    }
+                }
+            } else {
+                // Non-streaming path
+                Task { @MainActor in
+                    do {
+                        let result = try await TextProcessingPipeline.run(
+                            mode: mode,
+                            text: text,
+                            capturedSelection: nil,
+                            followUpContext: followUpContext,
+                            conversationTurns: currentTurns,
+                            conversationID: conversationID,
+                            parameterValues: parameterValues
+                        )
+                        outputPanel.finishProcessing(outputText: result.text)
+
+                        history.recordTurn(
+                            conversationID: conversationID,
+                            input: text,
+                            output: result.text,
+                            capturedSelection: nil,
+                            modeID: mode.id,
+                            modeName: mode.name,
+                            hadExternalProcessing: result.hadExternalProcessing
+                        )
+                    } catch {
+                        outputPanel.showProcessingError(error.localizedDescription)
+                    }
                 }
             }
         }

@@ -9,6 +9,14 @@ struct PipelineResult {
     let hadExternalProcessing: Bool
 }
 
+/// Result of the streaming pipeline variant.
+struct StreamingPipelineResult {
+    let chunks: AsyncThrowingStream<String, Error>
+    let cancel: @Sendable () -> Void
+    /// True when the pipeline executed an external command (bash script).
+    let hadExternalProcessing: Bool
+}
+
 enum TextProcessingPipeline {
     /// Runs the text processing pipeline: pre-processing (terminator, system prompt,
     /// follow-up context, captured selection) followed by optional bash script execution.
@@ -46,6 +54,47 @@ enum TextProcessingPipeline {
                 extraEnvironment: paramEnv
             )
             return PipelineResult(text: processedText, hadExternalProcessing: true)
+        }
+    }
+
+    /// Streaming variant: returns chunks as they arrive from the bash script.
+    /// For `.none` modes, returns a single-chunk stream with the preprocessed text.
+    static func runStreaming(
+        mode: Mode,
+        text: String,
+        capturedSelection: String?,
+        followUpContext: String?,
+        conversationTurns: [ConversationTurn],
+        conversationID: UUID,
+        parameterValues: [String: String] = [:]
+    ) -> StreamingPipelineResult {
+        let preprocessedText = mode.applyPreProcessing(text, capturedSelection: capturedSelection, followUpContext: followUpContext)
+
+        switch mode.processingType {
+        case .none:
+            let stream = AsyncThrowingStream<String, Error> { continuation in
+                continuation.yield(preprocessedText)
+                continuation.finish()
+            }
+            return StreamingPipelineResult(chunks: stream, cancel: {}, hadExternalProcessing: false)
+        case .bashScript:
+            let conversationJSON = buildConversationMessages(
+                mode: mode,
+                currentText: text,
+                currentCapturedSelection: capturedSelection,
+                turns: conversationTurns
+            )
+            let paramEnv = Dictionary(
+                uniqueKeysWithValues: parameterValues.map { ("VCDR_PARAM_\($0.key)", $0.value) }
+            )
+            let result = BashRunner.runStreaming(
+                command: mode.processingCommand,
+                text: preprocessedText,
+                conversationMessages: conversationJSON,
+                conversationID: conversationID.uuidString,
+                extraEnvironment: paramEnv
+            )
+            return StreamingPipelineResult(chunks: result.stream, cancel: result.cancel, hadExternalProcessing: true)
         }
     }
 

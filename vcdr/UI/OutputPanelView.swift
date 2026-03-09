@@ -182,7 +182,8 @@ struct OutputPanelView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(viewModel.conversationTurns.enumerated()), id: \.element.id) { index, turn in
-                                turnView(turn, showLabels: viewModel.showConversationLabels)
+                                let isProcessingTurn = viewModel.isProcessing && index == viewModel.conversationTurns.count - 1
+                                turnView(turn, showLabels: viewModel.showConversationLabels, isProcessingTurn: isProcessingTurn)
 
                                 if index < viewModel.conversationTurns.count - 1 {
                                     Divider()
@@ -254,7 +255,7 @@ struct OutputPanelView: View {
     }
 
     @ViewBuilder
-    private func turnView(_ turn: ConversationTurn, showLabels: Bool) -> some View {
+    private func turnView(_ turn: ConversationTurn, showLabels: Bool, isProcessingTurn: Bool = false) -> some View {
         if showLabels {
             Text("You:")
                 .font(.caption)
@@ -278,15 +279,22 @@ struct OutputPanelView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                copyButton(for: turn.output)
+                if !isProcessingTurn {
+                    copyButton(for: turn.output)
+                }
             }
             .padding(.bottom, Self.labelVPadding)
         }
 
-        Text(turn.output)
-            .font(.system(.body, design: .monospaced))
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        if isProcessingTurn && (turn.output.isEmpty || turn.output == "...") {
+            AnimatedDotsView()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(turn.output)
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func selectionBlockquote(_ text: String) -> some View {

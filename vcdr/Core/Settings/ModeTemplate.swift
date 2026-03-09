@@ -82,7 +82,7 @@ extension ModeTemplate {
         defaultName: "Claude Code",
         availabilityCommand: "claude",
         processingType: .bashScript,
-        processingCommand: "zsh -ic 'cd /tmp && (\n  claude --model $VCDR_PARAM_MODEL --resume $VCDR_CONV_ID \"$VCDR_TEXT\" 2>/dev/null ||\n  claude --model $VCDR_PARAM_MODEL --session-id $VCDR_CONV_ID \"$VCDR_TEXT\"\n)'",
+        processingCommand: "zsh -ic 'set -o pipefail; cd /tmp && (\n  claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages --resume $VCDR_CONV_ID \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\" ||\n  claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages --session-id $VCDR_CONV_ID \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"\n)'",
         terminatorTemplateEnabled: false,
         systemPromptEnabled: true,
         systemPrompt: "Act immediately on the user's request without follow-up questions. Input is voice-dictated and may contain minor transcription errors — interpret the intent. Be concise.",

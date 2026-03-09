@@ -340,91 +340,184 @@ final class RecordingCoordinator {
 
             let mode = settings.activeMode
             let parameterValues = overrides.resolvedParameterValues(for: mode)
-
-            // Show the pending "..." turn in the output panel while processing
-            if wasFollowUpFromOutputPanel {
-                outputPanel.startProcessing(inputText: text)
-            }
-
-            let result = try await TextProcessingPipeline.run(
-                mode: mode,
-                text: text,
-                capturedSelection: selection,
-                followUpContext: context,
-                conversationTurns: currentTurns,
-                conversationID: activeConversationID,
-                parameterValues: parameterValues
-            )
-            let processedText = result.text
-            let hadExternalProcessing = result.hadExternalProcessing
-
-            try Task.checkCancellation()
-            state = .executing
-            Logger.app.info("Pipeline: executing output action")
-
-            // Prepend accumulated text from previous non-processing output panel sessions
-            let finalText: String
-            if let accumulated = accumulatedText {
-                finalText = accumulated + "\n\n" + processedText
-            } else {
-                finalText = processedText
-            }
-            accumulatedText = nil
-
-            // Step 3: Output
             let destination = settings.outputDestination(for: destinationID)
+            let useStreaming = destination.type == .outputPanel && mode.processingType == .bashScript
 
-            if destination.type == .outputPanel {
-                recordingIndicator.hide()
+            if useStreaming {
+                // --- Streaming path: show tokens as they arrive in the output panel ---
+
+                let streamResult = TextProcessingPipeline.runStreaming(
+                    mode: mode,
+                    text: text,
+                    capturedSelection: selection,
+                    followUpContext: context,
+                    conversationTurns: currentTurns,
+                    conversationID: activeConversationID,
+                    parameterValues: parameterValues
+                )
+
+                // Set up the output panel for streaming
                 if wasFollowUpFromOutputPanel {
-                    // Update the existing output panel in-place
-                    outputPanel.finishProcessing(outputText: finalText)
-                    outputPanel.unlockFollowUp()
+                    outputPanel.startProcessing(inputText: text)
+                    outputPanel.expand()
                 } else {
                     outputPanel.show(
                         inputText: text,
-                        text: finalText,
+                        text: "",
                         capturedSelection: selection,
                         conversationTurns: currentTurns,
                         outputDestinations: settings.outputDestinations,
                         targetAppPID: targetAppPID,
                         modeID: mode.id,
                         conversationID: activeConversationID,
-                        canFollowUp: hadExternalProcessing
+                        canFollowUp: true
                     )
+                    // The panel was just created with empty output; mark it as processing
+                    // so the pill shows animated dots if minimized.
+                    outputPanel.setProcessing(true)
                 }
+                recordingIndicator.hide()
+
+                state = .executing
+                Logger.app.info("Pipeline: streaming output")
+
+                // Consume stream chunks
+                var accumulated = ""
+                do {
+                    for try await chunk in streamResult.chunks {
+                        try Task.checkCancellation()
+                        accumulated += chunk
+                        let displayText: String
+                        if let prior = accumulatedText {
+                            displayText = prior + "\n\n" + accumulated
+                        } else {
+                            displayText = accumulated
+                        }
+                        outputPanel.updateStreamingOutput(displayText)
+                    }
+                } catch is CancellationError {
+                    streamResult.cancel()
+                    throw CancellationError()
+                } catch {
+                    streamResult.cancel()
+                    throw error
+                }
+
+                let finalText: String
+                if let prior = accumulatedText {
+                    finalText = prior + "\n\n" + accumulated
+                } else {
+                    finalText = accumulated
+                }
+                accumulatedText = nil
+
+                if wasFollowUpFromOutputPanel {
+                    outputPanel.finishStreaming(outputText: finalText)
+                    outputPanel.unlockFollowUp()
+                } else {
+                    outputPanel.finishStreaming(outputText: finalText)
+                }
+
+                let isAccumulated = finalText != accumulated
+                if isAccumulated, let existing = transcriptionHistory.conversations.first(where: { $0.id == activeConversationID }) {
+                    transcriptionHistory.removeConversation(existing)
+                }
+                transcriptionHistory.recordTurn(
+                    conversationID: activeConversationID,
+                    input: text,
+                    output: finalText,
+                    capturedSelection: selection,
+                    modeID: mode.id,
+                    modeName: mode.name,
+                    hadExternalProcessing: streamResult.hadExternalProcessing
+                )
+
+                overrides.markPipelineCompleted()
+                escCancelManager.isEnabled = false
+                processingTask = nil
+                state = .idle
+                Logger.app.info("Pipeline: streaming complete")
+
             } else {
-                outputPanel.unlockFollowUp()
-                if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
-                    try await action.execute(text: finalText)
+                // --- Non-streaming path: existing behavior ---
+
+                // Show the pending "..." turn in the output panel while processing
+                if wasFollowUpFromOutputPanel {
+                    outputPanel.startProcessing(inputText: text)
                 }
-                recordingIndicator.update(phase: .success)
-                dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+
+                let result = try await TextProcessingPipeline.run(
+                    mode: mode,
+                    text: text,
+                    capturedSelection: selection,
+                    followUpContext: context,
+                    conversationTurns: currentTurns,
+                    conversationID: activeConversationID,
+                    parameterValues: parameterValues
+                )
+                let processedText = result.text
+                let hadExternalProcessing = result.hadExternalProcessing
+
+                try Task.checkCancellation()
+                state = .executing
+                Logger.app.info("Pipeline: executing output action")
+
+                // Prepend accumulated text from previous non-processing output panel sessions
+                let finalText: String
+                if let accumulated = accumulatedText {
+                    finalText = accumulated + "\n\n" + processedText
+                } else {
+                    finalText = processedText
+                }
+                accumulatedText = nil
+
+                if destination.type == .outputPanel {
+                    recordingIndicator.hide()
+                    if wasFollowUpFromOutputPanel {
+                        outputPanel.finishProcessing(outputText: finalText)
+                        outputPanel.unlockFollowUp()
+                    } else {
+                        outputPanel.show(
+                            inputText: text,
+                            text: finalText,
+                            capturedSelection: selection,
+                            conversationTurns: currentTurns,
+                            outputDestinations: settings.outputDestinations,
+                            targetAppPID: targetAppPID,
+                            modeID: mode.id,
+                            conversationID: activeConversationID,
+                            canFollowUp: hadExternalProcessing
+                        )
+                    }
+                } else {
+                    outputPanel.unlockFollowUp()
+                    if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
+                        try await action.execute(text: finalText)
+                    }
+                    recordingIndicator.update(phase: .success)
+                    dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+                }
+
+                let isAccumulated = finalText != processedText
+                if isAccumulated, let existing = transcriptionHistory.conversations.first(where: { $0.id == activeConversationID }) {
+                    transcriptionHistory.removeConversation(existing)
+                }
+                transcriptionHistory.recordTurn(
+                    conversationID: activeConversationID,
+                    input: text,
+                    output: finalText,
+                    capturedSelection: selection,
+                    modeID: mode.id,
+                    modeName: mode.name,
+                    hadExternalProcessing: hadExternalProcessing
+                )
+
+                overrides.markPipelineCompleted()
+                escCancelManager.isEnabled = false
+                processingTask = nil
+                state = .idle
+                Logger.app.info("Pipeline: complete")
             }
-
-            // Record in history — when accumulating, the previous conversation entry
-            // already exists with partial text. Remove it so recordTurn creates a fresh
-            // single-turn entry with the full accumulated output, not a multi-turn one.
-            let isAccumulated = finalText != processedText
-            if isAccumulated, let existing = transcriptionHistory.conversations.first(where: { $0.id == activeConversationID }) {
-                transcriptionHistory.removeConversation(existing)
-            }
-            transcriptionHistory.recordTurn(
-                conversationID: activeConversationID,
-                input: text,
-                output: finalText,
-                capturedSelection: selection,
-                modeID: mode.id,
-                modeName: mode.name,
-                hadExternalProcessing: hadExternalProcessing
-            )
-
-            overrides.markPipelineCompleted()
-
-            escCancelManager.isEnabled = false
-            processingTask = nil
-            state = .idle
-            Logger.app.info("Pipeline: complete")
         } catch is CancellationError {
             // Task was cancelled via Esc — cancelRecording() already cleaned up state
             processingTask = nil

@@ -305,8 +305,11 @@ final class OutputPanelPanel {
     // MARK: - Minimize / Expand
 
     /// Minimizes the panel to a pill. Optionally sets the pill phase.
+    /// When processing is active, the phase is forced to `.processing`
+    /// so the pill always shows animated dots during in-flight work.
     func minimize(phase: OutputPanelViewModel.OutputPillPhase = .idle) {
-        viewModel?.pillPhase = phase
+        let effectivePhase = (phase == .idle && viewModel?.isProcessing == true) ? .processing : phase
+        viewModel?.pillPhase = effectivePhase
         guard viewModel?.isMinimized != true else { return }
         viewModel?.isMinimized = true
         resizePanelToMinimized()
@@ -477,12 +480,45 @@ final class OutputPanelPanel {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
-        viewModel.conversationTurns[lastIndex] = ConversationTurn(input: lastTurn.input, output: outputText)
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText)
         currentText = outputText
         viewModel.isProcessing = false
         currentTurns = viewModel.conversationTurns
         viewModel.scrollTrigger += 1
         expand()
+    }
+
+    /// Updates the last turn's output text in-place during streaming.
+    /// Preserves the turn ID so SwiftUI updates without flicker.
+    /// Does NOT change `isProcessing` or expand/minimize state.
+    func updateStreamingOutput(_ text: String) {
+        guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
+        let lastIndex = viewModel.conversationTurns.count - 1
+        let lastTurn = viewModel.conversationTurns[lastIndex]
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: text, capturedSelection: lastTurn.capturedSelection)
+        currentText = text
+        currentTurns = viewModel.conversationTurns
+        viewModel.scrollTrigger += 1
+    }
+
+    /// Finalizes a streaming session: stops the processing indicator,
+    /// updates the turn with final text, and resizes the panel to fit.
+    func finishStreaming(outputText: String) {
+        guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
+        let lastIndex = viewModel.conversationTurns.count - 1
+        let lastTurn = viewModel.conversationTurns[lastIndex]
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText, capturedSelection: lastTurn.capturedSelection)
+        currentText = outputText
+        viewModel.isProcessing = false
+        currentTurns = viewModel.conversationTurns
+        viewModel.scrollTrigger += 1
+        resizePanel()
+    }
+
+    /// Marks the panel as processing without appending a turn.
+    /// Used when the panel was just created with empty output text for streaming.
+    func setProcessing(_ processing: Bool) {
+        viewModel?.isProcessing = processing
     }
 
     func showProcessingError(_ message: String) {
