@@ -63,11 +63,15 @@ final class AppDependencies {
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
+        let pttClipboardMonitor = ClipboardMonitor()
+        let pttEscCancelManager = GlobalHotkeyManager()
         self.pushToTypeCoordinator = PushToTypeCoordinator(
             settings: settings,
             recordingIndicator: recordingIndicator,
             outputPanel: outputPanel,
             selectionCapturer: selectionCapturer,
+            clipboardMonitor: pttClipboardMonitor,
+            escCancelManager: pttEscCancelManager,
             transcriptionHistory: history,
             overrides: overrides
         )
@@ -78,9 +82,10 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator
         )
 
-        // Dismiss mode switcher when recording or push-to-type starts
+        // Dismiss mode switcher and push-to-type when recording starts
         coordinator.onWillStartRecording = { [weak self] in
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
+            self?.pushToTypeCoordinator.dismissIfActive()
         }
         pushToTypeCoordinator.onWillStartInput = { [weak self] in
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()

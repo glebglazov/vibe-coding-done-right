@@ -11,6 +11,8 @@ final class PushToTypeCoordinator {
     private let recordingIndicator: RecordingIndicatorPanel
     private let outputPanel: OutputPanelPanel
     private let selectionCapturer: SelectionCapturer
+    private let clipboardMonitor: ClipboardMonitor
+    private let escCancelManager: GlobalHotkeyManager
     private let transcriptionHistory: TranscriptionHistory
     private let overrides: ConversationOverrides
 
@@ -18,12 +20,17 @@ final class PushToTypeCoordinator {
     /// state has been captured from the output panel. Cleared on completion/error/cancel.
     var session: PipelineSession?
 
+    /// The initial AX capture from when the session was opened. Set once per session.
+    private var originalCapturedSelection: String?
+    /// All Cmd+C captures accumulated across collapse/expand cycles.
+    private var accumulatedCaptures: [String] = []
+
     /// Called when the push-to-type overlay is about to show.
     /// Used to dismiss the mode switcher overlay.
     var onWillStartInput: (() -> Void)?
 
     /// Whether the push-to-type panel is visible and can host a contextual mode switcher
-    var isModeSwitcherHostVisible: Bool { panel.isVisible }
+    var isModeSwitcherHostVisible: Bool { panel.isVisible && !panel.isMinimized }
 
     /// Whether a contextual mode switcher is currently showing inside the push-to-type panel
     var isModeSwitcherVisible: Bool { panel.isModeSwitcherVisible }
@@ -46,12 +53,15 @@ final class PushToTypeCoordinator {
     private static let errorIndicatorDuration: Duration = .seconds(10)
     /// Gap between the bottom of the output panel and the top of the push-to-type overlay
     private static let panelGap: CGFloat = 8
+    private static let escapeKeyCode: CGKeyCode = 53
 
     init(
         settings: AppSettings,
         recordingIndicator: RecordingIndicatorPanel,
         outputPanel: OutputPanelPanel,
         selectionCapturer: SelectionCapturer,
+        clipboardMonitor: ClipboardMonitor,
+        escCancelManager: GlobalHotkeyManager,
         transcriptionHistory: TranscriptionHistory,
         overrides: ConversationOverrides
     ) {
@@ -59,6 +69,8 @@ final class PushToTypeCoordinator {
         self.recordingIndicator = recordingIndicator
         self.outputPanel = outputPanel
         self.selectionCapturer = selectionCapturer
+        self.clipboardMonitor = clipboardMonitor
+        self.escCancelManager = escCancelManager
         self.transcriptionHistory = transcriptionHistory
         self.overrides = overrides
     }
@@ -81,21 +93,36 @@ final class PushToTypeCoordinator {
         let keyCode = CGKeyCode(binding.keyCode)
         let modifiers = CGEventFlags(rawValue: binding.modifiers)
         _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
+
+        setupEscCancelForCollapsed()
     }
 
     func updateHotkey() {
         setupHotkey()
     }
 
+    /// Registers the global Escape tap for dismissing the panel while collapsed.
+    /// Starts disabled — enabled only when the panel collapses.
+    private func setupEscCancelForCollapsed() {
+        escCancelManager.isEnabled = false
+        escCancelManager.onKeyDown = { [weak self] in
+            self?.dismissOverlay()
+        }
+        escCancelManager.onKeyUp = nil
+        _ = escCancelManager.register(keyCode: Self.escapeKeyCode, modifiers: [])
+    }
+
     // MARK: - Overlay Lifecycle
 
     private func toggleOverlay() async {
-        if panel.isVisible {
-            panel.hide()
-            session = nil
-            outputPanel.unlockFollowUp()
-            Logger.app.info("Push-to-type: overlay dismissed via hotkey")
+        if panel.isVisible && !panel.isMinimized {
+            // Expanded → collapse (preserve session)
+            collapseOverlay()
+        } else if panel.isVisible && panel.isMinimized {
+            // Collapsed → expand (restore session)
+            await expandFromCollapsed()
         } else {
+            // Hidden → show
             onWillStartInput?()
 
             // If the output panel is visible, this is an implicit follow-up.
@@ -117,13 +144,12 @@ final class PushToTypeCoordinator {
     }
 
     private func showOverlay() async {
-        // Capture context from the frontmost app before showing the overlay
+        // Remember the frontmost app for focus restoration, but show the panel
+        // immediately — don't block on AX selection capture (it can be slow or
+        // fail for apps like Alacritty). The user can gather context later via
+        // collapse → Cmd+C → expand.
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         session?.previousActiveApp = frontmostApp
-        session?.capturedSelection = await selectionCapturer.capture(
-            bundleIdentifier: frontmostApp?.bundleIdentifier,
-            pid: frontmostApp?.processIdentifier
-        )
 
         // When the output panel is visible, position below it and skip duplicate
         // conversation turns (the output panel already shows them).
@@ -133,22 +159,113 @@ final class PushToTypeCoordinator {
             : 0
         let overlayTurns = isFollowUp ? [] : (session?.conversationTurns ?? [])
 
+        panel.onFocusLost = { [weak self] in
+            self?.collapseOverlay()
+        }
+        panel.onPillClicked = { [weak self] in
+            Task { @MainActor in
+                await self?.expandFromCollapsed()
+            }
+        }
+
         panel.show(
             settings: settings,
             conversationTurns: overlayTurns,
-            capturedSelection: session?.capturedSelection,
+            capturedSelection: nil,
             topOffset: topOffset,
             onSubmit: { [weak self] text in
+                // Clean up collapse state without nilling session — submitText needs it
+                Task { await self?.clipboardMonitor.stop() }
+                self?.escCancelManager.isEnabled = false
+                self?.panel.onFocusLost = nil
+                self?.panel.onPillClicked = nil
+                self?.originalCapturedSelection = nil
+                self?.accumulatedCaptures = []
                 self?.submitText(text)
             },
             onDismiss: { [weak self] in
-                self?.session = nil
-                self?.outputPanel.unlockFollowUp()
-                Logger.app.info("Push-to-type: overlay dismissed")
+                self?.dismissOverlay()
             }
         )
         panel.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
+
+        // Wire destination hotkeys: submit text directly to a specific destination
+        panel.setDestinationSubmitHandler { [weak self] text, destinationID in
+            guard let self else { return }
+            Task { await self.clipboardMonitor.stop() }
+            self.escCancelManager.isEnabled = false
+            self.panel.onFocusLost = nil
+            self.panel.onPillClicked = nil
+            self.originalCapturedSelection = nil
+            self.accumulatedCaptures = []
+            self.overrides.destinationOverride = destinationID
+            self.submitText(text)
+        }
+
         Logger.app.info("Push-to-type: overlay shown")
+
+        // Capture selection in the background — update panel and session if it succeeds
+        let bundleID = frontmostApp?.bundleIdentifier
+        let pid = frontmostApp?.processIdentifier
+        let captured = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
+        if let captured {
+            session?.capturedSelection = captured
+            originalCapturedSelection = captured
+            panel.updateCapturedSelection(captured)
+        }
+    }
+
+    // MARK: - Collapse / Expand
+
+    private func collapseOverlay() {
+        panel.minimize()
+        // Start clipboard monitoring so Cmd+C captures are gathered while collapsed
+        Task {
+            await clipboardMonitor.start { [weak self] _ in
+                self?.panel.signalClipboardCapture()
+            }
+        }
+        escCancelManager.isEnabled = true
+        Logger.app.info("Push-to-type: collapsed to pill")
+    }
+
+    private func expandFromCollapsed() async {
+        // Stop clipboard monitor and gather new captures
+        let newCaptures = await clipboardMonitor.stop()
+        accumulatedCaptures.append(contentsOf: newCaptures)
+
+        // Merge all captures (original AX capture + all accumulated Cmd+C captures)
+        let merged = RecordingCoordinator.mergeCaptures(
+            initial: originalCapturedSelection,
+            midRecording: accumulatedCaptures
+        )
+        panel.updateCapturedSelection(merged)
+        // Also update session so submitText gets the merged selection
+        session?.capturedSelection = merged
+        panel.expand()
+        escCancelManager.isEnabled = false
+        Logger.app.info("Push-to-type: expanded from pill with \(self.accumulatedCaptures.count) clipboard captures")
+    }
+
+    /// Full teardown — destroys the session, stops monitoring, hides panel.
+    func dismissOverlay() {
+        Task { await clipboardMonitor.stop() }
+        escCancelManager.isEnabled = false
+        panel.onFocusLost = nil
+        panel.onPillClicked = nil
+        panel.hide()
+        session = nil
+        originalCapturedSelection = nil
+        accumulatedCaptures = []
+        outputPanel.unlockFollowUp()
+        Logger.app.info("Push-to-type: overlay dismissed")
+    }
+
+    /// Dismiss the PTT panel if it's active (visible in any state).
+    /// Called when push-to-talk recording starts to avoid conflicts.
+    func dismissIfActive() {
+        guard panel.isVisible else { return }
+        dismissOverlay()
     }
 
     // MARK: - Text Submission Pipeline

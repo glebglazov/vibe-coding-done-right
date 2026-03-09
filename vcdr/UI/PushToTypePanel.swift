@@ -8,6 +8,14 @@ final class PushToTypePanel {
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
     private var becameKeyObserver: NSObjectProtocol?
+    private var resignKeyObserver: NSObjectProtocol?
+
+    /// Called when the panel loses focus (click outside, app switch).
+    /// The coordinator decides whether to collapse or dismiss.
+    var onFocusLost: (() -> Void)?
+
+    /// Called when the minimized pill is clicked or the panel regains key status while minimized.
+    var onPillClicked: (() -> Void)?
 
     // MARK: - Constants
 
@@ -15,6 +23,10 @@ final class PushToTypePanel {
     private static let panelBaseHeight: CGFloat = 140
     private static let panelMaxHeight: CGFloat = 600
     private static let panelOffsetBelowMenuBar: CGFloat = 8
+    private static let minimizedPanelWidth: CGFloat = 200
+    private static let minimizedPanelHeight: CGFloat = 40
+    /// Delay to let resize animation finish and SwiftUI lay out the TextEditor
+    private static let expandFocusDelay: Duration = .milliseconds(200)
     /// Approximate height per line of monospaced body text
     private static let lineHeight: CGFloat = 20
     /// Height of a "You:" or "Result:" label line
@@ -99,21 +111,42 @@ final class PushToTypePanel {
             return event
         }
 
-        // Re-focus the text view when this panel regains key status (e.g. after
-        // the mode switcher panel closes and key window falls back to this panel).
-        // Don't reposition cursor on re-focus — only on initial show.
+        // When the panel regains key status: if minimized, notify coordinator
+        // to expand; if expanded, re-focus the text view (e.g. after mode switcher closes).
         becameKeyObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: panel,
             queue: .main
-        ) { [weak hostingView, weak panel] _ in
+        ) { [weak self, weak hostingView, weak panel] _ in
+            guard let self else { return }
+            if self.viewModel?.isMinimized == true {
+                self.onPillClicked?()
+                return
+            }
             guard let hostingView, let panel else { return }
             Self.focusFirstTextView(in: hostingView, panel: panel)
         }
 
-        // Dismiss if the user clicks outside the panel
+        // Auto-collapse when the panel loses key window status.
+        // Skip if the mode switcher is open (it takes key from us) or already minimized.
+        resignKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            guard self.viewModel?.modeSwitcherViewModel == nil else { return }
+            guard self.viewModel?.isMinimized != true else { return }
+            self.onFocusLost?()
+        }
+
+        // Collapse if the user clicks outside the panel.
+        // Skip if mode switcher is open or already minimized.
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.hide()
+            guard let self else { return }
+            guard self.viewModel?.modeSwitcherViewModel == nil else { return }
+            guard self.viewModel?.isMinimized != true else { return }
+            self.onFocusLost?()
         }
     }
 
@@ -130,12 +163,80 @@ final class PushToTypePanel {
             NotificationCenter.default.removeObserver(observer)
             becameKeyObserver = nil
         }
+        if let observer = resignKeyObserver {
+            NotificationCenter.default.removeObserver(observer)
+            resignKeyObserver = nil
+        }
         panel?.close()
         panel = nil
         viewModel = nil
     }
 
     var isVisible: Bool { panel != nil }
+
+    var isMinimized: Bool { viewModel?.isMinimized ?? false }
+
+    var currentText: String { viewModel?.text ?? "" }
+
+    // MARK: - Minimize / Expand
+
+    func minimize() {
+        guard viewModel?.isMinimized != true else { return }
+        viewModel?.isMinimized = true
+        resizePanelToMinimized()
+        panel?.resignKey()
+    }
+
+    func expand() {
+        guard viewModel?.isMinimized == true else { return }
+        viewModel?.isMinimized = false
+        resizePanelToExpanded()
+        panel?.makeKey()
+        // Delay focus to let resize animation finish and SwiftUI
+        // lay out the TextEditor in the expanded view hierarchy.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.expandFocusDelay)
+            guard let self, let contentView = self.panel?.contentView, let panel = self.panel else { return }
+            Self.focusFirstTextView(in: contentView, panel: panel)
+        }
+    }
+
+    func updateCapturedSelection(_ selection: String?) {
+        viewModel?.capturedSelection = selection
+    }
+
+    func signalClipboardCapture() {
+        viewModel?.clipboardCaptureCount += 1
+    }
+
+    func setDestinationSubmitHandler(_ handler: @escaping (String, UUID) -> Void) {
+        viewModel?.onDestinationSubmit = handler
+    }
+
+    private func resizePanelToMinimized() {
+        guard let panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let screenFrame = screen.frame
+        let visibleFrame = screen.visibleFrame
+        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+        let x = screenFrame.midX - Self.minimizedPanelWidth / 2
+        let y = screenFrame.maxY - menuBarHeight - Self.minimizedPanelHeight - Self.panelOffsetBelowMenuBar
+        let newFrame = NSRect(x: x, y: y, width: Self.minimizedPanelWidth, height: Self.minimizedPanelHeight)
+        panel.setFrame(newFrame, display: true, animate: true)
+    }
+
+    private func resizePanelToExpanded() {
+        guard let panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let turns = viewModel?.conversationTurns ?? []
+        let selection = viewModel?.capturedSelection
+        let newHeight = Self.calculateHeight(for: turns, capturedSelection: selection)
+        let screenFrame = screen.frame
+        let visibleFrame = screen.visibleFrame
+        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
+        let x = screenFrame.midX - Self.panelWidth / 2
+        let y = screenFrame.maxY - menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar
+        let newFrame = NSRect(x: x, y: y, width: Self.panelWidth, height: newHeight)
+        panel.setFrame(newFrame, display: true, animate: true)
+    }
 
     func updateOutputDestinationOverride(_ id: UUID?) {
         viewModel?.outputDestinationOverrideID = id
@@ -242,14 +343,18 @@ final class PushToTypePanel {
 @Observable
 final class PushToTypeViewModel {
     var text: String = ""
+    var isMinimized: Bool = false
+    var clipboardCaptureCount: Int = 0
     var outputDestinationOverrideID: UUID?
     var parameterLabels: String?
     var modeSwitcherViewModel: ModeSwitcherViewModel?
     let conversationTurns: [ConversationTurn]
-    let capturedSelection: String?
+    var capturedSelection: String?
     let settings: AppSettings
     let onSubmit: (String) -> Void
     let onDismiss: () -> Void
+    /// Called when a destination hotkey is pressed — submits text to that destination
+    var onDestinationSubmit: ((String, UUID) -> Void)?
 
     var modeLabel: String {
         let destinationID = outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
@@ -273,6 +378,14 @@ final class PushToTypeViewModel {
             return msVM.handleKeyEvent(event)
         }
 
+        // Check destination hotkeys (Ctrl+P for paste, Ctrl+C for copy, etc.)
+        if let matchedDestination = matchDestinationHotkey(event) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return true }
+            onDestinationSubmit?(trimmed, matchedDestination)
+            return true
+        }
+
         switch event.keyCode {
         case 36: // Return
             // Shift+Return inserts newline (pass through to text field)
@@ -290,6 +403,21 @@ final class PushToTypeViewModel {
         default:
             return false
         }
+    }
+
+    /// Checks if the event matches any output destination's activation hotkey.
+    /// Uses superset modifier matching — extra modifiers are allowed.
+    private func matchDestinationHotkey(_ event: NSEvent) -> UUID? {
+        let eventFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
+        for destination in settings.outputDestinations {
+            let hotkey = destination.activationHotkey
+            guard hotkey.isAssigned else { continue }
+            let requiredFlags = UInt(hotkey.modifiers)
+            if event.keyCode == hotkey.keyCode && (eventFlags & requiredFlags) == requiredFlags {
+                return destination.id
+            }
+        }
+        return nil
     }
 }
 
@@ -316,7 +444,52 @@ private struct PushToTypeView: View {
     private static let blockquoteBorderOpacity: Double = 0.4
     private static let blockquoteLeadingPadding: CGFloat = 4
 
+    // MARK: - Constants (Pill)
+
+    private static let pillHeight: CGFloat = 32
+    private static let pillHPadding: CGFloat = 12
+    private static let pillIconSize: CGFloat = 14
+    private static let captureBadgeSize: CGFloat = 12
+    private static let captureCountFontSize: CGFloat = 9
+
     var body: some View {
+        if viewModel.isMinimized {
+            minimizedPillView
+        } else {
+            expandedView
+        }
+    }
+
+    private var minimizedPillView: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "text.cursor")
+                .font(.system(size: Self.pillIconSize))
+                .foregroundStyle(.secondary)
+
+            if viewModel.clipboardCaptureCount > 0 {
+                HStack(spacing: 1) {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: Self.captureBadgeSize, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    if viewModel.clipboardCaptureCount > 1 {
+                        Text("×\(viewModel.clipboardCaptureCount)")
+                            .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, Self.pillHPadding)
+        .frame(height: Self.pillHeight)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
+        .shadow(radius: 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.clipboardCaptureCount)
+    }
+
+    private var expandedView: some View {
         VStack(spacing: 0) {
             if let msVM = viewModel.modeSwitcherViewModel {
                 ModeSwitcherView(viewModel: msVM)
