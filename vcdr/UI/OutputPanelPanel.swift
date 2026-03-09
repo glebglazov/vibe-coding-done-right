@@ -39,7 +39,8 @@ final class OutputPanelPanel {
 
     private static let panelWidth: CGFloat = 480
     private static let panelMinHeight: CGFloat = 96
-    private static let panelMaxHeight: CGFloat = 600
+    /// Maximum panel height as a fraction of the visible screen height
+    private static let panelMaxHeightFraction: CGFloat = 0.85
     private static let panelOffsetBelowMenuBar: CGFloat = 8
     /// Approximate height per line of monospaced body text
     private static let lineHeight: CGFloat = 20
@@ -427,6 +428,12 @@ final class OutputPanelPanel {
 
     // MARK: - Height Calculation
 
+    private static func maxPanelHeight() -> CGFloat {
+        let screen = NSScreen.main ?? NSScreen.screens.first
+        let visibleHeight = screen?.visibleFrame.height ?? 800
+        return visibleHeight * panelMaxHeightFraction
+    }
+
     private static func calculateHeight(for turns: [ConversationTurn], isReadOnly: Bool = false) -> CGFloat {
         var totalLines: CGFloat = 0
         // Show labels when multiple turns, or (for non-read-only modes) input was transformed
@@ -461,7 +468,7 @@ final class OutputPanelPanel {
         let estimatedTextHeight = totalLines * lineHeight
         let inputHeight: CGFloat = isReadOnly ? 0 : textInputHeight
         let totalHeight = estimatedTextHeight + contentPadding + hintBarHeight + inputHeight
-        return min(max(totalHeight, panelMinHeight), panelMaxHeight)
+        return min(max(totalHeight, panelMinHeight), maxPanelHeight())
     }
 
     // MARK: - In-Place Processing
