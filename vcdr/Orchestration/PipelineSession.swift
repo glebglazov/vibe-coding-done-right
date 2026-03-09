@@ -12,4 +12,6 @@ struct PipelineSession {
     var conversationTurns: [ConversationTurn] = []
     var conversationID: UUID?
     var isFollowUpFromVisibleOutputPanel: Bool = false
+    /// Texts captured via clipboard monitoring during recording (Cmd+C in other apps).
+    var midRecordingCaptures: [String] = []
 }

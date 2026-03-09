@@ -30,6 +30,7 @@ final class RecordingCoordinator {
     private let recordingIndicator: RecordingIndicatorPanel
     private let outputPanel: OutputPanelPanel
     private let selectionCapturer: SelectionCapturer
+    private let clipboardMonitor: ClipboardMonitor
     private let transcriptionHistory: TranscriptionHistory
     let overrides: ConversationOverrides
 
@@ -65,6 +66,7 @@ final class RecordingCoordinator {
         recordingIndicator: RecordingIndicatorPanel,
         outputPanel: OutputPanelPanel,
         selectionCapturer: SelectionCapturer,
+        clipboardMonitor: ClipboardMonitor,
         transcriptionHistory: TranscriptionHistory,
         overrides: ConversationOverrides
     ) {
@@ -76,6 +78,7 @@ final class RecordingCoordinator {
         self.recordingIndicator = recordingIndicator
         self.outputPanel = outputPanel
         self.selectionCapturer = selectionCapturer
+        self.clipboardMonitor = clipboardMonitor
         self.transcriptionHistory = transcriptionHistory
         self.overrides = overrides
     }
@@ -226,6 +229,15 @@ final class RecordingCoordinator {
             destinationHotkeyManager.isEnabled = true
             updateEscCancel()
 
+            // Start monitoring clipboard for mid-recording captures (user Cmd+C).
+            // The monitor waits 500ms before watching so SelectionCapturer's
+            // clipboard manipulation doesn't trigger false positives.
+            Task {
+                await clipboardMonitor.start { [weak self] _ in
+                    self?.recordingIndicator.signalClipboardCapture()
+                }
+            }
+
             // If the hotkey was released while we were awaiting startRecording(),
             // the synchronous onKeyUp callback may have already called
             // stopRecordingAndTranscribe() — but if state was still .idle at that point,
@@ -294,7 +306,11 @@ final class RecordingCoordinator {
             await self.mediaPlaybackController.resumeIfNeeded()
         }
 
-        processingTask = Task { @MainActor in await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration) }
+        processingTask = Task { @MainActor in
+            let midCaptures = await self.clipboardMonitor.stop()
+            self.session?.midRecordingCaptures = midCaptures
+            await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration)
+        }
     }
 
     // MARK: - Transcription + Action (async)
@@ -321,7 +337,10 @@ final class RecordingCoordinator {
                 let capturedCount = pipelineSession.capturedSelection.map { "\($0.count) chars" } ?? "nil"
                 Logger.recording.info("Captured selection: \(capturedCount)")
             }
-            let selection = pipelineSession.capturedSelection
+            let selection = Self.mergeCaptures(
+                initial: pipelineSession.capturedSelection,
+                midRecording: pipelineSession.midRecordingCaptures
+            )
             let context = pipelineSession.followUpContext
             let currentTurns = pipelineSession.conversationTurns
             // Generate a new conversation ID for fresh recordings,
@@ -641,6 +660,9 @@ final class RecordingCoordinator {
 
         guard state == .recording || state == .transcribing || state == .executing else { return }
 
+        // Stop clipboard monitoring (fire-and-forget since we're discarding captures)
+        Task { await clipboardMonitor.stop() }
+
         let wasProcessing = state == .transcribing || state == .executing
         state = .idle
 
@@ -681,6 +703,26 @@ final class RecordingCoordinator {
     /// CoreAudio needs time to fully release the recording session so the
     /// output device is not contending with an active input — without this,
     /// the first 1-2 seconds of resumed music can sound degraded.
+    /// Merges the initial AX selection capture with any mid-recording clipboard captures
+    /// into a single formatted string for the pipeline's `capturedSelection` field.
+    /// - 0 captures total → nil
+    /// - 1 capture total → the text as-is (no numbering)
+    /// - 2+ captures total → numbered `[1] first\n\n[2] second\n\n[3] third`
+    static func mergeCaptures(initial: String?, midRecording: [String]) -> String? {
+        var all: [String] = []
+        if let initial { all.append(initial) }
+        all.append(contentsOf: midRecording)
+
+        switch all.count {
+        case 0: return nil
+        case 1: return all[0]
+        default:
+            return all.enumerated()
+                .map { "[\($0.offset + 1)] \($0.element)" }
+                .joined(separator: "\n\n")
+        }
+    }
+
     private static let audioSettleDelayBeforeResume: Duration = .milliseconds(300)
     private static let successIndicatorDuration: Duration = .seconds(2)
     private static let errorIndicatorDuration: Duration = .seconds(10)

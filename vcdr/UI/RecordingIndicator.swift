@@ -24,6 +24,15 @@ final class IndicatorPhaseState {
     var parameterLabels: String?
 }
 
+// MARK: - Indicator Capture State
+
+/// Tracks mid-recording clipboard captures for visual feedback (badge flash).
+@Observable
+@MainActor
+final class IndicatorCaptureState {
+    var captureCount: Int = 0
+}
+
 // MARK: - Indicator Mode Switcher State
 
 /// Separate observable for mode switcher state, to avoid exceeding IndicatorPhaseState's 5-property limit.
@@ -51,6 +60,7 @@ final class RecordingIndicatorPanel {
 
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
+    private let captureState = IndicatorCaptureState()
     private let modeSwitcherState = IndicatorModeSwitcherState()
     private let settings: AppSettings
     private let audioRecorder: AudioRecorder
@@ -79,6 +89,7 @@ final class RecordingIndicatorPanel {
 
         let hostingView = NSHostingView(rootView: RecordingIndicatorView(
             phaseState: phaseState,
+            captureState: captureState,
             modeSwitcherState: modeSwitcherState,
             settings: settings,
             audioRecorder: audioRecorder
@@ -127,6 +138,11 @@ final class RecordingIndicatorPanel {
 
     func updateParameterLabels(_ labels: String?) {
         phaseState.parameterLabels = labels
+    }
+
+    /// Triggers a brief clipboard icon flash on the recording indicator
+    func signalClipboardCapture() {
+        captureState.captureCount += 1
     }
 
     func hide() {
@@ -345,17 +361,29 @@ private struct RecordingIndicatorView: View {
     private static let errorPillVPadding: CGFloat = 3
     private static let errorPillCornerRadius: CGFloat = 6
     private static let errorPillFontSize: CGFloat = 11
+    private static let captureBadgeDisplayDuration: Duration = .milliseconds(600)
+    private static let captureBadgeSize: CGFloat = 12
 
     let phaseState: IndicatorPhaseState
+    let captureState: IndicatorCaptureState
     let modeSwitcherState: IndicatorModeSwitcherState
     let settings: AppSettings
     let audioRecorder: AudioRecorder
+
+    @State private var showCaptureBadge = false
 
     var body: some View {
         VStack(spacing: Self.errorPillSpacing) {
             HStack(spacing: Self.pillSpacing) {
                 switch phaseState.phase {
                 case .recording:
+                    if showCaptureBadge {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: Self.captureBadgeSize, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .transition(.opacity)
+                    }
+
                     AudioWaveformView(audioLevels: audioRecorder.audioLevels)
                         .transition(.opacity)
 
@@ -416,6 +444,14 @@ private struct RecordingIndicatorView: View {
         .modifier(ShakeEffect(shakeCount: phaseState.rejectCount))
         .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: phaseState.phase)
         .animation(.default, value: phaseState.rejectCount)
+        .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: showCaptureBadge)
+        .onChange(of: captureState.captureCount) {
+            showCaptureBadge = true
+            Task {
+                try? await Task.sleep(for: Self.captureBadgeDisplayDuration)
+                showCaptureBadge = false
+            }
+        }
     }
 }
 

@@ -45,6 +45,7 @@ final class AppDependencies {
         let outputPanel = OutputPanelPanel(audioRecorder: audioRecorder)
         self.outputPanel = outputPanel
         let selectionCapturer = SelectionCapturer()
+        let clipboardMonitor = ClipboardMonitor()
         let overrides = ConversationOverrides()
         self.coordinator = RecordingCoordinator(
             settings: settings,
@@ -55,6 +56,7 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator,
             outputPanel: outputPanel,
             selectionCapturer: selectionCapturer,
+            clipboardMonitor: clipboardMonitor,
             transcriptionHistory: history,
             overrides: overrides
         )
