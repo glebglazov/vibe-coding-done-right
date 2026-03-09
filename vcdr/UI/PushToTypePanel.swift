@@ -380,9 +380,9 @@ final class PushToTypeViewModel {
 
         // Check destination hotkeys (Ctrl+P for paste, Ctrl+C for copy, etc.)
         if let matchedDestination = matchDestinationHotkey(event) {
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return true }
-            onDestinationSubmit?(trimmed, matchedDestination)
+            let effectiveText = resolveSubmissionText()
+            guard !effectiveText.isEmpty else { return true }
+            onDestinationSubmit?(effectiveText, matchedDestination)
             return true
         }
 
@@ -393,9 +393,9 @@ final class PushToTypeViewModel {
                 return false
             }
             // Plain Return submits
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return true }
-            onSubmit(trimmed)
+            let effectiveText = resolveSubmissionText()
+            guard !effectiveText.isEmpty else { return true }
+            onSubmit(effectiveText)
             return true
         case 53: // Escape
             onDismiss()
@@ -403,6 +403,14 @@ final class PushToTypeViewModel {
         default:
             return false
         }
+    }
+
+    /// Typed text takes priority; falls back to captured selection so the user
+    /// can submit clipboard-gathered content without typing anything.
+    private func resolveSubmissionText() -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return capturedSelection?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     /// Checks if the event matches any output destination's activation hotkey.

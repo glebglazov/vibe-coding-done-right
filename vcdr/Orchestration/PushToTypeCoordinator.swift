@@ -200,6 +200,7 @@ final class PushToTypeCoordinator {
             self.accumulatedCaptures = []
             self.overrides.destinationOverride = destinationID
             self.submitText(text)
+            self.panel.hide()
         }
 
         Logger.app.info("Push-to-type: overlay shown")
