@@ -14,7 +14,6 @@ final class OutputPanelViewModel {
     var conversationTurns: [ConversationTurn]
     let outputDestinations: [OutputDestination]
     let isReadOnly: Bool
-    let onCopy: () -> Void
     let onFireDestination: (OutputDestination) -> Void
     let onDismiss: () -> Void
     let onSubmitText: (String) -> Void
@@ -49,7 +48,6 @@ final class OutputPanelViewModel {
         conversationTurns: [ConversationTurn],
         outputDestinations: [OutputDestination],
         isReadOnly: Bool = false,
-        onCopy: @escaping () -> Void,
         onFireDestination: @escaping (OutputDestination) -> Void,
         onDismiss: @escaping () -> Void,
         onSubmitText: @escaping (String) -> Void,
@@ -59,7 +57,6 @@ final class OutputPanelViewModel {
         self.conversationTurns = conversationTurns
         self.outputDestinations = outputDestinations
         self.isReadOnly = isReadOnly
-        self.onCopy = onCopy
         self.onFireDestination = onFireDestination
         self.onDismiss = onDismiss
         self.onSubmitText = onSubmitText
@@ -69,9 +66,6 @@ final class OutputPanelViewModel {
 
     /// Returns true if the event was handled (consumed)
     func handleKeyEvent(_ event: NSEvent) -> Bool {
-        let chars = event.charactersIgnoringModifiers ?? ""
-        let hasCmd = event.modifierFlags.contains(.command)
-
         switch event.keyCode {
         case 36: // Return
             guard !isReadOnly else { return true }
@@ -86,23 +80,29 @@ final class OutputPanelViewModel {
             onDismiss()
             return true
         default:
-            guard hasCmd else { return false }
+            let eventKeyCode = event.keyCode
+            let eventFlags = Self.cgEventFlags(from: event.modifierFlags)
 
-            if chars == "c" {
-                onCopy()
-                onDismiss()
-                return true
-            }
-            // Check destination activation keys (Cmd + key) — always available
-            if let char = chars.first {
-                let key = String(char)
-                if let destination = outputDestinations.first(where: { $0.activationKey == key }) {
+            // Exact-match destination hotkeys (no PTT modifiers in the output panel)
+            for destination in outputDestinations where destination.activationHotkey.isAssigned {
+                let destFlags = CGEventFlags(rawValue: destination.activationHotkey.modifiers)
+                if eventKeyCode == destination.activationHotkey.keyCode && eventFlags == destFlags {
                     onFireDestination(destination)
                     return true
                 }
             }
             return false
         }
+    }
+
+    /// Converts NSEvent modifier flags to CGEventFlags for hotkey comparison.
+    static func cgEventFlags(from flags: NSEvent.ModifierFlags) -> CGEventFlags {
+        var result: UInt64 = 0
+        if flags.contains(.command) { result |= CGEventFlags.maskCommand.rawValue }
+        if flags.contains(.option) { result |= CGEventFlags.maskAlternate.rawValue }
+        if flags.contains(.shift) { result |= CGEventFlags.maskShift.rawValue }
+        if flags.contains(.control) { result |= CGEventFlags.maskControl.rawValue }
+        return CGEventFlags(rawValue: result)
     }
 }
 
@@ -230,9 +230,14 @@ struct OutputPanelView: View {
                 Divider()
 
                 HStack(spacing: Self.hintSpacing) {
-                    hintLabel("\u{2318}C", "copy")
-                    ForEach(viewModel.outputDestinations.filter { !$0.activationKey.isEmpty }) { dest in
-                        hintLabel("\u{2318}\(dest.activationKey.uppercased())", dest.name.lowercased())
+                    ForEach(viewModel.outputDestinations.filter { $0.activationHotkey.isAssigned }) { dest in
+                        hintLabel(
+                            GlobalHotkeyManager.shortcutDisplayString(
+                                keyCode: CGKeyCode(dest.activationHotkey.keyCode),
+                                modifiers: CGEventFlags(rawValue: dest.activationHotkey.modifiers)
+                            ),
+                            dest.name.lowercased()
+                        )
                     }
                     Spacer()
                     if !viewModel.isReadOnly {

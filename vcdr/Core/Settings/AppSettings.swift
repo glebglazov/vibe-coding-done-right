@@ -243,6 +243,11 @@ final class AppSettings {
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInOutputPanelID }) {
             outputDestinations.append(OutputDestination.makeDefaultOutputPanel())
         }
+
+        // Ensure built-in Copy destination exists (migration for existing installs)
+        if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
+            outputDestinations.append(OutputDestination.makeDefaultCopy())
+        }
     }
 
     /// Creates template modes for newly available tools and refreshes availability state.

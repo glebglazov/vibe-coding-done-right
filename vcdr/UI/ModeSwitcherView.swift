@@ -171,10 +171,10 @@ final class ModeSwitcherViewModel {
                 confirmMode(modes[number - 1].id)
                 return true
             }
-            // Output destination activation keys — stage as pending override
+            // Output destination activation keys (bare key matching via keyCode-derived character)
             if let char = charsIgnoringModifiers.first {
-                let key = String(char)
-                if let destination = outputDestinations.first(where: { $0.activationKey == key }) {
+                let key = String(char).uppercased()
+                if let destination = outputDestinations.first(where: { $0.activationKeyCharacter.uppercased() == key }) {
                     toggleDestinationOverride(destination.id)
                     return true
                 }
@@ -383,9 +383,10 @@ struct ModeSwitcherView: View {
 
     private func destinationRow(destination: OutputDestination) -> some View {
         let isSelected = viewModel.activeDestinationOverrideID == destination.id
+        let keyChar = destination.activationKeyCharacter
 
         return HStack(spacing: 8) {
-            Text(destination.activationKey.isEmpty ? " " : destination.activationKey)
+            Text(keyChar.isEmpty ? " " : keyChar)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 16)

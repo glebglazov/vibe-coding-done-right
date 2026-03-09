@@ -102,8 +102,11 @@ private struct OutputDestinationRowView: View {
 
             Spacer()
 
-            if !destination.activationKey.isEmpty {
-                Text(destination.activationKey)
+            if destination.activationHotkey.isAssigned {
+                Text(GlobalHotkeyManager.shortcutDisplayString(
+                    keyCode: CGKeyCode(destination.activationHotkey.keyCode),
+                    modifiers: CGEventFlags(rawValue: destination.activationHotkey.modifiers)
+                ))
                     .font(.system(.caption, design: .monospaced))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -131,7 +134,6 @@ struct OutputDestinationDetailView: View {
 
     // MARK: - Constants
     private static let selectAllDelay: Duration = .milliseconds(100)
-    private static let maxActivationKeyLength = 1
 
     var body: some View {
         Form {
@@ -162,19 +164,11 @@ struct OutputDestinationDetailView: View {
                         .help("Displayed in the mode switcher to identify this destination")
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Activation Key")
-                        .foregroundStyle(.secondary)
-                    TextField("Key", text: $destination.activationKey)
-                        .labelsHidden()
-                        .onChange(of: destination.activationKey) { _, newValue in
-                            // Enforce single character limit
-                            if newValue.count > Self.maxActivationKeyLength {
-                                destination.activationKey = String(newValue.prefix(Self.maxActivationKeyLength))
-                            }
-                        }
-                        .help("Used as \u{2318}+key shortcut in the Output Panel and as activation key in the mode switcher")
-                }
+                ShortcutRecorderRow(
+                    label: "Activation Hotkey",
+                    keyCode: $destination.activationHotkey.keyCode,
+                    modifiers: $destination.activationHotkey.modifiers
+                )
 
                 if destination.type == .bashScript {
                     VStack(alignment: .leading, spacing: 4) {

@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import Testing
 @testable import vcdr
 
@@ -18,6 +19,7 @@ struct OutputDestinationTypeTests {
             (OutputDestinationType.paste, "Paste (Cmd+V)"),
             (OutputDestinationType.bashScript, "Bash Script"),
             (OutputDestinationType.outputPanel, "Output Panel"),
+            (OutputDestinationType.copy, "Copy to Clipboard"),
         ]
     )
     func displayName(type: OutputDestinationType, expected: String) {
@@ -42,6 +44,12 @@ struct OutputDestinationTests {
         #expect(dest.isBuiltIn == true)
     }
 
+    @Test("Copy destination is built-in")
+    func copyIsBuiltIn() {
+        let dest = OutputDestination.makeDefaultCopy()
+        #expect(dest.isBuiltIn == true)
+    }
+
     @Test("Bash Script destination is not built-in")
     func bashScriptIsNotBuiltIn() {
         let dest = OutputDestination.makeNewBashScript()
@@ -55,7 +63,8 @@ struct OutputDestinationTests {
         #expect(dest.name == "Paste")
         #expect(dest.type == .paste)
         #expect(dest.bashCommand == "")
-        #expect(dest.activationKey == "p")
+        #expect(dest.activationHotkey.keyCode == 35) // P
+        #expect(dest.activationHotkey.modifiers == UInt64(CGEventFlags.maskControl.rawValue))
     }
 
     @Test("makeDefaultOutputPanel uses well-known ID and correct fields")
@@ -65,7 +74,19 @@ struct OutputDestinationTests {
         #expect(dest.name == "Output Panel")
         #expect(dest.type == .outputPanel)
         #expect(dest.bashCommand == "")
-        #expect(dest.activationKey == "o")
+        #expect(dest.activationHotkey.keyCode == 31) // O
+        #expect(dest.activationHotkey.modifiers == UInt64(CGEventFlags.maskControl.rawValue))
+    }
+
+    @Test("makeDefaultCopy uses well-known ID and correct fields")
+    func defaultCopyFactory() {
+        let dest = OutputDestination.makeDefaultCopy()
+        #expect(dest.id == OutputDestination.builtInCopyID)
+        #expect(dest.name == "Copy")
+        #expect(dest.type == .copy)
+        #expect(dest.bashCommand == "")
+        #expect(dest.activationHotkey.keyCode == 8) // C
+        #expect(dest.activationHotkey.modifiers == UInt64(CGEventFlags.maskControl.rawValue))
     }
 
     @Test("makeNewBashScript creates unique IDs on each call")
@@ -81,7 +102,7 @@ struct OutputDestinationTests {
         #expect(dest.name == "My Script")
         #expect(dest.type == .bashScript)
         #expect(dest.bashCommand == "echo $VCDR_TEXT")
-        #expect(dest.activationKey == "")
+        #expect(dest.activationHotkey == .unassigned)
     }
 
     @Test("makeNewBashScript defaults name to 'New Destination'")
@@ -98,8 +119,41 @@ struct OutputDestinationTests {
         #expect(decoded == original)
     }
 
-    @Test("Well-known Paste and Output Panel IDs are distinct")
+    @Test("Decodes legacy activationKey format with migration to activationHotkey")
+    func legacyActivationKeyMigration() throws {
+        // Simulate legacy JSON with activationKey instead of activationHotkey
+        let legacyJSON = """
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "Paste",
+            "type": "paste",
+            "bashCommand": "",
+            "symbol": "📋",
+            "activationKey": "p"
+        }
+        """
+        let data = legacyJSON.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(OutputDestination.self, from: data)
+        #expect(decoded.activationHotkey.keyCode == 35) // P
+        #expect(decoded.activationHotkey.modifiers == UInt64(CGEventFlags.maskControl.rawValue))
+    }
+
+    @Test("activationKeyCharacter derives from keyCode")
+    func activationKeyCharacterFromKeyCode() {
+        let dest = OutputDestination.makeDefaultPaste()
+        #expect(dest.activationKeyCharacter == "P")
+    }
+
+    @Test("activationKeyCharacter is empty for unassigned hotkey")
+    func activationKeyCharacterUnassigned() {
+        let dest = OutputDestination.makeNewBashScript()
+        #expect(dest.activationKeyCharacter == "")
+    }
+
+    @Test("Well-known Paste, Output Panel, and Copy IDs are distinct")
     func wellKnownIDsDistinct() {
         #expect(OutputDestination.builtInPasteID != OutputDestination.builtInOutputPanelID)
+        #expect(OutputDestination.builtInPasteID != OutputDestination.builtInCopyID)
+        #expect(OutputDestination.builtInOutputPanelID != OutputDestination.builtInCopyID)
     }
 }

@@ -20,6 +20,8 @@ enum OutputActionFactory {
             )
         case .outputPanel:
             return nil
+        case .copy:
+            return CopyAction()
         }
     }
 }

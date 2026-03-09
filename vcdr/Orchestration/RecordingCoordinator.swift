@@ -21,6 +21,11 @@ final class RecordingCoordinator {
     private let hotkeyManager: GlobalHotkeyManager
     private let toggleRecordingHotkeyManager = GlobalHotkeyManager()
     private let escCancelManager = GlobalHotkeyManager()
+    private let destinationHotkeyManager = DestinationHotkeyManager()
+    /// Destination ID set by a destination hotkey during recording.
+    /// Written from the CGEvent tap callback (main run loop) and read
+    /// from processTranscription (@MainActor) — both on the main thread.
+    private var pendingDestinationOverride: UUID?
     private let mediaPlaybackController: MediaPlaybackController
     private let recordingIndicator: RecordingIndicatorPanel
     private let outputPanel: OutputPanelPanel
@@ -218,6 +223,7 @@ final class RecordingCoordinator {
         if started {
             state = .recording
             recordingStartInstant = .now
+            destinationHotkeyManager.isEnabled = true
             updateEscCancel()
 
             // If the hotkey was released while we were awaiting startRecording(),
@@ -242,6 +248,8 @@ final class RecordingCoordinator {
     /// Stops recording synchronously and kicks off transcription in a background Task.
     /// Called from both the UI button and the hotkey-up event.
     private func stopRecordingAndTranscribe() {
+        destinationHotkeyManager.isEnabled = false
+
         guard state == .recording else {
             Task { await mediaPlaybackController.resumeIfNeeded() }
             // Only hide the indicator if we're NOT in a processing state —
@@ -321,6 +329,12 @@ final class RecordingCoordinator {
             let activeConversationID = pipelineSession.conversationID ?? UUID()
             let wasFollowUpFromOutputPanel = pipelineSession.isFollowUpFromVisibleOutputPanel
             let targetAppPID = pipelineSession.previousActiveApp?.processIdentifier
+
+            // Apply destination override from hotkey pressed during recording
+            if let pending = pendingDestinationOverride {
+                overrides.destinationOverride = pending
+                pendingDestinationOverride = nil
+            }
             let destinationID = overrides.resolvedDestinationID(for: settings.activeMode)
             session = nil
 
@@ -583,6 +597,22 @@ final class RecordingCoordinator {
         _ = escCancelManager.register(keyCode: Self.escapeKeyCode, modifiers: [])
     }
 
+    // MARK: - Destination Hotkeys
+
+    func setupDestinationHotkeys() {
+        let bindings = settings.outputDestinations.map { ($0.id, $0.activationHotkey) }
+        destinationHotkeyManager.onDestinationMatched = { [weak self] destinationID in
+            guard let self else { return }
+            self.pendingDestinationOverride = destinationID
+            self.stopRecordingAndTranscribe()
+        }
+        destinationHotkeyManager.register(bindings: bindings)
+    }
+
+    func updateDestinationHotkeys() {
+        setupDestinationHotkeys()
+    }
+
     /// Enables the global Escape tap only when the recording overlay is showing
     /// without the output panel (which handles Escape via its own local monitor).
     private func updateEscCancel() {
@@ -606,6 +636,8 @@ final class RecordingCoordinator {
         // Always disable the global Escape tap first — even if the guard below
         // rejects the cancel (e.g. state is .error), we must stop swallowing Escape.
         escCancelManager.isEnabled = false
+        destinationHotkeyManager.isEnabled = false
+        pendingDestinationOverride = nil
 
         guard state == .recording || state == .transcribing || state == .executing else { return }
 

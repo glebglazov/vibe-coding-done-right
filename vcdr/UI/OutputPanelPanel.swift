@@ -90,10 +90,6 @@ final class OutputPanelPanel {
             conversationTurns: allTurns,
             outputDestinations: filteredDestinations,
             isReadOnly: !canFollowUp,
-            onCopy: { [weak self] in
-                guard let self, let latestText = self.currentText else { return }
-                self.copyToClipboard(latestText)
-            },
             onFireDestination: { [weak self] destination in
                 guard let self, let latestText = self.currentText else { return }
                 self.fireDestination(destination, text: latestText, targetAppPID: targetAppPID, conversationID: self.currentConversationID ?? conversationID)
@@ -141,10 +137,6 @@ final class OutputPanelPanel {
             conversationTurns: turns,
             outputDestinations: filteredDestinations,
             isReadOnly: !canContinue,
-            onCopy: { [weak self] in
-                guard let self, let latestText = self.currentText else { return }
-                self.copyToClipboard(latestText)
-            },
             onFireDestination: { [weak self] destination in
                 guard let self, let latestText = self.currentText else { return }
                 self.fireDestination(
