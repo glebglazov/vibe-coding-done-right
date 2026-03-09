@@ -120,7 +120,10 @@ final class PushToTypeCoordinator {
         // Capture context from the frontmost app before showing the overlay
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         session?.previousActiveApp = frontmostApp
-        session?.capturedSelection = await selectionCapturer.capture(bundleIdentifier: frontmostApp?.bundleIdentifier)
+        session?.capturedSelection = await selectionCapturer.capture(
+            bundleIdentifier: frontmostApp?.bundleIdentifier,
+            pid: frontmostApp?.processIdentifier
+        )
 
         // When the output panel is visible, position below it and skip duplicate
         // conversation turns (the output panel already shows them).

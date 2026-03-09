@@ -193,8 +193,9 @@ final class RecordingCoordinator {
         // want that blocking the recording. The result is awaited in processTranscription.
         let capturer = selectionCapturer
         let bundleID = frontmostApp?.bundleIdentifier
+        let pid = frontmostApp?.processIdentifier
         session?.capturedSelectionTask = Task {
-            await capturer.capture(bundleIdentifier: bundleID)
+            await capturer.capture(bundleIdentifier: bundleID, pid: pid)
         }
 
         // Show indicator immediately for visual feedback — the media pause
