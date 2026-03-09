@@ -26,39 +26,7 @@ final class RecordingCoordinator {
     private let outputPanel: OutputPanelPanel
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
-
-    /// Parameter value overrides for the current conversation.
-    /// Keyed by parameter ID -> selected option value string.
-    /// Set by the mode switcher, consumed by the pipeline, cleared on conversation end.
-    var conversationParameterOverrides: [UUID: String] = [:]
-
-    /// Resolves parameter labels for display (e.g. "Sonnet, English"). Returns nil if no parameters.
-    func resolvedParameterLabels(for mode: Mode) -> String? {
-        let labels = mode.parameters.compactMap { param -> String? in
-            guard !param.options.isEmpty else { return nil }
-            if let override = conversationParameterOverrides[param.id],
-               let option = param.options.first(where: { $0.value == override }) {
-                return option.label
-            }
-            return param.options.first?.label
-        }
-        return labels.isEmpty ? nil : labels.joined(separator: ", ")
-    }
-
-    /// Resolves parameter values for the active mode: overrides take precedence, then defaults.
-    func resolvedParameterValues(for mode: Mode) -> [String: String] {
-        var result: [String: String] = [:]
-        for parameter in mode.parameters {
-            let suffix = parameter.environmentVariableSuffix
-            guard !suffix.isEmpty else { continue }
-            if let override = conversationParameterOverrides[parameter.id] {
-                result[suffix] = override
-            } else {
-                result[suffix] = parameter.options.first?.value ?? ""
-            }
-        }
-        return result
-    }
+    let overrides: ConversationOverrides
 
     /// Called when recording is about to start (push-to-talk down or toggle start).
     /// Used to dismiss the mode switcher overlay.
@@ -76,9 +44,6 @@ final class RecordingCoordinator {
     private var isPreparingToRecord = false
     /// The in-flight processing Task, stored so it can be cancelled via cancelRecording().
     private var processingTask: Task<Void, Never>?
-    /// Whether a pipeline has completed with active parameter overrides.
-    /// Used to clear next-conversation overrides on the next fresh recording.
-    private var hasCompletedPipelineWithOverrides = false
     /// Text accumulated from previous recordings in non-processing output panel sessions.
     /// Prepended to the next transcription result to maintain chronological order.
     private var accumulatedText: String?
@@ -95,7 +60,8 @@ final class RecordingCoordinator {
         recordingIndicator: RecordingIndicatorPanel,
         outputPanel: OutputPanelPanel,
         selectionCapturer: SelectionCapturer,
-        transcriptionHistory: TranscriptionHistory
+        transcriptionHistory: TranscriptionHistory,
+        overrides: ConversationOverrides
     ) {
         self.settings = settings
         self.transcriptionProvider = transcriptionProvider
@@ -106,17 +72,7 @@ final class RecordingCoordinator {
         self.outputPanel = outputPanel
         self.selectionCapturer = selectionCapturer
         self.transcriptionHistory = transcriptionHistory
-    }
-
-    /// Sets the output destination override from the mode switcher.
-    /// Creates a session if one doesn't exist yet.
-    func setOutputDestinationOverride(_ id: UUID?) {
-        if let id {
-            if session == nil { session = PipelineSession() }
-            session?.outputDestinationOverride = id
-        } else {
-            session?.outputDestinationOverride = nil
-        }
+        self.overrides = overrides
     }
 
     func setupHotkey() {
@@ -189,14 +145,13 @@ final class RecordingCoordinator {
         // Read state without hiding so the user sees conversation history while recording.
         if let followUp = outputPanel.readFollowUpState() {
             session = PipelineSession(
-                outputDestinationOverride: OutputDestination.builtInOutputPanelID,
                 followUpContext: followUp.text,
                 conversationTurns: followUp.turns,
                 conversationID: followUp.conversationID,
                 isFollowUpFromVisibleOutputPanel: true
             )
+            overrides.destinationOverride = OutputDestination.builtInOutputPanelID
             settings.activeModeID = followUp.modeID
-            recordingIndicator.updateOutputDestinationOverride(OutputDestination.builtInOutputPanelID)
             outputPanel.lockForFollowUp()
         } else {
             // If the output panel is visible but doesn't support follow-up (non-processing mode),
@@ -211,12 +166,8 @@ final class RecordingCoordinator {
                 session?.conversationID = existingConversationID
             }
 
-            // Fresh recording — clear next-conversation parameter overrides
-            // if a conversation already completed with overrides active
-            if hasCompletedPipelineWithOverrides {
-                conversationParameterOverrides = [:]
-                hasCompletedPipelineWithOverrides = false
-            }
+            // Fresh recording — clear overrides if a previous pipeline completed with them
+            overrides.clearIfCompletedPipeline()
             if session == nil {
                 session = PipelineSession()
             }
@@ -254,7 +205,8 @@ final class RecordingCoordinator {
             outputPanel.minimize(phase: .recording)
         } else {
             recordingIndicator.show()
-            recordingIndicator.updateParameterLabels(resolvedParameterLabels(for: settings.activeMode))
+            recordingIndicator.updateOutputDestinationOverride(overrides.destinationOverride)
+            recordingIndicator.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
         }
 
         if settings.audioSettings.pauseMediaDuringRecording {
@@ -368,7 +320,7 @@ final class RecordingCoordinator {
             let activeConversationID = pipelineSession.conversationID ?? UUID()
             let wasFollowUpFromOutputPanel = pipelineSession.isFollowUpFromVisibleOutputPanel
             let targetAppPID = pipelineSession.previousActiveApp?.processIdentifier
-            let destinationID = pipelineSession.outputDestinationOverride ?? settings.activeMode.defaultOutputDestinationID
+            let destinationID = overrides.resolvedDestinationID(for: settings.activeMode)
             session = nil
 
             guard !text.isEmpty else {
@@ -387,7 +339,7 @@ final class RecordingCoordinator {
             }
 
             let mode = settings.activeMode
-            let parameterValues = resolvedParameterValues(for: mode)
+            let parameterValues = overrides.resolvedParameterValues(for: mode)
 
             // Show the pending "..." turn in the output panel while processing
             if wasFollowUpFromOutputPanel {
@@ -467,9 +419,7 @@ final class RecordingCoordinator {
                 hadExternalProcessing: hadExternalProcessing
             )
 
-            if !conversationParameterOverrides.isEmpty {
-                hasCompletedPipelineWithOverrides = true
-            }
+            overrides.markPipelineCompleted()
 
             escCancelManager.isEnabled = false
             processingTask = nil
@@ -584,8 +534,7 @@ final class RecordingCoordinator {
         session = nil
         accumulatedText = nil
         recordingStartInstant = nil
-        conversationParameterOverrides = [:]
-        hasCompletedPipelineWithOverrides = false
+        overrides.clearAll()
         outputPanel.unlockFollowUp()
 
         if wasFollowUp {

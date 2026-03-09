@@ -35,7 +35,7 @@ final class ModeSwitcherViewModel {
     let onSelect: (UUID) -> Void
     /// Activates a mode without dismissing the switcher
     let onActivate: (UUID) -> Void
-    let onOutputDestinationSelect: (UUID) -> Void
+    let onOutputDestinationSelect: (UUID?) -> Void
     var onParameterOverride: (UUID, String) -> Void
     let onDismiss: () -> Void
 
@@ -52,10 +52,9 @@ final class ModeSwitcherViewModel {
     /// Callback to notify panel when content height changes (e.g. destinations toggled)
     var onResize: (() -> Void)?
 
-    /// Destination override staged by pressing an activation key.
-    /// Applied only when the user confirms with Enter / number key / click on a mode row.
-    /// Cleared on Escape (no override applied).
-    var pendingDestinationOverrideID: UUID?
+    /// Active destination override, applied immediately when toggled.
+    /// Shown on all mode rows (not just highlighted) since it's already in effect.
+    var activeDestinationOverrideID: UUID?
 
     init(
         modes: [Mode],
@@ -64,9 +63,10 @@ final class ModeSwitcherViewModel {
         outputDestinations: [OutputDestination],
         showHint: Bool,
         parameterOverrides: [UUID: String],
+        activeDestinationOverrideID: UUID? = nil,
         onSelect: @escaping (UUID) -> Void,
         onActivate: @escaping (UUID) -> Void = { _ in },
-        onOutputDestinationSelect: @escaping (UUID) -> Void,
+        onOutputDestinationSelect: @escaping (UUID?) -> Void,
         onParameterOverride: @escaping (UUID, String) -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -76,6 +76,7 @@ final class ModeSwitcherViewModel {
         self.outputDestinations = outputDestinations
         self.showHint = showHint
         self.parameterOverrides = parameterOverrides
+        self.activeDestinationOverrideID = activeDestinationOverrideID
         self.onSelect = onSelect
         self.onActivate = onActivate
         self.onOutputDestinationSelect = onOutputDestinationSelect
@@ -83,11 +84,8 @@ final class ModeSwitcherViewModel {
         self.onDismiss = onDismiss
     }
 
-    /// Confirms mode selection, applies any pending destination override, and dismisses.
+    /// Confirms mode selection and dismisses.
     func confirmMode(_ id: UUID) {
-        if let overrideID = pendingDestinationOverrideID {
-            onOutputDestinationSelect(overrideID)
-        }
         onSelect(id)
     }
 
@@ -97,12 +95,14 @@ final class ModeSwitcherViewModel {
         onActivate(id)
     }
 
-    /// Toggles the pending destination override. Pressing the same key twice clears it.
+    /// Toggles a destination override immediately. Pressing the same key twice clears it.
     func toggleDestinationOverride(_ id: UUID) {
-        if pendingDestinationOverrideID == id {
-            pendingDestinationOverrideID = nil
+        if activeDestinationOverrideID == id {
+            activeDestinationOverrideID = nil
+            onOutputDestinationSelect(nil)
         } else {
-            pendingDestinationOverrideID = id
+            activeDestinationOverrideID = id
+            onOutputDestinationSelect(id)
         }
     }
 
@@ -333,12 +333,10 @@ struct ModeSwitcherView: View {
     private func modeRow(index: Int, mode: Mode) -> some View {
         let isHighlighted = index == viewModel.highlightedIndex
         let defaultDestination = viewModel.outputDestinations.first(where: { $0.id == mode.defaultOutputDestinationID })
-        // On the highlighted row, show the pending override symbol if one is staged
-        let overrideDestination = isHighlighted
-            ? viewModel.pendingDestinationOverrideID.flatMap { overrideID in
-                viewModel.outputDestinations.first(where: { $0.id == overrideID })
-            }
-            : nil
+        // Show active override on all rows since it's already applied
+        let overrideDestination = viewModel.activeDestinationOverrideID.flatMap { overrideID in
+            viewModel.outputDestinations.first(where: { $0.id == overrideID })
+        }
         let displayedDestination = overrideDestination ?? defaultDestination
 
         return HStack(spacing: 8) {
@@ -384,7 +382,7 @@ struct ModeSwitcherView: View {
     }
 
     private func destinationRow(destination: OutputDestination) -> some View {
-        let isSelected = viewModel.pendingDestinationOverrideID == destination.id
+        let isSelected = viewModel.activeDestinationOverrideID == destination.id
 
         return HStack(spacing: 8) {
             Text(destination.activationKey.isEmpty ? " " : destination.activationKey)

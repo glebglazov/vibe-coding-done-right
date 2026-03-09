@@ -70,7 +70,6 @@ final class RecordingIndicatorPanel {
     func show(topOffset: CGFloat = 0) {
         phaseState.phase = .recording
         phaseState.errorMessage = nil
-        phaseState.outputDestinationOverrideID = nil
         phaseState.parameterLabels = nil
         currentTopOffset = topOffset
 

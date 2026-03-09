@@ -12,16 +12,11 @@ final class PushToTypeCoordinator {
     private let outputPanel: OutputPanelPanel
     private let selectionCapturer: SelectionCapturer
     private let transcriptionHistory: TranscriptionHistory
+    private let overrides: ConversationOverrides
 
     /// Per-pipeline-run state. Non-nil while a pipeline is in progress or follow-up
     /// state has been captured from the output panel. Cleared on completion/error/cancel.
     var session: PipelineSession?
-
-    /// Resolves parameter values for a mode using the recording coordinator's overrides
-    var resolveParameterValues: ((Mode) -> [String: String])?
-
-    /// Resolves parameter labels for display (e.g. "Sonnet, English")
-    var resolveParameterLabels: ((Mode) -> String?)?
 
     /// Called when the push-to-type overlay is about to show.
     /// Used to dismiss the mode switcher overlay.
@@ -42,12 +37,6 @@ final class PushToTypeCoordinator {
     }
 
     func updateOutputDestinationOverride(_ id: UUID?) {
-        if let id {
-            if session == nil { session = PipelineSession() }
-            session?.outputDestinationOverride = id
-        } else {
-            session?.outputDestinationOverride = nil
-        }
         panel.updateOutputDestinationOverride(id)
     }
 
@@ -63,13 +52,15 @@ final class PushToTypeCoordinator {
         recordingIndicator: RecordingIndicatorPanel,
         outputPanel: OutputPanelPanel,
         selectionCapturer: SelectionCapturer,
-        transcriptionHistory: TranscriptionHistory
+        transcriptionHistory: TranscriptionHistory,
+        overrides: ConversationOverrides
     ) {
         self.settings = settings
         self.recordingIndicator = recordingIndicator
         self.outputPanel = outputPanel
         self.selectionCapturer = selectionCapturer
         self.transcriptionHistory = transcriptionHistory
+        self.overrides = overrides
     }
 
     func setupHotkey() {
@@ -117,6 +108,7 @@ final class PushToTypeCoordinator {
                 return
             }
 
+            overrides.clearIfCompletedPipeline()
             if session == nil {
                 session = PipelineSession()
             }
@@ -152,7 +144,7 @@ final class PushToTypeCoordinator {
                 Logger.app.info("Push-to-type: overlay dismissed")
             }
         )
-        panel.updateParameterLabels(resolveParameterLabels?(settings.activeMode))
+        panel.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
         Logger.app.info("Push-to-type: overlay shown")
     }
 
@@ -168,7 +160,7 @@ final class PushToTypeCoordinator {
         let context = pipelineSession.followUpContext
         let wasFollowUpFromOutputPanel = pipelineSession.isFollowUpFromVisibleOutputPanel
         let targetAppPID = pipelineSession.previousActiveApp?.processIdentifier
-        let destinationID = pipelineSession.outputDestinationOverride ?? mode.defaultOutputDestinationID
+        let destinationID = overrides.resolvedDestinationID(for: mode)
         session = nil
 
         if wasFollowUpFromOutputPanel {
@@ -177,13 +169,13 @@ final class PushToTypeCoordinator {
         } else {
             recordingIndicator.show()
             recordingIndicator.update(phase: .processing)
-            recordingIndicator.updateParameterLabels(resolveParameterLabels?(settings.activeMode))
+            recordingIndicator.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
         }
         Logger.app.info("Push-to-type: executing pipeline")
 
         Task { @MainActor in
             do {
-                let parameterValues = self.resolveParameterValues?(mode) ?? [:]
+                let parameterValues = self.overrides.resolvedParameterValues(for: mode)
                 let result = try await TextProcessingPipeline.run(
                     mode: mode,
                     text: text,
@@ -238,6 +230,7 @@ final class PushToTypeCoordinator {
                     hadExternalProcessing: result.hadExternalProcessing
                 )
 
+                self.overrides.markPipelineCompleted()
                 Logger.app.info("Push-to-type: complete")
             } catch {
                 if wasFollowUpFromOutputPanel {

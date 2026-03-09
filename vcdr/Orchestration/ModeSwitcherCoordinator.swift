@@ -8,18 +8,13 @@ final class ModeSwitcherCoordinator {
     private let settings: AppSettings
     private let hotkeyManager = GlobalHotkeyManager()
     private let panel = ModeSwitcherPanel()
+    private let overrides: ConversationOverrides
 
-    /// Callback to set a temporary output destination override on the active coordinators
-    var onOutputDestinationOverride: ((UUID) -> Void)?
-
-    /// Callback to set parameter overrides on the recording coordinator
-    var onParameterOverride: ((UUID, String) -> Void)?
-
-    /// Callback when a mode is selected (so the indicator can update parameter labels)
+    /// Called when a mode is selected (so the indicator can update labels)
     var onModeSelected: ((UUID) -> Void)?
 
-    /// Reads current parameter overrides for display in the mode switcher
-    var currentParameterOverrides: (() -> [UUID: String])?
+    /// Called when the destination override changes (for UI label updates on indicator/push-to-type)
+    var onDestinationOverrideChanged: ((UUID?) -> Void)?
 
     /// Returns true if a contextual host is available and mode list was shown there
     var showContextual: (() -> Bool)?
@@ -33,8 +28,9 @@ final class ModeSwitcherCoordinator {
     /// Called when contextual mode switcher is hidden (to resume Escape tap)
     var onContextualSwitcherHidden: (() -> Void)?
 
-    init(settings: AppSettings) {
+    init(settings: AppSettings, overrides: ConversationOverrides) {
         self.settings = settings
+        self.overrides = overrides
     }
 
     func setupHotkey() {
@@ -69,7 +65,6 @@ final class ModeSwitcherCoordinator {
     func makeViewModel(onDismiss: @escaping () -> Void) -> ModeSwitcherViewModel {
         let modes = settings.visibleModes
         let activeIndex = modes.firstIndex(where: { $0.id == settings.activeModeID }) ?? 0
-        let currentOverrides = currentParameterOverrides?() ?? [:]
 
         let vm = ModeSwitcherViewModel(
             modes: modes,
@@ -77,7 +72,8 @@ final class ModeSwitcherCoordinator {
             activeModeID: settings.activeModeID,
             outputDestinations: settings.outputDestinations,
             showHint: settings.showModeSwitcherHint,
-            parameterOverrides: currentOverrides,
+            parameterOverrides: overrides.parameterOverrides,
+            activeDestinationOverrideID: overrides.destinationOverride,
             onSelect: { [weak self] id in
                 guard let self else { return }
                 self.settings.activeModeID = id
@@ -93,8 +89,9 @@ final class ModeSwitcherCoordinator {
             },
             onOutputDestinationSelect: { [weak self] destinationID in
                 guard let self else { return }
-                self.onOutputDestinationOverride?(destinationID)
-                Logger.settings.info("Output destination override set to \(destinationID)")
+                self.overrides.destinationOverride = destinationID
+                self.onDestinationOverrideChanged?(destinationID)
+                Logger.settings.info("Output destination override set to \(String(describing: destinationID))")
             },
             onParameterOverride: { _ , _ in },
             onDismiss: onDismiss
@@ -110,7 +107,7 @@ final class ModeSwitcherCoordinator {
                 self.onModeSelected?(modeID)
                 Logger.settings.info("Mode auto-activated via parameter change: \(modeID)")
             }
-            self.onParameterOverride?(parameterID, value)
+            self.overrides.parameterOverrides[parameterID] = value
         }
 
         return vm

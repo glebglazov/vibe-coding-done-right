@@ -45,6 +45,7 @@ final class AppDependencies {
         let outputPanel = OutputPanelPanel(audioRecorder: audioRecorder)
         self.outputPanel = outputPanel
         let selectionCapturer = SelectionCapturer()
+        let overrides = ConversationOverrides()
         self.coordinator = RecordingCoordinator(
             settings: settings,
             transcriptionProvider: provider,
@@ -54,17 +55,19 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator,
             outputPanel: outputPanel,
             selectionCapturer: selectionCapturer,
-            transcriptionHistory: history
+            transcriptionHistory: history,
+            overrides: overrides
         )
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
-        self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings)
+        self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
         self.pushToTypeCoordinator = PushToTypeCoordinator(
             settings: settings,
             recordingIndicator: recordingIndicator,
             outputPanel: outputPanel,
             selectionCapturer: selectionCapturer,
-            transcriptionHistory: history
+            transcriptionHistory: history,
+            overrides: overrides
         )
 
         self.copyLatestCaptureHandler = CopyLatestCaptureHandler(
@@ -72,14 +75,6 @@ final class AppDependencies {
             transcriptionHistory: history,
             recordingIndicator: recordingIndicator
         )
-
-        // Wire parameter resolution for push-to-type
-        pushToTypeCoordinator.resolveParameterValues = { [weak self] mode in
-            self?.coordinator.resolvedParameterValues(for: mode) ?? [:]
-        }
-        pushToTypeCoordinator.resolveParameterLabels = { [weak self] mode in
-            self?.coordinator.resolvedParameterLabels(for: mode)
-        }
 
         // Dismiss mode switcher when recording or push-to-type starts
         coordinator.onWillStartRecording = { [weak self] in
@@ -89,24 +84,15 @@ final class AppDependencies {
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
         }
 
-        // Wire parameter override from mode switcher to recording coordinator
-        modeSwitcherCoordinator.onParameterOverride = { [weak self] parameterID, value in
-            self?.coordinator.conversationParameterOverrides[parameterID] = value
-        }
-
-        // Update recording indicator parameter labels when mode changes mid-recording
+        // Update recording indicator labels when mode changes mid-recording
         modeSwitcherCoordinator.onModeSelected = { [weak self] _ in
             guard let self else { return }
-            let labels = self.coordinator.resolvedParameterLabels(for: self.settings.activeMode)
+            let labels = overrides.resolvedParameterLabels(for: self.settings.activeMode)
             recordingIndicator.updateParameterLabels(labels)
         }
-        modeSwitcherCoordinator.currentParameterOverrides = { [weak self] in
-            self?.coordinator.conversationParameterOverrides ?? [:]
-        }
 
-        // Wire output destination override from mode switcher to both coordinators + indicator labels
-        modeSwitcherCoordinator.onOutputDestinationOverride = { [weak self] destinationID in
-            self?.coordinator.setOutputDestinationOverride(destinationID)
+        // Update UI labels when destination override changes
+        modeSwitcherCoordinator.onDestinationOverrideChanged = { [weak self] destinationID in
             self?.pushToTypeCoordinator.updateOutputDestinationOverride(destinationID)
             recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
@@ -167,7 +153,7 @@ final class AppDependencies {
             let mode = self.settings.modes.first(where: { $0.id == modeID }) ?? self.settings.activeMode
             let followUpContext = outputPanel.currentText
             let conversationID = outputPanel.currentConversationID ?? UUID()
-            let parameterValues = self.coordinator.resolvedParameterValues(for: mode)
+            let parameterValues = overrides.resolvedParameterValues(for: mode)
 
             outputPanel.startProcessing(inputText: text)
 
