@@ -81,6 +81,7 @@ final class RecordingIndicatorPanel {
         phaseState.phase = .recording
         phaseState.errorMessage = nil
         phaseState.parameterLabels = nil
+        captureState.captureCount = 0
         currentTopOffset = topOffset
 
         // Always recreate the panel — the existing one may be a CancelledIndicatorView
@@ -361,8 +362,8 @@ private struct RecordingIndicatorView: View {
     private static let errorPillVPadding: CGFloat = 3
     private static let errorPillCornerRadius: CGFloat = 6
     private static let errorPillFontSize: CGFloat = 11
-    private static let captureBadgeDisplayDuration: Duration = .milliseconds(600)
     private static let captureBadgeSize: CGFloat = 12
+    private static let captureCountFontSize: CGFloat = 9
 
     let phaseState: IndicatorPhaseState
     let captureState: IndicatorCaptureState
@@ -370,18 +371,23 @@ private struct RecordingIndicatorView: View {
     let settings: AppSettings
     let audioRecorder: AudioRecorder
 
-    @State private var showCaptureBadge = false
-
     var body: some View {
         VStack(spacing: Self.errorPillSpacing) {
             HStack(spacing: Self.pillSpacing) {
                 switch phaseState.phase {
                 case .recording:
-                    if showCaptureBadge {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.system(size: Self.captureBadgeSize, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .transition(.opacity)
+                    if captureState.captureCount > 0 {
+                        HStack(spacing: 1) {
+                            Image(systemName: "doc.on.clipboard")
+                                .font(.system(size: Self.captureBadgeSize, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            if captureState.captureCount > 1 {
+                                Text("×\(captureState.captureCount)")
+                                    .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .transition(.opacity)
                     }
 
                     AudioWaveformView(audioLevels: audioRecorder.audioLevels)
@@ -444,14 +450,7 @@ private struct RecordingIndicatorView: View {
         .modifier(ShakeEffect(shakeCount: phaseState.rejectCount))
         .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: phaseState.phase)
         .animation(.default, value: phaseState.rejectCount)
-        .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: showCaptureBadge)
-        .onChange(of: captureState.captureCount) {
-            showCaptureBadge = true
-            Task {
-                try? await Task.sleep(for: Self.captureBadgeDisplayDuration)
-                showCaptureBadge = false
-            }
-        }
+        .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: captureState.captureCount)
     }
 }
 
