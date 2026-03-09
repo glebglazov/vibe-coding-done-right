@@ -71,6 +71,15 @@ struct MenuBarView: View {
 
             Divider()
 
+            Picker("Copy method", selection: Binding(
+                get: { dependencies.settings.copyEventMethod },
+                set: { dependencies.settings.copyEventMethod = $0 }
+            )) {
+                ForEach(CopyEventMethod.allCases, id: \.self) { method in
+                    Text(method.label).tag(method)
+                }
+            }
+
             Button("Quit VCDR") {
                 NSApplication.shared.terminate(nil)
             }

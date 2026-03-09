@@ -9,6 +9,28 @@ enum PostTranscriptionActionType: String, CaseIterable, Codable {
     case bash = "bash"
 }
 
+/// CGEvent method for simulating Cmd+C to capture selected text.
+/// Different methods may or may not cause the Edit menu to flash.
+enum CopyEventMethod: Int, CaseIterable, Codable {
+    case hidTapNilSource = 0
+    case sessionTapNilSource = 1
+    case annotatedSessionTapNilSource = 2
+    case hidTapPrivateSource = 3
+    case sessionTapPrivateSource = 4
+    case hidTapCombinedSource = 5
+
+    var label: String {
+        switch self {
+        case .hidTapNilSource: "HID tap, nil source (default)"
+        case .sessionTapNilSource: "Session tap, nil source"
+        case .annotatedSessionTapNilSource: "Annotated session tap, nil source"
+        case .hidTapPrivateSource: "HID tap, private source"
+        case .sessionTapPrivateSource: "Session tap, private source"
+        case .hidTapCombinedSource: "HID tap, combined source"
+        }
+    }
+}
+
 struct AudioSettings: Codable, Equatable {
     var preferredInputDeviceID: String?
     var pauseMediaDuringRecording: Bool
@@ -71,6 +93,9 @@ final class AppSettings {
     var removeFillerWords: Bool {
         didSet { save() }
     }
+    var copyEventMethod: CopyEventMethod {
+        didSet { save() }
+    }
 
     /// Template IDs whose CLI tools are currently available. Not persisted.
     var availableTemplateIDs: Set<String> = []
@@ -116,6 +141,7 @@ final class AppSettings {
         static let audioSettings = "audioSettings"
         static let showModeSwitcherHint = "showModeSwitcherHint"
         static let removeFillerWords = "removeFillerWords"
+        static let copyEventMethod = "copyEventMethod"
         // Legacy key for migration
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         // Legacy keys for migration
@@ -228,6 +254,13 @@ final class AppSettings {
             self.removeFillerWords = true
         }
 
+        // Load copy event method (default: hidTapNilSource)
+        if userDefaults.object(forKey: Keys.copyEventMethod) != nil {
+            self.copyEventMethod = CopyEventMethod(rawValue: userDefaults.integer(forKey: Keys.copyEventMethod)) ?? .hidTapNilSource
+        } else {
+            self.copyEventMethod = .hidTapNilSource
+        }
+
         // Load audio settings (with migration from legacy preferredInputDeviceID)
         if let data = userDefaults.data(forKey: Keys.audioSettings),
            let decoded = try? JSONDecoder().decode(AudioSettings.self, from: data) {
@@ -295,6 +328,7 @@ final class AppSettings {
         }
         userDefaults.set(showModeSwitcherHint, forKey: Keys.showModeSwitcherHint)
         userDefaults.set(removeFillerWords, forKey: Keys.removeFillerWords)
+        userDefaults.set(copyEventMethod.rawValue, forKey: Keys.copyEventMethod)
         Logger.settings.info("Settings saved")
     }
 }

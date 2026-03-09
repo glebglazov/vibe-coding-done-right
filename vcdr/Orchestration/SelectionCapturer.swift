@@ -87,11 +87,16 @@ struct SelectionCapturer: Sendable {
     /// Accessibility API's selected text attribute. Saves and restores the clipboard
     /// contents around the operation.
     private func captureViaCmdC() async -> String? {
+        let method = CopyEventMethod(
+            rawValue: UserDefaults.standard.integer(forKey: "copyEventMethod")
+        ) ?? .hidTapNilSource
+
         let pasteboard = NSPasteboard.general
         let previousChangeCount = pasteboard.changeCount
         let previousContents = pasteboard.string(forType: .string)
 
-        simulateCmdC()
+        Logger.actions.info("Cmd+C fallback using method: \(method.label)")
+        simulateCmdC(method: method)
 
         let captured = await pollForClipboardChange(previousChangeCount: previousChangeCount)
 
@@ -110,13 +115,31 @@ struct SelectionCapturer: Sendable {
         return nil
     }
 
-    private func simulateCmdC() {
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: Self.cKeyCode, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: Self.cKeyCode, keyDown: false)
+    private func simulateCmdC(method: CopyEventMethod) {
+        let source: CGEventSource?
+        let tap: CGEventTapLocation
+
+        switch method {
+        case .hidTapNilSource:
+            source = nil; tap = .cghidEventTap
+        case .sessionTapNilSource:
+            source = nil; tap = .cgSessionEventTap
+        case .annotatedSessionTapNilSource:
+            source = nil; tap = .cgAnnotatedSessionEventTap
+        case .hidTapPrivateSource:
+            source = CGEventSource(stateID: .privateState); tap = .cghidEventTap
+        case .sessionTapPrivateSource:
+            source = CGEventSource(stateID: .privateState); tap = .cgSessionEventTap
+        case .hidTapCombinedSource:
+            source = CGEventSource(stateID: .combinedSessionState); tap = .cghidEventTap
+        }
+
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: Self.cKeyCode, keyDown: true)
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: Self.cKeyCode, keyDown: false)
         keyDown?.flags = .maskCommand
         keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        keyDown?.post(tap: tap)
+        keyUp?.post(tap: tap)
     }
 
     /// Polls `NSPasteboard.changeCount` until it differs from `previousChangeCount`
@@ -131,4 +154,5 @@ struct SelectionCapturer: Sendable {
         }
         return nil
     }
+
 }
