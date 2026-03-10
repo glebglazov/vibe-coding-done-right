@@ -257,19 +257,6 @@ struct ModeDetailView: View {
                 ))
             }
 
-            // Pre-processing section
-            Section("Pre-processing") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Append terminator template", isOn: $mode.terminatorTemplateEnabled)
-
-                    if mode.terminatorTemplateEnabled {
-                        TextField("Terminator template", text: $mode.terminatorTemplate)
-                            .labelsHidden()
-                            .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
-                    }
-                }
-            }
-
             // Processing section
             Section("Processing") {
                 Picker(selection: $mode.processingType) {

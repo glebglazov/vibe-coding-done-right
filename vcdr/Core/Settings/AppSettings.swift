@@ -77,6 +77,12 @@ final class AppSettings {
     var removeFillerWords: Bool {
         didSet { save() }
     }
+    var terminatorTemplateEnabled: Bool {
+        didSet { save() }
+    }
+    var terminatorTemplate: String {
+        didSet { save() }
+    }
     /// Template IDs whose CLI tools are currently available. Not persisted.
     var availableTemplateIDs: Set<String> = []
 
@@ -122,6 +128,8 @@ final class AppSettings {
         static let audioSettings = "audioSettings"
         static let showModeSwitcherHint = "showModeSwitcherHint"
         static let removeFillerWords = "removeFillerWords"
+        static let terminatorTemplateEnabled = "terminatorTemplateEnabled"
+        static let terminatorTemplate = "terminatorTemplate"
         // Legacy key for migration
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         // Legacy keys for migration
@@ -242,6 +250,14 @@ final class AppSettings {
             self.removeFillerWords = true
         }
 
+        // Load terminator template settings (default: enabled with <dot><space>)
+        if userDefaults.object(forKey: Keys.terminatorTemplateEnabled) != nil {
+            self.terminatorTemplateEnabled = userDefaults.bool(forKey: Keys.terminatorTemplateEnabled)
+        } else {
+            self.terminatorTemplateEnabled = true
+        }
+        self.terminatorTemplate = userDefaults.string(forKey: Keys.terminatorTemplate) ?? Mode.defaultTerminatorTemplate
+
         // Load audio settings (with migration from legacy preferredInputDeviceID)
         if let data = userDefaults.data(forKey: Keys.audioSettings),
            let decoded = try? JSONDecoder().decode(AudioSettings.self, from: data) {
@@ -326,6 +342,8 @@ final class AppSettings {
         }
         userDefaults.set(showModeSwitcherHint, forKey: Keys.showModeSwitcherHint)
         userDefaults.set(removeFillerWords, forKey: Keys.removeFillerWords)
+        userDefaults.set(terminatorTemplateEnabled, forKey: Keys.terminatorTemplateEnabled)
+        userDefaults.set(terminatorTemplate, forKey: Keys.terminatorTemplate)
         Logger.settings.info("Settings saved")
     }
 }

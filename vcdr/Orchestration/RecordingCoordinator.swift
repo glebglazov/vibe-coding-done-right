@@ -300,8 +300,11 @@ final class RecordingCoordinator {
             let elapsed = transcriptionStart.duration(to: .now)
             Logger.app.info("Transcribed in \(elapsed): \(rawText)")
 
-            // Apply filler word removal before any mode-specific processing
-            let text = settings.removeFillerWords ? FillerWordRemover.remove(from: rawText) : rawText
+            // Apply transcription-level pre-processing before any mode-specific pipeline
+            let cleanedText = settings.removeFillerWords ? FillerWordRemover.remove(from: rawText) : rawText
+            let text = settings.terminatorTemplateEnabled
+                ? Mode.applyTerminator(cleanedText, terminator: settings.terminatorTemplate)
+                : cleanedText
 
             try? FileManager.default.removeItem(at: audioURL)
 

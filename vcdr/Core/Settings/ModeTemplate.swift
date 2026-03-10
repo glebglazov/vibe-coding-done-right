@@ -7,7 +7,6 @@ struct ModeTemplate {
     let availabilityCommand: String?
     let processingType: ProcessingType
     let processingCommand: String
-    let terminatorTemplateEnabled: Bool
     let systemPromptEnabled: Bool
     let systemPrompt: String
     let parameters: [ModeParameter]
@@ -22,7 +21,6 @@ struct ModeTemplate {
             templateID: id,
             processingType: processingType,
             processingCommand: processingCommand,
-            terminatorTemplateEnabled: terminatorTemplateEnabled,
             systemPromptEnabled: systemPromptEnabled,
             systemPrompt: systemPrompt,
             defaultOutputDestinationID: defaultOutputDestinationID,
@@ -36,10 +34,8 @@ struct ModeTemplate {
         mode.name = defaultName
         mode.processingType = processingType
         mode.processingCommand = processingCommand
-        mode.terminatorTemplateEnabled = terminatorTemplateEnabled
         mode.systemPromptEnabled = systemPromptEnabled
         mode.systemPrompt = systemPrompt
-        mode.terminatorTemplate = Mode.defaultTerminatorTemplate
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.parameters = parameters
         mode.quickAction = quickAction
@@ -73,7 +69,6 @@ extension ModeTemplate {
         availabilityCommand: nil,
         processingType: .none,
         processingCommand: "",
-        terminatorTemplateEnabled: true,
         systemPromptEnabled: false,
         systemPrompt: "",
         parameters: [],
@@ -87,7 +82,6 @@ extension ModeTemplate {
         availabilityCommand: "claude",
         processingType: .bashScript,
         processingCommand: "zsh -ic 'set -o pipefail; cd /tmp && (\n  claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages --resume $VCDR_CONV_ID \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\" ||\n  claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages --session-id $VCDR_CONV_ID \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"\n)'",
-        terminatorTemplateEnabled: false,
         systemPromptEnabled: true,
         systemPrompt: "Act immediately on the user's request without follow-up questions. Input is voice-dictated and may contain minor transcription errors — interpret the intent. Be concise.",
         parameters: [
@@ -107,7 +101,6 @@ extension ModeTemplate {
         availabilityCommand: "ollama",
         processingType: .bashScript,
         processingCommand: "zsh -ic 'TERM=dumb ollama run --hidethinking --nowordwrap $VCDR_PARAM_MODEL \"$VCDR_CONVERSATION\" 2>/dev/null'",
-        terminatorTemplateEnabled: false,
         systemPromptEnabled: true,
         systemPrompt: "Be concise and direct. Input is voice-dictated and may contain minor transcription errors — interpret the intent.",
         parameters: [

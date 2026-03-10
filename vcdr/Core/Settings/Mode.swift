@@ -31,8 +31,6 @@ struct Mode: Identifiable, Codable, Equatable {
     var templateID: String?
 
     // Processing
-    var terminatorTemplateEnabled: Bool
-    var terminatorTemplate: String
     var processingType: ProcessingType
     var processingCommand: String
     var systemPromptEnabled: Bool
@@ -64,14 +62,11 @@ struct Mode: Identifiable, Codable, Equatable {
 
     // MARK: - Text Pipeline
 
-    /// Pre-processes transcription text by applying terminator, follow-up context
-    /// (previous capture), system prompt (bash processing only), and appending
-    /// any captured context items.
+    /// Pre-processes text by prepending follow-up context (previous capture),
+    /// system prompt (bash processing only), and appending any captured context items.
     /// This is step 1 of the pipeline — before the optional processing script.
     func applyPreProcessing(_ text: String, captures: [CapturedContext], followUpContext: String? = nil) -> String {
-        var result = terminatorTemplateEnabled
-            ? Self.applyTerminator(text, terminator: terminatorTemplate)
-            : text
+        var result = text
 
         // Prepend follow-up context (previous capture result) before new dictation
         if let context = followUpContext {
@@ -142,8 +137,6 @@ struct Mode: Identifiable, Codable, Equatable {
         templateID: String? = nil,
         processingType: ProcessingType = .none,
         processingCommand: String = "",
-        terminatorTemplateEnabled: Bool = false,
-        terminatorTemplate: String = defaultTerminatorTemplate,
         systemPromptEnabled: Bool = false,
         systemPrompt: String = "",
         defaultOutputDestinationID: UUID = OutputDestination.builtInOutputPanelID,
@@ -156,8 +149,6 @@ struct Mode: Identifiable, Codable, Equatable {
         self.templateID = templateID
         self.processingType = processingType
         self.processingCommand = processingCommand
-        self.terminatorTemplateEnabled = terminatorTemplateEnabled
-        self.terminatorTemplate = terminatorTemplate
         self.systemPromptEnabled = systemPromptEnabled
         self.systemPrompt = systemPrompt
         self.defaultOutputDestinationID = defaultOutputDestinationID
@@ -169,7 +160,6 @@ struct Mode: Identifiable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, name, isDisabled, templateID
-        case terminatorTemplateEnabled, terminatorTemplate
         case processingType, processingCommand
         case systemPromptEnabled, systemPrompt
         case defaultOutputDestinationID
@@ -185,8 +175,6 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(name, forKey: .name)
         try container.encode(isDisabled, forKey: .isDisabled)
         try container.encodeIfPresent(templateID, forKey: .templateID)
-        try container.encode(terminatorTemplateEnabled, forKey: .terminatorTemplateEnabled)
-        try container.encode(terminatorTemplate, forKey: .terminatorTemplate)
         try container.encode(processingType, forKey: .processingType)
         try container.encode(processingCommand, forKey: .processingCommand)
         try container.encode(systemPromptEnabled, forKey: .systemPromptEnabled)
@@ -204,8 +192,6 @@ struct Mode: Identifiable, Codable, Equatable {
         name = try container.decode(String.self, forKey: .name)
         isDisabled = try container.decodeIfPresent(Bool.self, forKey: .isDisabled) ?? false
         templateID = try container.decodeIfPresent(String.self, forKey: .templateID)
-        terminatorTemplateEnabled = try container.decodeIfPresent(Bool.self, forKey: .terminatorTemplateEnabled) ?? false
-        terminatorTemplate = try container.decodeIfPresent(String.self, forKey: .terminatorTemplate) ?? Self.defaultTerminatorTemplate
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInOutputPanelID

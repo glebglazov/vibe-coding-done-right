@@ -29,6 +29,22 @@ struct TranscriptionTabView: View {
                     get: { dependencies.settings.removeFillerWords },
                     set: { dependencies.settings.removeFillerWords = $0 }
                 ))
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Append terminator template", isOn: Binding(
+                        get: { dependencies.settings.terminatorTemplateEnabled },
+                        set: { dependencies.settings.terminatorTemplateEnabled = $0 }
+                    ))
+
+                    if dependencies.settings.terminatorTemplateEnabled {
+                        TextField("Terminator template", text: Binding(
+                            get: { dependencies.settings.terminatorTemplate },
+                            set: { dependencies.settings.terminatorTemplate = $0 }
+                        ))
+                        .labelsHidden()
+                        .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
+                    }
+                }
             }
         }
         .formStyle(.grouped)
