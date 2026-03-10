@@ -36,12 +36,17 @@ vcdr/
 │   ├── PostTranscriptionAction.swift     # Protocol
 │   ├── PasteAction.swift                 # Clipboard + focus restore + simulated Cmd+V
 │   └── BashAction.swift                  # Shell command + clipboard copy + optional paste
-├── Orchestration/RecordingCoordinator.swift    # State machine: idle→recording→transcribing→executing
+├── Orchestration/
+│   ├── RecordingCoordinator.swift    # State machine: idle→recording→transcribing→executing
+│   └── CaptureCoordinator.swift      # Capture view lifecycle + submission pipeline
 └── UI/
     ├── MenuBarView.swift
     ├── SettingsView.swift
     ├── ShortcutRecorderRow.swift
-    └── RecordingIndicator.swift          # Floating panel shown during recording
+    ├── CapturePanel.swift            # Unified capture panel (NSPanel controller)
+    ├── CaptureView.swift             # Capture SwiftUI view
+    ├── CaptureViewModel.swift        # Capture view model
+    └── RecordingIndicator.swift      # Floating indicator for quick action mode
 ```
 
 ## Architecture Rules

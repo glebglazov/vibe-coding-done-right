@@ -1,7 +1,7 @@
 import AppKit
 
 /// NSPanel subclass that accepts key events.
-/// Used by ModeSwitcherPanel, PushToTypePanel, OutputPanelPanel, and RecordingIndicatorPanel.
+/// Used by ModeSwitcherPanel, CapturePanel, and RecordingIndicatorPanel.
 final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 

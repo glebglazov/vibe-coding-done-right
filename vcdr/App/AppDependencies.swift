@@ -11,11 +11,10 @@ final class AppDependencies {
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
-    let pushToTypeCoordinator: PushToTypeCoordinator
+    let captureCoordinator: CaptureCoordinator
     let mediaPlaybackController: MediaPlaybackController
     let transcriptionHistory: TranscriptionHistory
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
-    let outputPanel: OutputPanelPanel
 
     private(set) var isTranscriptionReady = false
     private(set) var initializationStatus = "Loading model..."
@@ -42,11 +41,27 @@ final class AppDependencies {
         let audioRecorder = AudioRecorder()
         let hotkeyManager = GlobalHotkeyManager()
         let recordingIndicator = RecordingIndicatorPanel(settings: settings, audioRecorder: audioRecorder)
-        let outputPanel = OutputPanelPanel(audioRecorder: audioRecorder)
-        self.outputPanel = outputPanel
         let selectionCapturer = SelectionCapturer()
         let clipboardMonitor = ClipboardMonitor()
         let overrides = ConversationOverrides()
+        self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
+        self.inputLevelMonitor = InputLevelMonitor()
+        self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
+        let capturePanel = CapturePanel()
+        let pttClipboardMonitor = ClipboardMonitor()
+        let pttEscCancelManager = GlobalHotkeyManager()
+        let captureCoordinator = CaptureCoordinator(
+            settings: settings,
+            panel: capturePanel,
+            recordingIndicator: recordingIndicator,
+            audioRecorder: audioRecorder,
+            selectionCapturer: selectionCapturer,
+            clipboardMonitor: pttClipboardMonitor,
+            escCancelManager: pttEscCancelManager,
+            transcriptionHistory: history,
+            overrides: overrides
+        )
+        self.captureCoordinator = captureCoordinator
         self.coordinator = RecordingCoordinator(
             settings: settings,
             transcriptionProvider: provider,
@@ -54,24 +69,9 @@ final class AppDependencies {
             hotkeyManager: hotkeyManager,
             mediaPlaybackController: mediaPlayback,
             recordingIndicator: recordingIndicator,
-            outputPanel: outputPanel,
+            captureCoordinator: captureCoordinator,
             selectionCapturer: selectionCapturer,
             clipboardMonitor: clipboardMonitor,
-            transcriptionHistory: history,
-            overrides: overrides
-        )
-        self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
-        self.inputLevelMonitor = InputLevelMonitor()
-        self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
-        let pttClipboardMonitor = ClipboardMonitor()
-        let pttEscCancelManager = GlobalHotkeyManager()
-        self.pushToTypeCoordinator = PushToTypeCoordinator(
-            settings: settings,
-            recordingIndicator: recordingIndicator,
-            outputPanel: outputPanel,
-            selectionCapturer: selectionCapturer,
-            clipboardMonitor: pttClipboardMonitor,
-            escCancelManager: pttEscCancelManager,
             transcriptionHistory: history,
             overrides: overrides
         )
@@ -82,12 +82,11 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator
         )
 
-        // Dismiss mode switcher and push-to-type when recording starts
+        // Dismiss mode switcher when recording starts
         coordinator.onWillStartRecording = { [weak self] in
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
-            self?.pushToTypeCoordinator.dismissIfActive()
         }
-        pushToTypeCoordinator.onWillStartInput = { [weak self] in
+        captureCoordinator.onWillStartInput = { [weak self] in
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
         }
 
@@ -100,11 +99,11 @@ final class AppDependencies {
 
         // Update UI labels when destination override changes
         modeSwitcherCoordinator.onDestinationOverrideChanged = { [weak self] destinationID in
-            self?.pushToTypeCoordinator.updateOutputDestinationOverride(destinationID)
+            self?.captureCoordinator.updateOutputDestinationOverride(destinationID)
             recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
 
-        // Wire contextual mode switcher: show mode list inside recording indicator or push-to-type
+        // Wire contextual mode switcher: show mode list inside recording indicator or capture panel
         modeSwitcherCoordinator.showContextual = { [weak self] in
             guard let self else { return false }
             if recordingIndicator.isVisible {
@@ -115,12 +114,12 @@ final class AppDependencies {
                 recordingIndicator.showModeSwitcher(viewModel: vm)
                 return true
             }
-            if self.pushToTypeCoordinator.isModeSwitcherHostVisible {
+            if self.captureCoordinator.isModeSwitcherHostVisible {
                 let vm = self.modeSwitcherCoordinator.makeViewModel(onDismiss: {
-                    self.pushToTypeCoordinator.hideModeSwitcher()
+                    self.captureCoordinator.hideModeSwitcher()
                     self.modeSwitcherCoordinator.onContextualSwitcherHidden?()
                 })
-                self.pushToTypeCoordinator.showModeSwitcher(viewModel: vm)
+                self.captureCoordinator.showModeSwitcher(viewModel: vm)
                 return true
             }
             return false
@@ -132,8 +131,8 @@ final class AppDependencies {
                 recordingIndicator.hideModeSwitcher()
                 return true
             }
-            if self.pushToTypeCoordinator.isModeSwitcherVisible {
-                self.pushToTypeCoordinator.hideModeSwitcher()
+            if self.captureCoordinator.isModeSwitcherVisible {
+                self.captureCoordinator.hideModeSwitcher()
                 return true
             }
             return false
@@ -147,94 +146,10 @@ final class AppDependencies {
             self?.coordinator.resumeEscCancel()
         }
 
-        // Wire Escape-to-cancel: when the output panel is locked for follow-up
+        // Wire Escape-to-cancel: when the capture panel is locked for follow-up
         // (recording/processing in progress), Escape cancels the recording.
-        outputPanel.onCancelRecording = { [weak self] in
+        captureCoordinator.panel.onCancelRecording = { [weak self] in
             self?.coordinator.cancelRecording()
-        }
-
-        // Wire inline text submission from the output panel
-        outputPanel.onSubmitText = { [weak self] text in
-            guard let self else { return }
-            let modeID = outputPanel.currentModeID ?? self.settings.activeModeID
-            let mode = self.settings.modes.first(where: { $0.id == modeID }) ?? self.settings.activeMode
-            let followUpContext = outputPanel.currentText
-            let conversationID = outputPanel.currentConversationID ?? UUID()
-            let parameterValues = overrides.resolvedParameterValues(for: mode)
-            let currentTurns = outputPanel.currentTurns
-
-            outputPanel.startProcessing(inputText: text)
-
-            if mode.processingType == .bashScript {
-                // Streaming path for bash-processed modes
-                let streamResult = TextProcessingPipeline.runStreaming(
-                    mode: mode,
-                    text: text,
-                    captures: [],
-                    followUpContext: followUpContext,
-                    conversationTurns: currentTurns,
-                    conversationID: conversationID,
-                    parameterValues: parameterValues
-                )
-                outputPanel.expand()
-
-                Task { @MainActor in
-                    var accumulated = ""
-                    do {
-                        for try await chunk in streamResult.chunks {
-                            accumulated += chunk
-                            outputPanel.updateStreamingOutput(accumulated)
-                        }
-                        outputPanel.finishStreaming(outputText: accumulated)
-
-                        history.recordTurn(
-                            conversationID: conversationID,
-                            input: text,
-                            output: accumulated,
-                            captures: [],
-                            modeID: mode.id,
-                            modeName: mode.name,
-                            hadExternalProcessing: streamResult.hadExternalProcessing
-                        )
-                    } catch {
-                        streamResult.cancel()
-                        if accumulated.isEmpty {
-                            outputPanel.showProcessingError(error.localizedDescription)
-                        } else {
-                            // Show partial output on error
-                            outputPanel.finishStreaming(outputText: accumulated)
-                        }
-                    }
-                }
-            } else {
-                // Non-streaming path
-                Task { @MainActor in
-                    do {
-                        let result = try await TextProcessingPipeline.run(
-                            mode: mode,
-                            text: text,
-                            captures: [],
-                            followUpContext: followUpContext,
-                            conversationTurns: currentTurns,
-                            conversationID: conversationID,
-                            parameterValues: parameterValues
-                        )
-                        outputPanel.finishProcessing(outputText: result.text)
-
-                        history.recordTurn(
-                            conversationID: conversationID,
-                            input: text,
-                            output: result.text,
-                            captures: [],
-                            modeID: mode.id,
-                            modeName: mode.name,
-                            hadExternalProcessing: result.hadExternalProcessing
-                        )
-                    } catch {
-                        outputPanel.showProcessingError(error.localizedDescription)
-                    }
-                }
-            }
         }
 
     }
@@ -242,6 +157,19 @@ final class AppDependencies {
     func initialize() async {
         checkPermissions()
         startPermissionPolling()
+
+        // Register hotkeys immediately — don't wait for model loading.
+        // RecordingCoordinator.onHotkeyDown() already guards on transcriptionProvider.isReady,
+        // so hotkeys pressed before the model is ready show an appropriate error.
+        if hasAccessibilityPermission {
+            coordinator.setupHotkey()
+            coordinator.setupToggleRecordingHotkey()
+            coordinator.setupEscCancel()
+            coordinator.setupDestinationHotkeys()
+            modeSwitcherCoordinator.setupHotkey()
+            captureCoordinator.setupHotkey()
+            copyLatestCaptureHandler.setupHotkey()
+        }
 
         do {
             // Poll the provider's init phase so the UI updates in real time
@@ -265,15 +193,6 @@ final class AppDependencies {
 
             isTranscriptionReady = true
             initializationStatus = "Ready"
-            if hasAccessibilityPermission {
-                coordinator.setupHotkey()
-                coordinator.setupToggleRecordingHotkey()
-                coordinator.setupEscCancel()
-                coordinator.setupDestinationHotkeys()
-                modeSwitcherCoordinator.setupHotkey()
-                pushToTypeCoordinator.setupHotkey()
-                copyLatestCaptureHandler.setupHotkey()
-            }
             Logger.app.info("App fully initialized")
         } catch {
             initializationStatus = "Failed: \(error.localizedDescription)"
@@ -307,7 +226,7 @@ final class AppDependencies {
                 self.coordinator.setupEscCancel()
                 self.coordinator.setupDestinationHotkeys()
                 self.modeSwitcherCoordinator.setupHotkey()
-                self.pushToTypeCoordinator.setupHotkey()
+                self.captureCoordinator.setupHotkey()
                 self.copyLatestCaptureHandler.setupHotkey()
                 Logger.app.info("Accessibility granted, hotkeys registered")
             }
@@ -326,11 +245,7 @@ final class AppDependencies {
         if canContinue {
             settings.activeModeID = conversation.modeID
         }
-        outputPanel.showFromHistory(
-            conversation: conversation,
-            outputDestinations: settings.outputDestinations,
-            canContinue: canContinue
-        )
+        captureCoordinator.showFromHistory(conversation: conversation, canContinue: canContinue)
     }
 
     deinit {

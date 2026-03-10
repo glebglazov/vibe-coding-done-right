@@ -44,6 +44,9 @@ struct Mode: Identifiable, Codable, Equatable {
     // Output
     var defaultOutputDestinationID: UUID
 
+    // Behavior
+    var quickAction: Bool
+
     /// Joined labels from the first option of each parameter (the defaults, without overrides).
     /// Used in static UI contexts (settings, menu bar, quick actions) where there's no active session.
     var defaultParameterLabels: String? {
@@ -144,7 +147,8 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPromptEnabled: Bool = false,
         systemPrompt: String = "",
         defaultOutputDestinationID: UUID = OutputDestination.builtInOutputPanelID,
-        parameters: [ModeParameter] = []
+        parameters: [ModeParameter] = [],
+        quickAction: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -158,6 +162,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.systemPrompt = systemPrompt
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.parameters = parameters
+        self.quickAction = quickAction
     }
 
     // MARK: - Codable (backward-compatible)
@@ -169,6 +174,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case systemPromptEnabled, systemPrompt
         case defaultOutputDestinationID
         case parameters
+        case quickAction
         // Legacy keys (read-only, for migration)
         case actionType, bashCommand, pasteScriptOutput
     }
@@ -187,6 +193,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
+        try container.encode(quickAction, forKey: .quickAction)
         // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
         // Once saved in new format, old keys are gone (one-way migration).
     }
@@ -203,6 +210,7 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInOutputPanelID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
+        quickAction = try container.decodeIfPresent(Bool.self, forKey: .quickAction) ?? false
 
         // New fields
         if let newProcessingType = try container.decodeIfPresent(ProcessingType.self, forKey: .processingType) {

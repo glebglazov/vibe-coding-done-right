@@ -9,3 +9,4 @@ struct CopyAction: PostTranscriptionAction {
         return nil
     }
 }
+    

@@ -128,14 +128,14 @@ struct HomeTabView: View {
                         get: { dependencies.settings.pushToTypeHotkey.keyCode },
                         set: {
                             dependencies.settings.pushToTypeHotkey.keyCode = $0
-                            dependencies.pushToTypeCoordinator.updateHotkey()
+                            dependencies.captureCoordinator.updateHotkey()
                         }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.pushToTypeHotkey.modifiers },
                         set: {
                             dependencies.settings.pushToTypeHotkey.modifiers = $0
-                            dependencies.pushToTypeCoordinator.updateHotkey()
+                            dependencies.captureCoordinator.updateHotkey()
                         }
                     )
                 )

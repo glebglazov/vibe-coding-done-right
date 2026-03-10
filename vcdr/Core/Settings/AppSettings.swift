@@ -269,6 +269,15 @@ final class AppSettings {
     func refreshTemplateAvailability() {
         availableTemplateIDs = ToolAvailabilityChecker.checkAll()
 
+        // Migrate legacy "dictation" template to "plain"
+        for i in modes.indices where modes[i].templateID == "dictation" {
+            modes[i].templateID = "plain"
+            if modes[i].name == "Dictation" {
+                modes[i].name = "Plain"
+            }
+            Logger.settings.info("Migrated dictation template mode to plain")
+        }
+
         // Create missing template modes for available tools
         for template in ModeTemplate.all where availableTemplateIDs.contains(template.id) {
             if !modes.contains(where: { $0.templateID == template.id }) {

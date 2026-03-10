@@ -313,6 +313,15 @@ struct ModeDetailView: View {
                             .tag(destination.id)
                     }
                 }
+
+                if mode.processingType == .bashScript {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Quick Action", isOn: $mode.quickAction)
+                        Text("When enabled, recording result is immediately processed and sent to the default output destination without showing the Capture View.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .formStyle(.grouped)

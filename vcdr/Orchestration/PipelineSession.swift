@@ -11,5 +11,5 @@ struct PipelineSession {
     var followUpContext: String?
     var conversationTurns: [ConversationTurn] = []
     var conversationID: UUID?
-    var isFollowUpFromVisibleOutputPanel: Bool = false
+    var isFollowUpFromVisibleCapturePanel: Bool = false
 }

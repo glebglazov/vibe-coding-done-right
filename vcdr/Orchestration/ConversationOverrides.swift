@@ -1,7 +1,7 @@
 import Foundation
 
 /// Manages parameter and destination overrides for the current conversation.
-/// Shared between RecordingCoordinator and PushToTypeCoordinator so both
+/// Shared between RecordingCoordinator and CaptureCoordinator so both
 /// participate in the same override lifecycle: set → consume → clear-on-next.
 @Observable
 @MainActor

@@ -12,6 +12,7 @@ struct ModeTemplate {
     let systemPrompt: String
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
+    let quickAction: Bool
 
     func makeMode() -> Mode {
         Mode(
@@ -25,7 +26,8 @@ struct ModeTemplate {
             systemPromptEnabled: systemPromptEnabled,
             systemPrompt: systemPrompt,
             defaultOutputDestinationID: defaultOutputDestinationID,
-            parameters: parameters
+            parameters: parameters,
+            quickAction: quickAction
         )
     }
 
@@ -40,6 +42,7 @@ struct ModeTemplate {
         mode.terminatorTemplate = Mode.defaultTerminatorTemplate
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.parameters = parameters
+        mode.quickAction = quickAction
     }
 
     /// Finds the template definition for a given template ID.
@@ -64,9 +67,9 @@ extension ModeTemplate {
     private static let ollamaQwen35_08bOptionID = UUID(uuidString: "10000000-0000-0000-0000-000000000021")!
     private static let ollamaQwen35_4bOptionID = UUID(uuidString: "10000000-0000-0000-0000-000000000022")!
 
-    static let dictation = ModeTemplate(
-        id: "dictation",
-        defaultName: "Dictation",
+    static let plain = ModeTemplate(
+        id: "plain",
+        defaultName: "Plain",
         availabilityCommand: nil,
         processingType: .none,
         processingCommand: "",
@@ -74,7 +77,8 @@ extension ModeTemplate {
         systemPromptEnabled: false,
         systemPrompt: "",
         parameters: [],
-        defaultOutputDestinationID: OutputDestination.builtInPasteID
+        defaultOutputDestinationID: OutputDestination.builtInPasteID,
+        quickAction: false
     )
 
     static let claudeCode = ModeTemplate(
@@ -93,7 +97,8 @@ extension ModeTemplate {
                 ModeParameterOption(id: claudeCodeOpusOptionID, label: "Opus", value: "opus"),
             ]),
         ],
-        defaultOutputDestinationID: OutputDestination.builtInOutputPanelID
+        defaultOutputDestinationID: OutputDestination.builtInOutputPanelID,
+        quickAction: false
     )
 
     static let ollama = ModeTemplate(
@@ -111,8 +116,9 @@ extension ModeTemplate {
                 ModeParameterOption(id: ollamaQwen35_4bOptionID, label: "Qwen3.5 - 4B", value: "qwen3.5:4b"),
             ]),
         ],
-        defaultOutputDestinationID: OutputDestination.builtInOutputPanelID
+        defaultOutputDestinationID: OutputDestination.builtInOutputPanelID,
+        quickAction: false
     )
 
-    static let all: [ModeTemplate] = [.dictation, .claudeCode, .ollama]
+    static let all: [ModeTemplate] = [.plain, .claudeCode, .ollama]
 }
