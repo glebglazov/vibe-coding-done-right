@@ -406,6 +406,8 @@ final class RecordingCoordinator {
                 )
                 recordingIndicator.hide()
             } else {
+                let panelWasVisible = captureCoordinator.isPanelVisible
+
                 // Dismiss the capture panel if it was shown during recording
                 // (e.g. destination hotkey turned a normal recording into quick action)
                 captureCoordinator.panel.dismiss()
@@ -413,8 +415,10 @@ final class RecordingCoordinator {
                 if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
                     try await action.execute(text: processedText)
                 }
-                recordingIndicator.update(phase: .success)
-                dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+                if !panelWasVisible {
+                    recordingIndicator.update(phase: .success)
+                    dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+                }
             }
 
             transcriptionHistory.recordTurn(
@@ -562,14 +566,22 @@ final class RecordingCoordinator {
         session = nil
         recordingStartInstant = nil
         overrides.clearAll()
-        captureCoordinator.notifyRecordingCancelled()
         captureCoordinator.panel.unlockFollowUp()
 
         if captureCoordinator.isPanelVisible && !wasFollowUp {
-            // Fresh recording with pill — cancel the capture (dismiss panel)
-            captureCoordinator.cancelCapture()
+            // Fresh recording with pill — flash cancelled icon, then dismiss
+            captureCoordinator.notifyCancelled()
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                self.captureCoordinator.cancelCapture()
+            }
+        } else if captureCoordinator.isPanelVisible && wasFollowUp {
+            // Follow-up recording cancelled — flash cancelled on pill, keep panel
+            captureCoordinator.notifyCancelled()
+        } else {
+            captureCoordinator.notifyRecordingCancelled()
+            recordingIndicator.showCancelled()
         }
-        recordingIndicator.showCancelled()
 
         if wasProcessing {
             Logger.app.info("Processing cancelled via Esc")

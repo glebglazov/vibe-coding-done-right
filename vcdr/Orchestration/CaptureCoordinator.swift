@@ -53,6 +53,8 @@ final class CaptureCoordinator {
     private static let successIndicatorDuration: Duration = .seconds(2)
     /// How long the error X shows on the pill before returning to idle
     private static let pillErrorDisplayDuration: Duration = .seconds(1.5)
+    /// How long the cancelled/success icon shows on the pill before returning to idle
+    private static let pillFlashDuration: Duration = .seconds(1)
     private static let errorIndicatorDuration: Duration = .seconds(10)
     private static let escapeKeyCode: CGKeyCode = 53
 
@@ -182,6 +184,32 @@ final class CaptureCoordinator {
             panel.showPillError()
             Task {
                 try? await Task.sleep(for: Self.pillErrorDisplayDuration)
+                panel.setPillPhase(.idle)
+            }
+        }
+    }
+
+    /// Briefly flashes the cancelled icon on the pill, then returns to idle.
+    func notifyCancelled() {
+        panel.setRecording(false)
+        panel.setProcessing(false)
+        if panel.isVisible {
+            panel.setPillPhase(.cancelled)
+            if !panel.isMinimized { panel.minimize(phase: .cancelled) }
+            Task {
+                try? await Task.sleep(for: Self.pillFlashDuration)
+                panel.setPillPhase(.idle)
+            }
+        }
+    }
+
+    /// Briefly flashes the success icon on the pill, then returns to idle.
+    func notifySuccess() {
+        if panel.isVisible {
+            panel.setPillPhase(.success)
+            if !panel.isMinimized { panel.minimize(phase: .success) }
+            Task {
+                try? await Task.sleep(for: Self.pillFlashDuration)
                 panel.setPillPhase(.idle)
             }
         }

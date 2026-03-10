@@ -62,10 +62,14 @@ struct CaptureView: View {
                 AudioWaveformView(audioLevels: viewModel.audioRecorder?.audioLevels ?? [])
             case .processing:
                 AnimatedDotsView()
-            case .error:
+            case .error, .cancelled:
                 Image(systemName: "xmark")
                     .font(.system(size: Self.pillIconSize, weight: .semibold))
                     .foregroundStyle(.red)
+            case .success:
+                Image(systemName: "checkmark")
+                    .font(.system(size: Self.pillIconSize, weight: .semibold))
+                    .foregroundStyle(.green)
             }
 
             if viewModel.clipboardCaptureCount > 0 {

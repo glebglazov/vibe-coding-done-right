@@ -22,6 +22,8 @@ final class CaptureViewModel {
         case recording
         case processing
         case error
+        case cancelled
+        case success
     }
     var pillPhase: PillPhase = .idle
 
