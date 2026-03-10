@@ -23,6 +23,7 @@ struct CaptureView: View {
     private static let blockquoteBorderOpacity: Double = 0.4
     private static let blockquoteLeadingPadding: CGFloat = 4
     private static let textInputHeight: CGFloat = 60
+    private static let textInputTopInset: CGFloat = 4
     private static let recordingDotSize: CGFloat = 8
 
     // MARK: - Constants (Pill)
@@ -162,7 +163,7 @@ struct CaptureView: View {
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, Self.textPadding)
-                        .padding(.top, 8)
+                        .padding(.top, 8 + Self.textInputTopInset)
                         .allowsHitTesting(false)
                 }
                 TextEditor(text: $viewModel.text)
@@ -170,6 +171,7 @@ struct CaptureView: View {
                     .scrollContentBackground(.hidden)
                     .disabled(viewModel.isProcessing)
                     .padding(.horizontal, Self.textPadding - 5)
+                    .padding(.top, Self.textInputTopInset)
             }
             .frame(height: Self.textInputHeight)
         }

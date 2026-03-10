@@ -23,6 +23,9 @@ final class CapturePanel {
     /// Callback invoked when the user presses Escape while locked for follow-up
     var onCancelRecording: (() -> Void)?
 
+    /// Callback invoked when the user presses the cancel capture hotkey
+    var onCancelCapture: (() -> Void)?
+
     /// When true, the panel ignores dismiss triggers.
     /// Set during follow-up recording so the panel stays visible.
     private(set) var isLockedForFollowUp = false
@@ -81,6 +84,7 @@ final class CapturePanel {
             },
             audioRecorder: audioRecorder
         )
+        viewModel.onCancelCapture = onCancelCapture
         self.viewModel = viewModel
 
         presentPanel(viewModel: viewModel, turns: conversationTurns, captures: captures)
@@ -391,7 +395,6 @@ final class CapturePanel {
 
     func lockForFollowUp() {
         isLockedForFollowUp = true
-        minimize()
     }
 
     func unlockFollowUp() {

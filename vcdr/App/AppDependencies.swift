@@ -152,6 +152,11 @@ final class AppDependencies {
             self?.coordinator.cancelRecording()
         }
 
+        // Wire cancel capture hotkey: cancels the capture (removes from history) and dismisses
+        captureCoordinator.panel.onCancelCapture = { [weak captureCoordinator] in
+            captureCoordinator?.cancelCapture()
+        }
+
     }
 
     func initialize() async {

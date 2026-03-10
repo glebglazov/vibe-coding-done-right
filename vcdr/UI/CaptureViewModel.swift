@@ -36,6 +36,7 @@ final class CaptureViewModel {
 
     let onSubmit: (String) -> Void
     let onDismiss: () -> Void
+    var onCancelCapture: (() -> Void)?
     var onDestinationSubmit: ((String, UUID) -> Void)?
     let onExpand: () -> Void
     let audioRecorder: AudioRecorder?
@@ -123,6 +124,12 @@ final class CaptureViewModel {
             return true
         }
 
+        // Check cancel capture hotkey (e.g. Shift+Tab) — cancel the capture
+        if matchesCancelHotkey(event) {
+            if let onCancelCapture { onCancelCapture() } else { onDismiss() }
+            return true
+        }
+
         switch event.keyCode {
         case 36: // Return
             // Shift+Return inserts newline (pass through to text editor)
@@ -146,6 +153,15 @@ final class CaptureViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
         return captures.first?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    /// Checks if the event matches the configured cancel recording hotkey.
+    private func matchesCancelHotkey(_ event: NSEvent) -> Bool {
+        let binding = settings.cancelRecordingHotkey
+        guard binding.isAssigned else { return false }
+        let eventFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
+        let requiredFlags = UInt(binding.modifiers)
+        return event.keyCode == binding.keyCode && (eventFlags & requiredFlags) == requiredFlags
     }
 
     /// Checks if the event matches any output destination's activation hotkey.
