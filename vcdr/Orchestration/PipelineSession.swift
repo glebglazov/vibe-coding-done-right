@@ -4,14 +4,12 @@ import AppKit
 /// errors out, or is cancelled — replacing individual property resets.
 struct PipelineSession {
     var previousActiveApp: NSRunningApplication?
-    var capturedSelection: String?
+    var captures: [CapturedContext] = []
     /// When capture runs concurrently (e.g. Cmd+C fallback polling), this task
-    /// holds the in-flight result. Resolved into `capturedSelection` before use.
-    var capturedSelectionTask: Task<String?, Never>?
+    /// holds the in-flight result. Resolved into `captures` before use.
+    var captureTask: Task<CapturedContext?, Never>?
     var followUpContext: String?
     var conversationTurns: [ConversationTurn] = []
     var conversationID: UUID?
     var isFollowUpFromVisibleOutputPanel: Bool = false
-    /// Texts captured via clipboard monitoring during recording (Cmd+C in other apps).
-    var midRecordingCaptures: [String] = []
 }

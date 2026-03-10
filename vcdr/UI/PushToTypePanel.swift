@@ -39,7 +39,7 @@ final class PushToTypePanel {
     func show(
         settings: AppSettings,
         conversationTurns: [ConversationTurn] = [],
-        capturedSelection: String? = nil,
+        captures: [CapturedContext] = [],
         topOffset: CGFloat = 0,
         onSubmit: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void
@@ -49,7 +49,7 @@ final class PushToTypePanel {
         let viewModel = PushToTypeViewModel(
             settings: settings,
             conversationTurns: conversationTurns,
-            capturedSelection: capturedSelection,
+            captures: captures,
             onSubmit: { [weak self] text in
                 onSubmit(text)
                 self?.hide()
@@ -63,7 +63,7 @@ final class PushToTypePanel {
 
         let view = PushToTypeView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
-        let panelHeight = Self.calculateHeight(for: conversationTurns, capturedSelection: capturedSelection)
+        let panelHeight = Self.calculateHeight(for: conversationTurns, captures: captures)
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: panelHeight)
 
         let panel = KeyablePanel(
@@ -201,8 +201,8 @@ final class PushToTypePanel {
         }
     }
 
-    func updateCapturedSelection(_ selection: String?) {
-        viewModel?.capturedSelection = selection
+    func updateCaptures(_ captures: [CapturedContext]) {
+        viewModel?.captures = captures
     }
 
     func signalClipboardCapture() {
@@ -227,8 +227,8 @@ final class PushToTypePanel {
     private func resizePanelToExpanded() {
         guard let panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let turns = viewModel?.conversationTurns ?? []
-        let selection = viewModel?.capturedSelection
-        let newHeight = Self.calculateHeight(for: turns, capturedSelection: selection)
+        let caps = viewModel?.captures ?? []
+        let newHeight = Self.calculateHeight(for: turns, captures: caps)
         let screenFrame = screen.frame
         let visibleFrame = screen.visibleFrame
         let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
@@ -266,14 +266,16 @@ final class PushToTypePanel {
 
     // MARK: - Height Calculation
 
-    private static func calculateHeight(for turns: [ConversationTurn], capturedSelection: String? = nil) -> CGFloat {
+    private static func calculateHeight(for turns: [ConversationTurn], captures: [CapturedContext] = []) -> CGFloat {
         var extraHeight: CGFloat = 0
 
-        // Captured selection blockquote ("Context:" label + selection lines + padding)
-        if let selection = capturedSelection {
-            let selectionLines = CGFloat(selection.components(separatedBy: .newlines).count)
-            extraHeight += labelLineHeight  // "Context:" label
-            extraHeight += selectionLines * lineHeight * 0.9  // callout font is slightly smaller
+        // Captured context blockquotes ("Selected:"/"Copied:" label + text lines per capture + padding)
+        for capture in captures {
+            let captureLines = CGFloat(capture.text.components(separatedBy: .newlines).count)
+            extraHeight += labelLineHeight  // source label
+            extraHeight += captureLines * lineHeight * 0.9  // callout font is slightly smaller
+        }
+        if !captures.isEmpty {
             extraHeight += conversationPadding
         }
 
@@ -349,7 +351,7 @@ final class PushToTypeViewModel {
     var parameterLabels: String?
     var modeSwitcherViewModel: ModeSwitcherViewModel?
     let conversationTurns: [ConversationTurn]
-    var capturedSelection: String?
+    var captures: [CapturedContext]
     let settings: AppSettings
     let onSubmit: (String) -> Void
     let onDismiss: () -> Void
@@ -363,10 +365,10 @@ final class PushToTypeViewModel {
         return parts.joined(separator: " · ")
     }
 
-    init(settings: AppSettings, conversationTurns: [ConversationTurn] = [], capturedSelection: String? = nil, onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
+    init(settings: AppSettings, conversationTurns: [ConversationTurn] = [], captures: [CapturedContext] = [], onSubmit: @escaping (String) -> Void, onDismiss: @escaping () -> Void) {
         self.settings = settings
         self.conversationTurns = conversationTurns
-        self.capturedSelection = capturedSelection
+        self.captures = captures
         self.onSubmit = onSubmit
         self.onDismiss = onDismiss
     }
@@ -405,12 +407,12 @@ final class PushToTypeViewModel {
         }
     }
 
-    /// Typed text takes priority; falls back to captured selection so the user
+    /// Typed text takes priority; falls back to first capture so the user
     /// can submit clipboard-gathered content without typing anything.
     private func resolveSubmissionText() -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { return trimmed }
-        return capturedSelection?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return captures.first?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     /// Checks if the event matches any output destination's activation hotkey.
@@ -514,10 +516,14 @@ private struct PushToTypeView: View {
                     .focused($isTextFieldFocused)
                     .padding(Self.textPadding)
 
-                if let selection = viewModel.capturedSelection {
+                if !viewModel.captures.isEmpty {
                     Divider()
-                    selectionBlockquote(selection)
-                        .padding(Self.textPadding)
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(viewModel.captures) { capture in
+                            captureBlockquote(capture)
+                        }
+                    }
+                    .padding(Self.textPadding)
                 }
             }
 
@@ -575,18 +581,18 @@ private struct PushToTypeView: View {
         }
     }
 
-    private func selectionBlockquote(_ text: String) -> some View {
+    private func captureBlockquote(_ capture: CapturedContext) -> some View {
         HStack(alignment: .top, spacing: Self.blockquoteBorderSpacing) {
             RoundedRectangle(cornerRadius: 1)
                 .fill(Color.secondary.opacity(Self.blockquoteBorderOpacity))
                 .frame(width: Self.blockquoteBorderWidth)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Context:")
+                Text(capture.source == .selection ? "Selected:" : "Copied:")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
 
-                Text(text)
+                Text(capture.text)
                     .font(.system(.callout))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)

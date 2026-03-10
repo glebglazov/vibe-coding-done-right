@@ -90,7 +90,7 @@ struct ModeApplyPreProcessingTests {
     @Test("Returns text as-is when all options disabled")
     func passthrough() {
         let mode = Mode(id: UUID(), name: "Test")
-        #expect(mode.applyPreProcessing("hello", capturedSelection: nil) == "hello")
+        #expect(mode.applyPreProcessing("hello", captures: []) == "hello")
     }
 
     @Test("Applies terminator when enabled")
@@ -100,7 +100,7 @@ struct ModeApplyPreProcessingTests {
             terminatorTemplateEnabled: true,
             terminatorTemplate: "<dot><space>"
         )
-        #expect(mode.applyPreProcessing("hello", capturedSelection: nil) == "hello. ")
+        #expect(mode.applyPreProcessing("hello", captures: []) == "hello. ")
     }
 
     @Test("Does not apply terminator when disabled")
@@ -110,13 +110,13 @@ struct ModeApplyPreProcessingTests {
             terminatorTemplateEnabled: false,
             terminatorTemplate: "<dot><space>"
         )
-        #expect(mode.applyPreProcessing("hello", capturedSelection: nil) == "hello")
+        #expect(mode.applyPreProcessing("hello", captures: []) == "hello")
     }
 
     @Test("Prepends follow-up context before new dictation")
     func followUpContext() {
         let mode = Mode(id: UUID(), name: "Test")
-        let result = mode.applyPreProcessing("new text", capturedSelection: nil, followUpContext: "previous")
+        let result = mode.applyPreProcessing("new text", captures: [], followUpContext: "previous")
         #expect(result == "previous\n\nnew text")
     }
 
@@ -128,7 +128,7 @@ struct ModeApplyPreProcessingTests {
             systemPromptEnabled: true,
             systemPrompt: "Fix grammar:"
         )
-        #expect(mode.applyPreProcessing("hello world", capturedSelection: nil) == "Fix grammar:\n\nhello world")
+        #expect(mode.applyPreProcessing("hello world", captures: []) == "Fix grammar:\n\nhello world")
     }
 
     @Test("Does NOT prepend system prompt when processing type is none")
@@ -139,7 +139,7 @@ struct ModeApplyPreProcessingTests {
             systemPromptEnabled: true,
             systemPrompt: "Fix grammar:"
         )
-        #expect(mode.applyPreProcessing("hello world", capturedSelection: nil) == "hello world")
+        #expect(mode.applyPreProcessing("hello world", captures: []) == "hello world")
     }
 
     @Test("Does NOT prepend system prompt when system prompt disabled")
@@ -150,7 +150,7 @@ struct ModeApplyPreProcessingTests {
             systemPromptEnabled: false,
             systemPrompt: "Fix grammar:"
         )
-        #expect(mode.applyPreProcessing("hello world", capturedSelection: nil) == "hello world")
+        #expect(mode.applyPreProcessing("hello world", captures: []) == "hello world")
     }
 
     @Test("Does NOT prepend system prompt when system prompt is empty")
@@ -161,16 +161,17 @@ struct ModeApplyPreProcessingTests {
             systemPromptEnabled: true,
             systemPrompt: ""
         )
-        #expect(mode.applyPreProcessing("hello world", capturedSelection: nil) == "hello world")
+        #expect(mode.applyPreProcessing("hello world", captures: []) == "hello world")
     }
 
     @Test("Appends captured selection after text")
     func capturedSelection() {
         let mode = Mode(id: UUID(), name: "Test")
-        #expect(mode.applyPreProcessing("rewrite this", capturedSelection: "selected text") == "rewrite this\n\nselected text")
+        let captures = [CapturedContext(text: "selected text", source: .selection)]
+        #expect(mode.applyPreProcessing("rewrite this", captures: captures) == "rewrite this\n\nselected text")
     }
 
-    @Test("Full pipeline: terminator + follow-up + system prompt + selection in correct order")
+    @Test("Full pipeline: terminator + follow-up + system prompt + captures in correct order")
     func fullPipeline() {
         let mode = Mode(
             id: UUID(), name: "Test",
@@ -180,12 +181,13 @@ struct ModeApplyPreProcessingTests {
             systemPromptEnabled: true,
             systemPrompt: "Prompt:"
         )
+        let captures = [CapturedContext(text: "selection", source: .selection)]
         let result = mode.applyPreProcessing(
             "dictation",
-            capturedSelection: "selection",
+            captures: captures,
             followUpContext: "context"
         )
-        // Order: terminator applied to text → follow-up prepended → system prompt prepended → selection appended
+        // Order: terminator applied to text → follow-up prepended → system prompt prepended → captures appended
         #expect(result == "Prompt:\n\ncontext\n\ndictation.\n\nselection")
     }
 }

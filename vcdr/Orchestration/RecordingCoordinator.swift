@@ -202,8 +202,9 @@ final class RecordingCoordinator {
         let capturer = selectionCapturer
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
-        session?.capturedSelectionTask = Task {
-            await capturer.capture(bundleIdentifier: bundleID, pid: pid)
+        session?.captureTask = Task {
+            guard let text = await capturer.capture(bundleIdentifier: bundleID, pid: pid) else { return nil }
+            return CapturedContext(text: text, source: .selection)
         }
 
         // Show indicator immediately for visual feedback — the media pause
@@ -308,7 +309,8 @@ final class RecordingCoordinator {
 
         processingTask = Task { @MainActor in
             let midCaptures = await self.clipboardMonitor.stop()
-            self.session?.midRecordingCaptures = midCaptures
+            let clipboardContexts = midCaptures.map { CapturedContext(text: $0, source: .clipboard) }
+            self.session?.captures.append(contentsOf: clipboardContexts)
             await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration)
         }
     }
@@ -330,17 +332,15 @@ final class RecordingCoordinator {
 
             // Consume session state into locals for use throughout the pipeline
             var pipelineSession = session ?? PipelineSession()
-            // Resolve any in-flight capture task (Cmd+C fallback polling)
-            if let captureTask = pipelineSession.capturedSelectionTask {
-                pipelineSession.capturedSelection = await captureTask.value
-                pipelineSession.capturedSelectionTask = nil
-                let capturedCount = pipelineSession.capturedSelection.map { "\($0.count) chars" } ?? "nil"
-                Logger.recording.info("Captured selection: \(capturedCount)")
+            // Resolve any in-flight capture task (AX selection polling)
+            if let captureTask = pipelineSession.captureTask {
+                if let captured = await captureTask.value {
+                    pipelineSession.captures.insert(captured, at: 0)
+                }
+                pipelineSession.captureTask = nil
+                Logger.recording.info("Captures: \(pipelineSession.captures.count) items")
             }
-            let selection = Self.mergeCaptures(
-                initial: pipelineSession.capturedSelection,
-                midRecording: pipelineSession.midRecordingCaptures
-            )
+            let captures = pipelineSession.captures
             let context = pipelineSession.followUpContext
             let currentTurns = pipelineSession.conversationTurns
             // Generate a new conversation ID for fresh recordings,
@@ -383,7 +383,7 @@ final class RecordingCoordinator {
                 let streamResult = TextProcessingPipeline.runStreaming(
                     mode: mode,
                     text: text,
-                    capturedSelection: selection,
+                    captures: captures,
                     followUpContext: context,
                     conversationTurns: currentTurns,
                     conversationID: activeConversationID,
@@ -398,7 +398,7 @@ final class RecordingCoordinator {
                     outputPanel.show(
                         inputText: text,
                         text: "",
-                        capturedSelection: selection,
+                        captures: captures,
                         conversationTurns: currentTurns,
                         outputDestinations: settings.outputDestinations,
                         targetAppPID: targetAppPID,
@@ -460,7 +460,7 @@ final class RecordingCoordinator {
                     conversationID: activeConversationID,
                     input: text,
                     output: finalText,
-                    capturedSelection: selection,
+                    captures: captures,
                     modeID: mode.id,
                     modeName: mode.name,
                     hadExternalProcessing: streamResult.hadExternalProcessing
@@ -483,7 +483,7 @@ final class RecordingCoordinator {
                 let result = try await TextProcessingPipeline.run(
                     mode: mode,
                     text: text,
-                    capturedSelection: selection,
+                    captures: captures,
                     followUpContext: context,
                     conversationTurns: currentTurns,
                     conversationID: activeConversationID,
@@ -514,7 +514,7 @@ final class RecordingCoordinator {
                         outputPanel.show(
                             inputText: text,
                             text: finalText,
-                            capturedSelection: selection,
+                            captures: captures,
                             conversationTurns: currentTurns,
                             outputDestinations: settings.outputDestinations,
                             targetAppPID: targetAppPID,
@@ -540,7 +540,7 @@ final class RecordingCoordinator {
                     conversationID: activeConversationID,
                     input: text,
                     output: finalText,
-                    capturedSelection: selection,
+                    captures: captures,
                     modeID: mode.id,
                     modeName: mode.name,
                     hadExternalProcessing: hadExternalProcessing
@@ -703,26 +703,6 @@ final class RecordingCoordinator {
     /// CoreAudio needs time to fully release the recording session so the
     /// output device is not contending with an active input — without this,
     /// the first 1-2 seconds of resumed music can sound degraded.
-    /// Merges the initial AX selection capture with any mid-recording clipboard captures
-    /// into a single formatted string for the pipeline's `capturedSelection` field.
-    /// - 0 captures total → nil
-    /// - 1 capture total → the text as-is (no numbering)
-    /// - 2+ captures total → numbered `[1] first\n\n[2] second\n\n[3] third`
-    static func mergeCaptures(initial: String?, midRecording: [String]) -> String? {
-        var all: [String] = []
-        if let initial { all.append(initial) }
-        all.append(contentsOf: midRecording)
-
-        switch all.count {
-        case 0: return nil
-        case 1: return all[0]
-        default:
-            return all.enumerated()
-                .map { "[\($0.offset + 1)] \($0.element)" }
-                .joined(separator: "\n\n")
-        }
-    }
-
     private static let audioSettleDelayBeforeResume: Duration = .milliseconds(300)
     private static let successIndicatorDuration: Duration = .seconds(2)
     private static let errorIndicatorDuration: Duration = .seconds(10)

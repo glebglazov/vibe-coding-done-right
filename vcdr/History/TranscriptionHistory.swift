@@ -23,7 +23,7 @@ final class TranscriptionHistory {
         conversationID: UUID,
         input: String,
         output: String,
-        capturedSelection: String?,
+        captures: [CapturedContext],
         modeID: UUID,
         modeName: String,
         hadExternalProcessing: Bool = false
@@ -32,7 +32,7 @@ final class TranscriptionHistory {
             id: UUID(),
             input: input,
             output: output,
-            capturedSelection: capturedSelection,
+            captures: captures,
             timestamp: .now
         )
 
@@ -101,11 +101,14 @@ final class TranscriptionHistory {
         // Fall back to legacy format migration
         if let legacyRecords = try? decoder.decode([TranscriptionRecord].self, from: data) {
             return legacyRecords.map { record in
+                let captures: [CapturedContext] = record.capturedSelection.map {
+                    [CapturedContext(text: $0, source: .selection)]
+                } ?? []
                 let turn = Conversation.Turn(
                     id: UUID(),
                     input: record.text,
                     output: record.processedText ?? record.text,
-                    capturedSelection: record.capturedSelection,
+                    captures: captures,
                     timestamp: record.timestamp
                 )
                 return Conversation(

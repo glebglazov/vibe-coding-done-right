@@ -92,13 +92,13 @@ private struct ConversationRowView: View {
                     Text(conversation.previewText)
                         .lineLimit(Self.previewLineLimit)
 
-                    // Captured selection context (first turn only)
-                    if let selection = conversation.turns.first?.capturedSelection {
+                    // Captured context preview (first turn's first capture only)
+                    if let firstCapture = conversation.turns.first?.captures.first {
                         HStack(alignment: .top, spacing: 4) {
                             Image(systemName: "text.quote")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
-                            Text(selection)
+                            Text(firstCapture.text)
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                                 .lineLimit(Self.selectionPreviewLineLimit)

@@ -10,12 +10,27 @@ struct Conversation: Identifiable, Equatable {
     /// Determines if this entry is rendered and treated as a conversation.
     let hadExternalProcessing: Bool
 
-    struct Turn: Identifiable, Codable, Equatable {
+    struct Turn: Identifiable, Equatable {
         let id: UUID
         let input: String
         let output: String
-        let capturedSelection: String?
+        let captures: [CapturedContext]
         let timestamp: Date
+
+        // MARK: - Codable (backward-compatible)
+
+        private enum CodingKeys: String, CodingKey {
+            case id, input, output, captures, timestamp
+            case capturedSelection // Legacy key for backward compat
+        }
+
+        init(id: UUID, input: String, output: String, captures: [CapturedContext], timestamp: Date) {
+            self.id = id
+            self.input = input
+            self.output = output
+            self.captures = captures
+            self.timestamp = timestamp
+        }
     }
 
     /// Preview text for the history list (first turn's input, truncated)
@@ -32,6 +47,34 @@ struct Conversation: Identifiable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, turns, modeID, modeName, lastUpdated, hadExternalProcessing
+    }
+}
+
+extension Conversation.Turn: Codable {
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(input, forKey: .input)
+        try container.encode(output, forKey: .output)
+        try container.encode(captures, forKey: .captures)
+        try container.encode(timestamp, forKey: .timestamp)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        input = try container.decode(String.self, forKey: .input)
+        output = try container.decode(String.self, forKey: .output)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+
+        // Try new format first, fall back to legacy capturedSelection string
+        if let decoded = try? container.decode([CapturedContext].self, forKey: .captures) {
+            captures = decoded
+        } else if let legacy = try container.decodeIfPresent(String.self, forKey: .capturedSelection) {
+            captures = [CapturedContext(text: legacy, source: .selection)]
+        } else {
+            captures = []
+        }
     }
 }
 

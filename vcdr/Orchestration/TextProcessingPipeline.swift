@@ -19,18 +19,18 @@ struct StreamingPipelineResult {
 
 enum TextProcessingPipeline {
     /// Runs the text processing pipeline: pre-processing (terminator, system prompt,
-    /// follow-up context, captured selection) followed by optional bash script execution.
+    /// follow-up context, captured context) followed by optional bash script execution.
     static func run(
         mode: Mode,
         text: String,
-        capturedSelection: String?,
+        captures: [CapturedContext],
         followUpContext: String?,
         conversationTurns: [ConversationTurn],
         conversationID: UUID,
         parameterValues: [String: String] = [:]
     ) async throws -> PipelineResult {
-        // Step 1: Pre-processing (terminator, system prompt, follow-up context, captured selection)
-        let preprocessedText = mode.applyPreProcessing(text, capturedSelection: capturedSelection, followUpContext: followUpContext)
+        // Step 1: Pre-processing (terminator, system prompt, follow-up context, captures)
+        let preprocessedText = mode.applyPreProcessing(text, captures: captures, followUpContext: followUpContext)
 
         // Step 2: Processing (optional bash script)
         switch mode.processingType {
@@ -40,7 +40,7 @@ enum TextProcessingPipeline {
             let conversationJSON = buildConversationMessages(
                 mode: mode,
                 currentText: text,
-                currentCapturedSelection: capturedSelection,
+                currentCaptures: captures,
                 turns: conversationTurns
             )
             let paramEnv = Dictionary(
@@ -62,13 +62,13 @@ enum TextProcessingPipeline {
     static func runStreaming(
         mode: Mode,
         text: String,
-        capturedSelection: String?,
+        captures: [CapturedContext],
         followUpContext: String?,
         conversationTurns: [ConversationTurn],
         conversationID: UUID,
         parameterValues: [String: String] = [:]
     ) -> StreamingPipelineResult {
-        let preprocessedText = mode.applyPreProcessing(text, capturedSelection: capturedSelection, followUpContext: followUpContext)
+        let preprocessedText = mode.applyPreProcessing(text, captures: captures, followUpContext: followUpContext)
 
         switch mode.processingType {
         case .none:
@@ -81,7 +81,7 @@ enum TextProcessingPipeline {
             let conversationJSON = buildConversationMessages(
                 mode: mode,
                 currentText: text,
-                currentCapturedSelection: capturedSelection,
+                currentCaptures: captures,
                 turns: conversationTurns
             )
             let paramEnv = Dictionary(
@@ -103,7 +103,7 @@ enum TextProcessingPipeline {
     private static func buildConversationMessages(
         mode: Mode,
         currentText: String,
-        currentCapturedSelection: String?,
+        currentCaptures: [CapturedContext],
         turns: [ConversationTurn]
     ) -> String? {
         var messages: [[String: String]] = []
@@ -115,12 +115,12 @@ enum TextProcessingPipeline {
 
         // Previous turns as user/assistant pairs
         for turn in turns {
-            messages.append(["role": "user", "content": userContent(input: turn.input, capturedSelection: turn.capturedSelection)])
+            messages.append(["role": "user", "content": userContent(input: turn.input, captures: turn.captures)])
             messages.append(["role": "assistant", "content": turn.output])
         }
 
         // Current input as the latest user message
-        messages.append(["role": "user", "content": userContent(input: currentText, capturedSelection: currentCapturedSelection)])
+        messages.append(["role": "user", "content": userContent(input: currentText, captures: currentCaptures)])
 
         guard let data = try? JSONSerialization.data(withJSONObject: messages),
               let json = String(data: data, encoding: .utf8) else {
@@ -129,11 +129,9 @@ enum TextProcessingPipeline {
         return json
     }
 
-    /// Formats user message content: input first, then captured selection if present.
-    private static func userContent(input: String, capturedSelection: String?) -> String {
-        guard let selection = capturedSelection, !selection.isEmpty else {
-            return input
-        }
-        return input + "\n\n" + selection
+    /// Formats user message content: input first, then captured context if present.
+    private static func userContent(input: String, captures: [CapturedContext]) -> String {
+        guard !captures.isEmpty else { return input }
+        return input + "\n\n" + Mode.formatCaptures(captures)
     }
 }

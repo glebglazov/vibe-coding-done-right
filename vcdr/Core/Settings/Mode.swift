@@ -63,9 +63,9 @@ struct Mode: Identifiable, Codable, Equatable {
 
     /// Pre-processes transcription text by applying terminator, follow-up context
     /// (previous capture), system prompt (bash processing only), and appending
-    /// any captured selection.
+    /// any captured context items.
     /// This is step 1 of the pipeline — before the optional processing script.
-    func applyPreProcessing(_ text: String, capturedSelection: String?, followUpContext: String? = nil) -> String {
+    func applyPreProcessing(_ text: String, captures: [CapturedContext], followUpContext: String? = nil) -> String {
         var result = terminatorTemplateEnabled
             ? Self.applyTerminator(text, terminator: terminatorTemplate)
             : text
@@ -79,11 +79,25 @@ struct Mode: Identifiable, Codable, Equatable {
             result = systemPrompt + "\n\n" + result
         }
 
-        if let selection = capturedSelection {
-            result += "\n\n" + selection
+        if !captures.isEmpty {
+            result += "\n\n" + Self.formatCaptures(captures)
         }
 
         return result
+    }
+
+    /// Formats captures for inclusion in pipeline text.
+    /// - 1 capture → the text as-is
+    /// - 2+ captures → numbered `[1] first\n\n[2] second`
+    static func formatCaptures(_ captures: [CapturedContext]) -> String {
+        switch captures.count {
+        case 0: return ""
+        case 1: return captures[0].text
+        default:
+            return captures.enumerated()
+                .map { "[\($0.offset + 1)] \($0.element.text)" }
+                .joined(separator: "\n\n")
+        }
     }
 
     /// Appends the mode's terminator to the transcription, separating punctuation

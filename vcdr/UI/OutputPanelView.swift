@@ -35,7 +35,7 @@ final class OutputPanelViewModel {
         if conversationTurns.count > 1 { return true }
         if isReadOnly { return false }
         guard let turn = conversationTurns.first else { return false }
-        if turn.capturedSelection != nil { return true }
+        if !turn.captures.isEmpty { return true }
         return turn.input != turn.output
     }
 
@@ -273,9 +273,9 @@ struct OutputPanelView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, Self.labelVPadding)
 
-            // Captured selection blockquote
-            if let selection = turn.capturedSelection {
-                selectionBlockquote(selection)
+            // Captured context blockquotes
+            ForEach(turn.captures) { capture in
+                captureBlockquote(capture)
                     .padding(.bottom, Self.labelVPadding)
             }
 
@@ -302,18 +302,18 @@ struct OutputPanelView: View {
         }
     }
 
-    private func selectionBlockquote(_ text: String) -> some View {
+    private func captureBlockquote(_ capture: CapturedContext) -> some View {
         HStack(alignment: .top, spacing: Self.blockquoteBorderSpacing) {
             RoundedRectangle(cornerRadius: 1)
                 .fill(Color.secondary.opacity(Self.blockquoteBorderOpacity))
                 .frame(width: Self.blockquoteBorderWidth)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Context:")
+                Text(capture.source == .selection ? "Selected:" : "Copied:")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
 
-                Text(text)
+                Text(capture.text)
                     .font(.system(.callout))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)

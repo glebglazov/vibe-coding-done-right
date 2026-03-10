@@ -66,7 +66,7 @@ final class OutputPanelPanel {
     func show(
         inputText: String,
         text: String,
-        capturedSelection: String?,
+        captures: [CapturedContext],
         conversationTurns: [ConversationTurn],
         outputDestinations: [OutputDestination],
         targetAppPID: pid_t?,
@@ -76,7 +76,7 @@ final class OutputPanelPanel {
     ) {
         tearDown()
 
-        let allTurns = conversationTurns + [ConversationTurn(input: inputText, output: text, capturedSelection: capturedSelection)]
+        let allTurns = conversationTurns + [ConversationTurn(input: inputText, output: text, captures: captures)]
         let filteredDestinations = outputDestinations.filter { $0.type != .outputPanel }
 
         // Store session state for follow-up continuation
@@ -122,7 +122,7 @@ final class OutputPanelPanel {
         tearDown()
 
         let turns = conversation.turns.map { turn in
-            ConversationTurn(input: turn.input, output: turn.output, capturedSelection: turn.capturedSelection)
+            ConversationTurn(input: turn.input, output: turn.output, captures: turn.captures)
         }
         let filteredDestinations = outputDestinations.filter { $0.type != .outputPanel }
 
@@ -433,7 +433,7 @@ final class OutputPanelPanel {
         // for a single turn — the user just wants to see the final text.
         let showLabels = turns.count > 1
             || (!isReadOnly && ((turns.first.map { $0.input != $0.output } ?? false)
-                || turns.contains(where: { $0.capturedSelection != nil })))
+                || turns.contains(where: { !$0.captures.isEmpty })))
 
         for (index, turn) in turns.enumerated() {
             if showLabels {
@@ -442,11 +442,13 @@ final class OutputPanelPanel {
                 let labelOverhead = 2 * labelLineHeight / lineHeight // Two labels per turn
                 totalLines += labelOverhead
             }
-            // Captured selection blockquote ("Context:" label + selection lines)
-            if showLabels, let selection = turn.capturedSelection {
-                totalLines += labelLineHeight / lineHeight  // "Context:" label
-                let selectionLines = CGFloat(selection.components(separatedBy: .newlines).count)
-                totalLines += selectionLines * 0.9  // callout font is slightly smaller than body
+            // Captured context blockquotes ("Selected:"/"Copied:" label + text lines per capture)
+            if showLabels, !turn.captures.isEmpty {
+                for capture in turn.captures {
+                    totalLines += labelLineHeight / lineHeight  // source label
+                    let captureLines = CGFloat(capture.text.components(separatedBy: .newlines).count)
+                    totalLines += captureLines * 0.9  // callout font is slightly smaller than body
+                }
             }
 
             totalLines += CGFloat(turn.output.components(separatedBy: .newlines).count)
@@ -494,7 +496,7 @@ final class OutputPanelPanel {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
-        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: text, capturedSelection: lastTurn.capturedSelection)
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: text, captures: lastTurn.captures)
         currentText = text
         currentTurns = viewModel.conversationTurns
         viewModel.scrollTrigger += 1
@@ -506,7 +508,7 @@ final class OutputPanelPanel {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
-        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText, capturedSelection: lastTurn.capturedSelection)
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText, captures: lastTurn.captures)
         currentText = outputText
         viewModel.isProcessing = false
         currentTurns = viewModel.conversationTurns

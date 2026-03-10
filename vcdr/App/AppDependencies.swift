@@ -170,7 +170,7 @@ final class AppDependencies {
                 let streamResult = TextProcessingPipeline.runStreaming(
                     mode: mode,
                     text: text,
-                    capturedSelection: nil,
+                    captures: [],
                     followUpContext: followUpContext,
                     conversationTurns: currentTurns,
                     conversationID: conversationID,
@@ -191,7 +191,7 @@ final class AppDependencies {
                             conversationID: conversationID,
                             input: text,
                             output: accumulated,
-                            capturedSelection: nil,
+                            captures: [],
                             modeID: mode.id,
                             modeName: mode.name,
                             hadExternalProcessing: streamResult.hadExternalProcessing
@@ -213,7 +213,7 @@ final class AppDependencies {
                         let result = try await TextProcessingPipeline.run(
                             mode: mode,
                             text: text,
-                            capturedSelection: nil,
+                            captures: [],
                             followUpContext: followUpContext,
                             conversationTurns: currentTurns,
                             conversationID: conversationID,
@@ -225,7 +225,7 @@ final class AppDependencies {
                             conversationID: conversationID,
                             input: text,
                             output: result.text,
-                            capturedSelection: nil,
+                            captures: [],
                             modeID: mode.id,
                             modeName: mode.name,
                             hadExternalProcessing: result.hadExternalProcessing

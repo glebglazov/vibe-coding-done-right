@@ -21,9 +21,9 @@ final class PushToTypeCoordinator {
     var session: PipelineSession?
 
     /// The initial AX capture from when the session was opened. Set once per session.
-    private var originalCapturedSelection: String?
+    private var originalCapture: CapturedContext?
     /// All Cmd+C captures accumulated across collapse/expand cycles.
-    private var accumulatedCaptures: [String] = []
+    private var accumulatedCaptures: [CapturedContext] = []
 
     /// Called when the push-to-type overlay is about to show.
     /// Used to dismiss the mode switcher overlay.
@@ -171,7 +171,7 @@ final class PushToTypeCoordinator {
         panel.show(
             settings: settings,
             conversationTurns: overlayTurns,
-            capturedSelection: nil,
+            captures: [],
             topOffset: topOffset,
             onSubmit: { [weak self] text in
                 // Clean up collapse state without nilling session — submitText needs it
@@ -179,7 +179,7 @@ final class PushToTypeCoordinator {
                 self?.escCancelManager.isEnabled = false
                 self?.panel.onFocusLost = nil
                 self?.panel.onPillClicked = nil
-                self?.originalCapturedSelection = nil
+                self?.originalCapture = nil
                 self?.accumulatedCaptures = []
                 self?.submitText(text)
             },
@@ -196,7 +196,7 @@ final class PushToTypeCoordinator {
             self.escCancelManager.isEnabled = false
             self.panel.onFocusLost = nil
             self.panel.onPillClicked = nil
-            self.originalCapturedSelection = nil
+            self.originalCapture = nil
             self.accumulatedCaptures = []
             self.overrides.destinationOverride = destinationID
             self.submitText(text)
@@ -208,11 +208,12 @@ final class PushToTypeCoordinator {
         // Capture selection in the background — update panel and session if it succeeds
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
-        let captured = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
-        if let captured {
-            session?.capturedSelection = captured
-            originalCapturedSelection = captured
-            panel.updateCapturedSelection(captured)
+        let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
+        if let capturedText {
+            let context = CapturedContext(text: capturedText, source: .selection)
+            session?.captures = [context]
+            originalCapture = context
+            panel.updateCaptures([context])
         }
     }
 
@@ -233,16 +234,16 @@ final class PushToTypeCoordinator {
     private func expandFromCollapsed() async {
         // Stop clipboard monitor and gather new captures
         let newCaptures = await clipboardMonitor.stop()
-        accumulatedCaptures.append(contentsOf: newCaptures)
+        let newContexts = newCaptures.map { CapturedContext(text: $0, source: .clipboard) }
+        accumulatedCaptures.append(contentsOf: newContexts)
 
-        // Merge all captures (original AX capture + all accumulated Cmd+C captures)
-        let merged = RecordingCoordinator.mergeCaptures(
-            initial: originalCapturedSelection,
-            midRecording: accumulatedCaptures
-        )
-        panel.updateCapturedSelection(merged)
-        // Also update session so submitText gets the merged selection
-        session?.capturedSelection = merged
+        // Build full capture array (original AX capture + all accumulated Cmd+C captures)
+        var allCaptures: [CapturedContext] = []
+        if let original = originalCapture { allCaptures.append(original) }
+        allCaptures.append(contentsOf: accumulatedCaptures)
+        panel.updateCaptures(allCaptures)
+        // Also update session so submitText gets the captures
+        session?.captures = allCaptures
         panel.expand()
         escCancelManager.isEnabled = false
         Logger.app.info("Push-to-type: expanded from pill with \(self.accumulatedCaptures.count) clipboard captures")
@@ -256,7 +257,7 @@ final class PushToTypeCoordinator {
         panel.onPillClicked = nil
         panel.hide()
         session = nil
-        originalCapturedSelection = nil
+        originalCapture = nil
         accumulatedCaptures = []
         outputPanel.unlockFollowUp()
         Logger.app.info("Push-to-type: overlay dismissed")
@@ -275,7 +276,7 @@ final class PushToTypeCoordinator {
         // Consume session state into locals for use throughout the pipeline
         let pipelineSession = session ?? PipelineSession()
         let mode = settings.activeMode
-        let selection = pipelineSession.capturedSelection
+        let captures = pipelineSession.captures
         let activeConversationID = pipelineSession.conversationID ?? UUID()
         let currentTurns = pipelineSession.conversationTurns
         let context = pipelineSession.followUpContext
@@ -299,7 +300,7 @@ final class PushToTypeCoordinator {
             let streamResult = TextProcessingPipeline.runStreaming(
                 mode: mode,
                 text: text,
-                capturedSelection: selection,
+                captures: captures,
                 followUpContext: context,
                 conversationTurns: currentTurns,
                 conversationID: activeConversationID,
@@ -312,7 +313,7 @@ final class PushToTypeCoordinator {
                 outputPanel.show(
                     inputText: text,
                     text: "",
-                    capturedSelection: selection,
+                    captures: captures,
                     conversationTurns: currentTurns,
                     outputDestinations: settings.outputDestinations,
                     targetAppPID: targetAppPID,
@@ -344,7 +345,7 @@ final class PushToTypeCoordinator {
                         conversationID: activeConversationID,
                         input: text,
                         output: accumulated,
-                        capturedSelection: selection,
+                        captures: captures,
                         modeID: mode.id,
                         modeName: mode.name,
                         hadExternalProcessing: streamResult.hadExternalProcessing
@@ -380,7 +381,7 @@ final class PushToTypeCoordinator {
                     let result = try await TextProcessingPipeline.run(
                         mode: mode,
                         text: text,
-                        capturedSelection: selection,
+                        captures: captures,
                         followUpContext: context,
                         conversationTurns: currentTurns,
                         conversationID: activeConversationID,
@@ -398,7 +399,7 @@ final class PushToTypeCoordinator {
                             outputPanel.show(
                                 inputText: text,
                                 text: processedText,
-                                capturedSelection: selection,
+                                captures: captures,
                                 conversationTurns: currentTurns,
                                 outputDestinations: settings.outputDestinations,
                                 targetAppPID: targetAppPID,
@@ -420,7 +421,7 @@ final class PushToTypeCoordinator {
                         conversationID: activeConversationID,
                         input: text,
                         output: processedText,
-                        capturedSelection: selection,
+                        captures: captures,
                         modeID: mode.id,
                         modeName: mode.name,
                         hadExternalProcessing: result.hadExternalProcessing
