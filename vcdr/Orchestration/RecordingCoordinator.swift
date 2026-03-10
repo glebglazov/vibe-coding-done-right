@@ -336,12 +336,19 @@ final class RecordingCoordinator {
 
             guard !text.isEmpty else {
                 escCancelManager.isEnabled = false
-                captureCoordinator.notifyRecordingCancelled()
                 captureCoordinator.panel.unlockFollowUp()
-                recordingIndicator.update(phase: .error, message: "No speech detected")
-                dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
-                state = .error("No speech detected")
-                resetAfterDelay()
+                if captureCoordinator.isPanelVisible {
+                    // Capture panel is showing — flash error on pill, then return to idle
+                    captureCoordinator.notifyTranscriptionFailed()
+                    processingTask = nil
+                    state = .idle
+                } else {
+                    captureCoordinator.notifyRecordingCancelled()
+                    recordingIndicator.update(phase: .error, message: "No speech detected")
+                    dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+                    state = .error("No speech detected")
+                    resetAfterDelay()
+                }
                 return
             }
 
@@ -386,15 +393,29 @@ final class RecordingCoordinator {
             let processedText = result.text
             try Task.checkCancellation()
 
-            // Dismiss the capture panel if it was shown during recording
-            // (e.g. destination hotkey turned a normal recording into quick action)
-            captureCoordinator.panel.dismiss()
+            if destination.type == .outputPanel {
+                // Quick action with output panel destination — show result in capture view
+                captureCoordinator.panel.unlockFollowUp()
+                captureCoordinator.showQuickActionResult(
+                    input: text,
+                    output: processedText,
+                    captures: captures,
+                    conversationID: activeConversationID,
+                    previousActiveApp: pipelineSession.previousActiveApp,
+                    hadExternalProcessing: result.hadExternalProcessing
+                )
+                recordingIndicator.hide()
+            } else {
+                // Dismiss the capture panel if it was shown during recording
+                // (e.g. destination hotkey turned a normal recording into quick action)
+                captureCoordinator.panel.dismiss()
 
-            if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
-                try await action.execute(text: processedText)
+                if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
+                    try await action.execute(text: processedText)
+                }
+                recordingIndicator.update(phase: .success)
+                dismissIndicatorAfterDelay(Self.successIndicatorDuration)
             }
-            recordingIndicator.update(phase: .success)
-            dismissIndicatorAfterDelay(Self.successIndicatorDuration)
 
             transcriptionHistory.recordTurn(
                 conversationID: activeConversationID,

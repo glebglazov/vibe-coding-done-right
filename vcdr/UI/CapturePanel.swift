@@ -226,7 +226,9 @@ final class CapturePanel {
     // MARK: - Minimize / Expand
 
     func minimize(phase: CaptureViewModel.PillPhase = .idle) {
-        let effectivePhase = (phase == .idle && viewModel?.isProcessing == true) ? .processing : phase
+        var effectivePhase = phase
+        if phase == .idle && viewModel?.isRecording == true { effectivePhase = .recording }
+        if phase == .idle && viewModel?.isProcessing == true { effectivePhase = .processing }
         viewModel?.pillPhase = effectivePhase
         guard viewModel?.isMinimized != true else { return }
         viewModel?.isMinimized = true
@@ -256,6 +258,14 @@ final class CapturePanel {
         if recording {
             viewModel?.pillPhase = .recording
         }
+    }
+
+    func showPillError() {
+        viewModel?.pillPhase = .error
+    }
+
+    func setPillPhase(_ phase: CaptureViewModel.PillPhase) {
+        viewModel?.pillPhase = phase
     }
 
     // MARK: - Text Insertion

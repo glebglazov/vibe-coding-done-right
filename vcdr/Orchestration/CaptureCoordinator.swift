@@ -51,6 +51,8 @@ final class CaptureCoordinator {
     // MARK: - Constants
 
     private static let successIndicatorDuration: Duration = .seconds(2)
+    /// How long the error X shows on the pill before returning to idle
+    private static let pillErrorDisplayDuration: Duration = .seconds(1.5)
     private static let errorIndicatorDuration: Duration = .seconds(10)
     private static let escapeKeyCode: CGKeyCode = 53
 
@@ -77,6 +79,44 @@ final class CaptureCoordinator {
     }
 
     // MARK: - Public API (called by RecordingCoordinator)
+
+    /// Shows the result of a quick action that routed to the output panel.
+    /// Creates a conversation turn with input→output and opens the capture view.
+    func showQuickActionResult(
+        input: String,
+        output: String,
+        captures: [CapturedContext],
+        conversationID: UUID,
+        previousActiveApp: NSRunningApplication?,
+        hadExternalProcessing: Bool
+    ) {
+        let turn = ConversationTurn(input: input, output: output, captures: captures)
+
+        panel.dismiss()
+
+        session = PipelineSession()
+        session?.previousActiveApp = previousActiveApp
+        session?.captures = captures
+        session?.conversationID = conversationID
+        session?.conversationTurns = [turn]
+        session?.followUpContext = output
+
+        // showPanelWithText reads session.conversationTurns, so the turn is shown
+        showPanelWithText("")
+
+        transcriptionHistory.recordTurn(
+            conversationID: conversationID,
+            input: input,
+            output: output,
+            captures: captures,
+            modeID: settings.activeModeID,
+            modeName: settings.activeMode.name,
+            hadExternalProcessing: hadExternalProcessing
+        )
+
+        overrides.markPipelineCompleted()
+        Logger.app.info("Capture view: quick action result shown")
+    }
 
     /// Shows the Capture View with transcribed text after recording completes.
     /// Inserts text at cursor if panel is already open, otherwise creates new session.
@@ -131,6 +171,20 @@ final class CaptureCoordinator {
     /// Notifies the capture view that recording was cancelled.
     func notifyRecordingCancelled() {
         panel.setRecording(false)
+    }
+
+    /// Notifies that transcription produced no result (e.g. no speech detected).
+    /// Briefly shows an error state on the pill, then returns to idle.
+    func notifyTranscriptionFailed() {
+        panel.setRecording(false)
+        panel.setProcessing(false)
+        if panel.isVisible {
+            panel.showPillError()
+            Task {
+                try? await Task.sleep(for: Self.pillErrorDisplayDuration)
+                panel.setPillPhase(.idle)
+            }
+        }
     }
 
     /// Notifies that recording stopped and transcription has started.
