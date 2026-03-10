@@ -54,11 +54,14 @@ final class ConversationOverrides {
     // MARK: - Lifecycle
 
     /// Mark that a pipeline completed with active overrides.
-    /// The next fresh input will clear them.
+    /// The next fresh input will clear parameter overrides.
+    /// Destination override is cleared immediately — it's per-recording only,
+    /// and leaving it set would show stale state in the mode switcher between recordings.
     func markPipelineCompleted() {
         if !parameterOverrides.isEmpty || destinationOverride != nil {
             hasCompletedWithOverrides = true
         }
+        destinationOverride = nil
     }
 
     /// Clear overrides if a previous pipeline completed with them active.
