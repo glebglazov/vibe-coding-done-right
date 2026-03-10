@@ -237,7 +237,7 @@ final class CaptureCoordinator {
     private func setupEscCancelForCollapsed() {
         escCancelManager.isEnabled = false
         escCancelManager.onKeyDown = { [weak self] in
-            self?.cancelCapture()
+            self?.dismissOverlay()
         }
         escCancelManager.onKeyUp = nil
         _ = escCancelManager.register(keyCode: Self.escapeKeyCode, modifiers: [])
@@ -429,7 +429,6 @@ final class CaptureCoordinator {
                 self?.panel.signalClipboardCapture()
             }
         }
-        escCancelManager.isEnabled = true
         Logger.app.info("Capture view: collapsed to pill")
     }
 

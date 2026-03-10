@@ -157,7 +157,7 @@ struct HomeTabView: View {
                     )
                 )
                 ShortcutRecorderRow(
-                    label: "Cancel Recording",
+                    label: "Cancel Capture",
                     keyCode: Binding(
                         get: { dependencies.settings.cancelRecordingHotkey.keyCode },
                         set: {
