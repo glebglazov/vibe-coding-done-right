@@ -603,17 +603,27 @@ final class RecordingCoordinator {
         setupToggleRecordingHotkey()
     }
 
-    // MARK: - Esc Cancel
-
-    private static let escapeKeyCode: CGKeyCode = 53
+    // MARK: - Cancel Recording Hotkey
 
     func setupEscCancel() {
+        let binding = settings.cancelRecordingHotkey
+        guard binding.isAssigned else {
+            escCancelManager.isEnabled = false
+            return
+        }
         escCancelManager.isEnabled = false
         escCancelManager.onKeyDown = { [weak self] in
             self?.cancelRecording()
         }
         escCancelManager.onKeyUp = nil
-        _ = escCancelManager.register(keyCode: Self.escapeKeyCode, modifiers: [])
+        _ = escCancelManager.register(
+            keyCode: CGKeyCode(binding.keyCode),
+            modifiers: CGEventFlags(rawValue: binding.modifiers)
+        )
+    }
+
+    func updateCancelRecordingHotkey() {
+        setupEscCancel()
     }
 
     // MARK: - Destination Hotkeys

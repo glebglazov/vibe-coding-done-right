@@ -157,6 +157,23 @@ struct HomeTabView: View {
                     )
                 )
                 ShortcutRecorderRow(
+                    label: "Cancel Recording",
+                    keyCode: Binding(
+                        get: { dependencies.settings.cancelRecordingHotkey.keyCode },
+                        set: {
+                            dependencies.settings.cancelRecordingHotkey.keyCode = $0
+                            dependencies.coordinator.updateCancelRecordingHotkey()
+                        }
+                    ),
+                    modifiers: Binding(
+                        get: { dependencies.settings.cancelRecordingHotkey.modifiers },
+                        set: {
+                            dependencies.settings.cancelRecordingHotkey.modifiers = $0
+                            dependencies.coordinator.updateCancelRecordingHotkey()
+                        }
+                    )
+                )
+                ShortcutRecorderRow(
                     label: "Copy Latest Capture",
                     keyCode: Binding(
                         get: { dependencies.settings.copyLatestCaptureHotkey.keyCode },

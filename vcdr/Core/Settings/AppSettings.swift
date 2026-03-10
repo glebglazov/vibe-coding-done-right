@@ -25,6 +25,9 @@ struct HotkeyBinding: Codable, Equatable {
 
     static let unassigned = HotkeyBinding(keyCode: 0, modifiers: 0)
 
+    /// Default cancel recording: Escape (key code 53, no modifiers)
+    static let defaultCancelRecording = HotkeyBinding(keyCode: 53, modifiers: 0)
+
     /// Default push-to-talk: Cmd+Option+Space
     static let defaultPushToTalk = HotkeyBinding(
         keyCode: 49,
@@ -51,6 +54,9 @@ final class AppSettings {
         didSet { save() }
     }
     var copyLatestCaptureHotkey: HotkeyBinding {
+        didSet { save() }
+    }
+    var cancelRecordingHotkey: HotkeyBinding {
         didSet { save() }
     }
     var modes: [Mode] {
@@ -109,6 +115,7 @@ final class AppSettings {
         static let pushToTypeHotkey = "pushToTypeHotkey"
         static let toggleRecordingHotkey = "toggleRecordingHotkey"
         static let copyLatestCaptureHotkey = "copyLatestCaptureHotkey"
+        static let cancelRecordingHotkey = "cancelRecordingHotkey"
         static let modes = "modes"
         static let activeModeID = "activeModeID"
         static let outputDestinations = "outputDestinations"
@@ -173,6 +180,14 @@ final class AppSettings {
             self.copyLatestCaptureHotkey = decoded
         } else {
             self.copyLatestCaptureHotkey = .unassigned
+        }
+
+        // Load cancel recording hotkey (default: Escape)
+        if let data = userDefaults.data(forKey: Keys.cancelRecordingHotkey),
+           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
+            self.cancelRecordingHotkey = decoded
+        } else {
+            self.cancelRecordingHotkey = .defaultCancelRecording
         }
 
         // Load modes into local var first (can't use self.modes before all properties init)
@@ -286,6 +301,9 @@ final class AppSettings {
         }
         if let encoded = try? JSONEncoder().encode(copyLatestCaptureHotkey) {
             userDefaults.set(encoded, forKey: Keys.copyLatestCaptureHotkey)
+        }
+        if let encoded = try? JSONEncoder().encode(cancelRecordingHotkey) {
+            userDefaults.set(encoded, forKey: Keys.cancelRecordingHotkey)
         }
         userDefaults.set(activeModeID.uuidString, forKey: Keys.activeModeID)
         if let encoded = try? JSONEncoder().encode(modes) {
