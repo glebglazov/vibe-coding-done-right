@@ -17,13 +17,16 @@ final class CaptureCoordinator {
     private let overrides: ConversationOverrides
 
     /// Per-pipeline-run state. Non-nil while a pipeline is in progress.
-    /// Private to enforce explicit handoff — use `followUpSnapshot()` to read.
     private var session: PipelineSession?
 
     /// The initial AX capture from when the session was opened.
     private var originalCapture: CapturedContext?
     /// All Cmd+C captures accumulated across collapse/expand cycles.
     private var accumulatedCaptures: [CapturedContext] = []
+
+    /// The in-flight pill phase reset Task. Cancelled when a new recording
+    /// notification arrives to prevent stale .idle overwriting .recording.
+    private var pillResetTask: Task<Void, Never>?
 
     /// Called when the capture overlay is about to show.
     var onWillStartInput: (() -> Void)?
@@ -36,19 +39,6 @@ final class CaptureCoordinator {
 
     /// Whether the capture panel is visible in any state
     var isPanelVisible: Bool { panel.isVisible }
-
-    /// Returns a snapshot of the current session state for follow-up recordings.
-    /// RecordingCoordinator calls this instead of reading `session` directly.
-    func followUpSnapshot() -> FollowUpSnapshot? {
-        guard let session else { return nil }
-        return FollowUpSnapshot(
-            conversationID: session.conversationID,
-            conversationTurns: session.conversationTurns,
-            followUpContext: session.followUpContext,
-            captures: session.captures,
-            previousActiveApp: session.previousActiveApp
-        )
-    }
 
     func showModeSwitcher(viewModel: ModeSwitcherViewModel) {
         panel.showModeSwitcher(viewModel: viewModel)
@@ -94,153 +84,250 @@ final class CaptureCoordinator {
         self.overrides = overrides
     }
 
-    // MARK: - Public API (called by RecordingCoordinator)
+    // MARK: - Recording Event Handlers (called via closures from RecordingCoordinator)
 
-    /// Shows the result of a quick action that routed to the output panel.
-    /// Creates a conversation turn with input→output and opens the capture view.
-    func showQuickActionResult(
-        input: String,
-        output: String,
-        captures: [CapturedContext],
-        conversationID: UUID,
-        previousActiveApp: NSRunningApplication?,
-        hadExternalProcessing: Bool
-    ) {
-        let turn = ConversationTurn(input: input, output: output, captures: captures)
-
-        panel.dismiss()
-
-        session = PipelineSession()
-        session?.previousActiveApp = previousActiveApp
-        session?.captures = captures
-        session?.conversationID = conversationID
-        session?.conversationTurns = [turn]
-        session?.followUpContext = output
-
-        // showPanelWithText reads session.conversationTurns, so the turn is shown
-        showPanelWithText("")
-
-        transcriptionHistory.recordTurn(
-            conversationID: conversationID,
-            input: input,
-            output: output,
-            captures: captures,
-            modeID: settings.activeModeID,
-            modeName: settings.activeMode.name,
-            hadExternalProcessing: hadExternalProcessing
-        )
-
-        overrides.markPipelineCompleted()
-        Logger.app.info("Capture view: quick action result shown")
-    }
-
-    /// Shows the Capture View with transcribed text after recording completes.
-    /// Inserts text at cursor if panel is already open, otherwise creates new session.
-    /// Saves to capture history immediately.
-    func populateWithTranscription(
-        _ text: String,
-        captures: [CapturedContext],
-        conversationID: UUID,
-        previousActiveApp: NSRunningApplication?
-    ) {
-        if panel.isVisible {
-            // Panel already open — insert at cursor
-            panel.setRecording(false)
-            panel.setProcessing(false)
-            panel.insertTextAtCursor(text)
-            // Replace captures — the `captures` parameter already contains the full
-            // set from this recording run (including any carried over from the session),
-            // so appending would duplicate prior captures on each follow-up.
-            session?.captures = captures
-            panel.updateCaptures(captures)
-        } else {
-            // Fresh session — show panel with text
-            session = PipelineSession()
-            session?.previousActiveApp = previousActiveApp
-            session?.captures = captures
-            session?.conversationID = conversationID
-            showPanelWithText(text)
-        }
-        panel.expand()
-
-        // Save to capture history immediately (before any processing)
-        transcriptionHistory.recordTurn(
-            conversationID: session?.conversationID ?? conversationID,
-            input: text,
-            output: text,
-            captures: captures,
-            modeID: settings.activeModeID,
-            modeName: settings.activeMode.name,
-            hadExternalProcessing: false
-        )
-    }
-
-    /// Notifies the capture view that recording has started.
-    func notifyRecordingStarted() {
-        if panel.isVisible {
+    /// Called when recording starts. Handles panel lock and pill display.
+    func handleRecordingStarted(isFollowUp: Bool) {
+        pillResetTask?.cancel()
+        if isFollowUp && panel.isVisible {
+            panel.lockForFollowUp()
             panel.setRecording(true)
-        } else {
+        } else if !isFollowUp && !settings.activeMode.quickAction {
+            // Normal mode, fresh recording: show pill
             showPanelMinimized(phase: .recording)
+            // Mark the panel as recording so the didBecomeKeyNotification guard
+            // prevents the pill from expanding when another panel (e.g. standalone
+            // mode switcher) closes and returns focus to the capture panel.
+            panel.setRecording(true)
+        }
+        // Quick action fresh recording: RC shows its own indicator, CC does nothing
+    }
+
+    /// Called when transcription is in progress.
+    func handleTranscribing() {
+        panel.setRecording(false)
+        if panel.isVisible {
+            if panel.isMinimized {
+                panel.minimize(phase: .processing)
+            } else {
+                panel.setProcessing(true)
+            }
         }
     }
 
-    /// Notifies the capture view that recording was cancelled.
-    func notifyRecordingCancelled() {
+    /// Called when transcription completed with text.
+    func handleRecordingComplete(result: RecordingResult) {
+        panel.unlockFollowUp()
+
+        // Apply destination override if recording had one
+        if let overrideID = result.destinationOverrideID {
+            overrides.destinationOverride = overrideID
+        }
+
+        let mode = settings.activeMode
+        let isQuickAction = !result.isFollowUp && (mode.quickAction || result.hadDestinationOverride)
+
+        if isQuickAction {
+            executeQuickAction(result: result, mode: mode)
+        } else {
+            populateWithTranscription(result: result)
+        }
+    }
+
+    /// Called when transcription produced empty text.
+    func handleTranscriptionFailed(isFollowUp: Bool) {
+        panel.unlockFollowUp()
+        if isFollowUp && panel.isVisible {
+            // Panel was already showing — flash error on pill
+            notifyTranscriptionFailed()
+        } else if panel.isVisible {
+            // Fresh recording showed a pill — flash error then dismiss
+            notifyTranscriptionFailed()
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                self.cancelCapture()
+            }
+        } else if !isFollowUp {
+            // Quick action mode: RC showed the recording indicator, show error there
+            recordingIndicator.update(phase: .error, message: "No speech detected")
+            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+        }
+    }
+
+    /// Called when recording was cancelled.
+    func handleRecordingCancelled(wasFollowUp: Bool, wasFreshPill: Bool) {
+        panel.unlockFollowUp()
+        if panel.isVisible && wasFreshPill {
+            notifyCancelled()
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                self.cancelCapture()
+            }
+        } else if panel.isVisible && wasFollowUp {
+            notifyCancelled()
+        }
+        // Quick action mode: RC already showed cancelled on indicator
+    }
+
+    /// Called when recording failed to start.
+    func handleRecordingFailed(message: String) {
+        panel.unlockFollowUp()
         panel.setRecording(false)
     }
 
-    /// Notifies that transcription produced no result (e.g. no speech detected).
+    // MARK: - Pill Notification Helpers
+
     /// Briefly shows an error state on the pill, then returns to idle.
-    func notifyTranscriptionFailed() {
+    private func notifyTranscriptionFailed() {
         panel.setRecording(false)
         panel.setProcessing(false)
         if panel.isVisible {
             panel.showPillError()
-            Task {
+            pillResetTask?.cancel()
+            pillResetTask = Task {
                 try? await Task.sleep(for: Self.pillErrorDisplayDuration)
+                guard !Task.isCancelled else { return }
                 panel.setPillPhase(.idle)
             }
         }
     }
 
     /// Briefly flashes the cancelled icon on the pill, then returns to idle.
-    func notifyCancelled() {
+    private func notifyCancelled() {
         panel.setRecording(false)
         panel.setProcessing(false)
         if panel.isVisible {
             panel.setPillPhase(.cancelled)
             if !panel.isMinimized { panel.minimize(phase: .cancelled) }
-            Task {
+            pillResetTask?.cancel()
+            pillResetTask = Task {
                 try? await Task.sleep(for: Self.pillFlashDuration)
+                guard !Task.isCancelled else { return }
                 panel.setPillPhase(.idle)
             }
         }
     }
 
     /// Briefly flashes the success icon on the pill, then returns to idle.
-    func notifySuccess() {
+    private func notifySuccess() {
         if panel.isVisible {
             panel.setPillPhase(.success)
             if !panel.isMinimized { panel.minimize(phase: .success) }
-            Task {
+            pillResetTask?.cancel()
+            pillResetTask = Task {
                 try? await Task.sleep(for: Self.pillFlashDuration)
+                guard !Task.isCancelled else { return }
                 panel.setPillPhase(.idle)
             }
         }
     }
 
-    /// Notifies that recording stopped and transcription has started.
-    /// Transitions the capture panel from recording state to processing state.
-    func notifyTranscribing() {
-        panel.setRecording(false)
-        if panel.isVisible {
-            if panel.isMinimized {
-                panel.minimize(phase: .processing)
-            } else {
-                // Panel is expanded — show processing inline instead of minimizing
-                panel.setProcessing(true)
+    // MARK: - Quick Action Pipeline
+
+    /// Executes the quick action pipeline: process text and route to destination.
+    /// Called when a recording completes in quick action mode.
+    private func executeQuickAction(result: RecordingResult, mode: Mode) {
+        let captures = result.captures
+        let previousActiveApp = result.previousActiveApp
+        let conversationID = session?.conversationID ?? UUID()
+        let currentTurns = session?.conversationTurns ?? []
+        let context = session?.followUpContext
+        let targetAppPID = previousActiveApp?.processIdentifier
+        let destinationID = overrides.resolvedDestinationID(for: mode)
+        let destination = settings.outputDestination(for: destinationID)
+        let parameterValues = overrides.resolvedParameterValues(for: mode)
+
+        Task { @MainActor in
+            do {
+                let pipelineResult = try await TextProcessingPipeline.run(
+                    mode: mode,
+                    text: result.text,
+                    captures: captures,
+                    followUpContext: context,
+                    conversationTurns: currentTurns,
+                    conversationID: conversationID,
+                    parameterValues: parameterValues
+                )
+                let processedText = pipelineResult.text
+
+                if destination.type == .outputPanel {
+                    // Show result in capture panel
+                    let turn = ConversationTurn(input: result.text, output: processedText, captures: captures)
+                    panel.dismiss()
+                    session = PipelineSession()
+                    session?.previousActiveApp = previousActiveApp
+                    session?.captures = captures
+                    session?.conversationID = conversationID
+                    session?.conversationTurns = [turn]
+                    session?.followUpContext = processedText
+                    showPanelWithText("")
+                    recordingIndicator.hide()
+                } else {
+                    let panelWasVisible = panel.isVisible
+                    panel.dismiss()
+                    if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: conversationID) {
+                        try await action.execute(text: processedText)
+                    }
+                    if !panelWasVisible {
+                        recordingIndicator.update(phase: .success)
+                        dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+                    }
+                }
+
+                transcriptionHistory.recordTurn(
+                    conversationID: conversationID,
+                    input: result.text,
+                    output: processedText,
+                    captures: captures,
+                    modeID: mode.id,
+                    modeName: mode.name,
+                    hadExternalProcessing: pipelineResult.hadExternalProcessing
+                )
+
+                overrides.markPipelineCompleted()
+                Logger.app.info("Quick action pipeline complete")
+            } catch {
+                recordingIndicator.update(phase: .error, message: error.localizedDescription)
+                dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+                Logger.app.error("Quick action pipeline failed: \(error)")
             }
         }
+    }
+
+    // MARK: - Populate With Transcription
+
+    /// Shows the Capture View with transcribed text after recording completes (non-quick-action).
+    private func populateWithTranscription(result: RecordingResult) {
+        let conversationID = session?.conversationID ?? UUID()
+
+        if panel.isVisible {
+            panel.setRecording(false)
+            panel.setProcessing(false)
+            panel.insertTextAtCursor(result.text)
+            session?.captures = result.captures
+            panel.updateCaptures(result.captures)
+        } else {
+            session = PipelineSession()
+            session?.previousActiveApp = result.previousActiveApp
+            session?.captures = result.captures
+            session?.conversationID = conversationID
+            showPanelWithText(result.text)
+        }
+        panel.expand()
+        recordingIndicator.hide()
+
+        transcriptionHistory.recordTurn(
+            conversationID: session?.conversationID ?? conversationID,
+            input: result.text,
+            output: result.text,
+            captures: result.captures,
+            modeID: settings.activeModeID,
+            modeName: settings.activeMode.name,
+            hadExternalProcessing: false
+        )
+
+        overrides.markPipelineCompleted()
+        Logger.app.info("Pipeline: handed to capture view")
     }
 
     // MARK: - Show From History
@@ -257,48 +344,7 @@ final class CaptureCoordinator {
             session?.followUpContext = conversation.latestOutput
         }
 
-        panel.onFocusLost = { [weak self] in
-            self?.collapseOverlay()
-        }
-        panel.onPillClicked = { [weak self] in
-            Task { @MainActor in
-                await self?.expandFromCollapsed()
-            }
-        }
-
-        panel.show(
-            settings: settings,
-            conversationTurns: turns,
-            captures: [],
-            outputDestinations: settings.outputDestinations,
-            audioRecorder: audioRecorder,
-            onSubmit: { [weak self] text in
-                Task { await self?.clipboardMonitor.stop() }
-                self?.escCancelManager.isEnabled = false
-                self?.panel.onFocusLost = nil
-                self?.panel.onPillClicked = nil
-                self?.originalCapture = nil
-                self?.accumulatedCaptures = []
-                self?.submitText(text)
-            },
-            onDismiss: { [weak self] in
-                self?.dismissOverlay()
-            }
-        )
-        panel.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
-
-        panel.setDestinationSubmitHandler { [weak self] text, destinationID in
-            guard let self else { return }
-            Task { await self.clipboardMonitor.stop() }
-            self.escCancelManager.isEnabled = false
-            self.panel.onFocusLost = nil
-            self.panel.onPillClicked = nil
-            self.originalCapture = nil
-            self.accumulatedCaptures = []
-            self.overrides.destinationOverride = destinationID
-            self.submitText(text)
-        }
-
+        configurePanelAndShow(conversationTurns: turns)
         Logger.app.info("Capture view shown from history (canContinue=\(canContinue))")
     }
 
@@ -339,30 +385,14 @@ final class CaptureCoordinator {
         _ = escCancelManager.register(keyCode: Self.escapeKeyCode, modifiers: [])
     }
 
-    // MARK: - Overlay Lifecycle
+    // MARK: - Panel Configuration
 
-    private func toggleOverlay() async {
-        if panel.isVisible && !panel.isMinimized {
-            collapseOverlay()
-        } else if panel.isVisible && panel.isMinimized {
-            await expandFromCollapsed()
-        } else {
-            onWillStartInput?()
-
-            overrides.clearIfCompletedPipeline()
-            if session == nil {
-                session = PipelineSession()
-            }
-            await showOverlay()
-        }
-    }
-
-    private func showOverlay() async {
-        let frontmostApp = NSWorkspace.shared.frontmostApplication
-        session?.previousActiveApp = frontmostApp
-
-        let overlayTurns = session?.conversationTurns ?? []
-
+    /// Wires standard panel callbacks and calls panel.show().
+    /// All show methods delegate here, passing only what differs.
+    private func configurePanelAndShow(
+        conversationTurns: [ConversationTurn] = [],
+        captures: [CapturedContext] = []
+    ) {
         panel.onFocusLost = { [weak self] in
             self?.collapseOverlay()
         }
@@ -374,67 +404,7 @@ final class CaptureCoordinator {
 
         panel.show(
             settings: settings,
-            conversationTurns: overlayTurns,
-            captures: [],
-            outputDestinations: settings.outputDestinations,
-            audioRecorder: audioRecorder,
-            onSubmit: { [weak self] text in
-                Task { await self?.clipboardMonitor.stop() }
-                self?.escCancelManager.isEnabled = false
-                self?.panel.onFocusLost = nil
-                self?.panel.onPillClicked = nil
-                self?.originalCapture = nil
-                self?.accumulatedCaptures = []
-                self?.submitText(text)
-            },
-            onDismiss: { [weak self] in
-                self?.dismissOverlay()
-            }
-        )
-        panel.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
-
-        panel.setDestinationSubmitHandler { [weak self] text, destinationID in
-            guard let self else { return }
-            Task { await self.clipboardMonitor.stop() }
-            self.escCancelManager.isEnabled = false
-            self.panel.onFocusLost = nil
-            self.panel.onPillClicked = nil
-            self.originalCapture = nil
-            self.accumulatedCaptures = []
-            self.overrides.destinationOverride = destinationID
-            self.submitText(text)
-        }
-
-        Logger.app.info("Capture view: overlay shown")
-
-        // Capture selection in background
-        let bundleID = frontmostApp?.bundleIdentifier
-        let pid = frontmostApp?.processIdentifier
-        let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
-        if let capturedText {
-            let context = CapturedContext(text: capturedText, source: .selection)
-            session?.captures = [context]
-            originalCapture = context
-            panel.updateCaptures([context])
-        }
-    }
-
-    private func showPanelWithText(_ text: String) {
-        panel.onFocusLost = { [weak self] in
-            self?.collapseOverlay()
-        }
-        panel.onPillClicked = { [weak self] in
-            Task { @MainActor in
-                await self?.expandFromCollapsed()
-            }
-        }
-
-        let captures = session?.captures ?? []
-        let turns = session?.conversationTurns ?? []
-
-        panel.show(
-            settings: settings,
-            conversationTurns: turns,
+            conversationTurns: conversationTurns,
             captures: captures,
             outputDestinations: settings.outputDestinations,
             audioRecorder: audioRecorder,
@@ -464,55 +434,55 @@ final class CaptureCoordinator {
             self.overrides.destinationOverride = destinationID
             self.submitText(text)
         }
+    }
 
-        // Insert text into the panel after it's shown
+    // MARK: - Overlay Lifecycle
+
+    private func toggleOverlay() async {
+        if panel.isVisible && !panel.isMinimized {
+            collapseOverlay()
+        } else if panel.isVisible && panel.isMinimized {
+            await expandFromCollapsed()
+        } else {
+            onWillStartInput?()
+
+            overrides.clearIfCompletedPipeline()
+            if session == nil {
+                session = PipelineSession()
+            }
+            await showOverlay()
+        }
+    }
+
+    private func showOverlay() async {
+        let frontmostApp = NSWorkspace.shared.frontmostApplication
+        session?.previousActiveApp = frontmostApp
+        let overlayTurns = session?.conversationTurns ?? []
+
+        configurePanelAndShow(conversationTurns: overlayTurns)
+        Logger.app.info("Capture view: overlay shown")
+
+        // Capture selection in background
+        let bundleID = frontmostApp?.bundleIdentifier
+        let pid = frontmostApp?.processIdentifier
+        let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
+        if let capturedText {
+            let context = CapturedContext(text: capturedText, source: .selection)
+            session?.captures = [context]
+            originalCapture = context
+            panel.updateCaptures([context])
+        }
+    }
+
+    private func showPanelWithText(_ text: String) {
+        let captures = session?.captures ?? []
+        let turns = session?.conversationTurns ?? []
+        configurePanelAndShow(conversationTurns: turns, captures: captures)
         panel.insertTextAtCursor(text)
     }
 
     private func showPanelMinimized(phase: CaptureViewModel.PillPhase) {
-        panel.onFocusLost = { [weak self] in
-            self?.collapseOverlay()
-        }
-        panel.onPillClicked = { [weak self] in
-            Task { @MainActor in
-                await self?.expandFromCollapsed()
-            }
-        }
-
-        panel.show(
-            settings: settings,
-            conversationTurns: [],
-            captures: [],
-            outputDestinations: settings.outputDestinations,
-            audioRecorder: audioRecorder,
-            onSubmit: { [weak self] text in
-                Task { await self?.clipboardMonitor.stop() }
-                self?.escCancelManager.isEnabled = false
-                self?.panel.onFocusLost = nil
-                self?.panel.onPillClicked = nil
-                self?.originalCapture = nil
-                self?.accumulatedCaptures = []
-                self?.submitText(text)
-            },
-            onDismiss: { [weak self] in
-                self?.dismissOverlay()
-            }
-        )
-
-        panel.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
-
-        panel.setDestinationSubmitHandler { [weak self] text, destinationID in
-            guard let self else { return }
-            Task { await self.clipboardMonitor.stop() }
-            self.escCancelManager.isEnabled = false
-            self.panel.onFocusLost = nil
-            self.panel.onPillClicked = nil
-            self.originalCapture = nil
-            self.accumulatedCaptures = []
-            self.overrides.destinationOverride = destinationID
-            self.submitText(text)
-        }
-
+        configurePanelAndShow()
         panel.minimize(phase: phase)
     }
 

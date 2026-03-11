@@ -195,6 +195,10 @@ final class CapturePanel {
         ) { [weak self, weak hostingView, weak panel] _ in
             guard let self else { return }
             if self.viewModel?.isMinimized == true {
+                // Don't expand the pill when it regains key status during recording —
+                // this can happen when another panel (e.g. mode switcher) closes and
+                // returns focus to the capture panel. Only expand on intentional clicks.
+                guard self.viewModel?.isRecording != true else { return }
                 self.onPillClicked?()
                 return
             }

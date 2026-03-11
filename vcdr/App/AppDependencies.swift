@@ -69,10 +69,8 @@ final class AppDependencies {
             hotkeyManager: hotkeyManager,
             mediaPlaybackController: mediaPlayback,
             recordingIndicator: recordingIndicator,
-            captureCoordinator: captureCoordinator,
             selectionCapturer: selectionCapturer,
             clipboardMonitor: clipboardMonitor,
-            transcriptionHistory: history,
             overrides: overrides
         )
 
@@ -81,6 +79,35 @@ final class AppDependencies {
             transcriptionHistory: history,
             recordingIndicator: recordingIndicator
         )
+
+        // Recording delegate closures
+        coordinator.isPanelVisible = { [weak captureCoordinator] in
+            captureCoordinator?.isPanelVisible ?? false
+        }
+
+        coordinator.onRecordingStarted = { [weak captureCoordinator] isFollowUp in
+            captureCoordinator?.handleRecordingStarted(isFollowUp: isFollowUp)
+        }
+
+        coordinator.onTranscribing = { [weak captureCoordinator] in
+            captureCoordinator?.handleTranscribing()
+        }
+
+        coordinator.onRecordingComplete = { [weak captureCoordinator] result in
+            captureCoordinator?.handleRecordingComplete(result: result)
+        }
+
+        coordinator.onTranscriptionFailed = { [weak captureCoordinator] isFollowUp in
+            captureCoordinator?.handleTranscriptionFailed(isFollowUp: isFollowUp)
+        }
+
+        coordinator.onRecordingCancelled = { [weak captureCoordinator] wasFollowUp, wasFreshPill in
+            captureCoordinator?.handleRecordingCancelled(wasFollowUp: wasFollowUp, wasFreshPill: wasFreshPill)
+        }
+
+        coordinator.onRecordingFailed = { [weak captureCoordinator] message in
+            captureCoordinator?.handleRecordingFailed(message: message)
+        }
 
         // Dismiss mode switcher when recording starts
         coordinator.onWillStartRecording = { [weak self] in

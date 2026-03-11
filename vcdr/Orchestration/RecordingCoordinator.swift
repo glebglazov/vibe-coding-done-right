@@ -12,7 +12,21 @@ final class RecordingCoordinator {
         case executing
         case error(String)
     }
-    
+
+    /// Lightweight per-recording state. No conversation context — CC owns that.
+    private struct RecordingRunState {
+        var previousActiveApp: NSRunningApplication?
+        var captureTask: Task<CapturedContext?, Never>?
+        var captures: [CapturedContext] = []
+        var clipboardCaptures: [CapturedContext] = []
+        var destinationOverrideID: UUID?
+        var isFollowUp: Bool = false
+
+        init(isFollowUp: Bool = false) {
+            self.isFollowUp = isFollowUp
+        }
+    }
+
 
     private(set) var state: State = .idle
     private let settings: AppSettings
@@ -28,19 +42,41 @@ final class RecordingCoordinator {
     private var pendingDestinationOverride: UUID?
     private let mediaPlaybackController: MediaPlaybackController
     private let recordingIndicator: RecordingIndicatorPanel
-    private let captureCoordinator: CaptureCoordinator
     private let selectionCapturer: SelectionCapturer
     private let clipboardMonitor: ClipboardMonitor
-    private let transcriptionHistory: TranscriptionHistory
     let overrides: ConversationOverrides
 
     /// Called when recording is about to start (push-to-talk down or toggle start).
     /// Used to dismiss the mode switcher overlay.
     var onWillStartRecording: (() -> Void)?
 
-    /// Per-pipeline-run state. Non-nil while a pipeline is in progress.
+    /// Returns whether the capture panel is currently visible.
+    /// Used to determine follow-up recording behavior.
+    var isPanelVisible: (() -> Bool)?
+
+    /// Called when recording has started. isFollowUp indicates capture panel was visible.
+    var onRecordingStarted: ((_ isFollowUp: Bool) -> Void)?
+
+    /// Called when recording stopped and transcription is in progress.
+    var onTranscribing: (() -> Void)?
+
+    /// Called when transcription produced text and the full result is ready.
+    var onRecordingComplete: ((RecordingResult) -> Void)?
+
+    /// Called when transcription produced empty text (no speech detected).
+    /// isFollowUp indicates whether the capture panel was visible.
+    var onTranscriptionFailed: ((_ isFollowUp: Bool) -> Void)?
+
+    /// Called when recording was cancelled by the user (Escape).
+    /// wasFollowUp: panel was visible and locked. wasFreshPill: pill was shown for this recording.
+    var onRecordingCancelled: ((_ wasFollowUp: Bool, _ wasFreshPill: Bool) -> Void)?
+
+    /// Called when recording failed to start (model not ready, no audio, etc.).
+    var onRecordingFailed: ((_ message: String) -> Void)?
+
+    /// Per-recording-run state. Non-nil while a recording is in progress.
     /// Cleared on completion/error/cancel.
-    private var session: PipelineSession?
+    private var recordingRun: RecordingRunState?
 
     private var recordingStartInstant: ContinuousClock.Instant?
     /// Tracks whether the current recording was started via toggle (vs push-to-talk)
@@ -50,6 +86,7 @@ final class RecordingCoordinator {
     private var isPreparingToRecord = false
     /// The in-flight processing Task, stored so it can be cancelled via cancelRecording().
     private var processingTask: Task<Void, Never>?
+
     init(
         settings: AppSettings,
         transcriptionProvider: any TranscriptionProvider,
@@ -57,10 +94,8 @@ final class RecordingCoordinator {
         hotkeyManager: GlobalHotkeyManager,
         mediaPlaybackController: MediaPlaybackController,
         recordingIndicator: RecordingIndicatorPanel,
-        captureCoordinator: CaptureCoordinator,
         selectionCapturer: SelectionCapturer,
         clipboardMonitor: ClipboardMonitor,
-        transcriptionHistory: TranscriptionHistory,
         overrides: ConversationOverrides
     ) {
         self.settings = settings
@@ -69,10 +104,8 @@ final class RecordingCoordinator {
         self.hotkeyManager = hotkeyManager
         self.mediaPlaybackController = mediaPlaybackController
         self.recordingIndicator = recordingIndicator
-        self.captureCoordinator = captureCoordinator
         self.selectionCapturer = selectionCapturer
         self.clipboardMonitor = clipboardMonitor
-        self.transcriptionHistory = transcriptionHistory
         self.overrides = overrides
     }
 
@@ -142,31 +175,14 @@ final class RecordingCoordinator {
         isPreparingToRecord = true
         defer { isPreparingToRecord = false }
 
-        // If CapturePanel is visible, this is a recording-within-capture-view scenario.
-        // Don't dismiss it — notify it that recording is starting and reuse session.
-        if captureCoordinator.isPanelVisible {
-            captureCoordinator.panel.lockForFollowUp()
-            captureCoordinator.notifyRecordingStarted()
-            if let snapshot = captureCoordinator.followUpSnapshot() {
-                session = PipelineSession(followUp: snapshot)
-            } else {
-                session = PipelineSession()
-                session?.isFollowUpFromVisibleCapturePanel = true
-            }
-        } else {
-            // Fresh recording — clear overrides if a previous pipeline completed with them
-            overrides.clearIfCompletedPipeline()
-            if session == nil {
-                session = PipelineSession()
-            }
-        }
+        let isFollowUp = isPanelVisible?() ?? false
+        recordingRun = RecordingRunState(isFollowUp: isFollowUp)
 
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
             state = .error("Model still loading...")
-            session = nil
-            captureCoordinator.notifyRecordingCancelled()
-            captureCoordinator.panel.unlockFollowUp()
+            recordingRun = nil
+            onRecordingFailed?("Model still loading...")
             recordingIndicator.show()
             recordingIndicator.update(phase: .error, message: "Model still loading...")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
@@ -174,34 +190,33 @@ final class RecordingCoordinator {
             return
         }
 
+        // Notify CC that recording started — CC handles panel lock/pill display
+        onRecordingStarted?(isFollowUp)
+
         let frontmostApp = NSWorkspace.shared.frontmostApplication
-        session?.previousActiveApp = frontmostApp
+        recordingRun?.previousActiveApp = frontmostApp
         Logger.recording.info("Capturing selection from app: \(frontmostApp?.bundleIdentifier ?? "unknown")")
+
         // Fire capture concurrently so it doesn't delay recording start.
         // The Cmd+C fallback path polls the clipboard for up to 100ms — we don't
         // want that blocking the recording. The result is awaited in processTranscription.
         let capturer = selectionCapturer
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
-        session?.captureTask = Task {
+        recordingRun?.captureTask = Task {
             guard let text = await capturer.capture(bundleIdentifier: bundleID, pid: pid) else { return nil }
             return CapturedContext(text: text, source: .selection)
         }
 
-        // Show indicator immediately for visual feedback — the media pause
-        // and recording start below are async and can take 200-400ms.
-        let isFollowUp = session?.isFollowUpFromVisibleCapturePanel ?? false
+        // Show recording indicator for quick action mode only (CC shows pill for normal mode)
         if !isFollowUp {
             let isQuickAction = settings.activeMode.quickAction
             if isQuickAction {
-                // Quick action: show RecordingIndicator (transient)
                 recordingIndicator.show()
                 recordingIndicator.updateOutputDestinationOverride(overrides.destinationOverride)
                 recordingIndicator.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
-            } else {
-                // Normal mode, panel not yet visible: show CapturePanel in pill form
-                captureCoordinator.notifyRecordingStarted()
             }
+            // Normal mode non-follow-up: onRecordingStarted already told CC to show pill
         }
 
         if settings.audioSettings.pauseMediaDuringRecording {
@@ -236,6 +251,7 @@ final class RecordingCoordinator {
         } else {
             await mediaPlaybackController.resumeIfNeeded()
             state = .error("Failed to start recording")
+            onRecordingFailed?("Failed to start recording")
             recordingIndicator.update(phase: .error, message: "Failed to start recording")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Failed to start recording")
@@ -267,8 +283,7 @@ final class RecordingCoordinator {
             Task { await mediaPlaybackController.resumeIfNeeded() }
             escCancelManager.isEnabled = false
             state = .error("No audio recorded")
-            captureCoordinator.notifyRecordingCancelled()
-            captureCoordinator.panel.unlockFollowUp()
+            onRecordingFailed?("No audio recorded")
             recordingIndicator.update(phase: .error, message: "No audio recorded")
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
@@ -276,7 +291,7 @@ final class RecordingCoordinator {
         }
 
         state = .transcribing
-        captureCoordinator.notifyTranscribing()
+        onTranscribing?()
         recordingIndicator.update(phase: .processing)
         Logger.app.info("Recording stopped, transcribing...")
 
@@ -291,7 +306,7 @@ final class RecordingCoordinator {
         processingTask = Task { @MainActor in
             let midCaptures = await self.clipboardMonitor.stop()
             let clipboardContexts = midCaptures.map { CapturedContext(text: $0, source: .clipboard) }
-            self.session?.captures.append(contentsOf: clipboardContexts)
+            self.recordingRun?.clipboardCaptures = clipboardContexts
             await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration)
         }
     }
@@ -306,7 +321,6 @@ final class RecordingCoordinator {
             let elapsed = transcriptionStart.duration(to: .now)
             Logger.app.info("Transcribed in \(elapsed): \(rawText)")
 
-            // Apply transcription-level pre-processing before any mode-specific pipeline
             let cleanedText = settings.removeFillerWords ? FillerWordRemover.remove(from: rawText) : rawText
             let text = settings.terminatorTemplateEnabled
                 ? Mode.applyTerminator(cleanedText, terminator: settings.terminatorTemplate)
@@ -314,147 +328,65 @@ final class RecordingCoordinator {
 
             try? FileManager.default.removeItem(at: audioURL)
 
-            // Consume session state into locals for use throughout the pipeline
-            var pipelineSession = session ?? PipelineSession()
-            // Resolve any in-flight capture task (AX selection polling)
-            if let captureTask = pipelineSession.captureTask {
+            // Resolve captures from recording run
+            var run = recordingRun ?? RecordingRunState()
+            if let captureTask = run.captureTask {
                 if let captured = await captureTask.value {
-                    pipelineSession.captures.insert(captured, at: 0)
+                    run.captures.insert(captured, at: 0)
                 }
-                pipelineSession.captureTask = nil
-                Logger.recording.info("Captures: \(pipelineSession.captures.count) items")
+                run.captureTask = nil
+                Logger.recording.info("Captures: \(run.captures.count) items")
             }
-            let captures = pipelineSession.captures
-            let context = pipelineSession.followUpContext
-            let currentTurns = pipelineSession.conversationTurns
-            let activeConversationID = pipelineSession.conversationID ?? UUID()
-            let wasFollowUp = pipelineSession.isFollowUpFromVisibleCapturePanel
-            let targetAppPID = pipelineSession.previousActiveApp?.processIdentifier
+            run.captures.append(contentsOf: run.clipboardCaptures)
 
             // Apply destination override from hotkey pressed during recording
             let hadDestinationOverride: Bool
             if let pending = pendingDestinationOverride {
-                overrides.destinationOverride = pending
                 pendingDestinationOverride = nil
                 hadDestinationOverride = true
+                run.destinationOverrideID = pending
             } else {
                 hadDestinationOverride = false
             }
-            let destinationID = overrides.resolvedDestinationID(for: settings.activeMode)
-            session = nil
+
+            let isFollowUp = run.isFollowUp
+            recordingRun = nil
 
             guard !text.isEmpty else {
                 escCancelManager.isEnabled = false
-                captureCoordinator.panel.unlockFollowUp()
-                if captureCoordinator.isPanelVisible {
-                    // Capture panel is showing — flash error on pill, then return to idle
-                    captureCoordinator.notifyTranscriptionFailed()
-                    processingTask = nil
-                    state = .idle
-                } else {
-                    captureCoordinator.notifyRecordingCancelled()
-                    recordingIndicator.update(phase: .error, message: "No speech detected")
-                    dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
-                    state = .error("No speech detected")
-                    resetAfterDelay()
-                }
-                return
-            }
-
-            let mode = settings.activeMode
-            let isQuickAction = !wasFollowUp && (mode.quickAction || hadDestinationOverride)
-
-            if !isQuickAction {
-                // Normal mode: hand off transcribed text to CaptureCoordinator
-                captureCoordinator.panel.unlockFollowUp()
-                captureCoordinator.populateWithTranscription(
-                    text,
-                    captures: captures,
-                    conversationID: activeConversationID,
-                    previousActiveApp: pipelineSession.previousActiveApp
-                )
-                recordingIndicator.hide()
-                overrides.markPipelineCompleted()
-                escCancelManager.isEnabled = false
+                onTranscriptionFailed?(isFollowUp)
                 processingTask = nil
                 state = .idle
-                Logger.app.info("Pipeline: handed to capture view")
                 return
             }
 
-            // --- Quick action path: process and route directly ---
-
-            let parameterValues = overrides.resolvedParameterValues(for: mode)
-            let destination = settings.outputDestination(for: destinationID)
-
-            state = .executing
-            Logger.app.info("Pipeline: quick action processing")
-
-            let result = try await TextProcessingPipeline.run(
-                mode: mode,
+            // Emit the result — CC decides what to do with it
+            let result = RecordingResult(
                 text: text,
-                captures: captures,
-                followUpContext: context,
-                conversationTurns: currentTurns,
-                conversationID: activeConversationID,
-                parameterValues: parameterValues
-            )
-            let processedText = result.text
-            try Task.checkCancellation()
-
-            if destination.type == .outputPanel {
-                // Quick action with output panel destination — show result in capture view
-                captureCoordinator.panel.unlockFollowUp()
-                captureCoordinator.showQuickActionResult(
-                    input: text,
-                    output: processedText,
-                    captures: captures,
-                    conversationID: activeConversationID,
-                    previousActiveApp: pipelineSession.previousActiveApp,
-                    hadExternalProcessing: result.hadExternalProcessing
-                )
-                recordingIndicator.hide()
-            } else {
-                let panelWasVisible = captureCoordinator.isPanelVisible
-
-                // Dismiss the capture panel if it was shown during recording
-                // (e.g. destination hotkey turned a normal recording into quick action)
-                captureCoordinator.panel.dismiss()
-
-                if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
-                    try await action.execute(text: processedText)
-                }
-                if !panelWasVisible {
-                    recordingIndicator.update(phase: .success)
-                    dismissIndicatorAfterDelay(Self.successIndicatorDuration)
-                }
-            }
-
-            transcriptionHistory.recordTurn(
-                conversationID: activeConversationID,
-                input: text,
-                output: processedText,
-                captures: captures,
-                modeID: mode.id,
-                modeName: mode.name,
-                hadExternalProcessing: result.hadExternalProcessing
+                captures: run.captures,
+                previousActiveApp: run.previousActiveApp,
+                destinationOverrideID: run.destinationOverrideID,
+                hadDestinationOverride: hadDestinationOverride,
+                isFollowUp: isFollowUp
             )
 
-            overrides.markPipelineCompleted()
             escCancelManager.isEnabled = false
             processingTask = nil
             state = .idle
-            Logger.app.info("Pipeline: quick action complete")
+            // Don't hide recordingIndicator here — CC's handler manages the indicator
+            // lifecycle (it stays visible during quick action pipeline processing).
+            onRecordingComplete?(result)
+            Logger.app.info("Pipeline: result emitted to handler")
+
         } catch is CancellationError {
-            // Task was cancelled via Esc — cancelRecording() already cleaned up state
             processingTask = nil
             Logger.app.info("Processing task cancelled")
         } catch {
             escCancelManager.isEnabled = false
             processingTask = nil
-            captureCoordinator.panel.unlockFollowUp()
-            session = nil
+            recordingRun = nil
             state = .error(error.localizedDescription)
+            onRecordingFailed?(error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Pipeline failed: \(error)")
@@ -560,37 +492,22 @@ final class RecordingCoordinator {
         state = .idle
 
         if wasProcessing {
-            // Cancel the in-flight transcription/action Task
             processingTask?.cancel()
             processingTask = nil
         } else {
-            // Stop and discard the audio file without transcribing
             if let audioURL = audioRecorder.stopRecording() {
                 try? FileManager.default.removeItem(at: audioURL)
             }
         }
 
         Task { await mediaPlaybackController.resumeIfNeeded() }
-        let wasFollowUp = captureCoordinator.panel.isLockedForFollowUp
-        session = nil
+
+        let wasFollowUp = recordingRun?.isFollowUp ?? false
+        recordingRun = nil
         recordingStartInstant = nil
         overrides.clearAll()
-        captureCoordinator.panel.unlockFollowUp()
 
-        if captureCoordinator.isPanelVisible && !wasFollowUp {
-            // Fresh recording with pill — flash cancelled icon, then dismiss
-            captureCoordinator.notifyCancelled()
-            Task {
-                try? await Task.sleep(for: .seconds(1))
-                self.captureCoordinator.cancelCapture()
-            }
-        } else if captureCoordinator.isPanelVisible && wasFollowUp {
-            // Follow-up recording cancelled — flash cancelled on pill, keep panel
-            captureCoordinator.notifyCancelled()
-        } else {
-            captureCoordinator.notifyRecordingCancelled()
-            recordingIndicator.showCancelled()
-        }
+        onRecordingCancelled?(wasFollowUp, !wasFollowUp)
 
         if wasProcessing {
             Logger.app.info("Processing cancelled via Esc")
