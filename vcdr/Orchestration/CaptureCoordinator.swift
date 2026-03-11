@@ -231,53 +231,53 @@ final class CaptureCoordinator {
         let previousActiveApp = result.previousActiveApp
         let conversationID = session?.conversationID ?? UUID()
         let currentTurns = session?.conversationTurns ?? []
-        let context = session?.followUpContext
+        let followUpContext = session?.followUpContext
         let targetAppPID = previousActiveApp?.processIdentifier
         let destinationID = overrides.resolvedDestinationID(for: mode)
         let destination = settings.outputDestination(for: destinationID)
-        let parameterValues = overrides.resolvedParameterValues(for: mode)
+
+        let pipelineContext = SubmissionPipeline.Context(
+            text: result.text,
+            mode: mode,
+            captures: captures,
+            followUpContext: followUpContext,
+            conversationTurns: currentTurns,
+            conversationID: conversationID,
+            parameterValues: overrides.resolvedParameterValues(for: mode),
+            destination: destination,
+            targetAppPID: targetAppPID
+        )
 
         Task { @MainActor in
             do {
-                let pipelineResult = try await TextProcessingPipeline.run(
-                    mode: mode,
-                    text: result.text,
-                    captures: captures,
-                    followUpContext: context,
-                    conversationTurns: currentTurns,
-                    conversationID: conversationID,
-                    parameterValues: parameterValues
-                )
-                let processedText = pipelineResult.text
+                let pipelineResult = try await SubmissionPipeline.run(context: pipelineContext)
 
                 if destination.type == .outputPanel {
-                    // Show result in capture panel
-                    let turn = ConversationTurn(input: result.text, output: processedText, captures: captures)
+                    let turn = ConversationTurn(input: result.text, output: pipelineResult.processedText, captures: captures)
                     panel.dismiss()
                     session = PipelineSession()
                     session?.previousActiveApp = previousActiveApp
                     session?.captures = captures
                     session?.conversationID = conversationID
                     session?.conversationTurns = [turn]
-                    session?.followUpContext = processedText
+                    session?.followUpContext = pipelineResult.processedText
                     showPanelWithText("")
                     recordingIndicator.hide()
                 } else {
                     let panelWasVisible = panel.isVisible
                     panel.dismiss()
-                    if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: conversationID) {
-                        try await action.execute(text: processedText)
-                    }
+                    // Action already executed by SubmissionPipeline.run()
                     if !panelWasVisible {
                         recordingIndicator.update(phase: .success)
                         dismissIndicatorAfterDelay(Self.successIndicatorDuration)
                     }
                 }
 
-                transcriptionHistory.recordTurn(
+                SubmissionPipeline.recordTurn(
+                    history: transcriptionHistory,
                     conversationID: conversationID,
                     input: result.text,
-                    output: processedText,
+                    output: pipelineResult.processedText,
                     captures: captures,
                     modeID: mode.id,
                     modeName: mode.name,
@@ -552,7 +552,7 @@ final class CaptureCoordinator {
         let captures = pipelineSession.captures
         let activeConversationID = pipelineSession.conversationID ?? UUID()
         let currentTurns = pipelineSession.conversationTurns
-        let context = pipelineSession.followUpContext
+        let followUpContext = pipelineSession.followUpContext
         let targetAppPID = pipelineSession.previousActiveApp?.processIdentifier
         let destinationID = overrides.resolvedDestinationID(for: mode)
         session = nil
@@ -560,21 +560,22 @@ final class CaptureCoordinator {
         let destination = settings.outputDestination(for: destinationID)
         let useStreaming = destination.type == .outputPanel && mode.processingType == .bashScript
 
+        let pipelineContext = SubmissionPipeline.Context(
+            text: text,
+            mode: mode,
+            captures: captures,
+            followUpContext: followUpContext,
+            conversationTurns: currentTurns,
+            conversationID: activeConversationID,
+            parameterValues: overrides.resolvedParameterValues(for: mode),
+            destination: destination,
+            targetAppPID: targetAppPID
+        )
+
         Logger.app.info("Capture view: executing pipeline")
 
         if useStreaming {
-            // --- Streaming path ---
-            let parameterValues = self.overrides.resolvedParameterValues(for: mode)
-            let streamResult = TextProcessingPipeline.runStreaming(
-                mode: mode,
-                text: text,
-                captures: captures,
-                followUpContext: context,
-                conversationTurns: currentTurns,
-                conversationID: activeConversationID,
-                parameterValues: parameterValues
-            )
-
+            let streamResult = SubmissionPipeline.runStreaming(context: pipelineContext)
             panel.startProcessing(inputText: text)
             recordingIndicator.hide()
 
@@ -589,17 +590,14 @@ final class CaptureCoordinator {
                     panel.finishStreaming(outputText: accumulated)
                     panel.makeKeyIfVisible()
 
-                    transcriptionHistory.recordTurn(
+                    SubmissionPipeline.recordTurn(
+                        history: transcriptionHistory,
                         conversationID: activeConversationID,
-                        input: text,
-                        output: accumulated,
-                        captures: captures,
-                        modeID: mode.id,
-                        modeName: mode.name,
+                        input: text, output: accumulated, captures: captures,
+                        modeID: mode.id, modeName: mode.name,
                         hadExternalProcessing: streamResult.hadExternalProcessing
                     )
 
-                    // Re-create session for follow-up
                     self.session = PipelineSession()
                     self.session?.conversationTurns = self.panel.currentTurns
                     self.session?.conversationID = activeConversationID
@@ -620,62 +618,42 @@ final class CaptureCoordinator {
                 }
             }
         } else {
-            // --- Non-streaming path ---
             if mode.processingType == .bashScript {
                 panel.startProcessing(inputText: text)
             }
 
             Task { @MainActor in
                 do {
-                    let parameterValues = self.overrides.resolvedParameterValues(for: mode)
-                    let result = try await TextProcessingPipeline.run(
-                        mode: mode,
-                        text: text,
-                        captures: captures,
-                        followUpContext: context,
-                        conversationTurns: currentTurns,
-                        conversationID: activeConversationID,
-                        parameterValues: parameterValues
-                    )
-                    let processedText = result.text
+                    let result = try await SubmissionPipeline.run(context: pipelineContext)
 
                     if destination.type == .outputPanel {
                         recordingIndicator.hide()
                         if mode.processingType == .bashScript {
-                            panel.finishProcessing(outputText: processedText)
+                            panel.finishProcessing(outputText: result.processedText)
                             panel.makeKeyIfVisible()
                         } else {
-                            // No processing — route text directly to destination
                             panel.dismiss()
-                            if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
-                                try await action.execute(text: processedText)
-                            }
                         }
                     } else {
                         panel.dismiss()
-                        if let action = OutputActionFactory.makeAction(for: destination, targetAppPID: targetAppPID, conversationID: activeConversationID) {
-                            try await action.execute(text: processedText)
-                        }
+                        // Action already executed by SubmissionPipeline.run()
                         recordingIndicator.update(phase: .success)
                         dismissIndicatorAfterDelay(Self.successIndicatorDuration)
                     }
 
-                    transcriptionHistory.recordTurn(
+                    SubmissionPipeline.recordTurn(
+                        history: transcriptionHistory,
                         conversationID: activeConversationID,
-                        input: text,
-                        output: processedText,
-                        captures: captures,
-                        modeID: mode.id,
-                        modeName: mode.name,
+                        input: text, output: result.processedText, captures: captures,
+                        modeID: mode.id, modeName: mode.name,
                         hadExternalProcessing: result.hadExternalProcessing
                     )
 
-                    // Re-create session for follow-up if panel is still visible
                     if panel.isVisible && result.hadExternalProcessing {
                         self.session = PipelineSession()
                         self.session?.conversationTurns = self.panel.currentTurns
                         self.session?.conversationID = activeConversationID
-                        self.session?.followUpContext = processedText
+                        self.session?.followUpContext = result.processedText
                         self.session?.previousActiveApp = pipelineSession.previousActiveApp
                     }
 
