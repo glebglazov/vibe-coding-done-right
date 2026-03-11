@@ -262,6 +262,9 @@ final class CaptureCoordinator {
                     session?.conversationTurns = [turn]
                     session?.followUpContext = pipelineResult.processedText
                     showPanelWithText("")
+                    if pipelineResult.hadExternalProcessing {
+                        panel.setProcessedByModeName(mode.name)
+                    }
                     recordingIndicator.hide()
                 } else {
                     let panelWasVisible = panel.isVisible
@@ -345,6 +348,9 @@ final class CaptureCoordinator {
         }
 
         configurePanelAndShow(conversationTurns: turns)
+        if conversation.hadExternalProcessing {
+            panel.setProcessedByModeName(conversation.modeName)
+        }
         Logger.app.info("Capture view shown from history (canContinue=\(canContinue))")
     }
 
@@ -589,6 +595,9 @@ final class CaptureCoordinator {
                     }
 
                     panel.finishStreaming(outputText: accumulated)
+                    if streamResult.hadExternalProcessing {
+                        panel.setProcessedByModeName(mode.name)
+                    }
                     panel.makeKeyIfVisible()
 
                     SubmissionPipeline.recordTurn(
@@ -631,6 +640,9 @@ final class CaptureCoordinator {
                         recordingIndicator.hide()
                         if mode.processingType == .bashScript {
                             panel.finishProcessing(outputText: result.processedText)
+                            if result.hadExternalProcessing {
+                                panel.setProcessedByModeName(mode.name)
+                            }
                             panel.makeKeyIfVisible()
                         } else {
                             panel.dismiss()

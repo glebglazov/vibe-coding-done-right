@@ -368,6 +368,10 @@ final class CapturePanel {
         viewModel?.modeSwitcherViewModel != nil
     }
 
+    func setProcessedByModeName(_ name: String?) {
+        viewModel?.processedByModeName = name
+    }
+
     func updateOutputDestinationOverride(_ id: UUID?) {
         viewModel?.outputDestinationOverrideID = id
     }

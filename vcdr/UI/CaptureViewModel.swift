@@ -14,6 +14,7 @@ final class CaptureViewModel {
     var clipboardCaptureCount: Int = 0
     var outputDestinationOverrideID: UUID?
     var parameterLabels: String?
+    var processedByModeName: String?
     var modeSwitcherViewModel: ModeSwitcherViewModel?
 
     /// Pill phase controls what the minimized pill displays

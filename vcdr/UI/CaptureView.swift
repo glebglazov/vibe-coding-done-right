@@ -256,6 +256,14 @@ struct CaptureView: View {
                 Text("Result:")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let modeName = viewModel.processedByModeName {
+                    Text(modeName)
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.15), in: Capsule())
+                        .foregroundStyle(Color.accentColor)
+                }
                 Spacer()
             }
             .padding(.bottom, Self.labelVPadding)

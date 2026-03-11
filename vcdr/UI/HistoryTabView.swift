@@ -67,14 +67,8 @@ private struct ConversationRowView: View {
         Button(action: onOpen) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    // Mode badge + turn count
+                    // Turn count
                     HStack(spacing: 6) {
-                        Text(conversation.modeName)
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.15), in: Capsule())
-
                         if conversation.turns.count > 1 {
                             Text("\(conversation.turns.count) turns")
                                 .font(.caption)
@@ -133,6 +127,7 @@ private struct ConversationRowView: View {
                 .tint(showCopied ? .green : .secondary)
             }
             .padding(.vertical, 2)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu {
