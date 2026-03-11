@@ -471,6 +471,7 @@ final class CaptureCoordinator {
             session?.captures = [context]
             originalCapture = context
             panel.updateCaptures([context])
+            panel.signalClipboardCapture()
         }
     }
 

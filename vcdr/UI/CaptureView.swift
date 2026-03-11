@@ -281,10 +281,6 @@ struct CaptureView: View {
                 .frame(width: Self.blockquoteBorderWidth)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(capture.source == .selection ? "Selected:" : "Copied:")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-
                 Text(capture.text)
                     .font(.system(.callout))
                     .foregroundStyle(.secondary)
