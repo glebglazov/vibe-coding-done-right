@@ -38,9 +38,9 @@ final class RecordingCoordinator {
     /// Used to dismiss the mode switcher overlay.
     var onWillStartRecording: (() -> Void)?
 
-    /// Per-pipeline-run state. Non-nil while a pipeline is in progress or follow-up
-    /// state has been captured from the output panel. Cleared on completion/error/cancel.
-    var session: PipelineSession?
+    /// Per-pipeline-run state. Non-nil while a pipeline is in progress.
+    /// Cleared on completion/error/cancel.
+    private var session: PipelineSession?
 
     private var recordingStartInstant: ContinuousClock.Instant?
     /// Tracks whether the current recording was started via toggle (vs push-to-talk)
@@ -147,8 +147,12 @@ final class RecordingCoordinator {
         if captureCoordinator.isPanelVisible {
             captureCoordinator.panel.lockForFollowUp()
             captureCoordinator.notifyRecordingStarted()
-            session = captureCoordinator.session ?? PipelineSession()
-            session?.isFollowUpFromVisibleCapturePanel = true
+            if let snapshot = captureCoordinator.followUpSnapshot() {
+                session = PipelineSession(followUp: snapshot)
+            } else {
+                session = PipelineSession()
+                session?.isFollowUpFromVisibleCapturePanel = true
+            }
         } else {
             // Fresh recording — clear overrides if a previous pipeline completed with them
             overrides.clearIfCompletedPipeline()

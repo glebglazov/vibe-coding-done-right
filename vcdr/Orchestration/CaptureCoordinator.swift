@@ -17,7 +17,8 @@ final class CaptureCoordinator {
     private let overrides: ConversationOverrides
 
     /// Per-pipeline-run state. Non-nil while a pipeline is in progress.
-    var session: PipelineSession?
+    /// Private to enforce explicit handoff — use `followUpSnapshot()` to read.
+    private var session: PipelineSession?
 
     /// The initial AX capture from when the session was opened.
     private var originalCapture: CapturedContext?
@@ -35,6 +36,19 @@ final class CaptureCoordinator {
 
     /// Whether the capture panel is visible in any state
     var isPanelVisible: Bool { panel.isVisible }
+
+    /// Returns a snapshot of the current session state for follow-up recordings.
+    /// RecordingCoordinator calls this instead of reading `session` directly.
+    func followUpSnapshot() -> FollowUpSnapshot? {
+        guard let session else { return nil }
+        return FollowUpSnapshot(
+            conversationID: session.conversationID,
+            conversationTurns: session.conversationTurns,
+            followUpContext: session.followUpContext,
+            captures: session.captures,
+            previousActiveApp: session.previousActiveApp
+        )
+    }
 
     func showModeSwitcher(viewModel: ModeSwitcherViewModel) {
         panel.showModeSwitcher(viewModel: viewModel)
