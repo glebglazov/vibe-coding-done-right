@@ -223,9 +223,11 @@ final class RecordingCoordinator {
             // If the hotkey was released while we were awaiting startRecording(),
             // the synchronous onKeyUp callback may have already called
             // stopRecordingAndTranscribe() — but if state was still .idle at that point,
-            // the stop was a no-op. Check isHotkeyActive to catch this race condition.
+            // the stop was a no-op. Cancel the recording since it contains no
+            // meaningful audio (zero effective duration).
             if fromHotkey && !hotkeyManager.isHotkeyActive {
-                stopRecordingAndTranscribe()
+                cancelRecording()
+                return
             }
         } else {
             await mediaPlaybackController.resumeIfNeeded()

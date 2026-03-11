@@ -13,8 +13,10 @@ struct PasteAction: PostTranscriptionAction {
     // MARK: - Constants
 
     private static let clipboardSettleDelay: Duration = .milliseconds(50)
-    /// Delay for the target app to gain focus before simulating Cmd+V
-    private static let focusRestorationDelay: Duration = .milliseconds(100)
+    /// Maximum time to wait for the target app to gain focus before simulating Cmd+V
+    private static let focusRestorationTimeout: Duration = .milliseconds(500)
+    /// Polling interval when waiting for the target app to become active
+    private static let focusPollingInterval: Duration = .milliseconds(20)
 
     init(targetAppPID: pid_t? = nil) {
         self.targetAppPID = targetAppPID
@@ -27,10 +29,19 @@ struct PasteAction: PostTranscriptionAction {
 
         // Restore focus to the app that was active before recording started
         if let pid = targetAppPID,
-           let app = NSRunningApplication(processIdentifier: pid) {
+           let app = NSRunningApplication(processIdentifier: pid),
+           !app.isTerminated {
             app.activate()
-            // Brief delay for the target app to gain focus before simulating Cmd+V
-            try await Task.sleep(for: Self.focusRestorationDelay)
+            // Poll until the target app is actually active, with timeout.
+            // A fixed delay is unreliable — the app may be slow to activate
+            // if the system is busy or another window holds focus.
+            let deadline = ContinuousClock.now.advanced(by: Self.focusRestorationTimeout)
+            while !app.isActive && ContinuousClock.now < deadline {
+                try await Task.sleep(for: Self.focusPollingInterval)
+            }
+            if !app.isActive {
+                Logger.actions.warning("Target app (pid \(pid)) did not gain focus within timeout, attempting paste anyway")
+            }
         }
 
         let pasteboard = NSPasteboard.general
