@@ -81,6 +81,14 @@ final class RecordingCoordinator {
     /// Called when recording failed to start (model not ready, no audio, etc.).
     var onRecordingFailed: ((_ message: String) -> Void)?
 
+    /// Called when the initial selection capture completes with text.
+    /// Used to update the pill's clipboard badge immediately.
+    var onSelectionCaptured: (() -> Void)?
+
+    /// Called when a mid-recording clipboard capture is detected.
+    /// Used to update the pill's clipboard badge counter.
+    var onClipboardCaptured: (() -> Void)?
+
     /// Per-recording-run state. Non-nil while a recording is in progress.
     /// Cleared on completion/error/cancel.
     private var recordingRun: RecordingRunState?
@@ -237,6 +245,14 @@ final class RecordingCoordinator {
             return CapturedContext(text: text, source: .selection)
         }
 
+        // Signal the pill as soon as the capture task completes with a result,
+        // so the clipboard badge appears immediately — not after transcription.
+        Task { @MainActor [weak self] in
+            guard let captured = await self?.recordingRun?.captureTask?.value,
+                  captured != nil else { return }
+            self?.onSelectionCaptured?()
+        }
+
         // Show recording indicator for quick action mode only (CC shows pill for normal mode)
         if !isFollowUp {
             let isQuickAction = settings.activeMode.quickAction
@@ -263,6 +279,7 @@ final class RecordingCoordinator {
             Task {
                 await clipboardMonitor.start { [weak self] _ in
                     self?.recordingIndicator.signalClipboardCapture()
+                    self?.onClipboardCaptured?()
                 }
             }
 

@@ -109,6 +109,14 @@ final class AppDependencies {
             captureCoordinator?.handleRecordingFailed(message: message)
         }
 
+        coordinator.onSelectionCaptured = { [weak captureCoordinator] in
+            captureCoordinator?.panel.signalClipboardCapture()
+        }
+
+        coordinator.onClipboardCaptured = { [weak captureCoordinator] in
+            captureCoordinator?.panel.signalClipboardCapture()
+        }
+
         // Dismiss mode switcher when recording starts
         coordinator.onWillStartRecording = { [weak self] in
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
