@@ -245,7 +245,11 @@ final class CapturePanel {
     func expand() {
         guard viewModel?.isMinimized == true else { return }
         viewModel?.isMinimized = false
-        viewModel?.phase = .idle
+        // Preserve phase during active recording so the expanded view
+        // shows the recording placeholder and the pill keeps the waveform.
+        if viewModel?.phase != .recording {
+            viewModel?.phase = .idle
+        }
         resizePanelToExpanded()
         panel?.makeKey()
         if viewModel?.isRecording != true {

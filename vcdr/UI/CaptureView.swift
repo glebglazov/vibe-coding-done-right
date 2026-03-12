@@ -15,8 +15,10 @@ struct CaptureView: View {
     private static let keyVPadding: CGFloat = 1
     private static let labelVPadding: CGFloat = 4
     private static let turnDividerVPadding: CGFloat = 4
-    private static let closeButtonPadding: CGFloat = 8
-    private static let closeButtonSize: CGFloat = 16
+    private static let closeButtonPadding: CGFloat = 5
+    private static let headerBottomPadding: CGFloat = 2
+    private static let headerBackgroundOpacity: Double = 0.03
+    private static let closeButtonSize: CGFloat = 12
     private static let copyButtonSize: CGFloat = 12
     private static let blockquoteBorderWidth: CGFloat = 2
     private static let blockquoteBorderSpacing: CGFloat = 6
@@ -101,98 +103,100 @@ struct CaptureView: View {
     // MARK: - Expanded View
 
     private var expandedView: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(spacing: 0) {
-                if let msVM = viewModel.modeSwitcherViewModel {
-                    ModeSwitcherView(viewModel: msVM)
-                        .padding(Self.textPadding)
-                } else {
-                    if !viewModel.conversationTurns.isEmpty {
-                        conversationHistorySection
-                    }
+        VStack(spacing: 0) {
+            headerBar
 
-                    if !viewModel.conversationTurns.isEmpty {
-                        Divider()
-                    }
-
-                    inputSection
-
-                    if !viewModel.captures.isEmpty {
-                        Divider()
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(viewModel.captures) { capture in
-                                captureBlockquote(capture)
-                            }
-                        }
-                        .padding(Self.textPadding)
-                    }
+            if let msVM = viewModel.modeSwitcherViewModel {
+                ModeSwitcherView(viewModel: msVM)
+                    .padding(Self.textPadding)
+            } else {
+                if !viewModel.conversationTurns.isEmpty {
+                    conversationHistorySection
                 }
 
-                Divider()
+                if !viewModel.conversationTurns.isEmpty {
+                    Divider()
+                }
 
-                hintBar
+                inputSection
+
+                if !viewModel.captures.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(viewModel.captures) { capture in
+                            captureBlockquote(capture)
+                        }
+                    }
+                    .padding(Self.textPadding)
+                }
             }
 
-            Button(action: viewModel.onDismiss) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: Self.closeButtonSize))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .padding(Self.closeButtonPadding)
+            Divider()
+
+            hintBar
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
+    }
+
+    // MARK: - Header Bar
+
+    private var headerBar: some View {
+        VStack(spacing: 0) {
+            HStack {
+                if viewModel.isRecording {
+                    recordingDot
+                }
+                Spacer()
+                Button(action: viewModel.onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: Self.closeButtonSize))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, Self.closeButtonPadding)
+            .padding(.top, Self.closeButtonPadding)
+            .padding(.bottom, Self.headerBottomPadding)
+
+            Divider()
+        }
+        .background(Color.primary.opacity(Self.headerBackgroundOpacity))
     }
 
     // MARK: - Input Section
 
     @ViewBuilder
     private var inputSection: some View {
-        if viewModel.isRecording {
-            recordingPlaceholder
-        } else if viewModel.isProcessing && viewModel.conversationTurns.isEmpty {
-            transcribingPlaceholder
-        } else {
-            ZStack(alignment: .topLeading) {
-                if viewModel.text.isEmpty && !viewModel.isProcessing && !viewModel.conversationTurns.isEmpty {
-                    Text("Type a follow-up...")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, Self.textPadding)
-                        .padding(.top, 8 + Self.textInputTopInset)
-                        .allowsHitTesting(false)
-                }
-                TextEditor(text: $viewModel.text)
+        ZStack(alignment: .topLeading) {
+            if viewModel.text.isEmpty && !viewModel.isRecording && !viewModel.isProcessing && !viewModel.conversationTurns.isEmpty {
+                Text("Type a follow-up...")
                     .font(.system(size: 13))
-                    .scrollContentBackground(.hidden)
-                    .disabled(viewModel.isProcessing)
-                    .padding(.horizontal, Self.textPadding - 5)
-                    .padding(.top, Self.textInputTopInset)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, Self.textPadding)
+                    .padding(.top, 8 + Self.textInputTopInset)
+                    .allowsHitTesting(false)
             }
-            .frame(height: Self.textInputHeight)
-        }
-    }
-
-    private var transcribingPlaceholder: some View {
-        HStack {
-            AnimatedDotsView()
-            Spacer()
-        }
-        .frame(height: Self.textInputHeight)
-        .padding(.horizontal, Self.textPadding)
-    }
-
-    private var recordingPlaceholder: some View {
-        HStack {
-            Circle()
-                .fill(Color.red)
-                .frame(width: Self.recordingDotSize, height: Self.recordingDotSize)
-                .shadow(color: .red.opacity(0.6), radius: 4)
-                .shadow(color: .red.opacity(0.3), radius: 8)
-            Spacer()
+            if viewModel.text.isEmpty && viewModel.isProcessing && viewModel.conversationTurns.isEmpty {
+                AnimatedDotsView()
+                    .padding(.horizontal, Self.textPadding)
+                    .padding(.top, 8 + Self.textInputTopInset)
+            }
+            TextEditor(text: $viewModel.text)
+                .font(.system(size: 13))
+                .scrollContentBackground(.hidden)
+                .disabled(viewModel.isRecording || viewModel.isProcessing)
+                .padding(.horizontal, Self.textPadding - 5)
+                .padding(.top, Self.textInputTopInset)
         }
         .frame(height: Self.textInputHeight)
-        .padding(.horizontal, Self.textPadding)
+    }
+
+    private var recordingDot: some View {
+        Circle()
+            .fill(Color.red)
+            .frame(width: Self.recordingDotSize, height: Self.recordingDotSize)
+            .shadow(color: .red.opacity(0.6), radius: 4)
+            .shadow(color: .red.opacity(0.3), radius: 8)
     }
 
     // MARK: - Conversation History

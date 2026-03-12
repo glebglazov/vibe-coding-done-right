@@ -306,6 +306,11 @@ final class CaptureCoordinator {
         if session == nil {
             session = PipelineSession()
             session?.previousActiveApp = result.previousActiveApp
+        }
+        // Assign conversationID lazily — the session may have been created
+        // by toggleOverlay() without one (push-to-type opens the panel
+        // before any recording happens).
+        if session?.conversationID == nil {
             session?.conversationID = UUID()
         }
         guard let activeSession = session, let currentConversationID = activeSession.conversationID else {
@@ -485,15 +490,18 @@ final class CaptureCoordinator {
     private func showOverlay() async {
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         session?.previousActiveApp = frontmostApp
-        let overlayTurns = session?.conversationTurns ?? []
 
-        configurePanelAndShow(conversationTurns: overlayTurns)
-        Logger.app.info("Capture view: overlay shown")
-
-        // Capture selection in background
+        // Capture selection BEFORE showing panel — the panel steals AX focus,
+        // so captureViaAccessibility would read from the panel's TextEditor
+        // instead of the original app, and Cmd+C fallback would target the panel.
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
         let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
+
+        let overlayTurns = session?.conversationTurns ?? []
+        configurePanelAndShow(conversationTurns: overlayTurns)
+        Logger.app.info("Capture view: overlay shown")
+
         if let capturedText {
             let context = CapturedContext(text: capturedText, source: .selection)
             session?.captures = [context]
