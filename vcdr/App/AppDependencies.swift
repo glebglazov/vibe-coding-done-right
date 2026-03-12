@@ -40,10 +40,10 @@ final class AppDependencies {
         self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
         let hotkeyManager = GlobalHotkeyManager()
-        let recordingIndicator = RecordingIndicatorPanel(settings: settings, audioRecorder: audioRecorder)
+        let overrides = ConversationOverrides()
+        let recordingIndicator = RecordingIndicatorPanel(settings: settings, overrides: overrides, audioRecorder: audioRecorder)
         let selectionCapturer = SelectionCapturer()
         let clipboardMonitor = ClipboardMonitor()
-        let overrides = ConversationOverrides()
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
@@ -115,20 +115,6 @@ final class AppDependencies {
         }
         captureCoordinator.onWillStartInput = { [weak self] in
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
-        }
-
-        // Update recording indicator labels when mode changes mid-recording
-        modeSwitcherCoordinator.onModeSelected = { [weak self] _ in
-            guard let self else { return }
-            let labels = overrides.resolvedParameterLabels(for: self.settings.activeMode)
-            recordingIndicator.updateParameterLabels(labels)
-            captureCoordinator.panel.updateParameterLabels(labels)
-        }
-
-        // Update UI labels when destination override changes
-        modeSwitcherCoordinator.onDestinationOverrideChanged = { [weak self] destinationID in
-            self?.captureCoordinator.updateOutputDestinationOverride(destinationID)
-            recordingIndicator.updateOutputDestinationOverride(destinationID)
         }
 
         // Wire contextual mode switcher: show mode list inside recording indicator or capture panel

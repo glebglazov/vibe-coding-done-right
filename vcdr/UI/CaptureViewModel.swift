@@ -8,29 +8,30 @@ final class CaptureViewModel {
     var conversationTurns: [ConversationTurn] = []
     var captures: [CapturedContext] = []
     var isMinimized: Bool = false
-    var isRecording: Bool = false
-    var isProcessing: Bool = false
     var scrollTrigger: Int = 0
     var clipboardCaptureCount: Int = 0
-    var outputDestinationOverrideID: UUID?
-    var parameterLabels: String?
     var processedByModeName: String?
     var modeSwitcherViewModel: ModeSwitcherViewModel?
 
-    /// Pill phase controls what the minimized pill displays
-    enum PillPhase {
+    /// Unified phase for both the minimized pill and expanded view state
+    enum CapturePhase {
         case idle
         case recording
         case processing
+        case success
         case error
         case cancelled
-        case success
     }
-    var pillPhase: PillPhase = .idle
+    var phase: CapturePhase = .idle
+
+    /// Convenience for view compatibility
+    var isRecording: Bool { phase == .recording }
+    var isProcessing: Bool { phase == .processing }
 
     // MARK: - Configuration
 
     let settings: AppSettings
+    let overrides: ConversationOverrides
     let outputDestinations: [OutputDestination]
 
     // MARK: - Callbacks
@@ -45,9 +46,9 @@ final class CaptureViewModel {
     // MARK: - Computed
 
     var modeLabel: String {
-        let destinationID = outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
+        let destinationID = overrides.destinationOverride ?? settings.activeMode.defaultOutputDestinationID
         let destination = settings.outputDestination(for: destinationID)
-        let parts = [settings.activeMode.name, parameterLabels, destination.symbol].compactMap { $0 }
+        let parts = [settings.activeMode.name, overrides.resolvedParameterLabels(for: settings.activeMode), destination.symbol].compactMap { $0 }
         return parts.joined(separator: " · ")
     }
 
@@ -75,9 +76,9 @@ final class CaptureViewModel {
 
     /// Mode label for the minimized pill: "Mode · params · dest symbol" + " ⚡" for quick action
     var pillModeLabel: String {
-        let destinationID = outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
+        let destinationID = overrides.destinationOverride ?? settings.activeMode.defaultOutputDestinationID
         let destination = settings.outputDestination(for: destinationID)
-        let parts = [settings.activeMode.name, parameterLabels, destination.symbol].compactMap { $0 }
+        let parts = [settings.activeMode.name, overrides.resolvedParameterLabels(for: settings.activeMode), destination.symbol].compactMap { $0 }
         var label = parts.joined(separator: " · ")
         if settings.activeMode.quickAction {
             label += " \u{26A1}"
@@ -87,6 +88,7 @@ final class CaptureViewModel {
 
     init(
         settings: AppSettings,
+        overrides: ConversationOverrides,
         conversationTurns: [ConversationTurn] = [],
         captures: [CapturedContext] = [],
         outputDestinations: [OutputDestination] = [],
@@ -96,6 +98,7 @@ final class CaptureViewModel {
         audioRecorder: AudioRecorder? = nil
     ) {
         self.settings = settings
+        self.overrides = overrides
         self.conversationTurns = conversationTurns
         self.captures = captures
         self.outputDestinations = outputDestinations

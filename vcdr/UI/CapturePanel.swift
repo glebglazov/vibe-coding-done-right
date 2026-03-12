@@ -57,6 +57,7 @@ final class CapturePanel {
 
     func show(
         settings: AppSettings,
+        overrides: ConversationOverrides,
         conversationTurns: [ConversationTurn] = [],
         captures: [CapturedContext] = [],
         outputDestinations: [OutputDestination] = [],
@@ -70,6 +71,7 @@ final class CapturePanel {
 
         let viewModel = CaptureViewModel(
             settings: settings,
+            overrides: overrides,
             conversationTurns: conversationTurns,
             captures: captures,
             outputDestinations: filteredDestinations,
@@ -233,11 +235,7 @@ final class CapturePanel {
 
     // MARK: - Minimize / Expand
 
-    func minimize(phase: CaptureViewModel.PillPhase = .idle) {
-        var effectivePhase = phase
-        if phase == .idle && viewModel?.isRecording == true { effectivePhase = .recording }
-        if phase == .idle && viewModel?.isProcessing == true { effectivePhase = .processing }
-        viewModel?.pillPhase = effectivePhase
+    func minimize() {
         guard viewModel?.isMinimized != true else { return }
         viewModel?.isMinimized = true
         resizePanelToMinimized()
@@ -247,7 +245,7 @@ final class CapturePanel {
     func expand() {
         guard viewModel?.isMinimized == true else { return }
         viewModel?.isMinimized = false
-        viewModel?.pillPhase = .idle
+        viewModel?.phase = .idle
         resizePanelToExpanded()
         panel?.makeKey()
         if viewModel?.isRecording != true {
@@ -259,21 +257,10 @@ final class CapturePanel {
         }
     }
 
-    // MARK: - Recording State
+    // MARK: - Phase
 
-    func setRecording(_ recording: Bool) {
-        viewModel?.isRecording = recording
-        if recording {
-            viewModel?.pillPhase = .recording
-        }
-    }
-
-    func showPillError() {
-        viewModel?.pillPhase = .error
-    }
-
-    func setPillPhase(_ phase: CaptureViewModel.PillPhase) {
-        viewModel?.pillPhase = phase
+    func setPhase(_ phase: CaptureViewModel.CapturePhase) {
+        viewModel?.phase = phase
     }
 
     // MARK: - Text Insertion
@@ -297,10 +284,10 @@ final class CapturePanel {
     func startProcessing(inputText: String) {
         let pendingTurn = ConversationTurn(input: inputText, output: "...")
         viewModel?.conversationTurns.append(pendingTurn)
-        viewModel?.isProcessing = true
+        viewModel?.phase = .processing
         viewModel?.text = ""
         viewModel?.scrollTrigger += 1
-        minimize(phase: .processing)
+        minimize()
     }
 
     func finishProcessing(outputText: String) {
@@ -308,7 +295,7 @@ final class CapturePanel {
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
         viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText)
-        viewModel.isProcessing = false
+        viewModel.phase = .idle
         viewModel.scrollTrigger += 1
         expand()
     }
@@ -326,19 +313,15 @@ final class CapturePanel {
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
         viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText, captures: lastTurn.captures)
-        viewModel.isProcessing = false
+        viewModel.phase = .idle
         viewModel.scrollTrigger += 1
         resizePanel()
-    }
-
-    func setProcessing(_ processing: Bool) {
-        viewModel?.isProcessing = processing
     }
 
     func showProcessingError(_ message: String) {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         viewModel.conversationTurns.removeLast()
-        viewModel.isProcessing = false
+        viewModel.phase = .idle
         expand()
         Logger.actions.error("Capture panel processing failed: \(message)")
     }
@@ -370,14 +353,6 @@ final class CapturePanel {
 
     func setProcessedByModeName(_ name: String?) {
         viewModel?.processedByModeName = name
-    }
-
-    func updateOutputDestinationOverride(_ id: UUID?) {
-        viewModel?.outputDestinationOverrideID = id
-    }
-
-    func updateParameterLabels(_ labels: String?) {
-        viewModel?.parameterLabels = labels
     }
 
     func setDestinationSubmitHandler(_ handler: @escaping (String, UUID) -> Void) {

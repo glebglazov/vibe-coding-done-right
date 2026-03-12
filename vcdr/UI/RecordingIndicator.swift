@@ -18,10 +18,6 @@ final class IndicatorPhaseState {
     var phase: IndicatorPhase = .recording
     var rejectCount: Int = 0
     var errorMessage: String?
-    /// Output destination override set via mode switcher; nil means use mode default
-    var outputDestinationOverrideID: UUID?
-    /// Resolved parameter labels for display (e.g. "Sonnet, English")
-    var parameterLabels: String?
 }
 
 // MARK: - Indicator Capture State
@@ -63,6 +59,7 @@ final class RecordingIndicatorPanel {
     private let captureState = IndicatorCaptureState()
     private let modeSwitcherState = IndicatorModeSwitcherState()
     private let settings: AppSettings
+    private let overrides: ConversationOverrides
     private let audioRecorder: AudioRecorder
     /// Stored top offset for positioning below the output panel during follow-ups.
     /// Used by showCancelled() so the cancelled indicator appears in the same spot.
@@ -72,15 +69,15 @@ final class RecordingIndicatorPanel {
 
     var isVisible: Bool { panel != nil }
 
-    init(settings: AppSettings, audioRecorder: AudioRecorder) {
+    init(settings: AppSettings, overrides: ConversationOverrides, audioRecorder: AudioRecorder) {
         self.settings = settings
+        self.overrides = overrides
         self.audioRecorder = audioRecorder
     }
 
     func show(topOffset: CGFloat = 0) {
         phaseState.phase = .recording
         phaseState.errorMessage = nil
-        phaseState.parameterLabels = nil
         captureState.captureCount = 0
         currentTopOffset = topOffset
 
@@ -93,6 +90,7 @@ final class RecordingIndicatorPanel {
             captureState: captureState,
             modeSwitcherState: modeSwitcherState,
             settings: settings,
+            overrides: overrides,
             audioRecorder: audioRecorder
         ))
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
@@ -131,14 +129,6 @@ final class RecordingIndicatorPanel {
 
     var currentPhase: IndicatorPhase {
         phaseState.phase
-    }
-
-    func updateOutputDestinationOverride(_ id: UUID?) {
-        phaseState.outputDestinationOverrideID = id
-    }
-
-    func updateParameterLabels(_ labels: String?) {
-        phaseState.parameterLabels = labels
     }
 
     /// Triggers a brief clipboard icon flash on the recording indicator
@@ -369,6 +359,7 @@ private struct RecordingIndicatorView: View {
     let captureState: IndicatorCaptureState
     let modeSwitcherState: IndicatorModeSwitcherState
     let settings: AppSettings
+    let overrides: ConversationOverrides
     let audioRecorder: AudioRecorder
 
     var body: some View {
@@ -411,9 +402,9 @@ private struct RecordingIndicatorView: View {
                 }
 
                 if phaseState.phase == .recording || phaseState.phase == .processing {
-                    let destinationID = phaseState.outputDestinationOverrideID ?? settings.activeMode.defaultOutputDestinationID
+                    let destinationID = overrides.destinationOverride ?? settings.activeMode.defaultOutputDestinationID
                     let destination = settings.outputDestination(for: destinationID)
-                    let labelParts = [settings.activeMode.name, phaseState.parameterLabels, destination.symbol].compactMap { $0 }
+                    let labelParts = [settings.activeMode.name, overrides.resolvedParameterLabels(for: settings.activeMode), destination.symbol].compactMap { $0 }
                     Text(labelParts.joined(separator: " · "))
                         .font(.caption)
                         .foregroundStyle(.primary)

@@ -54,7 +54,7 @@ struct CaptureView: View {
                 pillCopyButton
             }
 
-            switch viewModel.pillPhase {
+            switch viewModel.phase {
             case .idle:
                 Image(systemName: viewModel.conversationTurns.isEmpty ? "text.cursor" : "text.bubble")
                     .font(.system(size: Self.pillIconSize))

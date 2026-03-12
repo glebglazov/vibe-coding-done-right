@@ -213,8 +213,6 @@ final class RecordingCoordinator {
             let isQuickAction = settings.activeMode.quickAction
             if isQuickAction {
                 recordingIndicator.show()
-                recordingIndicator.updateOutputDestinationOverride(overrides.destinationOverride)
-                recordingIndicator.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
             }
             // Normal mode non-follow-up: onRecordingStarted already told CC to show pill
         }

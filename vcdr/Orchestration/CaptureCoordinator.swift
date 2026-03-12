@@ -48,10 +48,6 @@ final class CaptureCoordinator {
         panel.hideModeSwitcher()
     }
 
-    func updateOutputDestinationOverride(_ id: UUID?) {
-        panel.updateOutputDestinationOverride(id)
-    }
-
     // MARK: - Constants
 
     private static let successIndicatorDuration: Duration = .seconds(2)
@@ -91,28 +87,17 @@ final class CaptureCoordinator {
         pillResetTask?.cancel()
         if isFollowUp && panel.isVisible {
             panel.lockForFollowUp()
-            panel.setRecording(true)
+            panel.setPhase(.recording)
         } else if !isFollowUp && !settings.activeMode.quickAction {
             // Normal mode, fresh recording: show pill
             showPanelMinimized(phase: .recording)
-            // Mark the panel as recording so the didBecomeKeyNotification guard
-            // prevents the pill from expanding when another panel (e.g. standalone
-            // mode switcher) closes and returns focus to the capture panel.
-            panel.setRecording(true)
         }
         // Quick action fresh recording: RC shows its own indicator, CC does nothing
     }
 
     /// Called when transcription is in progress.
     func handleTranscribing() {
-        panel.setRecording(false)
-        if panel.isVisible {
-            if panel.isMinimized {
-                panel.minimize(phase: .processing)
-            } else {
-                panel.setProcessing(true)
-            }
-        }
+        panel.setPhase(.processing)
     }
 
     /// Called when transcription completed with text.
@@ -172,38 +157,34 @@ final class CaptureCoordinator {
     /// Called when recording failed to start.
     func handleRecordingFailed(message: String) {
         panel.unlockFollowUp()
-        panel.setRecording(false)
+        panel.setPhase(.idle)
     }
 
     // MARK: - Pill Notification Helpers
 
     /// Briefly shows an error state on the pill, then returns to idle.
     private func notifyTranscriptionFailed() {
-        panel.setRecording(false)
-        panel.setProcessing(false)
+        panel.setPhase(.error)
         if panel.isVisible {
-            panel.showPillError()
             pillResetTask?.cancel()
             pillResetTask = Task {
                 try? await Task.sleep(for: Self.pillErrorDisplayDuration)
                 guard !Task.isCancelled else { return }
-                panel.setPillPhase(.idle)
+                panel.setPhase(.idle)
             }
         }
     }
 
     /// Briefly flashes the cancelled icon on the pill, then returns to idle.
     private func notifyCancelled() {
-        panel.setRecording(false)
-        panel.setProcessing(false)
         if panel.isVisible {
-            panel.setPillPhase(.cancelled)
-            if !panel.isMinimized { panel.minimize(phase: .cancelled) }
+            panel.setPhase(.cancelled)
+            if !panel.isMinimized { panel.minimize() }
             pillResetTask?.cancel()
             pillResetTask = Task {
                 try? await Task.sleep(for: Self.pillFlashDuration)
                 guard !Task.isCancelled else { return }
-                panel.setPillPhase(.idle)
+                panel.setPhase(.idle)
             }
         }
     }
@@ -211,13 +192,13 @@ final class CaptureCoordinator {
     /// Briefly flashes the success icon on the pill, then returns to idle.
     private func notifySuccess() {
         if panel.isVisible {
-            panel.setPillPhase(.success)
-            if !panel.isMinimized { panel.minimize(phase: .success) }
+            panel.setPhase(.success)
+            if !panel.isMinimized { panel.minimize() }
             pillResetTask?.cancel()
             pillResetTask = Task {
                 try? await Task.sleep(for: Self.pillFlashDuration)
                 guard !Task.isCancelled else { return }
-                panel.setPillPhase(.idle)
+                panel.setPhase(.idle)
             }
         }
     }
@@ -312,8 +293,7 @@ final class CaptureCoordinator {
         }
 
         if panel.isVisible {
-            panel.setRecording(false)
-            panel.setProcessing(false)
+            panel.setPhase(.idle)
             panel.insertTextAtCursor(result.text)
             session?.captures = result.captures
             panel.updateCaptures(result.captures)
@@ -431,6 +411,7 @@ final class CaptureCoordinator {
 
         panel.show(
             settings: settings,
+            overrides: overrides,
             conversationTurns: conversationTurns,
             captures: captures,
             outputDestinations: settings.outputDestinations,
@@ -448,7 +429,6 @@ final class CaptureCoordinator {
                 self?.dismissOverlay()
             }
         )
-        panel.updateParameterLabels(overrides.resolvedParameterLabels(for: settings.activeMode))
 
         panel.setDestinationSubmitHandler { [weak self] text, destinationID in
             guard let self else { return }
@@ -509,9 +489,10 @@ final class CaptureCoordinator {
         panel.insertTextAtCursor(text)
     }
 
-    private func showPanelMinimized(phase: CaptureViewModel.PillPhase) {
+    private func showPanelMinimized(phase: CaptureViewModel.CapturePhase) {
         configurePanelAndShow()
-        panel.minimize(phase: phase)
+        panel.setPhase(phase)
+        panel.minimize()
     }
 
     // MARK: - Collapse / Expand
