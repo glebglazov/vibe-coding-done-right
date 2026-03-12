@@ -92,4 +92,25 @@ enum SubmissionPipeline {
             hadExternalProcessing: hadExternalProcessing
         )
     }
+
+    static func updateLastTurn(
+        history: TranscriptionHistory,
+        conversationID: UUID,
+        input: String,
+        output: String,
+        captures: [CapturedContext],
+        modeID: UUID,
+        modeName: String,
+        hadExternalProcessing: Bool
+    ) {
+        history.updateLastTurn(
+            conversationID: conversationID,
+            input: input,
+            output: output,
+            captures: captures,
+            modeID: modeID,
+            modeName: modeName,
+            hadExternalProcessing: hadExternalProcessing
+        )
+    }
 }

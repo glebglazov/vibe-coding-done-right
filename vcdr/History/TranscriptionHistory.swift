@@ -60,6 +60,38 @@ final class TranscriptionHistory {
         save()
     }
 
+    /// Updates the last turn of an existing conversation.
+    /// Used for draft accumulation (follow-up dictations) and submission (updating output).
+    func updateLastTurn(
+        conversationID: UUID,
+        input: String,
+        output: String,
+        captures: [CapturedContext],
+        modeID: UUID,
+        modeName: String,
+        hadExternalProcessing: Bool
+    ) {
+        guard let index = conversations.firstIndex(where: { $0.id == conversationID }),
+              !conversations[index].turns.isEmpty else { return }
+
+        let lastTurnIndex = conversations[index].turns.count - 1
+        let existingTurn = conversations[index].turns[lastTurnIndex]
+        conversations[index].turns[lastTurnIndex] = Conversation.Turn(
+            id: existingTurn.id,
+            input: input,
+            output: output,
+            captures: captures,
+            timestamp: .now
+        )
+        conversations[index].lastUpdated = .now
+        conversations[index].hadExternalProcessing = hadExternalProcessing
+
+        // Move to front (most recent)
+        let conversation = conversations.remove(at: index)
+        conversations.insert(conversation, at: 0)
+        save()
+    }
+
     func removeConversation(_ conversation: Conversation) {
         conversations.removeAll { $0.id == conversation.id }
         save()

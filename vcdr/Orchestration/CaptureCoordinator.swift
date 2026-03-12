@@ -301,7 +301,15 @@ final class CaptureCoordinator {
 
     /// Shows the Capture View with transcribed text after recording completes (non-quick-action).
     private func populateWithTranscription(result: RecordingResult) {
-        let conversationID = session?.conversationID ?? UUID()
+        if session == nil {
+            session = PipelineSession()
+            session?.previousActiveApp = result.previousActiveApp
+            session?.conversationID = UUID()
+        }
+        guard let activeSession = session, let currentConversationID = activeSession.conversationID else {
+            Logger.app.error("populateWithTranscription: session unexpectedly nil")
+            return
+        }
 
         if panel.isVisible {
             panel.setRecording(false)
@@ -310,24 +318,37 @@ final class CaptureCoordinator {
             session?.captures = result.captures
             panel.updateCaptures(result.captures)
         } else {
-            session = PipelineSession()
-            session?.previousActiveApp = result.previousActiveApp
             session?.captures = result.captures
-            session?.conversationID = conversationID
             showPanelWithText(result.text)
         }
         panel.expand()
         recordingIndicator.hide()
 
-        transcriptionHistory.recordTurn(
-            conversationID: session?.conversationID ?? conversationID,
-            input: result.text,
-            output: result.text,
-            captures: result.captures,
-            modeID: settings.activeModeID,
-            modeName: settings.activeMode.name,
-            hadExternalProcessing: false
-        )
+        if session?.hasUnsubmittedDraft == true {
+            // Follow-up dictation before submit: update existing draft Turn
+            let fullText = panel.currentText ?? result.text
+            transcriptionHistory.updateLastTurn(
+                conversationID: currentConversationID,
+                input: fullText,
+                output: fullText,
+                captures: result.captures,
+                modeID: settings.activeModeID,
+                modeName: settings.activeMode.name,
+                hadExternalProcessing: false
+            )
+        } else {
+            // First dictation or post-submit follow-up: create new draft Turn
+            transcriptionHistory.recordTurn(
+                conversationID: currentConversationID,
+                input: result.text,
+                output: result.text,
+                captures: result.captures,
+                modeID: settings.activeModeID,
+                modeName: settings.activeMode.name,
+                hadExternalProcessing: false
+            )
+            session?.hasUnsubmittedDraft = true
+        }
 
         overrides.markPipelineCompleted()
         Logger.app.info("Pipeline: handed to capture view")
@@ -558,6 +579,7 @@ final class CaptureCoordinator {
         let mode = settings.activeMode
         let captures = pipelineSession.captures
         let activeConversationID = pipelineSession.conversationID ?? UUID()
+        let hasUnsubmittedDraft = pipelineSession.hasUnsubmittedDraft
         let currentTurns = pipelineSession.conversationTurns
         let followUpContext = pipelineSession.followUpContext
         let targetAppPID = pipelineSession.previousActiveApp?.processIdentifier
@@ -600,13 +622,23 @@ final class CaptureCoordinator {
                     }
                     panel.makeKeyIfVisible()
 
-                    SubmissionPipeline.recordTurn(
-                        history: transcriptionHistory,
-                        conversationID: activeConversationID,
-                        input: text, output: accumulated, captures: captures,
-                        modeID: mode.id, modeName: mode.name,
-                        hadExternalProcessing: streamResult.hadExternalProcessing
-                    )
+                    if hasUnsubmittedDraft {
+                        SubmissionPipeline.updateLastTurn(
+                            history: transcriptionHistory,
+                            conversationID: activeConversationID,
+                            input: text, output: accumulated, captures: captures,
+                            modeID: mode.id, modeName: mode.name,
+                            hadExternalProcessing: streamResult.hadExternalProcessing
+                        )
+                    } else {
+                        SubmissionPipeline.recordTurn(
+                            history: transcriptionHistory,
+                            conversationID: activeConversationID,
+                            input: text, output: accumulated, captures: captures,
+                            modeID: mode.id, modeName: mode.name,
+                            hadExternalProcessing: streamResult.hadExternalProcessing
+                        )
+                    }
 
                     self.session = PipelineSession()
                     self.session?.conversationTurns = self.panel.currentTurns
@@ -654,13 +686,23 @@ final class CaptureCoordinator {
                         dismissIndicatorAfterDelay(Self.successIndicatorDuration)
                     }
 
-                    SubmissionPipeline.recordTurn(
-                        history: transcriptionHistory,
-                        conversationID: activeConversationID,
-                        input: text, output: result.processedText, captures: captures,
-                        modeID: mode.id, modeName: mode.name,
-                        hadExternalProcessing: result.hadExternalProcessing
-                    )
+                    if hasUnsubmittedDraft {
+                        SubmissionPipeline.updateLastTurn(
+                            history: transcriptionHistory,
+                            conversationID: activeConversationID,
+                            input: text, output: result.processedText, captures: captures,
+                            modeID: mode.id, modeName: mode.name,
+                            hadExternalProcessing: result.hadExternalProcessing
+                        )
+                    } else {
+                        SubmissionPipeline.recordTurn(
+                            history: transcriptionHistory,
+                            conversationID: activeConversationID,
+                            input: text, output: result.processedText, captures: captures,
+                            modeID: mode.id, modeName: mode.name,
+                            hadExternalProcessing: result.hadExternalProcessing
+                        )
+                    }
 
                     if panel.isVisible && result.hadExternalProcessing {
                         self.session = PipelineSession()

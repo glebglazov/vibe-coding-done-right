@@ -22,4 +22,6 @@ struct PipelineSession {
     var followUpContext: String?
     var conversationTurns: [ConversationTurn] = []
     var conversationID: UUID?
+    /// Whether the current session has a draft Turn in history that hasn't been submitted yet.
+    var hasUnsubmittedDraft = false
 }

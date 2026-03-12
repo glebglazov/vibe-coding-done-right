@@ -8,7 +8,7 @@ struct Conversation: Identifiable, Equatable {
     var lastUpdated: Date
     /// Whether external processing (e.g. a bash script) produced the output.
     /// Determines if this entry is rendered and treated as a conversation.
-    let hadExternalProcessing: Bool
+    var hadExternalProcessing: Bool
 
     struct Turn: Identifiable, Equatable {
         let id: UUID
