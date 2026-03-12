@@ -64,8 +64,8 @@ private struct ConversationRowView: View {
     @State private var showCopied = false
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(alignment: .top) {
+        HStack(alignment: .top) {
+            Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: 4) {
                     // Turn count
                     HStack(spacing: 6) {
@@ -114,22 +114,21 @@ private struct ConversationRowView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
-
-                Spacer()
-
-                // Copy latest output button
-                Button {
-                    copyToClipboard(conversation.latestOutput)
-                } label: {
-                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                }
-                .buttonStyle(.borderless)
-                .tint(showCopied ? .green : .secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 2)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            // Copy latest output button — outside the row button to prevent press animation bleed
+            Button {
+                copyToClipboard(conversation.latestOutput)
+            } label: {
+                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .tint(showCopied ? .green : .secondary)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 2)
         .contextMenu {
             if canContinue {
                 Button("Continue Conversation") {
