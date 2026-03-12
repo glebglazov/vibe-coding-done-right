@@ -67,13 +67,6 @@ final class CaptureViewModel {
         conversationTurns.last?.output ?? ""
     }
 
-    /// Latest text suitable for the pill copy button — latest turn output, or current text
-    var latestCopyableText: String {
-        let turnOutput = conversationTurns.last?.output ?? ""
-        if !turnOutput.isEmpty { return turnOutput }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     /// Mode label for the minimized pill: "Mode · params · dest symbol" + " ⚡" for quick action
     var pillModeLabel: String {
         let destinationID = overrides.destinationOverride ?? settings.activeMode.defaultOutputDestinationID

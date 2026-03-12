@@ -50,8 +50,18 @@ struct CaptureView: View {
 
     private var minimizedPillView: some View {
         HStack(spacing: Self.pillSpacing) {
-            if !viewModel.latestCopyableText.isEmpty {
-                pillCopyButton
+            if viewModel.clipboardCaptureCount > 0 {
+                HStack(spacing: 1) {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: Self.captureBadgeSize, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    if viewModel.clipboardCaptureCount > 1 {
+                        Text("\u{00D7}\(viewModel.clipboardCaptureCount)")
+                            .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .transition(.opacity)
             }
 
             switch viewModel.phase {
@@ -71,20 +81,6 @@ struct CaptureView: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: Self.pillIconSize, weight: .semibold))
                     .foregroundStyle(.green)
-            }
-
-            if viewModel.clipboardCaptureCount > 0 {
-                HStack(spacing: 1) {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: Self.captureBadgeSize, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    if viewModel.clipboardCaptureCount > 1 {
-                        Text("\u{00D7}\(viewModel.clipboardCaptureCount)")
-                            .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .transition(.opacity)
             }
 
             Text(viewModel.pillModeLabel)
@@ -328,18 +324,6 @@ struct CaptureView: View {
     }
 
     // MARK: - Helpers
-
-    private var pillCopyButton: some View {
-        Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(viewModel.latestCopyableText, forType: .string)
-        } label: {
-            Image(systemName: "doc.on.doc")
-                .font(.system(size: Self.copyButtonSize))
-                .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-    }
 
     private func copyButton(for text: String) -> some View {
         Button {
