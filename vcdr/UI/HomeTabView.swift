@@ -202,11 +202,12 @@ struct HomeTabView: View {
     }
 
     private var isRecording: Bool {
-        dependencies.coordinator.state == .recording
+        let state = dependencies.coordinator.state
+        return state == .preparingToRecord || state == .recording
     }
 
     private var canToggleRecording: Bool {
         let state = dependencies.coordinator.state
-        return state == .idle || state == .recording
+        return state == .idle || state == .preparingToRecord || state == .recording
     }
 }

@@ -7,6 +7,7 @@ import OSLog
 final class RecordingCoordinator {
     enum State: Equatable {
         case idle
+        case preparingToRecord
         case recording
         case transcribing
         case executing
@@ -28,7 +29,13 @@ final class RecordingCoordinator {
     }
 
 
-    private(set) var state: State = .idle
+    private(set) var state: State = .idle {
+        didSet {
+            if oldValue != state {
+                Logger.consistency.info("RC state: \(String(describing: oldValue)) → \(String(describing: self.state))")
+            }
+        }
+    }
     private let settings: AppSettings
     private let transcriptionProvider: any TranscriptionProvider
     private let audioRecorder: AudioRecorder
@@ -81,11 +88,15 @@ final class RecordingCoordinator {
     private var recordingStartInstant: ContinuousClock.Instant?
     /// Tracks whether the current recording was started via toggle (vs push-to-talk)
     private var isToggleMode = false
-    /// Guards against concurrent onHotkeyDown() calls racing during the async gap
-    /// between state == .idle check and state = .recording assignment.
-    private var isPreparingToRecord = false
+    /// Set when the user presses toggle again while onHotkeyDown() is mid-await.
+    /// Checked after startRecording() completes to immediately stop.
+    private var pendingToggleStop = false
     /// The in-flight processing Task, stored so it can be cancelled via cancelRecording().
     private var processingTask: Task<Void, Never>?
+    /// The in-flight indicator dismiss Task. Stored so it can be cancelled
+    /// when a new recording cycle starts, preventing a stale hide from
+    /// dismissing the new recording's indicator.
+    private var dismissIndicatorTask: Task<Void, Never>?
 
     init(
         settings: AppSettings,
@@ -145,9 +156,13 @@ final class RecordingCoordinator {
     func toggleRecording() {
         switch state {
         case .idle, .error:
-            guard !isPreparingToRecord else { return }
             isToggleMode = true
             Task { await onHotkeyDown() }
+        case .preparingToRecord:
+            // User pressed toggle again while we're still setting up.
+            // We can't call stopRecordingAndTranscribe() because the mic hasn't
+            // started yet. Set a flag so onHotkeyDown() stops after setup.
+            pendingToggleStop = true
         case .recording:
             stopRecordingAndTranscribe()
         default:
@@ -164,7 +179,7 @@ final class RecordingCoordinator {
             state = .idle
         }
 
-        guard state == .idle, !isPreparingToRecord else {
+        guard state == .idle else {
             Logger.app.warning("Hotkey pressed but not idle (state: \(String(describing: self.state)))")
             if state == .transcribing || state == .executing {
                 recordingIndicator.buzz()
@@ -172,14 +187,23 @@ final class RecordingCoordinator {
             return
         }
 
-        isPreparingToRecord = true
-        defer { isPreparingToRecord = false }
+        state = .preparingToRecord
+        dismissIndicatorTask?.cancel()
+        defer {
+            if state == .preparingToRecord {
+                // If we're still preparing when the function exits, something went wrong
+                // in a code path that didn't explicitly set a terminal state.
+                Logger.app.error("onHotkeyDown exited while still in .preparingToRecord — resetting to .idle")
+                state = .idle
+            }
+        }
 
         let isFollowUp = isPanelVisible?() ?? false
         recordingRun = RecordingRunState(isFollowUp: isFollowUp)
 
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
+            pendingToggleStop = false
             state = .error("Model still loading...")
             recordingRun = nil
             onRecordingFailed?("Model still loading...")
@@ -188,6 +212,11 @@ final class RecordingCoordinator {
             dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
             return
+        }
+
+        // Consistency: panel lock should not already be active when starting a fresh non-follow-up recording
+        if !isFollowUp, let checkPanel = isPanelVisible, checkPanel() {
+            Logger.consistency.warning("onRecordingStarted(isFollowUp=false) but panel is already visible — potential stale panel from previous cycle")
         }
 
         // Notify CC that recording started — CC handles panel lock/pill display
@@ -239,14 +268,24 @@ final class RecordingCoordinator {
 
             // If the hotkey was released while we were awaiting startRecording(),
             // the synchronous onKeyUp callback may have already called
-            // stopRecordingAndTranscribe() — but if state was still .idle at that point,
-            // the stop was a no-op. Cancel the recording since it contains no
-            // meaningful audio (zero effective duration).
+            // stopRecordingAndTranscribe() — but if state was still .preparingToRecord
+            // at that point, the stop was a no-op. Cancel the recording since it
+            // contains no meaningful audio (zero effective duration).
             if fromHotkey && !hotkeyManager.isHotkeyActive {
                 cancelRecording()
                 return
             }
+
+            // Toggle mode: check if user pressed toggle again during await.
+            // pendingToggleStop is set by toggleRecording() when it sees
+            // .preparingToRecord and can't call stopRecordingAndTranscribe() yet.
+            if pendingToggleStop {
+                pendingToggleStop = false
+                stopRecordingAndTranscribe()
+                return
+            }
         } else {
+            pendingToggleStop = false
             await mediaPlaybackController.resumeIfNeeded()
             state = .error("Failed to start recording")
             onRecordingFailed?("Failed to start recording")
@@ -266,9 +305,9 @@ final class RecordingCoordinator {
 
         guard state == .recording else {
             Task { await mediaPlaybackController.resumeIfNeeded() }
-            // Only hide the indicator if we're NOT in a processing state —
-            // during transcribing/executing the indicator should stay visible
-            if state != .transcribing && state != .executing {
+            // Only hide the indicator if we're NOT in an active state —
+            // during preparing/transcribing/executing the indicator should stay visible
+            if state != .preparingToRecord && state != .transcribing && state != .executing {
                 recordingIndicator.hide()
             }
             return
@@ -459,7 +498,7 @@ final class RecordingCoordinator {
 
     /// Enables the global Escape tap when recording/transcribing/executing.
     private func updateEscCancel() {
-        escCancelManager.isEnabled = (state == .recording || state == .transcribing || state == .executing)
+        escCancelManager.isEnabled = (state == .preparingToRecord || state == .recording || state == .transcribing || state == .executing)
     }
 
     /// Temporarily disables the global Escape tap so contextual mode switcher
@@ -480,19 +519,22 @@ final class RecordingCoordinator {
         escCancelManager.isEnabled = false
         destinationHotkeyManager.isEnabled = false
         pendingDestinationOverride = nil
+        pendingToggleStop = false
 
-        guard state == .recording || state == .transcribing || state == .executing else { return }
+        guard state == .preparingToRecord || state == .recording || state == .transcribing || state == .executing else { return }
 
         // Stop clipboard monitoring (fire-and-forget since we're discarding captures)
         Task { await clipboardMonitor.stop() }
 
         let wasProcessing = state == .transcribing || state == .executing
+        let wasPreparing = state == .preparingToRecord
         state = .idle
 
         if wasProcessing {
             processingTask?.cancel()
             processingTask = nil
-        } else {
+        } else if !wasPreparing {
+            // Only stop audio if we actually started recording
             if let audioURL = audioRecorder.stopRecording() {
                 try? FileManager.default.removeItem(at: audioURL)
             }
@@ -534,8 +576,10 @@ final class RecordingCoordinator {
     }
 
     private func dismissIndicatorAfterDelay(_ duration: Duration) {
-        Task {
+        dismissIndicatorTask?.cancel()
+        dismissIndicatorTask = Task {
             try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
             // Only dismiss if still showing a terminal phase — a new recording
             // may have started and reset the phase to .recording
             let phase = recordingIndicator.currentPhase
@@ -552,6 +596,7 @@ extension RecordingCoordinator.State {
     var menuBarIcon: String {
         switch self {
         case .idle: "waveform.circle"
+        case .preparingToRecord: "waveform.circle"
         case .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
         case .executing: "arrow.right.circle"

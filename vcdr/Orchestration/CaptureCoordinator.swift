@@ -28,6 +28,15 @@ final class CaptureCoordinator {
     /// notification arrives to prevent stale .idle overwriting .recording.
     private var pillResetTask: Task<Void, Never>?
 
+    /// The in-flight auto-dismiss Task. Cancelled when a new recording starts
+    /// to prevent an orphaned task from dismissing the new recording's panel.
+    private var autoDismissTask: Task<Void, Never>?
+
+    /// The in-flight indicator dismiss Task. Stored so it can be cancelled
+    /// when a new recording cycle starts, preventing a stale hide from
+    /// dismissing the new recording's indicator.
+    private var dismissIndicatorTask: Task<Void, Never>?
+
     /// Called when the capture overlay is about to show.
     var onWillStartInput: (() -> Void)?
 
@@ -84,7 +93,12 @@ final class CaptureCoordinator {
 
     /// Called when recording starts. Handles panel lock and pill display.
     func handleRecordingStarted(isFollowUp: Bool) {
+        if isFollowUp && !panel.isVisible {
+            Logger.consistency.warning("handleRecordingStarted(isFollowUp=true) but panel is not visible — RC/CC disagree on follow-up status")
+        }
         pillResetTask?.cancel()
+        autoDismissTask?.cancel()
+        dismissIndicatorTask?.cancel()
         if isFollowUp && panel.isVisible {
             panel.lockForFollowUp()
             panel.setPhase(.recording)
@@ -102,6 +116,9 @@ final class CaptureCoordinator {
 
     /// Called when transcription completed with text.
     func handleRecordingComplete(result: RecordingResult) {
+        if result.isFollowUp && !panel.isVisible {
+            Logger.consistency.warning("handleRecordingComplete(isFollowUp=true) but panel is not visible")
+        }
         panel.unlockFollowUp()
 
         // Apply destination override if recording had one
@@ -128,8 +145,10 @@ final class CaptureCoordinator {
         } else if panel.isVisible {
             // Fresh recording showed a pill — flash error then dismiss
             notifyTranscriptionFailed()
-            Task {
-                try? await Task.sleep(for: .seconds(1.5))
+            autoDismissTask?.cancel()
+            autoDismissTask = Task {
+                try? await Task.sleep(for: Self.pillErrorDisplayDuration)
+                guard !Task.isCancelled else { return }
                 self.cancelCapture()
             }
         } else if !isFollowUp {
@@ -144,8 +163,10 @@ final class CaptureCoordinator {
         panel.unlockFollowUp()
         if panel.isVisible && wasFreshPill {
             notifyCancelled()
-            Task {
-                try? await Task.sleep(for: .seconds(1))
+            autoDismissTask?.cancel()
+            autoDismissTask = Task {
+                try? await Task.sleep(for: Self.pillFlashDuration)
+                guard !Task.isCancelled else { return }
                 self.cancelCapture()
             }
         } else if panel.isVisible && wasFollowUp {
@@ -526,6 +547,8 @@ final class CaptureCoordinator {
     func dismissOverlay() {
         Task { await clipboardMonitor.stop() }
         escCancelManager.isEnabled = false
+        autoDismissTask?.cancel()
+        autoDismissTask = nil
         panel.onFocusLost = nil
         panel.onPillClicked = nil
         panel.dismiss()
@@ -705,8 +728,10 @@ final class CaptureCoordinator {
     }
 
     private func dismissIndicatorAfterDelay(_ duration: Duration) {
-        Task {
+        dismissIndicatorTask?.cancel()
+        dismissIndicatorTask = Task {
             try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
             let phase = recordingIndicator.currentPhase
             if phase == .success || phase == .error {
                 recordingIndicator.hide()

@@ -82,6 +82,7 @@ struct MenuBarView: View {
         }
         switch dependencies.coordinator.state {
         case .idle: return "Ready"
+        case .preparingToRecord: return "Starting..."
         case .recording: return "Recording..."
         case .transcribing: return "Transcribing..."
         case .executing: return "Executing action..."
