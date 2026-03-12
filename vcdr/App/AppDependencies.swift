@@ -122,6 +122,7 @@ final class AppDependencies {
             guard let self else { return }
             let labels = overrides.resolvedParameterLabels(for: self.settings.activeMode)
             recordingIndicator.updateParameterLabels(labels)
+            captureCoordinator.panel.updateParameterLabels(labels)
         }
 
         // Update UI labels when destination override changes
