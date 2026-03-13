@@ -84,18 +84,15 @@ struct Mode: Identifiable, Codable, Equatable {
         return result
     }
 
-    /// Formats captures for inclusion in pipeline text.
-    /// - 1 capture → the text as-is
-    /// - 2+ captures → numbered `[1] first\n\n[2] second`
+    /// Formats captures for inclusion in pipeline text using `<capture-N>` tags.
     static func formatCaptures(_ captures: [CapturedContext]) -> String {
-        switch captures.count {
-        case 0: return ""
-        case 1: return captures[0].text
-        default:
-            return captures.enumerated()
-                .map { "[\($0.offset + 1)] \($0.element.text)" }
-                .joined(separator: "\n\n")
+        guard !captures.isEmpty else { return "" }
+        if captures.count == 1 {
+            return "<capture-1>\(captures[0].text)</capture-1>"
         }
+        return captures.enumerated().map { index, capture in
+            "<capture-\(index + 1)>\(capture.text)</capture-\(index + 1)>"
+        }.joined(separator: "\n\n")
     }
 
     /// Appends the mode's terminator to the transcription, separating punctuation

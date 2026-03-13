@@ -318,37 +318,69 @@ final class CaptureCoordinator {
             return
         }
 
+        let newCaptures = result.captures
+        let hasNewCapture = !newCaptures.isEmpty
+
         if panel.isVisible {
             panel.setPhase(.idle)
-            panel.insertTextAtCursor(result.text)
-            session?.captures = result.captures
-            panel.updateCaptures(result.captures)
+
+            // If the panel only has the default empty segment (from showPanelMinimized
+            // during recording), replace it rather than appending after it — otherwise
+            // the leading empty segment causes a zero-length editable region and the
+            // cursor lands on the tiny-font separator, appearing "cut in half".
+            let hasOnlyEmptySegment = panel.segmentCount == 1
+                && panel.fullText.isEmpty && panel.allCaptures.isEmpty
+
+            if hasOnlyEmptySegment {
+                if hasNewCapture {
+                    let capture = newCaptures[0]
+                    panel.setSegments([InputSegment(text: result.text, capture: capture)])
+                } else {
+                    panel.setSegments([InputSegment(text: result.text)])
+                }
+            } else if hasNewCapture {
+                // Follow-up with new captured context -> new segment at end (chronological order)
+                let capture = newCaptures[0]
+                let segment = InputSegment(text: result.text, capture: capture)
+                panel.appendSegment(segment)
+            } else {
+                // Follow-up without new capture -> append to active segment
+                panel.appendTextToActiveSegment(result.text)
+            }
+
+            // Merge captures into session
+            session?.captures.append(contentsOf: newCaptures)
         } else {
-            session?.captures = result.captures
-            showPanelWithText(result.text)
+            session?.captures = newCaptures
+            let segments: [InputSegment]
+            if let capture = newCaptures.first {
+                segments = [InputSegment(text: result.text, capture: capture)]
+            } else {
+                segments = [InputSegment(text: result.text)]
+            }
+            showPanelWithSegments(segments)
         }
+
         panel.expand()
         recordingIndicator.hide()
 
         if session?.hasUnsubmittedDraft == true {
-            // Follow-up dictation before submit: update existing draft Turn
-            let fullText = panel.currentText ?? result.text
+            let fullText = panel.fullText
             transcriptionHistory.updateLastTurn(
                 conversationID: currentConversationID,
                 input: fullText,
                 output: fullText,
-                captures: result.captures,
+                captures: session?.captures ?? [],
                 modeID: settings.activeModeID,
                 modeName: settings.activeMode.name,
                 hadExternalProcessing: false
             )
         } else {
-            // First dictation or post-submit follow-up: create new draft Turn
             transcriptionHistory.recordTurn(
                 conversationID: currentConversationID,
                 input: result.text,
                 output: result.text,
-                captures: result.captures,
+                captures: newCaptures,
                 modeID: settings.activeModeID,
                 modeName: settings.activeMode.name,
                 hadExternalProcessing: false
@@ -358,6 +390,11 @@ final class CaptureCoordinator {
 
         overrides.markPipelineCompleted()
         Logger.app.info("Pipeline: handed to capture view")
+    }
+
+    private func showPanelWithSegments(_ segments: [InputSegment]) {
+        let turns = session?.conversationTurns ?? []
+        configurePanelAndShow(conversationTurns: turns, segments: segments)
     }
 
     // MARK: - Show From History
@@ -374,7 +411,8 @@ final class CaptureCoordinator {
             session?.followUpContext = conversation.latestOutput
         }
 
-        configurePanelAndShow(conversationTurns: turns)
+        // Fresh segment for new input (no need to reconstruct old segments)
+        configurePanelAndShow(conversationTurns: turns, segments: [InputSegment()])
         if conversation.hadExternalProcessing {
             panel.setProcessedByModeName(conversation.modeName)
         }
@@ -424,7 +462,8 @@ final class CaptureCoordinator {
     /// All show methods delegate here, passing only what differs.
     private func configurePanelAndShow(
         conversationTurns: [ConversationTurn] = [],
-        captures: [CapturedContext] = []
+        captures: [CapturedContext] = [],
+        segments: [InputSegment]? = nil
     ) {
         panel.onFocusLost = { [weak self] in
             self?.collapseOverlay()
@@ -435,11 +474,25 @@ final class CaptureCoordinator {
             }
         }
 
+        // Build segments from captures if no explicit segments provided
+        let resolvedSegments: [InputSegment]
+        if let segments {
+            resolvedSegments = segments
+        } else if !captures.isEmpty {
+            if captures.count == 1 {
+                resolvedSegments = [InputSegment(capture: captures.first)]
+            } else {
+                resolvedSegments = [InputSegment(capture: captures.first)] + captures.dropFirst().map { InputSegment(capture: $0) }
+            }
+        } else {
+            resolvedSegments = [InputSegment()]
+        }
+
         panel.show(
             settings: settings,
             overrides: overrides,
             conversationTurns: conversationTurns,
-            captures: captures,
+            segments: resolvedSegments,
             outputDestinations: settings.outputDestinations,
             audioRecorder: audioRecorder,
             onSubmit: { [weak self] text in
@@ -499,23 +552,37 @@ final class CaptureCoordinator {
         let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
 
         let overlayTurns = session?.conversationTurns ?? []
-        configurePanelAndShow(conversationTurns: overlayTurns)
-        Logger.app.info("Capture view: overlay shown")
 
         if let capturedText {
             let context = CapturedContext(text: capturedText, source: .selection)
+            let segment = InputSegment(capture: context)
             session?.captures = [context]
             originalCapture = context
-            panel.updateCaptures([context])
+            configurePanelAndShow(conversationTurns: overlayTurns, segments: [segment])
             panel.signalClipboardCapture()
+        } else {
+            configurePanelAndShow(conversationTurns: overlayTurns)
         }
+
+        Logger.app.info("Capture view: overlay shown")
     }
 
     private func showPanelWithText(_ text: String) {
         let captures = session?.captures ?? []
         let turns = session?.conversationTurns ?? []
-        configurePanelAndShow(conversationTurns: turns, captures: captures)
-        panel.insertTextAtCursor(text)
+        let segments: [InputSegment]
+        if captures.count == 1 {
+            segments = [InputSegment(text: text, capture: captures.first)]
+        } else if captures.count > 1 {
+            var segs = [InputSegment(text: text, capture: captures.first)]
+            for capture in captures.dropFirst() {
+                segs.append(InputSegment(capture: capture))
+            }
+            segments = segs
+        } else {
+            segments = [InputSegment(text: text)]
+        }
+        configurePanelAndShow(conversationTurns: turns, segments: segments)
     }
 
     private func showPanelMinimized(phase: CaptureViewModel.CapturePhase) {
@@ -538,17 +605,22 @@ final class CaptureCoordinator {
 
     private func expandFromCollapsed() async {
         let newCaptures = await clipboardMonitor.stop()
-        let newContexts = newCaptures.map { CapturedContext(text: $0, source: .clipboard) }
-        accumulatedCaptures.append(contentsOf: newContexts)
 
-        var allCaptures: [CapturedContext] = []
-        if let original = originalCapture { allCaptures.append(original) }
-        allCaptures.append(contentsOf: accumulatedCaptures)
-        panel.updateCaptures(allCaptures)
-        session?.captures = allCaptures
+        if !newCaptures.isEmpty {
+            for capturedText in newCaptures {
+                let context = CapturedContext(text: capturedText, source: .clipboard)
+                accumulatedCaptures.append(context)
+                // Insert a new segment after the active segment
+                let segment = InputSegment(capture: context)
+                panel.insertSegment(segment)
+            }
+            // Update session captures
+            session?.captures = panel.allCaptures
+        }
+
         panel.expand()
         escCancelManager.isEnabled = false
-        Logger.app.info("Capture view: expanded from pill with \(self.accumulatedCaptures.count) clipboard captures")
+        Logger.app.info("Capture view: expanded from pill with \(newCaptures.count) clipboard captures")
     }
 
     /// Dismiss — keeps capture in history.
@@ -604,7 +676,7 @@ final class CaptureCoordinator {
         let pipelineContext = SubmissionPipeline.Context(
             text: text,
             mode: mode,
-            captures: captures,
+            captures: [],  // captures are already inline in text via <capture-N> tags
             followUpContext: followUpContext,
             conversationTurns: currentTurns,
             conversationID: activeConversationID,

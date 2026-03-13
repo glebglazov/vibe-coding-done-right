@@ -25,6 +25,7 @@ struct CaptureView: View {
     private static let blockquoteBorderOpacity: Double = 0.4
     private static let blockquoteLeadingPadding: CGFloat = 4
     private static let textInputHeight: CGFloat = 60
+    private static let segmentTextMinHeight: CGFloat = 60
     private static let textInputTopInset: CGFloat = 4
     private static let recordingDotSize: CGFloat = 8
 
@@ -118,17 +119,7 @@ struct CaptureView: View {
                     Divider()
                 }
 
-                inputSection
-
-                if !viewModel.captures.isEmpty {
-                    Divider()
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(viewModel.captures) { capture in
-                            captureBlockquote(capture)
-                        }
-                    }
-                    .padding(Self.textPadding)
-                }
+                segmentedInputSection
             }
 
             Divider()
@@ -166,9 +157,11 @@ struct CaptureView: View {
     // MARK: - Input Section
 
     @ViewBuilder
-    private var inputSection: some View {
+    private var segmentedInputSection: some View {
         ZStack(alignment: .topLeading) {
-            if viewModel.text.isEmpty && !viewModel.isRecording && !viewModel.isProcessing && !viewModel.conversationTurns.isEmpty {
+            // Placeholder overlay
+            if viewModel.fullText.isEmpty && !viewModel.isRecording && !viewModel.isProcessing
+                && !viewModel.conversationTurns.isEmpty {
                 Text("Type a follow-up...")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
@@ -176,19 +169,26 @@ struct CaptureView: View {
                     .padding(.top, 8 + Self.textInputTopInset)
                     .allowsHitTesting(false)
             }
-            if viewModel.text.isEmpty && viewModel.isProcessing && viewModel.conversationTurns.isEmpty {
+            if viewModel.fullText.isEmpty && viewModel.isProcessing
+                && viewModel.conversationTurns.isEmpty {
                 AnimatedDotsView()
                     .padding(.horizontal, Self.textPadding)
                     .padding(.top, 8 + Self.textInputTopInset)
             }
-            TextEditor(text: $viewModel.text)
-                .font(.system(size: 13))
-                .scrollContentBackground(.hidden)
-                .disabled(viewModel.isRecording || viewModel.isProcessing)
-                .padding(.horizontal, Self.textPadding - 5)
-                .padding(.top, Self.textInputTopInset)
+
+            SegmentedTextView(
+                segments: viewModel.segments,
+                segmentsVersion: viewModel.segmentsVersion,
+                isEditable: !viewModel.isRecording && !viewModel.isProcessing,
+                onSegmentsChanged: { newSegments in
+                    viewModel.segments = newSegments
+                },
+                onActiveSegmentChanged: { index in
+                    viewModel.activeSegmentIndex = index
+                }
+            )
         }
-        .frame(height: Self.textInputHeight)
+        .frame(minHeight: Self.segmentTextMinHeight)
     }
 
     private var recordingDot: some View {

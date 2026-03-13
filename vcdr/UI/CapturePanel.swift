@@ -59,7 +59,7 @@ final class CapturePanel {
         settings: AppSettings,
         overrides: ConversationOverrides,
         conversationTurns: [ConversationTurn] = [],
-        captures: [CapturedContext] = [],
+        segments: [InputSegment] = [InputSegment()],
         outputDestinations: [OutputDestination] = [],
         audioRecorder: AudioRecorder? = nil,
         onSubmit: @escaping (String) -> Void,
@@ -73,7 +73,7 @@ final class CapturePanel {
             settings: settings,
             overrides: overrides,
             conversationTurns: conversationTurns,
-            captures: captures,
+            segments: segments,
             outputDestinations: filteredDestinations,
             onSubmit: { text in
                 onSubmit(text)
@@ -89,7 +89,7 @@ final class CapturePanel {
         viewModel.onCancelCapture = onCancelCapture
         self.viewModel = viewModel
 
-        presentPanel(viewModel: viewModel, turns: conversationTurns, captures: captures)
+        presentPanel(viewModel: viewModel, turns: conversationTurns, segments: segments)
     }
 
     func hide() {
@@ -134,16 +134,16 @@ final class CapturePanel {
 
     var isMinimized: Bool { viewModel?.isMinimized ?? false }
 
-    var currentText: String? { viewModel?.text }
+    var currentText: String? { viewModel?.fullText }
 
     var currentTurns: [ConversationTurn] { viewModel?.conversationTurns ?? [] }
 
     // MARK: - Panel Presentation
 
-    private func presentPanel(viewModel: CaptureViewModel, turns: [ConversationTurn], captures: [CapturedContext]) {
+    private func presentPanel(viewModel: CaptureViewModel, turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()]) {
         let view = CaptureView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
-        let panelHeight = Self.calculateHeight(for: turns, captures: captures)
+        let panelHeight = Self.calculateHeight(for: turns, segments: segments)
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: panelHeight)
 
         let panel = KeyablePanel(
@@ -267,20 +267,60 @@ final class CapturePanel {
         viewModel?.phase = phase
     }
 
-    // MARK: - Text Insertion
+    // MARK: - Segment Mutations
 
-    /// Inserts text at the NSTextView's current cursor position.
+    /// Appends text to the active segment (follow-up dictation without new capture).
+    func appendTextToActiveSegment(_ text: String) {
+        guard let viewModel else { return }
+        let index = viewModel.activeSegmentIndex
+        guard viewModel.segments.indices.contains(index) else { return }
+        viewModel.segments[index].text += text
+        viewModel.segmentsVersion += 1
+        resizePanel()
+    }
+
+    /// Inserts a new segment after the active segment (for clipboard captures near cursor).
+    func insertSegment(_ segment: InputSegment) {
+        guard let viewModel else { return }
+        let insertIndex = min(viewModel.activeSegmentIndex + 1, viewModel.segments.count)
+        viewModel.segments.insert(segment, at: insertIndex)
+        viewModel.activeSegmentIndex = insertIndex
+        viewModel.segmentsVersion += 1
+        resizePanel()
+    }
+
+    /// Appends a new segment at the end (for dictation results that should follow chronological order).
+    func appendSegment(_ segment: InputSegment) {
+        guard let viewModel else { return }
+        viewModel.segments.append(segment)
+        viewModel.activeSegmentIndex = viewModel.segments.count - 1
+        viewModel.segmentsVersion += 1
+        resizePanel()
+    }
+
+    /// Replaces the capture on a specific segment.
+    func setCapture(_ capture: CapturedContext, onSegmentAt index: Int) {
+        guard let viewModel, viewModel.segments.indices.contains(index) else { return }
+        viewModel.segments[index].capture = capture
+        viewModel.segmentsVersion += 1
+        resizePanel()
+    }
+
+    /// Updates segments wholesale.
+    func setSegments(_ segments: [InputSegment]) {
+        viewModel?.segments = segments
+        viewModel?.activeSegmentIndex = max(0, segments.count - 1)
+        viewModel?.segmentsVersion += 1
+        resizePanel()
+    }
+
+    var segmentCount: Int { viewModel?.segments.count ?? 0 }
+    var allCaptures: [CapturedContext] { viewModel?.allCaptures ?? [] }
+    var fullText: String { viewModel?.fullText ?? "" }
+
+    /// Legacy bridge for CaptureCoordinator code that still uses insertTextAtCursor.
     func insertTextAtCursor(_ text: String) {
-        guard let contentView = panel?.contentView,
-              let textView = Self.findFirstTextView(in: contentView) else {
-            // Fallback: append to view model text
-            viewModel?.text += text
-            return
-        }
-        let range = textView.selectedRange()
-        textView.insertText(text, replacementRange: range)
-        // Sync view model text with NSTextView
-        viewModel?.text = textView.string
+        appendTextToActiveSegment(text)
     }
 
     // MARK: - Conversation Updates
@@ -289,7 +329,8 @@ final class CapturePanel {
         let pendingTurn = ConversationTurn(input: inputText, output: "...")
         viewModel?.conversationTurns.append(pendingTurn)
         viewModel?.phase = .processing
-        viewModel?.text = ""
+        viewModel?.segments = [InputSegment()]
+        viewModel?.segmentsVersion += 1
         viewModel?.scrollTrigger += 1
         minimize()
     }
@@ -333,7 +374,24 @@ final class CapturePanel {
     // MARK: - Captures / Mode Switcher / Destination
 
     func updateCaptures(_ captures: [CapturedContext]) {
-        viewModel?.captures = captures
+        guard let viewModel else { return }
+        // Bridge: set capture on last segment or create new segments
+        if captures.isEmpty {
+            for i in viewModel.segments.indices {
+                viewModel.segments[i].capture = nil
+            }
+        } else if viewModel.segments.count == 1 && captures.count == 1 {
+            viewModel.segments[0].capture = captures[0]
+        } else {
+            // Rebuild segments preserving existing text in first segment
+            let existingText = viewModel.segments.first?.text ?? ""
+            var newSegments = [InputSegment(text: existingText, capture: captures.first)]
+            for capture in captures.dropFirst() {
+                newSegments.append(InputSegment(capture: capture))
+            }
+            viewModel.segments = newSegments
+        }
+        viewModel.segmentsVersion += 1
     }
 
     func signalClipboardCapture() {
@@ -417,8 +475,8 @@ final class CapturePanel {
     private func resizePanelToExpanded() {
         guard let panel, let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let turns = viewModel?.conversationTurns ?? []
-        let caps = viewModel?.captures ?? []
-        let newHeight = Self.calculateHeight(for: turns, captures: caps)
+        let segs = viewModel?.segments ?? [InputSegment()]
+        let newHeight = Self.calculateHeight(for: turns, segments: segs)
         let screenFrame = screen.frame
         let visibleFrame = screen.visibleFrame
         let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
@@ -432,8 +490,8 @@ final class CapturePanel {
     private func resizePanel() {
         guard let panel else { return }
         let turns = viewModel?.conversationTurns ?? []
-        let caps = viewModel?.captures ?? []
-        let newHeight = Self.calculateHeight(for: turns, captures: caps)
+        let segs = viewModel?.segments ?? [InputSegment()]
+        let newHeight = Self.calculateHeight(for: turns, segments: segs)
         let currentFrame = panel.frame
         let newY = currentFrame.maxY - newHeight
         let newFrame = NSRect(x: currentFrame.origin.x, y: newY, width: currentFrame.width, height: newHeight)
@@ -448,21 +506,24 @@ final class CapturePanel {
         return visibleHeight * panelMaxHeightFraction
     }
 
-    private static func calculateHeight(for turns: [ConversationTurn], captures: [CapturedContext] = []) -> CGFloat {
-        var extraHeight: CGFloat = 0
+    private static func calculateHeight(for turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()]) -> CGFloat {
+        // Segment content height: all segments share one SegmentedTextView,
+        // so the minimum height applies to the section total, not per-segment.
+        var segmentContentHeight: CGFloat = 0
+        for segment in segments {
+            let textLines = max(1, CGFloat(segment.text.components(separatedBy: .newlines).count))
+            segmentContentHeight += textLines * lineHeight
 
-        // Captured context blockquotes
-        for capture in captures {
-            let captureLines = CGFloat(capture.text.components(separatedBy: .newlines).count)
-            extraHeight += labelLineHeight  // source label
-            extraHeight += captureLines * lineHeight * 0.9
+            if let capture = segment.capture {
+                let captureLines = CGFloat(capture.text.components(separatedBy: .newlines).count)
+                segmentContentHeight += captureLines * lineHeight * 0.9
+                segmentContentHeight += 8 // separator spacing
+            }
         }
-        if !captures.isEmpty {
-            extraHeight += conversationPadding
-        }
+        let extraHeight = max(segmentSectionMinHeight, segmentContentHeight)
 
         guard !turns.isEmpty else {
-            let total = panelBaseHeight + extraHeight
+            let total = panelMinBaseHeight + extraHeight + hintBarHeight
             return min(total, maxPanelHeight())
         }
 
@@ -486,9 +547,14 @@ final class CapturePanel {
         }
 
         let conversationHeight = totalLines * lineHeight + conversationPadding
-        let total = panelBaseHeight + conversationHeight + extraHeight
+        let total = panelMinBaseHeight + conversationHeight + extraHeight + hintBarHeight
         return min(total, maxPanelHeight())
     }
+
+    private static let panelMinBaseHeight: CGFloat = 60
+    /// Must match CaptureView.segmentTextMinHeight so the panel is tall enough
+    /// to show the full segment input section (cursor + capture text).
+    private static let segmentSectionMinHeight: CGFloat = 60
 
     // MARK: - Constants (Focus)
 

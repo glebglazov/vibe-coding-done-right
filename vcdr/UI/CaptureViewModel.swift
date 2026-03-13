@@ -4,9 +4,15 @@ import SwiftUI
 final class CaptureViewModel {
     // MARK: - State
 
-    var text: String = ""
+    var segments: [InputSegment] = [InputSegment()]
+    /// Index of the segment the cursor is currently in.
+    /// Updated by SegmentedTextView when the cursor moves between editable regions.
+    /// Used by CaptureCoordinator to decide where to insert new captures.
+    var activeSegmentIndex: Int = 0
+    /// Bumped to trigger SegmentedTextView to rebuild its attributed string from segments.
+    /// Used when segments are mutated programmatically (new segment inserted, text appended by coordinator).
+    var segmentsVersion: Int = 0
     var conversationTurns: [ConversationTurn] = []
-    var captures: [CapturedContext] = []
     var isMinimized: Bool = false
     var scrollTrigger: Int = 0
     var clipboardCaptureCount: Int = 0
@@ -52,6 +58,21 @@ final class CaptureViewModel {
         return parts.joined(separator: " · ")
     }
 
+    /// All captures across all segments, preserving order.
+    var allCaptures: [CapturedContext] {
+        segments.compactMap(\.capture)
+    }
+
+    /// Whether any segment has a capture.
+    var hasCaptures: Bool {
+        segments.contains { $0.capture != nil }
+    }
+
+    /// Full text content across all segments (for checking emptiness, draft recording).
+    var fullText: String {
+        segments.map(\.text).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Show "You:" / "Result:" labels when there are multiple turns,
     /// or when the single turn's input was transformed by processing,
     /// or when captured context is present.
@@ -83,7 +104,7 @@ final class CaptureViewModel {
         settings: AppSettings,
         overrides: ConversationOverrides,
         conversationTurns: [ConversationTurn] = [],
-        captures: [CapturedContext] = [],
+        segments: [InputSegment] = [InputSegment()],
         outputDestinations: [OutputDestination] = [],
         onSubmit: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void,
@@ -93,7 +114,7 @@ final class CaptureViewModel {
         self.settings = settings
         self.overrides = overrides
         self.conversationTurns = conversationTurns
-        self.captures = captures
+        self.segments = segments
         self.outputDestinations = outputDestinations
         self.onSubmit = onSubmit
         self.onDismiss = onDismiss
@@ -144,12 +165,24 @@ final class CaptureViewModel {
         }
     }
 
-    /// Typed text takes priority; falls back to first capture so the user
-    /// can submit clipboard-gathered content without typing anything.
+    /// Builds interleaved submission text with `<capture-N>` tags from segments.
+    /// Falls back to first capture text for submit-without-typing.
     private func resolveSubmissionText() -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { return trimmed }
-        return captures.first?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var parts: [String] = []
+        for (index, segment) in segments.enumerated() {
+            let trimmed = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                parts.append(trimmed)
+            }
+            if let capture = segment.capture {
+                let captureNumber = segments[0...index].compactMap(\.capture).count
+                parts.append("<capture-\(captureNumber)>\(capture.text)</capture-\(captureNumber)>")
+            }
+        }
+        let result = parts.joined(separator: "\n")
+        if !result.isEmpty { return result }
+        // Fallback: first capture text (for submit-without-typing)
+        return segments.first?.capture?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     /// Checks if the event matches the configured cancel recording hotkey.
