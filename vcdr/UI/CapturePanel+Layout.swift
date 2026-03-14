@@ -8,7 +8,7 @@ extension CapturePanel {
     static let conversationPadding: CGFloat = 24
     static let hintBarHeight: CGFloat = 30
     static let panelMinBaseHeight: CGFloat = 60
-    static let segmentSectionMinHeight: CGFloat = 80
+    static let segmentSectionMinHeight: CGFloat = 28
 
     static func maxPanelHeight() -> CGFloat {
         let screen = NSScreen.main ?? NSScreen.screens.first

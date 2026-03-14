@@ -24,8 +24,8 @@ struct CaptureView: View {
     private static let blockquoteBorderSpacing: CGFloat = 6
     private static let blockquoteBorderOpacity: Double = 0.4
     private static let blockquoteLeadingPadding: CGFloat = 4
-    private static let segmentTextMinHeight: CGFloat = 80
-    private static let minEditorHeight: CGFloat = 80
+    private static let segmentTextMinHeight: CGFloat = 28
+    private static let minEditorHeight: CGFloat = 28
     private static let textInputTopInset: CGFloat = 4
     private static let recordingDotSize: CGFloat = 8
 
