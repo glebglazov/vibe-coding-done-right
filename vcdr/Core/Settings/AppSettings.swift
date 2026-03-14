@@ -28,8 +28,8 @@ struct HotkeyBinding: Codable, Equatable {
     /// Default cancel recording: Escape (key code 53, no modifiers)
     static let defaultCancelRecording = HotkeyBinding(keyCode: 53, modifiers: 0)
 
-    /// Default push-to-talk: Cmd+Option+Space
-    static let defaultPushToTalk = HotkeyBinding(
+    /// Default toggle recording: Cmd+Option+Space
+    static let defaultToggleRecording = HotkeyBinding(
         keyCode: 49,
         modifiers: UInt64(CGEventFlags.maskCommand.rawValue | CGEventFlags.maskAlternate.rawValue)
     )
@@ -41,9 +41,6 @@ struct HotkeyBinding: Codable, Equatable {
 
 @Observable
 final class AppSettings {
-    var pushToTalkHotkey: HotkeyBinding {
-        didSet { save() }
-    }
     var modeSwitcherHotkey: HotkeyBinding {
         didSet { save() }
     }
@@ -116,7 +113,6 @@ final class AppSettings {
     // MARK: - UserDefaults Keys
 
     private enum Keys {
-        static let pushToTalkHotkey = "pushToTalkHotkey"
         static let modeSwitcherHotkey = "modeSwitcherHotkey"
         static let pushToTypeHotkey = "pushToTypeHotkey"
         static let toggleRecordingHotkey = "toggleRecordingHotkey"
@@ -133,30 +129,14 @@ final class AppSettings {
         // Legacy key for migration
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         // Legacy keys for migration
+        // Legacy keys — used only for one-time migration to toggleRecordingHotkey
+        static let legacyPushToTalkHotkey = "pushToTalkHotkey"
         static let legacyKeyCode = "hotkeyKeyCode"
         static let legacyModifiers = "hotkeyModifiers"
     }
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-
-        // Load push-to-talk hotkey (with migration from legacy keys)
-        if let data = userDefaults.data(forKey: Keys.pushToTalkHotkey),
-           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
-            self.pushToTalkHotkey = decoded
-        } else {
-            // Migrate from legacy keys
-            let savedKeyCode = userDefaults.integer(forKey: Keys.legacyKeyCode)
-            let savedModifiers = userDefaults.integer(forKey: Keys.legacyModifiers)
-            if savedKeyCode != 0 || savedModifiers != 0 {
-                self.pushToTalkHotkey = HotkeyBinding(
-                    keyCode: UInt16(savedKeyCode),
-                    modifiers: UInt64(savedModifiers)
-                )
-            } else {
-                self.pushToTalkHotkey = .defaultPushToTalk
-            }
-        }
 
         // Load mode switcher hotkey (default: unassigned)
         if let data = userDefaults.data(forKey: Keys.modeSwitcherHotkey),
@@ -174,12 +154,28 @@ final class AppSettings {
             self.pushToTypeHotkey = .unassigned
         }
 
-        // Load toggle recording hotkey (default: unassigned)
+        // Load toggle recording hotkey (default: Cmd+Option+Space)
+        // Migrates from legacy push-to-talk hotkey if toggle was never configured
         if let data = userDefaults.data(forKey: Keys.toggleRecordingHotkey),
            let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
             self.toggleRecordingHotkey = decoded
+        } else if let data = userDefaults.data(forKey: Keys.legacyPushToTalkHotkey),
+                  let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data),
+                  decoded.isAssigned {
+            // Migrate from push-to-talk hotkey
+            self.toggleRecordingHotkey = decoded
         } else {
-            self.toggleRecordingHotkey = .unassigned
+            // Migrate from very old legacy keys
+            let savedKeyCode = userDefaults.integer(forKey: Keys.legacyKeyCode)
+            let savedModifiers = userDefaults.integer(forKey: Keys.legacyModifiers)
+            if savedKeyCode != 0 || savedModifiers != 0 {
+                self.toggleRecordingHotkey = HotkeyBinding(
+                    keyCode: UInt16(savedKeyCode),
+                    modifiers: UInt64(savedModifiers)
+                )
+            } else {
+                self.toggleRecordingHotkey = .defaultToggleRecording
+            }
         }
 
         // Load copy latest capture hotkey (default: unassigned)
@@ -312,9 +308,6 @@ final class AppSettings {
     }
 
     private func save() {
-        if let encoded = try? JSONEncoder().encode(pushToTalkHotkey) {
-            userDefaults.set(encoded, forKey: Keys.pushToTalkHotkey)
-        }
         if let encoded = try? JSONEncoder().encode(modeSwitcherHotkey) {
             userDefaults.set(encoded, forKey: Keys.modeSwitcherHotkey)
         }

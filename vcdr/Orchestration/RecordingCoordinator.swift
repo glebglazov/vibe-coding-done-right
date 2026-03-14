@@ -36,7 +36,6 @@ final class RecordingCoordinator {
     private let settings: AppSettings
     private let transcriptionProvider: any TranscriptionProvider
     private let audioRecorder: AudioRecorder
-    private let hotkeyManager: GlobalHotkeyManager
     private let toggleRecordingHotkeyManager = GlobalHotkeyManager()
     private let escCancelManager = GlobalHotkeyManager()
     private let destinationHotkeyManager = DestinationHotkeyManager()
@@ -70,8 +69,6 @@ final class RecordingCoordinator {
     private var recordingRun: RecordingRunState?
 
     private var recordingStartInstant: ContinuousClock.Instant?
-    private var isToggleMode = false
-    private var pendingToggleStop = false
     private var processingTask: Task<Void, Never>?
     private var dismissIndicatorTask: Task<Void, Never>?
 
@@ -79,7 +76,6 @@ final class RecordingCoordinator {
         settings: AppSettings,
         transcriptionProvider: any TranscriptionProvider,
         audioRecorder: AudioRecorder,
-        hotkeyManager: GlobalHotkeyManager,
         mediaPlaybackController: MediaPlaybackController,
         recordingIndicator: RecordingIndicatorPanel,
         selectionCapturer: SelectionCapturer,
@@ -89,7 +85,6 @@ final class RecordingCoordinator {
         self.settings = settings
         self.transcriptionProvider = transcriptionProvider
         self.audioRecorder = audioRecorder
-        self.hotkeyManager = hotkeyManager
         self.mediaPlaybackController = mediaPlaybackController
         self.recordingIndicator = recordingIndicator
         self.selectionCapturer = selectionCapturer
@@ -97,40 +92,10 @@ final class RecordingCoordinator {
         self.overrides = overrides
     }
 
-    func setupHotkey() {
-        let keyCode = CGKeyCode(settings.pushToTalkHotkey.keyCode)
-        let modifiers = CGEventFlags(rawValue: settings.pushToTalkHotkey.modifiers)
-
-        guard settings.pushToTalkHotkey.isAssigned else {
-            hotkeyManager.unregister()
-            Logger.hotkeys.info("Hotkey unassigned, unregistered")
-            return
-        }
-
-        hotkeyManager.onKeyDown = { [weak self] in
-            Task { @MainActor in
-                self?.isToggleMode = false
-                await self?.onHotkeyDown(fromHotkey: true)
-            }
-        }
-        hotkeyManager.onKeyUp = { [weak self] in
-            self?.stopRecordingAndTranscribe()
-        }
-
-        _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
-    }
-
-    func updateHotkey() {
-        setupHotkey()
-    }
-
     func toggleRecording() {
         switch state {
         case .idle, .error:
-            isToggleMode = true
-            Task { await onHotkeyDown() }
-        case .preparingToRecord:
-            pendingToggleStop = true
+            Task { await startRecording() }
         case .recording:
             stopRecordingAndTranscribe()
         default:
@@ -138,7 +103,7 @@ final class RecordingCoordinator {
         }
     }
 
-    private func onHotkeyDown(fromHotkey: Bool = false) async {
+    private func startRecording() async {
         onWillStartRecording?()
 
         if case .error = state {
@@ -157,7 +122,7 @@ final class RecordingCoordinator {
         dismissIndicatorTask?.cancel()
         defer {
             if state == .preparingToRecord {
-                Logger.app.error("onHotkeyDown exited while still in .preparingToRecord — resetting to .idle")
+                Logger.app.error("startRecording exited while still in .preparingToRecord — resetting to .idle")
                 state = .idle
             }
         }
@@ -167,7 +132,6 @@ final class RecordingCoordinator {
 
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
-            pendingToggleStop = false
             state = .error("Model still loading...")
             recordingRun = nil
             onRecordingFailed?("Model still loading...")
@@ -229,18 +193,7 @@ final class RecordingCoordinator {
                 }
             }
 
-            if fromHotkey && !hotkeyManager.isHotkeyActive {
-                cancelRecording()
-                return
-            }
-
-            if pendingToggleStop {
-                pendingToggleStop = false
-                stopRecordingAndTranscribe()
-                return
-            }
         } else {
-            pendingToggleStop = false
             await mediaPlaybackController.resumeIfNeeded()
             state = .error("Failed to start recording")
             onRecordingFailed?("Failed to start recording")
@@ -443,7 +396,6 @@ final class RecordingCoordinator {
         escCancelManager.isEnabled = false
         destinationHotkeyManager.isEnabled = false
         pendingDestinationOverride = nil
-        pendingToggleStop = false
 
         guard state == .preparingToRecord || state == .recording || state == .transcribing else { return }
 
@@ -503,7 +455,6 @@ final class RecordingCoordinator {
         }
     }
 
-    var isHotkeyRegistered: Bool { hotkeyManager.isRegistered }
 }
 
 extension RecordingCoordinator.State {

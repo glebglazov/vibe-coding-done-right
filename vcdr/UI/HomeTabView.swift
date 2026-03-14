@@ -106,23 +106,6 @@ struct HomeTabView: View {
                     )
                 )
                 ShortcutRecorderRow(
-                    label: "Push-to-Talk",
-                    keyCode: Binding(
-                        get: { dependencies.settings.pushToTalkHotkey.keyCode },
-                        set: {
-                            dependencies.settings.pushToTalkHotkey.keyCode = $0
-                            dependencies.coordinator.updateHotkey()
-                        }
-                    ),
-                    modifiers: Binding(
-                        get: { dependencies.settings.pushToTalkHotkey.modifiers },
-                        set: {
-                            dependencies.settings.pushToTalkHotkey.modifiers = $0
-                            dependencies.coordinator.updateHotkey()
-                        }
-                    )
-                )
-                ShortcutRecorderRow(
                     label: "Push-to-Type",
                     keyCode: Binding(
                         get: { dependencies.settings.pushToTypeHotkey.keyCode },

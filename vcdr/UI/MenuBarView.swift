@@ -89,7 +89,7 @@ struct MenuBarView: View {
     }
 
     private var hotkeyDisplay: String {
-        let binding = dependencies.settings.pushToTalkHotkey
+        let binding = dependencies.settings.toggleRecordingHotkey
         let kc = binding.keyCode
         let mods = binding.modifiers
         guard binding.isAssigned else { return "Not set" }

@@ -39,7 +39,6 @@ final class AppDependencies {
         let history = TranscriptionHistory()
         self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
-        let hotkeyManager = GlobalHotkeyManager()
         let overrides = ConversationOverrides()
         let recordingIndicator = RecordingIndicatorPanel(settings: settings, overrides: overrides, audioRecorder: audioRecorder)
         let selectionCapturer = SelectionCapturer()
@@ -66,7 +65,6 @@ final class AppDependencies {
             settings: settings,
             transcriptionProvider: provider,
             audioRecorder: audioRecorder,
-            hotkeyManager: hotkeyManager,
             mediaPlaybackController: mediaPlayback,
             recordingIndicator: recordingIndicator,
             selectionCapturer: selectionCapturer,
@@ -189,7 +187,6 @@ final class AppDependencies {
         // RecordingCoordinator.onHotkeyDown() already guards on transcriptionProvider.isReady,
         // so hotkeys pressed before the model is ready show an appropriate error.
         if hasAccessibilityPermission {
-            coordinator.setupHotkey()
             coordinator.setupToggleRecordingHotkey()
             coordinator.setupEscCancel()
             coordinator.setupDestinationHotkeys()
@@ -248,7 +245,6 @@ final class AppDependencies {
 
             // Register hotkey as soon as accessibility is granted
             if !wasAccessible && self.hasAccessibilityPermission {
-                self.coordinator.setupHotkey()
                 self.coordinator.setupToggleRecordingHotkey()
                 self.coordinator.setupEscCancel()
                 self.coordinator.setupDestinationHotkeys()
