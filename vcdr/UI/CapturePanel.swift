@@ -264,7 +264,24 @@ final class CapturePanel {
     // MARK: - Phase
 
     func setPhase(_ phase: CaptureViewModel.CapturePhase) {
+        if phase == .recording || phase == .processing {
+            removeTrailingEmptySegments()
+        }
         viewModel?.phase = phase
+    }
+
+    /// Removes trailing segments that have no text and no capture.
+    /// Called before recording/processing so empty segments created by
+    /// arrow-down navigation don't persist when they're unused.
+    private func removeTrailingEmptySegments() {
+        guard let viewModel else { return }
+        while viewModel.segments.count > 1,
+              let last = viewModel.segments.last,
+              last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              last.capture == nil {
+            viewModel.segments.removeLast()
+        }
+        viewModel.activeSegmentIndex = min(viewModel.activeSegmentIndex, viewModel.segments.count - 1)
     }
 
     // MARK: - Segment Mutations
@@ -275,7 +292,6 @@ final class CapturePanel {
         let index = viewModel.activeSegmentIndex
         guard viewModel.segments.indices.contains(index) else { return }
         viewModel.segments[index].text += text
-        viewModel.segmentsVersion += 1
         resizePanel()
     }
 
@@ -285,7 +301,6 @@ final class CapturePanel {
         let insertIndex = min(viewModel.activeSegmentIndex + 1, viewModel.segments.count)
         viewModel.segments.insert(segment, at: insertIndex)
         viewModel.activeSegmentIndex = insertIndex
-        viewModel.segmentsVersion += 1
         resizePanel()
     }
 
@@ -294,7 +309,6 @@ final class CapturePanel {
         guard let viewModel else { return }
         viewModel.segments.append(segment)
         viewModel.activeSegmentIndex = viewModel.segments.count - 1
-        viewModel.segmentsVersion += 1
         resizePanel()
     }
 
@@ -302,7 +316,6 @@ final class CapturePanel {
     func setCapture(_ capture: CapturedContext, onSegmentAt index: Int) {
         guard let viewModel, viewModel.segments.indices.contains(index) else { return }
         viewModel.segments[index].capture = capture
-        viewModel.segmentsVersion += 1
         resizePanel()
     }
 
@@ -310,7 +323,6 @@ final class CapturePanel {
     func setSegments(_ segments: [InputSegment]) {
         viewModel?.segments = segments
         viewModel?.activeSegmentIndex = max(0, segments.count - 1)
-        viewModel?.segmentsVersion += 1
         resizePanel()
     }
 
@@ -326,11 +338,11 @@ final class CapturePanel {
     // MARK: - Conversation Updates
 
     func startProcessing(inputText: String) {
-        let pendingTurn = ConversationTurn(input: inputText, output: "...")
+        let captures = viewModel?.allCaptures ?? []
+        let pendingTurn = ConversationTurn(input: inputText, output: "...", captures: captures)
         viewModel?.conversationTurns.append(pendingTurn)
         viewModel?.phase = .processing
         viewModel?.segments = [InputSegment()]
-        viewModel?.segmentsVersion += 1
         viewModel?.scrollTrigger += 1
         minimize()
     }
@@ -339,7 +351,7 @@ final class CapturePanel {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
-        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText)
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText, captures: lastTurn.captures)
         viewModel.phase = .idle
         viewModel.scrollTrigger += 1
         expand()
@@ -391,7 +403,6 @@ final class CapturePanel {
             }
             viewModel.segments = newSegments
         }
-        viewModel.segmentsVersion += 1
     }
 
     func signalClipboardCapture() {
@@ -507,8 +518,7 @@ final class CapturePanel {
     }
 
     private static func calculateHeight(for turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()]) -> CGFloat {
-        // Segment content height: all segments share one SegmentedTextView,
-        // so the minimum height applies to the section total, not per-segment.
+        // Segment content height: the minimum height applies to the section total.
         var segmentContentHeight: CGFloat = 0
         for segment in segments {
             let textLines = max(1, CGFloat(segment.text.components(separatedBy: .newlines).count))

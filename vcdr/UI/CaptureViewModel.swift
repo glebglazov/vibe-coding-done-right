@@ -6,12 +6,9 @@ final class CaptureViewModel {
 
     var segments: [InputSegment] = [InputSegment()]
     /// Index of the segment the cursor is currently in.
-    /// Updated by SegmentedTextView when the cursor moves between editable regions.
+    /// Updated by SegmentEditor's onFocus callback when the user clicks into or types in an editor.
     /// Used by CaptureCoordinator to decide where to insert new captures.
     var activeSegmentIndex: Int = 0
-    /// Bumped to trigger SegmentedTextView to rebuild its attributed string from segments.
-    /// Used when segments are mutated programmatically (new segment inserted, text appended by coordinator).
-    var segmentsVersion: Int = 0
     var conversationTurns: [ConversationTurn] = []
     var isMinimized: Bool = false
     var scrollTrigger: Int = 0

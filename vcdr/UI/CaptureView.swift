@@ -41,6 +41,13 @@ struct CaptureView: View {
     /// ID for the bottom anchor used to auto-scroll
     private static let bottomAnchorID = "bottom"
 
+    /// Per-segment focus trigger counters. Bumped to shift focus to a specific editor
+    /// when the user arrows past the boundary of the current editor.
+    @State private var focusTriggers: [UUID: Int] = [:]
+    /// Whether the focus request should place the cursor at end (arrow-up from below)
+    /// vs start (arrow-down from above).
+    @State private var focusCursorAtEnd: [UUID: Bool] = [:]
+
     var body: some View {
         if viewModel.isMinimized {
             minimizedPillView
@@ -156,6 +163,11 @@ struct CaptureView: View {
 
     // MARK: - Input Section
 
+    /// Height per line of editor text, matching CapturePanel.lineHeight for consistent sizing.
+    private static let editorLineHeight: CGFloat = 20
+    /// Vertical padding from NSTextView textContainerInset (top + bottom).
+    private static let editorVerticalPadding: CGFloat = 8
+
     @ViewBuilder
     private var segmentedInputSection: some View {
         ZStack(alignment: .topLeading) {
@@ -176,19 +188,64 @@ struct CaptureView: View {
                     .padding(.top, 8 + Self.textInputTopInset)
             }
 
-            SegmentedTextView(
-                segments: viewModel.segments,
-                segmentsVersion: viewModel.segmentsVersion,
-                isEditable: !viewModel.isRecording && !viewModel.isProcessing,
-                onSegmentsChanged: { newSegments in
-                    viewModel.segments = newSegments
-                },
-                onActiveSegmentChanged: { index in
-                    viewModel.activeSegmentIndex = index
+            VStack(spacing: 0) {
+                ForEach(Array(viewModel.segments.enumerated()), id: \.element.id) { index, segment in
+                    SegmentEditor(
+                        text: segmentTextBinding(at: index),
+                        isEditable: !viewModel.isRecording && !viewModel.isProcessing,
+                        focusTrigger: focusTriggers[segment.id, default: 0],
+                        focusCursorAtEnd: focusCursorAtEnd[segment.id, default: false],
+                        onFocus: { viewModel.activeSegmentIndex = index },
+                        onMoveUp: index > 0 ? {
+                            let target = viewModel.segments[index - 1]
+                            focusCursorAtEnd[target.id] = true
+                            focusTriggers[target.id, default: 0] += 1
+                        } : nil,
+                        onMoveDown: {
+                            if index < viewModel.segments.count - 1 {
+                                // Focus the next existing editor
+                                let target = viewModel.segments[index + 1]
+                                focusCursorAtEnd[target.id] = false
+                                focusTriggers[target.id, default: 0] += 1
+                            } else if segment.capture != nil {
+                                // Last segment has a capture below — create a new
+                                // empty segment so the user can type after it.
+                                let newSegment = InputSegment()
+                                viewModel.segments.append(newSegment)
+                                viewModel.activeSegmentIndex = viewModel.segments.count - 1
+                                focusCursorAtEnd[newSegment.id] = false
+                                focusTriggers[newSegment.id, default: 0] += 1
+                            }
+                        }
+                    )
+                    .frame(height: editorHeight(for: segment.text))
+
+                    if let capture = segment.capture {
+                        captureBlockquote(capture)
+                            .padding(.horizontal, Self.textPadding)
+                            .padding(.vertical, 4)
+                    }
                 }
-            )
+            }
         }
         .frame(minHeight: Self.segmentTextMinHeight)
+    }
+
+    // MARK: - Segment Helpers
+
+    private func editorHeight(for text: String) -> CGFloat {
+        let lines = max(1, CGFloat(text.components(separatedBy: .newlines).count))
+        return lines * Self.editorLineHeight + Self.editorVerticalPadding
+    }
+
+    private func segmentTextBinding(at index: Int) -> Binding<String> {
+        Binding(
+            get: { viewModel.segments.indices.contains(index) ? viewModel.segments[index].text : "" },
+            set: { newValue in
+                guard viewModel.segments.indices.contains(index) else { return }
+                viewModel.segments[index].text = newValue
+            }
+        )
     }
 
     private var recordingDot: some View {
@@ -238,16 +295,8 @@ struct CaptureView: View {
                 .foregroundStyle(.secondary)
                 .padding(.bottom, Self.labelVPadding)
 
-            Text(turn.input)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            turnInputView(turn)
                 .padding(.bottom, Self.labelVPadding)
-
-            ForEach(turn.captures) { capture in
-                captureBlockquote(capture)
-                    .padding(.bottom, Self.labelVPadding)
-            }
 
             HStack {
                 if !isProcessingTurn {
@@ -278,6 +327,76 @@ struct CaptureView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: - Turn Input (interleaved text + blockquotes)
+
+    /// Renders the turn's input text interleaved with capture blockquotes.
+    /// Parses `<capture-N>...</capture-N>` tags from `resolveSubmissionText()` and
+    /// displays the text parts as monospaced body and captures as blockquotes.
+    @ViewBuilder
+    private func turnInputView(_ turn: ConversationTurn) -> some View {
+        let parts = parseTurnInput(turn.input, captures: turn.captures)
+        ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+            switch part {
+            case .text(let value):
+                Text(value)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            case .capture(let context):
+                captureBlockquote(context)
+            }
+        }
+    }
+
+    private enum TurnInputPart {
+        case text(String)
+        case capture(CapturedContext)
+    }
+
+    /// Splits input text on `<capture-N>...</capture-N>` boundaries, pairing each
+    /// tag with the corresponding `CapturedContext` from the turn.
+    private func parseTurnInput(_ input: String, captures: [CapturedContext]) -> [TurnInputPart] {
+        guard !captures.isEmpty else {
+            let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? [] : [.text(trimmed)]
+        }
+
+        var parts: [TurnInputPart] = []
+        var remaining = input
+        var captureIndex = 0
+
+        while captureIndex < captures.count {
+            let tag = "<capture-\(captureIndex + 1)>"
+            let endTag = "</capture-\(captureIndex + 1)>"
+
+            if let tagRange = remaining.range(of: tag) {
+                let before = String(remaining[remaining.startIndex..<tagRange.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !before.isEmpty {
+                    parts.append(.text(before))
+                }
+                parts.append(.capture(captures[captureIndex]))
+
+                if let endRange = remaining.range(of: endTag) {
+                    remaining = String(remaining[endRange.upperBound...])
+                } else {
+                    remaining = ""
+                }
+            } else {
+                // Tag not found — append capture from the model directly
+                parts.append(.capture(captures[captureIndex]))
+            }
+            captureIndex += 1
+        }
+
+        let trailing = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trailing.isEmpty {
+            parts.append(.text(trailing))
+        }
+
+        return parts
     }
 
     // MARK: - Capture Blockquote
