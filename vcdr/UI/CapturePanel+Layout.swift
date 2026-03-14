@@ -8,7 +8,7 @@ extension CapturePanel {
     static let conversationPadding: CGFloat = 24
     static let hintBarHeight: CGFloat = 30
     static let panelMinBaseHeight: CGFloat = 60
-    static let segmentSectionMinHeight: CGFloat = 60
+    static let segmentSectionMinHeight: CGFloat = 80
 
     static func maxPanelHeight() -> CGFloat {
         let screen = NSScreen.main ?? NSScreen.screens.first
@@ -16,11 +16,17 @@ extension CapturePanel {
         return visibleHeight * panelMaxHeightFraction
     }
 
-    static func calculateHeight(for turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()]) -> CGFloat {
+    static func calculateHeight(for turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()], segmentHeights: [UUID: CGFloat] = [:]) -> CGFloat {
         var segmentContentHeight: CGFloat = 0
         for segment in segments {
-            let textLines = max(1, CGFloat(segment.text.components(separatedBy: .newlines).count))
-            segmentContentHeight += textLines * lineHeight
+            // Use layout-reported height if available (accounts for soft wraps),
+            // otherwise fall back to newline counting.
+            if let reportedHeight = segmentHeights[segment.id], reportedHeight > 0 {
+                segmentContentHeight += reportedHeight
+            } else {
+                let textLines = max(1, CGFloat(segment.text.components(separatedBy: .newlines).count))
+                segmentContentHeight += textLines * lineHeight
+            }
 
             if let capture = segment.capture {
                 let captureLines = CGFloat(capture.text.components(separatedBy: .newlines).count)

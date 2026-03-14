@@ -18,6 +18,10 @@ final class CaptureViewModel {
     var clipboardCaptureCount: Int = 0
     var processedByModeName: String?
     var modeSwitcherViewModel: ModeSwitcherViewModel?
+    /// Actual content heights per segment, reported by SegmentEditor layout manager.
+    var segmentHeights: [UUID: CGFloat] = [:]
+    /// Called when segment content height changes, so the panel can resize.
+    var onContentHeightChanged: (() -> Void)?
 
     /// Unified phase for both the minimized pill and expanded view state
     enum CapturePhase {

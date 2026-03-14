@@ -24,6 +24,8 @@ struct SegmentEditor: NSViewRepresentable {
     var onMoveUp: (() -> Void)?
     /// Called when arrow-down is pressed while the cursor is on the last line.
     var onMoveDown: (() -> Void)?
+    /// Called when the editor's content height changes (including soft wraps).
+    var onHeightChange: ((CGFloat) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -84,6 +86,10 @@ struct SegmentEditor: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: loc, length: 0))
             nsView.window?.makeFirstResponder(textView)
         }
+        // Report height on every update to catch layout changes (initial layout,
+        // external text changes, width changes). The coordinator deduplicates
+        // by comparing against lastReportedHeight.
+        context.coordinator.reportHeight(textView)
     }
 
     // MARK: - Coordinator
@@ -91,12 +97,32 @@ struct SegmentEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: SegmentEditor
         var lastFocusTrigger: Int = 0
+        /// Last height reported via onHeightChange, used to deduplicate callbacks
+        /// and prevent infinite SwiftUI update loops.
+        private var lastReportedHeight: CGFloat = 0
+        private static let heightChangeThreshold: CGFloat = 1
 
         init(_ parent: SegmentEditor) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
+            reportHeight(textView)
+        }
+
+        /// Computes the actual content height from the layout manager (including
+        /// soft wraps) and notifies the parent if it changed.
+        func reportHeight(_ textView: NSTextView) {
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer else { return }
+            layoutManager.ensureLayout(for: textContainer)
+            let usedRect = layoutManager.usedRect(for: textContainer)
+            let inset = textView.textContainerInset
+            let newHeight = usedRect.height + inset.height * 2
+            if abs(newHeight - lastReportedHeight) > Self.heightChangeThreshold {
+                lastReportedHeight = newHeight
+                parent.onHeightChange?(newHeight)
+            }
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {

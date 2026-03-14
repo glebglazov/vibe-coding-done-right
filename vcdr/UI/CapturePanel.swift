@@ -30,7 +30,6 @@ final class CapturePanel {
     private static let minimizedPanelWidth: CGFloat = 200
     private static let minimizedPanelHeight: CGFloat = 40
     private static let expandFocusDelay: Duration = .milliseconds(200)
-    private static let textInputHeight: CGFloat = 68
 
     func show(
         settings: AppSettings,
@@ -64,6 +63,9 @@ final class CapturePanel {
             audioRecorder: audioRecorder
         )
         viewModel.onCancelCapture = onCancelCapture
+        viewModel.onContentHeightChanged = { [weak self] in
+            self?.resizePanel()
+        }
         self.viewModel = viewModel
 
         presentPanel(viewModel: viewModel, turns: conversationTurns, segments: segments)
@@ -116,7 +118,7 @@ final class CapturePanel {
     private func presentPanel(viewModel: CaptureViewModel, turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()]) {
         let view = CaptureView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
-        let panelHeight = Self.calculateHeight(for: turns, segments: segments)
+        let panelHeight = Self.calculateHeight(for: turns, segments: segments, segmentHeights: viewModel.segmentHeights)
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: panelHeight)
 
         let panel = KeyablePanel(
@@ -409,20 +411,20 @@ final class CapturePanel {
     }
 
     private func resizePanelToExpanded() {
-        guard let panel else { return }
-        let turns = viewModel?.conversationTurns ?? []
-        let segs = viewModel?.segments ?? [InputSegment()]
-        let newHeight = Self.calculateHeight(for: turns, segments: segs)
+        guard let panel, let viewModel else { return }
+        let turns = viewModel.conversationTurns
+        let segs = viewModel.segments
+        let newHeight = Self.calculateHeight(for: turns, segments: segs, segmentHeights: viewModel.segmentHeights)
         guard let origin = Self.panelOrigin(width: Self.panelWidth, height: newHeight) else { return }
         let newFrame = NSRect(origin: origin, size: NSSize(width: Self.panelWidth, height: newHeight))
         panel.setFrame(newFrame, display: true, animate: true)
     }
 
     private func resizePanel() {
-        guard let panel else { return }
-        let turns = viewModel?.conversationTurns ?? []
-        let segs = viewModel?.segments ?? [InputSegment()]
-        let newHeight = Self.calculateHeight(for: turns, segments: segs)
+        guard let panel, let viewModel else { return }
+        let turns = viewModel.conversationTurns
+        let segs = viewModel.segments
+        let newHeight = Self.calculateHeight(for: turns, segments: segs, segmentHeights: viewModel.segmentHeights)
         let currentFrame = panel.frame
         let newY = currentFrame.maxY - newHeight
         let newFrame = NSRect(x: currentFrame.origin.x, y: newY, width: currentFrame.width, height: newHeight)

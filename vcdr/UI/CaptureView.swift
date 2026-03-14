@@ -24,8 +24,8 @@ struct CaptureView: View {
     private static let blockquoteBorderSpacing: CGFloat = 6
     private static let blockquoteBorderOpacity: Double = 0.4
     private static let blockquoteLeadingPadding: CGFloat = 4
-    private static let textInputHeight: CGFloat = 60
-    private static let segmentTextMinHeight: CGFloat = 60
+    private static let segmentTextMinHeight: CGFloat = 80
+    private static let minEditorHeight: CGFloat = 80
     private static let textInputTopInset: CGFloat = 4
     private static let recordingDotSize: CGFloat = 8
 
@@ -163,11 +163,6 @@ struct CaptureView: View {
 
     // MARK: - Input Section
 
-    /// Height per line of editor text, matching CapturePanel.lineHeight for consistent sizing.
-    private static let editorLineHeight: CGFloat = 20
-    /// Vertical padding from NSTextView textContainerInset (top + bottom).
-    private static let editorVerticalPadding: CGFloat = 8
-
     @ViewBuilder
     private var segmentedInputSection: some View {
         ZStack(alignment: .topLeading) {
@@ -226,9 +221,13 @@ struct CaptureView: View {
                                     focusTriggers[newSegment.id, default: 0] += 1
                                 }
                             }
+                        },
+                        onHeightChange: { height in
+                            viewModel.segmentHeights[segment.id] = height
+                            viewModel.onContentHeightChanged?()
                         }
                     )
-                    .frame(height: editorHeight(for: segment.text))
+                    .frame(height: max(Self.minEditorHeight, viewModel.segmentHeights[segment.id] ?? Self.minEditorHeight))
 
                     if let capture = segment.capture {
                         captureBlockquote(capture)
@@ -242,11 +241,6 @@ struct CaptureView: View {
     }
 
     // MARK: - Segment Helpers
-
-    private func editorHeight(for text: String) -> CGFloat {
-        let lines = max(1, CGFloat(text.components(separatedBy: .newlines).count))
-        return lines * Self.editorLineHeight + Self.editorVerticalPadding
-    }
 
     private func segmentTextBinding(at index: Int) -> Binding<String> {
         Binding(
