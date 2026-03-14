@@ -18,7 +18,12 @@ actor ClipboardMonitor {
 
     /// Starts monitoring clipboard changes. Calls `onCapture` on each new capture.
     /// The callback receives the captured text.
-    func start(onCapture: @MainActor @Sendable @escaping (String) -> Void) {
+    ///
+    /// - Parameter baselineChangeCount: If provided, the monitor ignores any clipboard
+    ///   changes until `changeCount` exceeds this value. Use the pasteboard's `changeCount`
+    ///   captured **before** SelectionCapturer runs so its internal clipboard manipulation
+    ///   (copy → read → restore) is ignored regardless of timing.
+    func start(baselineChangeCount: Int? = nil, onCapture: @MainActor @Sendable @escaping (String) -> Void) {
         stop()
 
         pollingTask = Task { [weak self] in
@@ -26,10 +31,19 @@ actor ClipboardMonitor {
             try? await Task.sleep(for: Self.initialGracePeriod)
             guard !Task.isCancelled else { return }
 
-            // Snapshot current clipboard state after the grace period
+            // Use the provided baseline or snapshot after the grace period.
+            // SelectionCapturer's clipboard cycle (copy → read → restore) produces
+            // multiple changeCount bumps. By anchoring to the pre-capture count,
+            // we skip all of them regardless of timing.
             let pasteboard = NSPasteboard.general
-            var lastChangeCount = pasteboard.changeCount
-            var lastContent = pasteboard.string(forType: .string)
+            var lastChangeCount = baselineChangeCount ?? pasteboard.changeCount
+            var lastContent: String? = nil
+            // Fast-forward: if the pasteboard has already moved past baseline,
+            // record its current content so we don't re-fire for stale changes.
+            if pasteboard.changeCount != lastChangeCount {
+                lastChangeCount = pasteboard.changeCount
+                lastContent = pasteboard.string(forType: .string)
+            }
 
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.pollInterval)

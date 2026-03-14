@@ -234,6 +234,11 @@ final class RecordingCoordinator {
         recordingRun?.previousActiveApp = frontmostApp
         Logger.recording.info("Capturing selection from app: \(frontmostApp?.bundleIdentifier ?? "unknown")")
 
+        // Snapshot clipboard changeCount BEFORE SelectionCapturer runs.
+        // The capturer's clipboard save-copy-restore cycle bumps changeCount
+        // multiple times — the clipboard monitor uses this baseline to skip them.
+        let clipboardBaseline = NSPasteboard.general.changeCount
+
         // Fire capture concurrently so it doesn't delay recording start.
         // The Cmd+C fallback path polls the clipboard for up to 100ms — we don't
         // want that blocking the recording. The result is awaited in processTranscription.
@@ -274,10 +279,10 @@ final class RecordingCoordinator {
             updateEscCancel()
 
             // Start monitoring clipboard for mid-recording captures (user Cmd+C).
-            // The monitor waits 500ms before watching so SelectionCapturer's
-            // clipboard manipulation doesn't trigger false positives.
+            // Pass the pre-capture baseline so SelectionCapturer's clipboard
+            // manipulation is ignored regardless of timing.
             Task {
-                await clipboardMonitor.start { [weak self] _ in
+                await clipboardMonitor.start(baselineChangeCount: clipboardBaseline) { [weak self] _ in
                     self?.recordingIndicator.signalClipboardCapture()
                     self?.onClipboardCaptured?()
                 }
