@@ -260,6 +260,16 @@ final class CapturePanel {
         let lastTurn = viewModel.conversationTurns[lastIndex]
         viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: text, captures: lastTurn.captures)
         viewModel.scrollTrigger += 1
+
+        if viewModel.isMinimized {
+            // Expand on first streaming chunk so user can watch output in real-time.
+            // Don't use expand() — it resets phase to .idle, but we want to stay in .processing.
+            viewModel.isMinimized = false
+            resizePanelToExpanded()
+            panel?.makeKey()
+        } else {
+            resizePanel()
+        }
     }
 
     func finishStreaming(outputText: String) {
