@@ -131,8 +131,14 @@ final class CaptureViewModel {
             return msVM.handleKeyEvent(event)
         }
 
-        // Block input during recording
-        if isRecording { return true }
+        // During recording, only handle submit/dismiss — let typing pass through
+        if isRecording {
+            if event.keyCode == 53 { // Escape
+                onDismiss()
+                return true
+            }
+            return false
+        }
 
         // Check destination hotkeys (Ctrl+P for paste, Ctrl+C for copy, etc.)
         if let matchedDestination = matchDestinationHotkey(event) {

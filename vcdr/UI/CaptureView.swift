@@ -192,7 +192,7 @@ struct CaptureView: View {
                 ForEach(Array(viewModel.segments.enumerated()), id: \.element.id) { index, segment in
                     SegmentEditor(
                         text: segmentTextBinding(at: index),
-                        isEditable: !viewModel.isRecording && !viewModel.isProcessing,
+                        isEditable: !viewModel.isProcessing,
                         focusTrigger: focusTriggers[segment.id, default: 0],
                         focusCursorAtEnd: focusCursorAtEnd[segment.id, default: false],
                         initialCursorPosition: viewModel.savedCursorPositions[segment.id],

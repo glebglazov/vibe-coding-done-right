@@ -158,12 +158,14 @@ final class CapturePanel {
     }
 
     func expand() {
-        guard viewModel?.isMinimized == true else { return }
+        let wasMinimized = viewModel?.isMinimized == true
         viewModel?.isMinimized = false
         if viewModel?.phase != .recording {
             viewModel?.phase = .idle
         }
-        resizePanelToExpanded()
+        if wasMinimized {
+            resizePanelToExpanded()
+        }
         panel?.makeKey()
         if viewModel?.isRecording != true {
             Task { @MainActor [weak self] in
