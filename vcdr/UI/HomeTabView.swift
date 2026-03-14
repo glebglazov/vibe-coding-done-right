@@ -122,6 +122,22 @@ struct HomeTabView: View {
                         }
                     )
                 )
+                HStack {
+                    Text("Push-to-Type expand delay")
+                    Spacer()
+                    TextField(
+                        "ms",
+                        value: Binding(
+                            get: { dependencies.settings.pushToTypeExpandDelay },
+                            set: { dependencies.settings.pushToTypeExpandDelay = $0 }
+                        ),
+                        format: .number
+                    )
+                    .frame(width: 60)
+                    .textFieldStyle(.roundedBorder)
+                    Text("ms")
+                        .foregroundStyle(.secondary)
+                }
                 ShortcutRecorderRow(
                     label: "Mode Switcher",
                     keyCode: Binding(

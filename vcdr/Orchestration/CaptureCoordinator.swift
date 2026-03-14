@@ -27,6 +27,8 @@ final class CaptureCoordinator {
 
     private var dismissIndicatorTask: Task<Void, Never>?
 
+    private var expandTimerTask: Task<Void, Never>?
+
     var onWillStartInput: (() -> Void)?
 
     var isModeSwitcherHostVisible: Bool { panel.isVisible && !panel.isMinimized }
@@ -351,10 +353,14 @@ final class CaptureCoordinator {
 
         hotkeyManager.onKeyDown = { [weak self] in
             Task { @MainActor in
-                await self?.toggleOverlay()
+                self?.handlePushToTypeKeyDown()
             }
         }
-        hotkeyManager.onKeyUp = nil
+        hotkeyManager.onKeyUp = { [weak self] in
+            Task { @MainActor in
+                self?.handlePushToTypeKeyUp()
+            }
+        }
 
         let keyCode = CGKeyCode(binding.keyCode)
         let modifiers = CGEventFlags(rawValue: binding.modifiers)
@@ -428,44 +434,60 @@ final class CaptureCoordinator {
         }
     }
 
-    private func toggleOverlay() async {
+    private func handlePushToTypeKeyDown() {
         if panel.isVisible && !panel.isMinimized {
             collapseOverlay()
         } else if panel.isVisible && panel.isMinimized {
-            await expandFromCollapsed()
+            Task { await expandFromCollapsed() }
         } else {
             onWillStartInput?()
-
             overrides.clearIfCompletedPipeline()
             if session == nil {
                 session = PipelineSession()
             }
-            await showOverlay()
+            showPillForNewCapture()
+            startExpandTimer()
         }
     }
 
-    private func showOverlay() async {
+    private func handlePushToTypeKeyUp() {
+        expandTimerTask?.cancel()
+        expandTimerTask = nil
+    }
+
+    private func showPillForNewCapture() {
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         session?.previousActiveApp = frontmostApp
 
+        // Show pill immediately with empty content
+        configurePanelAndShow()
+        panel.setPhase(.idle)
+        panel.minimize()
+
+        // Capture selection in background — populates segments when ready
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
-        let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
-
-        let overlayTurns = session?.conversationTurns ?? []
-
-        if let capturedText {
+        Task {
+            guard let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid) else { return }
             let context = CapturedContext(text: capturedText, source: .selection)
-            let segment = InputSegment(capture: context)
             session?.captures = [context]
             originalCapture = context
-            configurePanelAndShow(conversationTurns: overlayTurns, segments: [segment])
+            panel.setSegments([InputSegment(capture: context)])
             panel.signalClipboardCapture()
-        } else {
-            configurePanelAndShow(conversationTurns: overlayTurns)
         }
 
-        Logger.app.info("Capture view: overlay shown")
+        Logger.app.info("Capture view: pill shown for new capture")
+    }
+
+    private func startExpandTimer() {
+        expandTimerTask?.cancel()
+        let delayMs = settings.pushToTypeExpandDelay
+        expandTimerTask = Task {
+            try? await Task.sleep(for: .milliseconds(delayMs))
+            guard !Task.isCancelled else { return }
+            guard panel.isVisible, panel.isMinimized else { return }
+            panel.expand()
+        }
     }
 
     private func showPanelMinimized(phase: CaptureViewModel.CapturePhase) {
@@ -504,6 +526,8 @@ final class CaptureCoordinator {
     func dismissOverlay() {
         Task { await clipboardMonitor.stop() }
         escCancelManager.isEnabled = false
+        expandTimerTask?.cancel()
+        expandTimerTask = nil
         autoDismissTask?.cancel()
         autoDismissTask = nil
         panel.onFocusLost = nil

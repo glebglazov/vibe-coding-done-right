@@ -47,6 +47,9 @@ final class AppSettings {
     var pushToTypeHotkey: HotkeyBinding {
         didSet { save() }
     }
+    var pushToTypeExpandDelay: Int {
+        didSet { save() }
+    }
     var toggleRecordingHotkey: HotkeyBinding {
         didSet { save() }
     }
@@ -108,6 +111,8 @@ final class AppSettings {
         outputDestinations.first(where: { $0.id == id }) ?? outputDestinations.first ?? OutputDestination.makeDefaultPaste()
     }
 
+    static let defaultPushToTypeExpandDelay = 500
+
     private let userDefaults: UserDefaults
 
     // MARK: - UserDefaults Keys
@@ -115,6 +120,7 @@ final class AppSettings {
     private enum Keys {
         static let modeSwitcherHotkey = "modeSwitcherHotkey"
         static let pushToTypeHotkey = "pushToTypeHotkey"
+        static let pushToTypeExpandDelay = "pushToTypeExpandDelay"
         static let toggleRecordingHotkey = "toggleRecordingHotkey"
         static let copyLatestCaptureHotkey = "copyLatestCaptureHotkey"
         static let cancelRecordingHotkey = "cancelRecordingHotkey"
@@ -152,6 +158,13 @@ final class AppSettings {
             self.pushToTypeHotkey = decoded
         } else {
             self.pushToTypeHotkey = .unassigned
+        }
+
+        // Load push-to-type expand delay (default: 500ms)
+        if userDefaults.object(forKey: Keys.pushToTypeExpandDelay) != nil {
+            self.pushToTypeExpandDelay = userDefaults.integer(forKey: Keys.pushToTypeExpandDelay)
+        } else {
+            self.pushToTypeExpandDelay = Self.defaultPushToTypeExpandDelay
         }
 
         // Load toggle recording hotkey (default: Cmd+Option+Space)
@@ -314,6 +327,7 @@ final class AppSettings {
         if let encoded = try? JSONEncoder().encode(pushToTypeHotkey) {
             userDefaults.set(encoded, forKey: Keys.pushToTypeHotkey)
         }
+        userDefaults.set(pushToTypeExpandDelay, forKey: Keys.pushToTypeExpandDelay)
         if let encoded = try? JSONEncoder().encode(toggleRecordingHotkey) {
             userDefaults.set(encoded, forKey: Keys.toggleRecordingHotkey)
         }
