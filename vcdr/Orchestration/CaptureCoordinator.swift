@@ -458,13 +458,9 @@ final class CaptureCoordinator {
 
     // MARK: - Panel Configuration
 
-    /// Wires standard panel callbacks and calls panel.show().
-    /// All show methods delegate here, passing only what differs.
-    private func configurePanelAndShow(
-        conversationTurns: [ConversationTurn] = [],
-        captures: [CapturedContext] = [],
-        segments: [InputSegment]? = nil
-    ) {
+    /// Restores the standard focus-lost and pill-click callbacks on the panel.
+    /// Called after panel creation and after pipeline completion when the panel remains visible.
+    private func rewirePanelCallbacks() {
         panel.onFocusLost = { [weak self] in
             self?.collapseOverlay()
         }
@@ -473,6 +469,16 @@ final class CaptureCoordinator {
                 await self?.expandFromCollapsed()
             }
         }
+    }
+
+    /// Wires standard panel callbacks and calls panel.show().
+    /// All show methods delegate here, passing only what differs.
+    private func configurePanelAndShow(
+        conversationTurns: [ConversationTurn] = [],
+        captures: [CapturedContext] = [],
+        segments: [InputSegment]? = nil
+    ) {
+        rewirePanelCallbacks()
 
         // Build segments from captures if no explicit segments provided
         let resolvedSegments: [InputSegment]
@@ -731,6 +737,7 @@ final class CaptureCoordinator {
                     self.session?.previousActiveApp = pipelineSession.previousActiveApp
 
                     self.overrides.markPipelineCompleted()
+                    self.rewirePanelCallbacks()
                     Logger.app.info("Capture view: streaming complete")
                 } catch {
                     streamResult.cancel()
@@ -738,6 +745,9 @@ final class CaptureCoordinator {
                         panel.showProcessingError(error.localizedDescription)
                     } else {
                         panel.finishStreaming(outputText: accumulated)
+                    }
+                    if panel.isVisible {
+                        self.rewirePanelCallbacks()
                     }
                     session = nil
                     Logger.app.error("Capture view streaming failed: \(error)")
@@ -797,9 +807,15 @@ final class CaptureCoordinator {
                     }
 
                     self.overrides.markPipelineCompleted()
+                    if panel.isVisible {
+                        self.rewirePanelCallbacks()
+                    }
                     Logger.app.info("Capture view: pipeline complete")
                 } catch {
                     panel.showProcessingError(error.localizedDescription)
+                    if panel.isVisible {
+                        self.rewirePanelCallbacks()
+                    }
                     session = nil
                     Logger.app.error("Capture view pipeline failed: \(error)")
                 }
