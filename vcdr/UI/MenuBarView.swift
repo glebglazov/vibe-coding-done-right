@@ -4,7 +4,6 @@ struct MenuBarView: View {
     let dependencies: AppDependencies
     @Environment(\.openWindow) private var openWindow
 
-    // MARK: - Constants
     private static let previewLineLimit = 2
     private static let copiedFeedbackDuration: Duration = .seconds(1.5)
 
@@ -85,7 +84,6 @@ struct MenuBarView: View {
         case .preparingToRecord: return "Starting..."
         case .recording: return "Recording..."
         case .transcribing: return "Transcribing..."
-        case .executing: return "Executing action..."
         case .error(let msg): return "Error: \(msg)"
         }
     }
