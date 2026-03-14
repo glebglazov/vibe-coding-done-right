@@ -83,6 +83,7 @@ final class CapturePanel {
 
     private func tearDown() {
         isLockedForFollowUp = false
+        removeTrailingEmptySegments()
         if let monitor = globalEventMonitor {
             NSEvent.removeMonitor(monitor)
             globalEventMonitor = nil
@@ -142,7 +143,7 @@ final class CapturePanel {
         self.panel = panel
 
         if !viewModel.isRecording {
-            Self.focusFirstTextView(in: hostingView, panel: panel)
+            focusActiveTextView(in: hostingView, panel: panel)
         }
 
         setupEventMonitors(panel: panel, hostingView: hostingView)
@@ -168,15 +169,14 @@ final class CapturePanel {
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: Self.expandFocusDelay)
                 guard let self, let contentView = self.panel?.contentView, let panel = self.panel else { return }
-                Self.focusFirstTextView(in: contentView, panel: panel)
+                self.focusActiveTextView(in: contentView, panel: panel)
             }
         }
     }
 
+
+
     func setPhase(_ phase: CaptureViewModel.CapturePhase) {
-        if phase == .recording || phase == .processing {
-            removeTrailingEmptySegments()
-        }
         viewModel?.phase = phase
     }
 
@@ -195,7 +195,20 @@ final class CapturePanel {
         guard let viewModel else { return }
         let index = viewModel.activeSegmentIndex
         guard viewModel.segments.indices.contains(index) else { return }
-        viewModel.segments[index].text += text
+
+        let segment = viewModel.segments[index]
+        let cursorPos = viewModel.savedCursorPositions[segment.id] ?? (segment.text as NSString).length
+        let nsText = segment.text as NSString
+        let clampedPos = min(cursorPos, nsText.length)
+
+        // Insert at cursor position instead of appending to end
+        viewModel.segments[index].text = nsText.replacingCharacters(
+            in: NSRange(location: clampedPos, length: 0),
+            with: text
+        )
+        // Update saved position to right after the inserted text
+        viewModel.savedCursorPositions[segment.id] = clampedPos + (text as NSString).length
+
         resizePanel()
     }
 
@@ -335,7 +348,7 @@ final class CapturePanel {
     func hideModeSwitcher() {
         self.viewModel?.modeSwitcherViewModel = nil
         if let contentView = panel?.contentView, let panel {
-            Self.focusFirstTextView(in: contentView, panel: panel)
+            focusActiveTextView(in: contentView, panel: panel)
         }
     }
 
@@ -382,7 +395,7 @@ final class CapturePanel {
         }
         panel.makeKey()
         if let contentView = panel.contentView {
-            Self.focusFirstTextView(in: contentView, panel: panel)
+            focusActiveTextView(in: contentView, panel: panel)
         }
     }
 
@@ -439,7 +452,7 @@ final class CapturePanel {
             }
             guard let hostingView, let panel else { return }
             if self.viewModel?.isRecording != true {
-                Self.focusFirstTextView(in: hostingView, panel: panel)
+                self.focusActiveTextView(in: hostingView, panel: panel)
             }
         }
 
@@ -462,30 +475,44 @@ final class CapturePanel {
         }
     }
 
-    private static func focusFirstTextView(in view: NSView, panel: NSPanel) {
+    /// Focuses the NSTextView corresponding to `activeSegmentIndex`, falling back
+    /// to the first text view if the target index is out of bounds.
+    private func focusActiveTextView(in view: NSView, panel: NSPanel, cursorAtEnd: Bool = false) {
+        let targetIndex = viewModel?.activeSegmentIndex ?? 0
         Task { @MainActor in
-            for _ in 0..<focusMaxAttempts {
-                if let textView = findFirstTextView(in: view) {
+            for _ in 0..<Self.focusMaxAttempts {
+                let textViews = Self.findAllTextViews(in: view)
+                let index = min(targetIndex, textViews.count - 1)
+                if index >= 0, index < textViews.count {
+                    let textView = textViews[index]
                     panel.makeFirstResponder(textView)
                     if panel.firstResponder === textView {
+                        if cursorAtEnd {
+                            let length = (textView.string as NSString).length
+                            textView.setSelectedRange(NSRange(location: length, length: 0))
+                        }
                         return
                     }
                 }
-                try? await Task.sleep(for: focusRetryDelay)
+                try? await Task.sleep(for: Self.focusRetryDelay)
             }
-            Logger.ui.warning("Capture panel: failed to focus text view after \(focusMaxAttempts) attempts")
+            Logger.ui.warning("Capture panel: failed to focus text view at index \(targetIndex) after \(Self.focusMaxAttempts) attempts")
         }
     }
 
-    static func findFirstTextView(in view: NSView) -> NSTextView? {
+    private static func findAllTextViews(in view: NSView) -> [NSTextView] {
+        var result: [NSTextView] = []
+        collectTextViews(in: view, into: &result)
+        return result
+    }
+
+    private static func collectTextViews(in view: NSView, into result: inout [NSTextView]) {
         if let textView = view as? NSTextView {
-            return textView
+            result.append(textView)
+            return
         }
         for subview in view.subviews {
-            if let found = findFirstTextView(in: subview) {
-                return found
-            }
+            collectTextViews(in: subview, into: &result)
         }
-        return nil
     }
 }

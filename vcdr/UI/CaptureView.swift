@@ -195,7 +195,11 @@ struct CaptureView: View {
                         isEditable: !viewModel.isRecording && !viewModel.isProcessing,
                         focusTrigger: focusTriggers[segment.id, default: 0],
                         focusCursorAtEnd: focusCursorAtEnd[segment.id, default: false],
-                        onFocus: { viewModel.activeSegmentIndex = index },
+                        initialCursorPosition: viewModel.savedCursorPositions[segment.id],
+                        onFocus: { cursorPosition in
+                            viewModel.activeSegmentIndex = index
+                            viewModel.savedCursorPositions[segment.id] = cursorPosition
+                        },
                         onMoveUp: index > 0 ? {
                             let target = viewModel.segments[index - 1]
                             focusCursorAtEnd[target.id] = true

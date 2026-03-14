@@ -9,6 +9,9 @@ final class CaptureViewModel {
     /// Updated by SegmentEditor's onFocus callback when the user clicks into or types in an editor.
     /// Used by CaptureCoordinator to decide where to insert new captures.
     var activeSegmentIndex: Int = 0
+    /// Saved cursor positions per segment ID, used to restore cursor on expand after collapse.
+    /// Populated by CapturePanel.minimize(), consumed by SegmentEditor.makeNSView().
+    var savedCursorPositions: [UUID: Int] = [:]
     var conversationTurns: [ConversationTurn] = []
     var isMinimized: Bool = false
     var scrollTrigger: Int = 0
@@ -165,21 +168,30 @@ final class CaptureViewModel {
     /// Builds interleaved submission text with `<capture-N>` tags from segments.
     /// Falls back to first capture text for submit-without-typing.
     private func resolveSubmissionText() -> String {
+        // Trim trailing empty segments (no text, no capture) from submission
+        var effectiveSegments = segments
+        while effectiveSegments.count > 1,
+              let last = effectiveSegments.last,
+              last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              last.capture == nil {
+            effectiveSegments.removeLast()
+        }
+
         var parts: [String] = []
-        for (index, segment) in segments.enumerated() {
+        for (index, segment) in effectiveSegments.enumerated() {
             let trimmed = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 parts.append(trimmed)
             }
             if let capture = segment.capture {
-                let captureNumber = segments[0...index].compactMap(\.capture).count
+                let captureNumber = effectiveSegments[0...index].compactMap(\.capture).count
                 parts.append("<capture-\(captureNumber)>\(capture.text)</capture-\(captureNumber)>")
             }
         }
         let result = parts.joined(separator: "\n")
         if !result.isEmpty { return result }
         // Fallback: first capture text (for submit-without-typing)
-        return segments.first?.capture?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return effectiveSegments.first?.capture?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     /// Checks if the event matches the configured cancel recording hotkey.

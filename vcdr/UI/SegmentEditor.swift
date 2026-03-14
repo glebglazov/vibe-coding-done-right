@@ -15,7 +15,11 @@ struct SegmentEditor: NSViewRepresentable {
     var focusTrigger: Int = 0
     /// When focus is requested, place cursor at end (true) or start (false).
     var focusCursorAtEnd: Bool = false
-    var onFocus: () -> Void
+    /// Cursor position to restore when the view is first created (e.g., after expand from pill).
+    /// If nil, cursor defaults to position 0.
+    var initialCursorPosition: Int? = nil
+    /// Called when the editor gains focus or the cursor moves. Parameter is the cursor offset.
+    var onFocus: (_ cursorPosition: Int) -> Void
     /// Called when arrow-up is pressed while the cursor is on the first line.
     var onMoveUp: (() -> Void)?
     /// Called when arrow-down is pressed while the cursor is on the last line.
@@ -41,6 +45,10 @@ struct SegmentEditor: NSViewRepresentable {
         textView.drawsBackground = false
         textView.delegate = context.coordinator
         textView.string = text
+        if let pos = initialCursorPosition {
+            let maxLoc = (text as NSString).length
+            textView.setSelectedRange(NSRange(location: min(pos, maxLoc), length: 0))
+        }
         textView.isEditable = isEditable
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = false
@@ -58,10 +66,15 @@ struct SegmentEditor: NSViewRepresentable {
         // During user typing, textDidChange already synced parent.text = textView.string,
         // so they're equal and this guard prevents clobbering the cursor.
         if textView.string != text {
-            let cursor = textView.selectedRange()
             textView.string = text
-            let maxLoc = (text as NSString).length
-            textView.setSelectedRange(NSRange(location: min(cursor.location, maxLoc), length: 0))
+            let length = (text as NSString).length
+            // Use saved cursor position if available (e.g., after dictation insertion),
+            // otherwise place cursor at end (e.g., setSegments full replacement).
+            if let pos = initialCursorPosition {
+                textView.setSelectedRange(NSRange(location: min(pos, length), length: 0))
+            } else {
+                textView.setSelectedRange(NSRange(location: length, length: 0))
+            }
         }
         // Handle focus requests from parent (arrow key navigation between editors).
         if context.coordinator.lastFocusTrigger != focusTrigger {
@@ -87,7 +100,8 @@ struct SegmentEditor: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            parent.onFocus()
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.onFocus(textView.selectedRange().location)
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
