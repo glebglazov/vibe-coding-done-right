@@ -214,6 +214,22 @@ final class CapturePanel {
         resizePanel()
     }
 
+    func addClipboardCapture(_ capture: CapturedContext) {
+        guard let viewModel else { return }
+        let activeIndex = viewModel.activeSegmentIndex
+        if viewModel.segments[activeIndex].capture == nil {
+            // Active segment has no capture — attach to it
+            viewModel.segments[activeIndex].capture = capture
+        } else {
+            // Active segment already has a capture — insert new segment after it
+            let segment = InputSegment(capture: capture)
+            let insertIndex = min(activeIndex + 1, viewModel.segments.count)
+            viewModel.segments.insert(segment, at: insertIndex)
+            viewModel.activeSegmentIndex = insertIndex
+        }
+        resizePanel()
+    }
+
     func setCapture(_ capture: CapturedContext, onSegmentAt index: Int) {
         guard let viewModel, viewModel.segments.indices.contains(index) else { return }
         viewModel.segments[index].capture = capture

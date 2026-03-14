@@ -45,7 +45,6 @@ struct SegmentEditor: NSViewRepresentable {
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = false
         scrollView.hasHorizontalScroller = false
-        context.coordinator.lastFocusTrigger = focusTrigger
         return scrollView
     }
 

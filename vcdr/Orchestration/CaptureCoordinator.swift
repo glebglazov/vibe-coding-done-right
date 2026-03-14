@@ -491,8 +491,7 @@ final class CaptureCoordinator {
             for capturedText in newCaptures {
                 let context = CapturedContext(text: capturedText, source: .clipboard)
                 accumulatedCaptures.append(context)
-                let segment = InputSegment(capture: context)
-                panel.insertSegment(segment)
+                panel.addClipboardCapture(context)
             }
             session?.captures = panel.allCaptures
         }

@@ -214,7 +214,13 @@ struct CaptureView: View {
                                 viewModel.segments.append(newSegment)
                                 viewModel.activeSegmentIndex = viewModel.segments.count - 1
                                 focusCursorAtEnd[newSegment.id] = false
-                                focusTriggers[newSegment.id, default: 0] += 1
+                                // Defer focus request — the new SegmentEditor's NSTextView
+                                // must be in the window hierarchy before makeFirstResponder
+                                // works. Bumping the trigger in a Task lets SwiftUI complete
+                                // the layout pass first.
+                                Task { @MainActor in
+                                    focusTriggers[newSegment.id, default: 0] += 1
+                                }
                             }
                         }
                     )
