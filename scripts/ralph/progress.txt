@@ -28,12 +28,13 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - CapturePanel event monitoring (setupEventMonitors, focusActiveTextView) lives in CapturePanel+Events.swift
 - CapturePanel content manipulation, processing, mode switcher, and follow-up methods live in CapturePanel+Content.swift
 - CapturePanel layout constants and height calculation live in CapturePanel+Layout.swift
-- AppSettings groups hotkey properties into HotkeySettings and transcription properties into TranscriptionSettings sub-structs (SettingsTypes.swift). Computed compatibility accessors in AppSettings+Compatibility.swift preserve the original API (e.g., settings.toggleRecordingHotkey still works)
+- AppSettings groups hotkey properties into HotkeySettings, transcription into TranscriptionSettings, and modes+activeModeID+availableTemplateIDs into ModeConfiguration sub-structs (SettingsTypes.swift). Computed compatibility accessors in AppSettings+Compatibility.swift preserve the original API (e.g., settings.toggleRecordingHotkey, settings.modes still work)
 - Use AppSettings.decodeSetting(from:forKey:default:) and boolSetting(from:forKey:default:) for UserDefaults decode patterns, and encode(_:forKey:) for Codable save patterns
 - ModeSwitcherViewModel + NavigationLevel + KeyCode live in ModeSwitcherViewModel.swift; ModeSwitcherView (pure SwiftUI) lives in ModeSwitcherView.swift
 - CaptureView conversation history rendering (conversationHistorySection, turnView, captureBlockquote) lives in CaptureView+History.swift
 - ModeDetailView + ParameterEditorView live in ModeDetailView.swift (extracted from ModesTabView.swift)
 - SelectionCapturer AX helpers (findCopyMenuItem, axChildren, axIsEnabled, enableEnhancedAccessibility) live in SelectionCapturer+AXHelpers.swift
+- Use scheduleAutoDismiss(after:) for deferred cancelCapture() calls — shared by handleTranscriptionFailed and handleRecordingCancelled
 - CaptureViewModel.errorMessage stores the last processing error; CaptureViewModel.clearError() resets error state and triggers panel resize
 - ErrorBannerView provides click-to-copy error display with dismiss button — use it for showing actionable error messages in panel headers
 - CapturePanel.expand() preserves both .recording and .error phases — add new persistent phases to the preserve check
@@ -41,6 +42,7 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - Mode management (disable with fallback, delete with fallback) lives on AppSettings: setModeDisabled(_:disabled:) and deleteMode(_:)
 - Destination management (isDestinationInUse, deleteDestination) lives on AppSettings+Compatibility.swift
 - Mode parameter mutations (removeParameter, moveParameterUp, moveParameterDown, addParameter) live on Mode struct itself
+- ModeParameter option mutations (addOption, removeOption, moveOptionUp, moveOptionDown) live on ModeParameter struct itself
 - ConversationTurn.parseInput() parses <capture-N> tags and returns [InputPart] — used by CaptureView+History for rendering
 - Conversation.canContinue(modes:) checks eligibility for continuing a conversation — used by HistoryTabView and AppDependencies
 - For CoreFoundation type casts (AXUIElement, CFBoolean): use `guard let ref = anyObj else { return }` + `unsafeBitCast(ref, to: AXUIElement.self)` — `as?` triggers "always succeeds" error, `as!` is a force unwrap. For CFBoolean, cast to NSNumber and use `.boolValue`
@@ -368,4 +370,56 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - Process.terminationHandler fires on an arbitrary thread — use withCheckedContinuation to bridge to async without blocking
   - Moving refreshTemplateAvailability() from init to initialize() is safe because template modes are only needed after the UI appears, and the settings window's .task modifier also calls it
   - CopiedFeedback fire-and-forget is acceptable because the only effect is setting a view-local @State bool to false — if the view disappears, the write is harmless
+---
+
+## 2026-03-15 - US-022
+- Reduced ModeSwitcherViewModel observable stored vars from 9 to 4 (under the max-5 rule)
+- Marked @ObservationIgnored: onParameterOverride (closure), onResize (closure), parameterOverrides (always changes alongside navigation state)
+- Created NavigationState struct grouping navigationLevel + subHighlightedIndex + showingDestinations into single `var navigation`
+- Updated all access sites: ModeSwitcherView, ModeSwitcherPanel, RecordingIndicator (`.navigationLevel` → `.navigation.level`, `.subHighlightedIndex` → `.navigation.subHighlightedIndex`, `.showingDestinations` → `.navigation.showingDestinations`)
+- Files changed: 4 modified (ModeSwitcherViewModel.swift, ModeSwitcherView.swift, ModeSwitcherPanel.swift, RecordingIndicator.swift)
+- **Learnings for future iterations:**
+  - parameterOverrides is safe for @ObservationIgnored because it only changes alongside navigation level changes (goBackFromOptions, confirmMode) — the view always re-renders from the navigation change before reading the updated overrides
+  - showingDestinations is NOT safe for @ObservationIgnored — it's the only property that changes when "?" is pressed, so the view needs to observe it. Grouping it into a struct preserves observation while reducing the count
+  - With @Observable, mutating a field of a struct stored in a `var` property triggers observation of the entire property — so `navigation.level = .modes` triggers re-render for any view reading `navigation`
+  - The calculateHeight static method still takes individual parameters (NavigationLevel, showingDestinations) rather than NavigationState — no need to change its signature since it's also called from RecordingIndicatorPanel where navigation state comes from the VM
+---
+
+## 2026-03-15 - US-023
+- Grouped `modes`, `activeModeID`, and `availableTemplateIDs` into a single `ModeConfiguration` struct in SettingsTypes.swift
+- Replaced 3 separate stored vars with single `var modeConfig: ModeConfiguration` in AppSettings
+- Added computed compatibility accessors (`modes`, `activeModeID`, `availableTemplateIDs`) in AppSettings+Compatibility.swift — all existing call sites compile unchanged
+- Updated `visibleModes`, `activeMode`, `save()`, `refreshTemplateAvailability()` to use `modeConfig`
+- Observable var count: 7 → 5 (hotkeySettings, transcriptionSettings, modeConfig, outputDestinations, audioSettings)
+- Files changed: 3 modified (AppSettings.swift, AppSettings+Compatibility.swift, SettingsTypes.swift)
+- **Learnings for future iterations:**
+  - Grouping `availableTemplateIDs` with `modes` into a single struct is cleaner than @ObservationIgnored — `visibleModes` depends on both, and struct mutation triggers observation for the whole struct, ensuring views see updated template availability
+  - `refreshTemplateAvailability()` modifies `modeConfig.modes` and `modeConfig.availableTemplateIDs` — since both are in the same struct, any mutation triggers didSet → save() and observation, even if only `availableTemplateIDs` changed
+  - Computed compatibility accessors (modes, activeModeID, availableTemplateIDs) delegate to modeConfig — zero call site changes needed across the entire codebase
+  - The save() method only persists `modes` and `activeModeID` keys, not `availableTemplateIDs` — save() being triggered by availableTemplateIDs changes is harmless (re-writes same values)
+---
+
+## 2026-03-15 - US-024
+- Added 4 mutating methods to ModeParameter: addOption(), removeOption(at:), moveOptionUp(at:), moveOptionDown(at:)
+- Replaced 4 inline array mutations in ParameterEditorView (append, 2x swapAt, remove) with calls to the new ModeParameter methods
+- Files changed: 2 modified (Mode.swift, ModeDetailView.swift)
+- **Learnings for future iterations:**
+  - This follows the exact same pattern as Mode's parameter mutation methods (removeParameter, moveParameterUp, etc.) from US-017 — just applied one level deeper to ModeParameter.options
+  - The guard clauses for bounds checking moved from the view closures into the model methods, making the view closures pure one-liners
+---
+
+## 2026-03-15 - US-025
+- Simplified handleTranscriptionFailed: combined two `panel.isVisible` branches (both called flashPill) into one, added `if !isFollowUp` guard for auto-dismiss
+- Simplified handleRecordingCancelled: used `guard panel.isVisible else { return }` to flatten, both branches always called flashPill
+- Extracted `scheduleAutoDismiss(after:)` helper — deduplicated identical auto-dismiss Task pattern from handleTranscriptionFailed and handleRecordingCancelled
+- Simplified populateWithTranscription: extracted `updateVisiblePanel(text:newCaptures:)` and `showNewPanel(text:newCaptures:)` — reduced nesting from 4 to 2 levels
+- Extracted `makeInitialSegment(text:capture:)` — shared by both visible/hidden panel branches (both built identical InputSegment from text + optional capture)
+- Simplified startRecording: flattened `if !isFollowUp { if isQuickAction { } }` to single `if !isFollowUp && settings.activeMode.quickAction`
+- Simplified startRecording: replaced `if started { ... } else { ... }` with `guard started else { ... return }` — reduced clipboard monitor callback nesting from 4 to 3 levels
+- Files changed: 2 modified (RecordingCoordinator.swift, CaptureCoordinator+RecordingHandlers.swift)
+- **Learnings for future iterations:**
+  - `wasFreshPill` and `wasFollowUp` in handleRecordingCancelled are always complementary (`wasFreshPill = !wasFollowUp`) — when panel is visible, one of them must be true, so guard + unconditional flashPill is safe
+  - The `defer` block in startRecording checks `state == .preparingToRecord` — setting state to `.error` before returning prevents the defer from double-resetting to `.idle`
+  - `guard started else { ... return }` works well with the defer because the error path sets state before returning, and the defer only fires for `.preparingToRecord`
+  - The PRD referenced "transcribing → cancel-and-retry" and "panel visible + minimized → expand-and-return" in startRecording, but these patterns don't exist in the current code — the guard at line 103 just returns with a buzz
 ---

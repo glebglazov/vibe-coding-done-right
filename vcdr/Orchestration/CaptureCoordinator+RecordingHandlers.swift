@@ -48,15 +48,10 @@ extension CaptureCoordinator {
 
     func handleTranscriptionFailed(isFollowUp: Bool) {
         panel.unlockFollowUp()
-        if isFollowUp && panel.isVisible {
+        if panel.isVisible {
             flashPill(phase: .error, duration: Self.pillErrorDisplayDuration)
-        } else if panel.isVisible {
-            flashPill(phase: .error, duration: Self.pillErrorDisplayDuration)
-            autoDismissTask?.cancel()
-            autoDismissTask = Task {
-                try? await Task.sleep(for: Self.pillErrorDisplayDuration)
-                guard !Task.isCancelled else { return }
-                self.cancelCapture()
+            if !isFollowUp {
+                scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
             }
         } else if !isFollowUp {
             recordingIndicator.update(phase: .error, message: "No speech detected")
@@ -66,16 +61,10 @@ extension CaptureCoordinator {
 
     func handleRecordingCancelled(wasFollowUp: Bool, wasFreshPill: Bool) {
         panel.unlockFollowUp()
-        if panel.isVisible && wasFreshPill {
-            flashPill(phase: .cancelled, shouldMinimize: true, duration: Self.pillFlashDuration)
-            autoDismissTask?.cancel()
-            autoDismissTask = Task {
-                try? await Task.sleep(for: Self.pillFlashDuration)
-                guard !Task.isCancelled else { return }
-                self.cancelCapture()
-            }
-        } else if panel.isVisible && wasFollowUp {
-            flashPill(phase: .cancelled, shouldMinimize: true, duration: Self.pillFlashDuration)
+        guard panel.isVisible else { return }
+        flashPill(phase: .cancelled, shouldMinimize: true, duration: Self.pillFlashDuration)
+        if wasFreshPill {
+            scheduleAutoDismiss(after: Self.pillFlashDuration)
         }
     }
 
@@ -100,6 +89,15 @@ extension CaptureCoordinator {
         }
     }
 
+    func scheduleAutoDismiss(after duration: Duration) {
+        autoDismissTask?.cancel()
+        autoDismissTask = Task {
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            self.cancelCapture()
+        }
+    }
+
     func populateWithTranscription(result: RecordingResult) {
         if session == nil {
             session = PipelineSession()
@@ -114,39 +112,11 @@ extension CaptureCoordinator {
         }
 
         let newCaptures = result.captures
-        let hasNewCapture = !newCaptures.isEmpty
 
         if panel.isVisible {
-            panel.setPhase(.idle)
-
-            let hasOnlyEmptySegment = panel.segmentCount == 1
-                && panel.fullText.isEmpty && panel.allCaptures.isEmpty
-
-            if hasOnlyEmptySegment {
-                if hasNewCapture {
-                    let capture = newCaptures[0]
-                    panel.setSegments([InputSegment(text: result.text, capture: capture)])
-                } else {
-                    panel.setSegments([InputSegment(text: result.text)])
-                }
-            } else if hasNewCapture {
-                let capture = newCaptures[0]
-                let segment = InputSegment(text: result.text, capture: capture)
-                panel.appendSegment(segment)
-            } else {
-                panel.appendTextToActiveSegment(result.text)
-            }
-
-            session?.captures.append(contentsOf: newCaptures)
+            updateVisiblePanel(text: result.text, newCaptures: newCaptures)
         } else {
-            session?.captures = newCaptures
-            let segments: [InputSegment]
-            if let capture = newCaptures.first {
-                segments = [InputSegment(text: result.text, capture: capture)]
-            } else {
-                segments = [InputSegment(text: result.text)]
-            }
-            showPanelWithSegments(segments)
+            showNewPanel(text: result.text, newCaptures: newCaptures)
         }
 
         panel.expand()
@@ -174,6 +144,35 @@ extension CaptureCoordinator {
 
         overrides.markPipelineCompleted()
         Logger.app.info("Pipeline: handed to capture view")
+    }
+
+    private func updateVisiblePanel(text: String, newCaptures: [CapturedContext]) {
+        panel.setPhase(.idle)
+
+        let hasOnlyEmptySegment = panel.segmentCount == 1
+            && panel.fullText.isEmpty && panel.allCaptures.isEmpty
+
+        if hasOnlyEmptySegment {
+            panel.setSegments([makeInitialSegment(text: text, capture: newCaptures.first)])
+        } else if let capture = newCaptures.first {
+            panel.appendSegment(InputSegment(text: text, capture: capture))
+        } else {
+            panel.appendTextToActiveSegment(text)
+        }
+
+        session?.captures.append(contentsOf: newCaptures)
+    }
+
+    private func showNewPanel(text: String, newCaptures: [CapturedContext]) {
+        session?.captures = newCaptures
+        showPanelWithSegments([makeInitialSegment(text: text, capture: newCaptures.first)])
+    }
+
+    private func makeInitialSegment(text: String, capture: CapturedContext?) -> InputSegment {
+        if let capture {
+            return InputSegment(text: text, capture: capture)
+        }
+        return InputSegment(text: text)
     }
 
     func showPanelWithSegments(_ segments: [InputSegment]) {

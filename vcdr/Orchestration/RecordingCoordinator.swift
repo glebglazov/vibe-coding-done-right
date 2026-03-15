@@ -158,11 +158,8 @@ final class RecordingCoordinator {
             self?.delegate?.recordingCoordinatorDidCaptureSelection()
         }
 
-        if !isFollowUp {
-            let isQuickAction = settings.activeMode.quickAction
-            if isQuickAction {
-                recordingIndicator.show()
-            }
+        if !isFollowUp && settings.activeMode.quickAction {
+            recordingIndicator.show()
         }
 
         if settings.audioSettings.pauseMediaDuringRecording {
@@ -170,20 +167,7 @@ final class RecordingCoordinator {
         }
 
         let started = await audioRecorder.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID)
-        if started {
-            state = .recording
-            recordingStartInstant = .now
-            destinationHotkeyManager.isEnabled = true
-            updateEscCancel()
-
-            Task {
-                await clipboardMonitor.start(baselineChangeCount: clipboardBaseline) { [weak self] _ in
-                    self?.recordingIndicator.signalClipboardCapture()
-                    self?.delegate?.recordingCoordinatorDidCaptureClipboard()
-                }
-            }
-
-        } else {
+        guard started else {
             await mediaPlaybackController.resumeIfNeeded()
             state = .error("Failed to start recording")
             delegate?.recordingCoordinatorDidFailRecording(message: "Failed to start recording")
@@ -191,6 +175,19 @@ final class RecordingCoordinator {
             recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Failed to start recording")
             resetAfterDelay()
+            return
+        }
+
+        state = .recording
+        recordingStartInstant = .now
+        destinationHotkeyManager.isEnabled = true
+        updateEscCancel()
+
+        Task {
+            await clipboardMonitor.start(baselineChangeCount: clipboardBaseline) { [weak self] _ in
+                self?.recordingIndicator.signalClipboardCapture()
+                self?.delegate?.recordingCoordinatorDidCaptureClipboard()
+            }
         }
     }
 
