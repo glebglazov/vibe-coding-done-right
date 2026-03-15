@@ -157,6 +157,9 @@ final class CapturePanel {
         }
         panel?.makeKey()
         if viewModel?.isRecording != true {
+            // Trigger focus through SwiftUI's own view update mechanism — more reliable than
+            // the NSView tree walk when the view hierarchy is being recreated after minimize.
+            viewModel?.focusRequest += 1
             Task { @MainActor [weak self] in
                 // Wait for SwiftUI to lay out the expanded hosting view
                 try? await Task.sleep(for: Self.expandFocusDelay)

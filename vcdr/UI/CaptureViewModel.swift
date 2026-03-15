@@ -15,6 +15,9 @@ final class CaptureViewModel {
     var conversationTurns: [ConversationTurn] = []
     var isMinimized: Bool = false
     var scrollTrigger: Int = 0
+    /// Bumped to request focus on the active segment's editor via SwiftUI's own
+    /// view update mechanism, bypassing the NSView tree walk in focusActiveTextView.
+    var focusRequest: Int = 0
     var clipboardCaptureCount: Int = 0
     var processedByModeName: String?
     var modeSwitcherViewModel: ModeSwitcherViewModel?

@@ -127,6 +127,14 @@ struct CaptureView: View {
             hintBar
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
+    .onChange(of: viewModel.focusRequest, initial: true) { _, newValue in
+        guard newValue > 0 else { return }
+        let index = viewModel.activeSegmentIndex
+        guard index < viewModel.segments.count else { return }
+        let segmentID = viewModel.segments[index].id
+        focusCursorAtEnd[segmentID] = false
+        focusTriggers[segmentID, default: 0] += 1
+    }
     }
 
     // MARK: - Header Bar

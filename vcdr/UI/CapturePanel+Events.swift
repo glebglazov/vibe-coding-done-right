@@ -69,6 +69,11 @@ extension CapturePanel {
                             let length = (textView.string as NSString).length
                             textView.setSelectedRange(NSRange(location: length, length: 0))
                         }
+                        // Force the insertion point (blinking cursor) to redraw and restart its
+                        // blink timer. Without this, the cursor can be invisible when focus is set
+                        // during a panel resize animation — makeFirstResponder succeeds but the
+                        // insertion point never draws at the final frame size.
+                        textView.updateInsertionPointStateAndRestartTimer(true)
                         return
                     }
                 }
