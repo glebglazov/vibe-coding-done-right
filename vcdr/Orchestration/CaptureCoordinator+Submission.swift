@@ -134,6 +134,9 @@ extension CaptureCoordinator {
 
     func executeStreamingSubmission(_ snapshot: SubmissionSnapshot, text: String) {
         let streamResult = SubmissionPipeline.runStreaming(context: snapshot.pipelineContext)
+        // Save full panel state before startProcessing clears it — restored on error.
+        let savedSegments = panel.viewModel?.segments ?? [InputSegment()]
+        let savedTurns = panel.currentTurns
         panel.startProcessing(inputText: text)
         recordingIndicator.hide()
 
@@ -167,74 +170,95 @@ extension CaptureCoordinator {
                 Logger.app.info("Capture view: streaming complete")
             } catch {
                 streamResult.cancel()
-                if accumulated.isEmpty {
-                    panel.showProcessingError(error.localizedDescription)
-                } else {
-                    panel.finishStreaming(outputText: accumulated)
-                    panel.setError(error.localizedDescription)
-                }
-                if panel.isVisible {
-                    self.rewirePanelCallbacks()
-                }
-                session = nil
+                panel.restoreConversation(turns: savedTurns, segments: savedSegments, error: error.localizedDescription)
+                self.rebuildSessionAfterError(snapshot: snapshot, followUpContext: snapshot.pipelineContext.followUpContext)
+                self.rewirePanelCallbacks()
                 Logger.app.error("Capture view streaming failed: \(error)")
             }
         }
     }
 
     func executeNonStreamingSubmission(_ snapshot: SubmissionSnapshot, text: String) {
+        // Save pre-submission state — restored if processing itself fails.
+        let savedSegments = panel.viewModel?.segments ?? [InputSegment()]
+        let savedTurns = panel.currentTurns
+
         if snapshot.mode.processingType == .bashScript {
             panel.startProcessing(inputText: text)
         }
 
         Task { @MainActor in
+            // Step 1: Process text
+            let result: SubmissionPipeline.Result
             do {
-                let result = try await SubmissionPipeline.run(context: snapshot.pipelineContext)
+                result = try await SubmissionPipeline.process(context: snapshot.pipelineContext)
+            } catch {
+                // Processing failed — restore pre-submission state
+                panel.restoreConversation(turns: savedTurns, segments: savedSegments, error: error.localizedDescription)
+                self.rebuildSessionAfterError(snapshot: snapshot, followUpContext: snapshot.pipelineContext.followUpContext)
+                self.rewirePanelCallbacks()
+                Logger.app.error("Capture view processing failed: \(error)")
+                return
+            }
 
-                if snapshot.destination.type == .outputPanel {
-                    recordingIndicator.hide()
-                    if snapshot.mode.processingType == .bashScript {
-                        panel.finishProcessing(outputText: result.processedText)
-                        if result.hadExternalProcessing {
-                            panel.setProcessedByModeName(snapshot.mode.name)
-                        }
-                        panel.makeKeyIfVisible()
-                    } else {
-                        panel.dismiss()
-                    }
-                } else {
-                    panel.dismiss()
-                    recordingIndicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
+            // Processing succeeded — commit the result as a conversation turn.
+            // This is the state we restore to if the action fails below.
+            if snapshot.mode.processingType == .bashScript {
+                panel.finishProcessing(outputText: result.processedText)
+                if result.hadExternalProcessing {
+                    panel.setProcessedByModeName(snapshot.mode.name)
                 }
+            }
 
+            // Step 2: Execute output action
+            do {
+                try await SubmissionPipeline.executeAction(context: snapshot.pipelineContext, processedText: result.processedText)
+            } catch {
+                // Action failed — processing result is already committed as a conversation turn,
+                // so start with empty segments (not savedSegments which would duplicate the input).
+                panel.setError(error.localizedDescription)
+                panel.setSegments([InputSegment()])
                 recordOrUpdateHistory(
                     hasUnsubmittedDraft: snapshot.hasUnsubmittedDraft,
                     conversationID: snapshot.conversationID,
                     input: text, output: result.processedText, captures: snapshot.captures,
                     mode: snapshot.mode, hadExternalProcessing: result.hadExternalProcessing
                 )
-
-                if panel.isVisible && result.hadExternalProcessing {
-                    rebuildSessionForFollowUp(
-                        conversationID: snapshot.conversationID,
-                        followUpContext: result.processedText,
-                        previousActiveApp: snapshot.previousActiveApp
-                    )
-                }
-
-                self.overrides.markPipelineCompleted()
-                if panel.isVisible {
-                    self.rewirePanelCallbacks()
-                }
-                Logger.app.info("Capture view: pipeline complete")
-            } catch {
-                panel.showProcessingError(error.localizedDescription)
-                if panel.isVisible {
-                    self.rewirePanelCallbacks()
-                }
-                session = nil
-                Logger.app.error("Capture view pipeline failed: \(error)")
+                self.rebuildSessionAfterError(snapshot: snapshot)
+                self.rewirePanelCallbacks()
+                Logger.app.error("Capture view action failed: \(error)")
+                return
             }
+
+            // Full success
+            if snapshot.destination.type == .outputPanel {
+                recordingIndicator.hide()
+                panel.makeKeyIfVisible()
+            } else {
+                panel.dismiss()
+                recordingIndicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
+            }
+
+            recordOrUpdateHistory(
+                hasUnsubmittedDraft: snapshot.hasUnsubmittedDraft,
+                conversationID: snapshot.conversationID,
+                input: text, output: result.processedText, captures: snapshot.captures,
+                mode: snapshot.mode, hadExternalProcessing: result.hadExternalProcessing
+            )
+
+            if panel.isVisible && result.hadExternalProcessing {
+                rebuildSessionForFollowUp(
+                    conversationID: snapshot.conversationID,
+                    followUpContext: result.processedText,
+                    previousActiveApp: snapshot.previousActiveApp
+                )
+            }
+
+            self.overrides.markPipelineCompleted()
+            if panel.isVisible {
+                self.rewirePanelCallbacks()
+            }
+            Logger.app.info("Capture view: pipeline complete")
         }
     }
 
@@ -274,5 +298,19 @@ extension CaptureCoordinator {
         session?.conversationID = conversationID
         session?.followUpContext = followUpContext
         session?.previousActiveApp = previousActiveApp
+    }
+
+    /// Rebuilds the session after a pipeline error so the capture view
+    /// continues to function (user can change mode/destination and retry).
+    /// Pass the previous followUpContext when the conversation state hasn't changed
+    /// (processing failed). Leave nil when a new turn was added (action failed) —
+    /// the conversation turns already carry the context.
+    func rebuildSessionAfterError(snapshot: SubmissionSnapshot, followUpContext: String? = nil) {
+        session = PipelineSession()
+        session?.conversationTurns = panel.currentTurns
+        session?.conversationID = snapshot.conversationID
+        session?.captures = panel.allCaptures
+        session?.previousActiveApp = snapshot.previousActiveApp
+        session?.followUpContext = followUpContext
     }
 }

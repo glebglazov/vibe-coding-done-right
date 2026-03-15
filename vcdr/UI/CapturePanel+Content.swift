@@ -130,6 +130,24 @@ extension CapturePanel {
         Logger.actions.error("Capture panel processing failed: \(message)")
     }
 
+    /// Restores the full conversation state from before submission and shows an error.
+    /// Called when the pipeline or action fails so the user sees their original
+    /// conversation + input and can fix the issue and retry.
+    func restoreConversation(turns: [ConversationTurn], segments: [InputSegment], error message: String) {
+        guard let viewModel else { return }
+        viewModel.conversationTurns = turns
+        viewModel.segments = segments
+        viewModel.activeSegmentIndex = max(0, segments.count - 1)
+        viewModel.errorMessage = message
+        viewModel.phase = .error
+        if viewModel.isMinimized {
+            expand()
+        } else {
+            resizePanel()
+        }
+        Logger.actions.error("Capture panel processing failed: \(message)")
+    }
+
     func setError(_ message: String) {
         viewModel?.errorMessage = message
         viewModel?.phase = .error

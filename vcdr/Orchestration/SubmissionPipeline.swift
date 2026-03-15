@@ -24,10 +24,8 @@ enum SubmissionPipeline {
 
     // MARK: - Non-Streaming Execution
 
-    /// Runs the text processing pipeline and routes the result to the destination.
-    /// For `.outputPanel` destinations, does NOT execute an action (caller handles display).
-    /// For other destinations, executes the action (paste/copy/bash).
-    static func run(context: Context) async throws -> Result {
+    /// Runs the text processing pipeline (mode transforms) without executing the output action.
+    static func process(context: Context) async throws -> Result {
         let pipelineResult = try await TextProcessingPipeline.run(
             mode: context.mode,
             text: context.text,
@@ -37,21 +35,29 @@ enum SubmissionPipeline {
             conversationID: context.conversationID,
             parameterValues: context.parameterValues
         )
-
-        if context.destination.type != .outputPanel {
-            if let action = OutputActionFactory.makeAction(
-                for: context.destination,
-                targetAppPID: context.targetAppPID,
-                conversationID: context.conversationID
-            ) {
-                try await action.execute(text: pipelineResult.text)
-            }
-        }
-
         return Result(
             processedText: pipelineResult.text,
             hadExternalProcessing: pipelineResult.hadExternalProcessing
         )
+    }
+
+    /// Executes the output action (paste/copy/bash) for non-outputPanel destinations.
+    static func executeAction(context: Context, processedText: String) async throws {
+        guard context.destination.type != .outputPanel else { return }
+        if let action = OutputActionFactory.makeAction(
+            for: context.destination,
+            targetAppPID: context.targetAppPID,
+            conversationID: context.conversationID
+        ) {
+            try await action.execute(text: processedText)
+        }
+    }
+
+    /// Convenience: runs processing + action in one call. Used by quick action path.
+    static func run(context: Context) async throws -> Result {
+        let result = try await process(context: context)
+        try await executeAction(context: context, processedText: result.processedText)
+        return result
     }
 
     // MARK: - Streaming Execution
