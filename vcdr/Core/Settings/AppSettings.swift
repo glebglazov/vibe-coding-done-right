@@ -41,22 +41,10 @@ struct HotkeyBinding: Codable, Equatable {
 
 @Observable
 final class AppSettings {
-    var modeSwitcherHotkey: HotkeyBinding {
+    var hotkeySettings: HotkeySettings {
         didSet { save() }
     }
-    var pushToTypeHotkey: HotkeyBinding {
-        didSet { save() }
-    }
-    var pushToTypeExpandDelay: Int {
-        didSet { save() }
-    }
-    var toggleRecordingHotkey: HotkeyBinding {
-        didSet { save() }
-    }
-    var copyLatestCaptureHotkey: HotkeyBinding {
-        didSet { save() }
-    }
-    var cancelRecordingHotkey: HotkeyBinding {
+    var transcriptionSettings: TranscriptionSettings {
         didSet { save() }
     }
     var modes: [Mode] {
@@ -69,18 +57,6 @@ final class AppSettings {
         didSet { save() }
     }
     var audioSettings: AudioSettings {
-        didSet { save() }
-    }
-    var showModeSwitcherHint: Bool {
-        didSet { save() }
-    }
-    var removeFillerWords: Bool {
-        didSet { save() }
-    }
-    var terminatorTemplateEnabled: Bool {
-        didSet { save() }
-    }
-    var terminatorTemplate: String {
         didSet { save() }
     }
     /// Template IDs whose CLI tools are currently available. Not persisted.
@@ -132,82 +108,80 @@ final class AppSettings {
         static let removeFillerWords = "removeFillerWords"
         static let terminatorTemplateEnabled = "terminatorTemplateEnabled"
         static let terminatorTemplate = "terminatorTemplate"
-        // Legacy key for migration
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
-        // Legacy keys for migration
-        // Legacy keys — used only for one-time migration to toggleRecordingHotkey
         static let legacyPushToTalkHotkey = "pushToTalkHotkey"
         static let legacyKeyCode = "hotkeyKeyCode"
         static let legacyModifiers = "hotkeyModifiers"
     }
 
+    // MARK: - Decode/Encode Helpers
+
+    private static func decodeSetting<T: Codable>(
+        from defaults: UserDefaults, forKey key: String, default defaultValue: T
+    ) -> T {
+        guard let data = defaults.data(forKey: key),
+              let decoded = try? JSONDecoder().decode(T.self, from: data) else {
+            return defaultValue
+        }
+        return decoded
+    }
+
+    private static func boolSetting(from defaults: UserDefaults, forKey key: String, default defaultValue: Bool) -> Bool {
+        defaults.object(forKey: key) != nil ? defaults.bool(forKey: key) : defaultValue
+    }
+
+    private func encode<T: Codable>(_ value: T, forKey key: String) {
+        if let encoded = try? JSONEncoder().encode(value) {
+            userDefaults.set(encoded, forKey: key)
+        }
+    }
+
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
 
-        // Load mode switcher hotkey (default: unassigned)
-        if let data = userDefaults.data(forKey: Keys.modeSwitcherHotkey),
-           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
-            self.modeSwitcherHotkey = decoded
-        } else {
-            self.modeSwitcherHotkey = .unassigned
-        }
-
-        // Load push-to-type hotkey (default: unassigned)
-        if let data = userDefaults.data(forKey: Keys.pushToTypeHotkey),
-           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
-            self.pushToTypeHotkey = decoded
-        } else {
-            self.pushToTypeHotkey = .unassigned
-        }
-
-        // Load push-to-type expand delay (default: 500ms)
+        // Load hotkey settings from individual keys (supports legacy migration)
+        var hotkeys = HotkeySettings.default
+        hotkeys.modeSwitcherHotkey = Self.decodeSetting(from: userDefaults, forKey: Keys.modeSwitcherHotkey, default: .unassigned)
+        hotkeys.pushToTypeHotkey = Self.decodeSetting(from: userDefaults, forKey: Keys.pushToTypeHotkey, default: .unassigned)
         if userDefaults.object(forKey: Keys.pushToTypeExpandDelay) != nil {
-            self.pushToTypeExpandDelay = userDefaults.integer(forKey: Keys.pushToTypeExpandDelay)
-        } else {
-            self.pushToTypeExpandDelay = Self.defaultPushToTypeExpandDelay
+            hotkeys.pushToTypeExpandDelay = userDefaults.integer(forKey: Keys.pushToTypeExpandDelay)
         }
-
-        // Load toggle recording hotkey (default: Cmd+Option+Space)
-        // Migrates from legacy push-to-talk hotkey if toggle was never configured
+        // Toggle recording hotkey with 3-level migration
         if let data = userDefaults.data(forKey: Keys.toggleRecordingHotkey),
            let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
-            self.toggleRecordingHotkey = decoded
+            hotkeys.toggleRecordingHotkey = decoded
         } else if let data = userDefaults.data(forKey: Keys.legacyPushToTalkHotkey),
                   let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data),
                   decoded.isAssigned {
-            // Migrate from push-to-talk hotkey
-            self.toggleRecordingHotkey = decoded
+            hotkeys.toggleRecordingHotkey = decoded
         } else {
-            // Migrate from very old legacy keys
             let savedKeyCode = userDefaults.integer(forKey: Keys.legacyKeyCode)
             let savedModifiers = userDefaults.integer(forKey: Keys.legacyModifiers)
             if savedKeyCode != 0 || savedModifiers != 0 {
-                self.toggleRecordingHotkey = HotkeyBinding(
-                    keyCode: UInt16(savedKeyCode),
-                    modifiers: UInt64(savedModifiers)
+                hotkeys.toggleRecordingHotkey = HotkeyBinding(
+                    keyCode: UInt16(savedKeyCode), modifiers: UInt64(savedModifiers)
                 )
-            } else {
-                self.toggleRecordingHotkey = .defaultToggleRecording
             }
         }
+        hotkeys.copyLatestCaptureHotkey = Self.decodeSetting(
+            from: userDefaults, forKey: Keys.copyLatestCaptureHotkey, default: .unassigned
+        )
+        hotkeys.cancelRecordingHotkey = Self.decodeSetting(
+            from: userDefaults, forKey: Keys.cancelRecordingHotkey, default: .defaultCancelRecording
+        )
+        hotkeys.showModeSwitcherHint = Self.boolSetting(from: userDefaults, forKey: Keys.showModeSwitcherHint, default: true)
+        self.hotkeySettings = hotkeys
 
-        // Load copy latest capture hotkey (default: unassigned)
-        if let data = userDefaults.data(forKey: Keys.copyLatestCaptureHotkey),
-           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
-            self.copyLatestCaptureHotkey = decoded
-        } else {
-            self.copyLatestCaptureHotkey = .unassigned
-        }
+        // Load transcription settings
+        self.transcriptionSettings = TranscriptionSettings(
+            removeFillerWords: Self.boolSetting(from: userDefaults, forKey: Keys.removeFillerWords, default: true),
+            terminatorTemplateEnabled: Self.boolSetting(
+                from: userDefaults, forKey: Keys.terminatorTemplateEnabled, default: true
+            ),
+            terminatorTemplate: userDefaults.string(forKey: Keys.terminatorTemplate) ?? Mode.defaultTerminatorTemplate
+        )
 
-        // Load cancel recording hotkey (default: Escape)
-        if let data = userDefaults.data(forKey: Keys.cancelRecordingHotkey),
-           let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
-            self.cancelRecordingHotkey = decoded
-        } else {
-            self.cancelRecordingHotkey = .defaultCancelRecording
-        }
-
-        // Load modes into local var first (can't use self.modes before all properties init)
+        // Load modes (with legacy migration)
         let loadedModes: [Mode]
         if let modesData = userDefaults.data(forKey: Keys.modes),
            let decoded = try? JSONDecoder().decode([Mode].self, from: modesData),
@@ -220,8 +194,7 @@ final class AppSettings {
             let oldBashCommand = userDefaults.string(forKey: "bashCommand") ?? ""
             let migratedProcessingType: ProcessingType = oldActionType == .bash ? .bashScript : .none
             loadedModes = [Mode(
-                id: UUID(),
-                name: "Default",
+                id: UUID(), name: "Default",
                 processingType: migratedProcessingType,
                 processingCommand: migratedProcessingType == .bashScript ? oldBashCommand : ""
             )]
@@ -237,7 +210,7 @@ final class AppSettings {
             self.outputDestinations = [OutputDestination.makeDefaultOutputPanel(), OutputDestination.makeDefaultPaste()]
         }
 
-        // Load active mode ID, defaulting to first mode
+        // Load active mode ID
         if let savedActiveID = userDefaults.string(forKey: Keys.activeModeID),
            let uuid = UUID(uuidString: savedActiveID) {
             self.activeModeID = uuid
@@ -245,49 +218,40 @@ final class AppSettings {
             self.activeModeID = loadedModes.first?.id ?? UUID()
         }
 
-        // Load mode switcher hint preference (default: true)
-        if userDefaults.object(forKey: Keys.showModeSwitcherHint) != nil {
-            self.showModeSwitcherHint = userDefaults.bool(forKey: Keys.showModeSwitcherHint)
-        } else {
-            self.showModeSwitcherHint = true
-        }
-
-        // Load filler word removal preference (default: true)
-        if userDefaults.object(forKey: Keys.removeFillerWords) != nil {
-            self.removeFillerWords = userDefaults.bool(forKey: Keys.removeFillerWords)
-        } else {
-            self.removeFillerWords = true
-        }
-
-        // Load terminator template settings (default: enabled with <dot><space>)
-        if userDefaults.object(forKey: Keys.terminatorTemplateEnabled) != nil {
-            self.terminatorTemplateEnabled = userDefaults.bool(forKey: Keys.terminatorTemplateEnabled)
-        } else {
-            self.terminatorTemplateEnabled = true
-        }
-        self.terminatorTemplate = userDefaults.string(forKey: Keys.terminatorTemplate) ?? Mode.defaultTerminatorTemplate
-
-        // Load audio settings (with migration from legacy preferredInputDeviceID)
+        // Load audio settings (with legacy migration)
         if let data = userDefaults.data(forKey: Keys.audioSettings),
            let decoded = try? JSONDecoder().decode(AudioSettings.self, from: data) {
             self.audioSettings = decoded
         } else {
             let legacyDeviceID = userDefaults.string(forKey: Keys.legacyPreferredInputDeviceID)
-            self.audioSettings = AudioSettings(
-                preferredInputDeviceID: legacyDeviceID,
-                pauseMediaDuringRecording: true
-            )
+            self.audioSettings = AudioSettings(preferredInputDeviceID: legacyDeviceID, pauseMediaDuringRecording: true)
         }
 
-        // Ensure built-in Output Panel destination exists (migration for existing installs)
+        // Ensure built-in destinations exist (migration for existing installs)
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInOutputPanelID }) {
             outputDestinations.append(OutputDestination.makeDefaultOutputPanel())
         }
-
-        // Ensure built-in Copy destination exists (migration for existing installs)
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
             outputDestinations.append(OutputDestination.makeDefaultCopy())
         }
+    }
+
+    private func save() {
+        encode(hotkeySettings.modeSwitcherHotkey, forKey: Keys.modeSwitcherHotkey)
+        encode(hotkeySettings.pushToTypeHotkey, forKey: Keys.pushToTypeHotkey)
+        userDefaults.set(hotkeySettings.pushToTypeExpandDelay, forKey: Keys.pushToTypeExpandDelay)
+        encode(hotkeySettings.toggleRecordingHotkey, forKey: Keys.toggleRecordingHotkey)
+        encode(hotkeySettings.copyLatestCaptureHotkey, forKey: Keys.copyLatestCaptureHotkey)
+        encode(hotkeySettings.cancelRecordingHotkey, forKey: Keys.cancelRecordingHotkey)
+        userDefaults.set(hotkeySettings.showModeSwitcherHint, forKey: Keys.showModeSwitcherHint)
+        userDefaults.set(activeModeID.uuidString, forKey: Keys.activeModeID)
+        encode(modes, forKey: Keys.modes)
+        encode(outputDestinations, forKey: Keys.outputDestinations)
+        encode(audioSettings, forKey: Keys.audioSettings)
+        userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
+        userDefaults.set(transcriptionSettings.terminatorTemplateEnabled, forKey: Keys.terminatorTemplateEnabled)
+        userDefaults.set(transcriptionSettings.terminatorTemplate, forKey: Keys.terminatorTemplate)
+        Logger.settings.info("Settings saved")
     }
 
     /// Creates template modes for newly available tools and refreshes availability state.
@@ -318,39 +282,5 @@ final class AppSettings {
                 Logger.settings.info("Active mode hidden, switched to: \(firstVisible.name)")
             }
         }
-    }
-
-    private func save() {
-        if let encoded = try? JSONEncoder().encode(modeSwitcherHotkey) {
-            userDefaults.set(encoded, forKey: Keys.modeSwitcherHotkey)
-        }
-        if let encoded = try? JSONEncoder().encode(pushToTypeHotkey) {
-            userDefaults.set(encoded, forKey: Keys.pushToTypeHotkey)
-        }
-        userDefaults.set(pushToTypeExpandDelay, forKey: Keys.pushToTypeExpandDelay)
-        if let encoded = try? JSONEncoder().encode(toggleRecordingHotkey) {
-            userDefaults.set(encoded, forKey: Keys.toggleRecordingHotkey)
-        }
-        if let encoded = try? JSONEncoder().encode(copyLatestCaptureHotkey) {
-            userDefaults.set(encoded, forKey: Keys.copyLatestCaptureHotkey)
-        }
-        if let encoded = try? JSONEncoder().encode(cancelRecordingHotkey) {
-            userDefaults.set(encoded, forKey: Keys.cancelRecordingHotkey)
-        }
-        userDefaults.set(activeModeID.uuidString, forKey: Keys.activeModeID)
-        if let encoded = try? JSONEncoder().encode(modes) {
-            userDefaults.set(encoded, forKey: Keys.modes)
-        }
-        if let encoded = try? JSONEncoder().encode(outputDestinations) {
-            userDefaults.set(encoded, forKey: Keys.outputDestinations)
-        }
-        if let encoded = try? JSONEncoder().encode(audioSettings) {
-            userDefaults.set(encoded, forKey: Keys.audioSettings)
-        }
-        userDefaults.set(showModeSwitcherHint, forKey: Keys.showModeSwitcherHint)
-        userDefaults.set(removeFillerWords, forKey: Keys.removeFillerWords)
-        userDefaults.set(terminatorTemplateEnabled, forKey: Keys.terminatorTemplateEnabled)
-        userDefaults.set(terminatorTemplate, forKey: Keys.terminatorTemplate)
-        Logger.settings.info("Settings saved")
     }
 }
