@@ -298,15 +298,9 @@ struct SelectionCapturer: Sendable {
         return nil
     }
 
-    /// Simulates Cmd+C via CGEvent. Uses HID tap with nil source — the simplest method
-    /// that works reliably for apps with Accessibility permission.
+    /// Simulates Cmd+C via CGEvent. Delegates to KeyboardSimulator for the actual keystroke.
     private func simulateCmdC() {
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: Self.cVirtualKeyCode, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: Self.cVirtualKeyCode, keyDown: false)
-        keyDown?.flags = .maskCommand
-        keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        KeyboardSimulator.simulateCmdC()
     }
 
     // MARK: - Alert Volume Helpers

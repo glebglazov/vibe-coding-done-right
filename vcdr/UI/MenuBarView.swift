@@ -5,8 +5,6 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     private static let previewLineLimit = 2
-    private static let copiedFeedbackDuration: Duration = .seconds(1.5)
-
     @State private var showCopied = false
 
     var body: some View {
@@ -22,13 +20,8 @@ struct MenuBarView: View {
                 Divider()
 
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(latest.latestOutput, forType: .string)
-                    showCopied = true
-                    Task {
-                        try? await Task.sleep(for: Self.copiedFeedbackDuration)
-                        showCopied = false
-                    }
+                    ClipboardHelper.writeString(latest.latestOutput)
+                    CopiedFeedback.trigger($showCopied)
                 } label: {
                     VStack(alignment: .leading) {
                         Text(latest.previewText)

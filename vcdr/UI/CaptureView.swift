@@ -454,8 +454,7 @@ struct CaptureView: View {
 
     private func copyButton(for text: String) -> some View {
         Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
+            ClipboardHelper.writeString(text)
         } label: {
             Image(systemName: "doc.on.doc")
                 .font(.system(size: Self.copyButtonSize))

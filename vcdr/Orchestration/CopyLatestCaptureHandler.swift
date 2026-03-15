@@ -48,8 +48,7 @@ final class CopyLatestCaptureHandler {
         }
 
         let textToCopy = conversation.latestOutput
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(textToCopy, forType: .string)
+        ClipboardHelper.writeString(textToCopy)
 
         recordingIndicator.showCopied()
         Logger.actions.info("Copied latest capture to clipboard")

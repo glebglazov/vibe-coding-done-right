@@ -59,7 +59,6 @@ private struct ConversationRowView: View {
     // MARK: - Constants
     private static let previewLineLimit = 3
     private static let selectionPreviewLineLimit = 2
-    private static let copiedFeedbackDuration: Duration = .seconds(1.5)
 
     @State private var showCopied = false
 
@@ -153,12 +152,7 @@ private struct ConversationRowView: View {
     }
 
     private func copyToClipboard(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        showCopied = true
-        Task {
-            try? await Task.sleep(for: Self.copiedFeedbackDuration)
-            showCopied = false
-        }
+        ClipboardHelper.writeString(text)
+        CopiedFeedback.trigger($showCopied)
     }
 }
