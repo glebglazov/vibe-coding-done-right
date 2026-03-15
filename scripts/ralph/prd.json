@@ -102,7 +102,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "The three methods follow identical pattern: hide(), create NSHostingView, makeEphemeralPanel, positionAtTopCenter, orderFrontRegardless, assign to self.panel, Task sleep then conditionally nil panel. Only difference is the view content and sleep duration constant."
     },
     {

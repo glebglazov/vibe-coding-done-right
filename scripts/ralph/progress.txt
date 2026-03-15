@@ -20,6 +20,7 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - BashRunner uses buildEnvironment() and resolveCommand() private helpers to avoid duplication between run() and runStreaming()
 - Use EventTapManager for CGEvent tap lifecycle (install/uninstall/reEnableTap) — shared by GlobalHotkeyManager and DestinationHotkeyManager
 - No updateHotkey() aliases — callers call setupHotkey()/setupEscCancel()/setupDestinationHotkeys() directly
+- RecordingIndicatorPanel uses showEphemeral(content:duration:topOffset:) for all brief auto-dismissing indicators — add new ones via thin wrappers calling showEphemeral
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -86,4 +87,17 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - The updateEscCancel() private method in RecordingCoordinator is NOT an alias — it controls isEnabled based on state, distinct from setupEscCancel() which does full registration. Don't remove it
   - updateDestinationHotkeys() had zero external callers (only defined, never called from outside RecordingCoordinator), safe to delete without updating any call sites
   - The CGEvent tap callback uses Unmanaged pointer passing — each manager still owns its callback logic, only the tap infrastructure (create/source/enable/cleanup) is shared
+---
+
+## 2026-03-15 - US-006
+- Consolidated three near-identical ephemeral indicator methods (showCancelled, showCopied, showCopyError) into a single generic showEphemeral(content:duration:topOffset:) method with thin public wrappers
+- Moved all three duration constants (cancelledDisplayDuration, copiedDisplayDuration, copyErrorDisplayDuration) to the Constants section at the top of RecordingIndicatorPanel
+- Moved RecordingIndicatorView, AudioWaveformView, and AnimatedDotsView from RecordingIndicator.swift to RecordingIndicatorViews.swift
+- Changed RecordingIndicatorView from `private` to `internal` access (required when moving to a separate file)
+- RecordingIndicator.swift: 491 → 280 lines; RecordingIndicatorViews.swift: 129 → 300 lines
+- Files changed: 2 modified (RecordingIndicator.swift, RecordingIndicatorViews.swift), net -38 lines
+- **Learnings for future iterations:**
+  - When moving `private struct` views to another file in the same module, just remove the `private` keyword — Swift's default `internal` access works across files in the same module
+  - The existing views in RecordingIndicatorViews.swift don't use `// MARK: - Constants` headers inside their structs — removed them from the moved views for consistency and to stay under 300 lines
+  - showCancelled() has a unique topOffset parameter (uses stored currentTopOffset) while the other two always use 0 — the generic showEphemeral takes topOffset as a defaulted parameter to handle both cases
 ---
