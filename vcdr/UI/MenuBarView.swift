@@ -21,7 +21,7 @@ struct MenuBarView: View {
 
                 Button {
                     ClipboardHelper.writeString(latest.latestOutput)
-                    CopiedFeedback.trigger($showCopied)
+                    CopiedFeedback.trigger { showCopied = $0 }
                 } label: {
                     VStack(alignment: .leading) {
                         Text(latest.previewText)

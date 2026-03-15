@@ -36,7 +36,7 @@ struct OutputDestination: Identifiable, Equatable {
     /// Used in the mode switcher for bare-key matching and display.
     var activationKeyCharacter: String {
         guard activationHotkey.isAssigned else { return "" }
-        return GlobalHotkeyManager.keyNameForCode(CGKeyCode(activationHotkey.keyCode))
+        return KeyCodeMap.name(for: CGKeyCode(activationHotkey.keyCode))
     }
 
     // MARK: - Constants

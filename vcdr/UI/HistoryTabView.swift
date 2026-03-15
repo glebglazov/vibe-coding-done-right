@@ -152,6 +152,6 @@ private struct ConversationRowView: View {
 
     private func copyToClipboard(_ text: String) {
         ClipboardHelper.writeString(text)
-        CopiedFeedback.trigger($showCopied)
+        CopiedFeedback.trigger { showCopied = $0 }
     }
 }

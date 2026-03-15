@@ -3,8 +3,9 @@ import AVFoundation
 import CoreAudio
 import OSLog
 
+@MainActor
 @Observable
-final class AudioRecorder: NSObject {
+final class AudioRecorder {
     private(set) var isRecording = false
     /// Rolling buffer of recent audio level samples (0.0–1.0), one per meter tick.
     /// Oldest sample at index 0, newest at the end. Used by the waveform visualizer
@@ -12,7 +13,9 @@ final class AudioRecorder: NSObject {
     private(set) var audioLevels: [Float] = Array(repeating: 0, count: levelSampleCount)
 
     private var audioRecorder: AVAudioRecorder?
-    private var levelTimer: Timer?
+    /// nonisolated(unsafe) allows deinit cleanup. Safe because deinit runs
+    /// only when no other references exist, so no concurrent access is possible.
+    private nonisolated(unsafe) var levelTimer: Timer?
     private var recordingStartTime: ContinuousClock.Instant?
 
     #if DEBUG

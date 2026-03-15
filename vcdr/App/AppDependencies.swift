@@ -33,8 +33,7 @@ final class AppDependencies {
 
     init() {
         let settings = AppSettings()
-        // Check tool availability and create template modes
-        settings.refreshTemplateAvailability()
+        // Tool availability is checked asynchronously after init via refreshTemplateAvailability()
         let provider = ParakeetProvider()
         self.settings = settings
         self.transcriptionProvider = provider
@@ -110,6 +109,9 @@ final class AppDependencies {
     }
 
     func initialize() async {
+        // Check tool availability and create template modes (async to avoid blocking main thread)
+        await settings.refreshTemplateAvailability()
+
         checkPermissions()
         startPermissionPolling()
 

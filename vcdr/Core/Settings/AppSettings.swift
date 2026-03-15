@@ -255,8 +255,8 @@ final class AppSettings {
     }
 
     /// Creates template modes for newly available tools and refreshes availability state.
-    func refreshTemplateAvailability() {
-        availableTemplateIDs = ToolAvailabilityChecker.checkAll()
+    func refreshTemplateAvailability() async {
+        availableTemplateIDs = await ToolAvailabilityChecker.checkAll()
 
         // Migrate legacy "dictation" template to "plain"
         for i in modes.indices where modes[i].templateID == "dictation" {

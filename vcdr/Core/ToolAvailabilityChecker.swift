@@ -8,11 +8,11 @@ enum ToolAvailabilityChecker {
     /// Checks which template tools are available by running `which <command>`.
     /// Returns the set of template IDs whose tools are found in PATH.
     /// Templates with no availability command (always available) are included automatically.
-    static func checkAll() -> Set<String> {
+    static func checkAll() async -> Set<String> {
         var available: Set<String> = []
         for template in ModeTemplate.all {
             if let command = template.availabilityCommand {
-                if isToolAvailable(command) {
+                if await isToolAvailable(command) {
                     available.insert(template.id)
                 }
             } else {
@@ -26,7 +26,8 @@ enum ToolAvailabilityChecker {
     /// Runs `which <command>` via the user's interactive zsh to check PATH.
     /// Uses `zsh -ic` to load the user's shell profile so tools installed
     /// via npm, brew, etc. are found.
-    private static func isToolAvailable(_ command: String) -> Bool {
+    /// Runs process.waitUntilExit() off the main thread to avoid blocking.
+    private static func isToolAvailable(_ command: String) async -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = ["-c", "zsh -ic 'which \(command)' 2>/dev/null"]
@@ -35,11 +36,16 @@ enum ToolAvailabilityChecker {
 
         do {
             try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
         } catch {
             Logger.settings.warning("Tool check failed for \(command): \(error)")
             return false
+        }
+
+        // Wait for process completion off the calling thread
+        return await withCheckedContinuation { continuation in
+            process.terminationHandler = { finishedProcess in
+                continuation.resume(returning: finishedProcess.terminationStatus == 0)
+            }
         }
     }
 }
