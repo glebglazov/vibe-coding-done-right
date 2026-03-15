@@ -37,6 +37,12 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - CaptureViewModel.errorMessage stores the last processing error; CaptureViewModel.clearError() resets error state and triggers panel resize
 - ErrorBannerView provides click-to-copy error display with dismiss button — use it for showing actionable error messages in panel headers
 - CapturePanel.expand() preserves both .recording and .error phases — add new persistent phases to the preserve check
+- Hotkey settings updates use coordinator methods (e.g., coordinator.updateToggleRecordingKeyCode()) that combine settings write + re-registration — views never directly write settings + call setupHotkey separately
+- Mode management (disable with fallback, delete with fallback) lives on AppSettings: setModeDisabled(_:disabled:) and deleteMode(_:)
+- Destination management (isDestinationInUse, deleteDestination) lives on AppSettings+Compatibility.swift
+- Mode parameter mutations (removeParameter, moveParameterUp, moveParameterDown, addParameter) live on Mode struct itself
+- ConversationTurn.parseInput() parses <capture-N> tags and returns [InputPart] — used by CaptureView+History for rendering
+- Conversation.canContinue(modes:) checks eligibility for continuing a conversation — used by HistoryTabView and AppDependencies
 - For CoreFoundation type casts (AXUIElement, CFBoolean): use `guard let ref = anyObj else { return }` + `unsafeBitCast(ref, to: AXUIElement.self)` — `as?` triggers "always succeeds" error, `as!` is a force unwrap. For CFBoolean, cast to NSNumber and use `.boolValue`
 
 ## 2026-03-15 - US-001
@@ -271,4 +277,21 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - Duration.debugFormatted was `private extension` (file-scoped) — when splitting files that both use it, change to `extension` (internal) so both files can access it
   - DebugTestRunner and DebugTabView are both `#if DEBUG` gated — the new file must also wrap in `#if DEBUG`
   - Xcode's fileSystemSynchronizedGroups auto-discovers new files — no project file changes needed (same pattern as US-002)
+---
+
+## 2026-03-15 - US-017
+- Extracted business logic from 6 views into coordinators/models/settings:
+  - HomeTabView: Added hotkey update methods (updateToggleRecordingKeyCode/Modifiers, updateCancelRecordingKeyCode/Modifiers, updatePushToTypeKeyCode/Modifiers, updateModeSwitcherKeyCode/Modifiers, updateCopyLatestCaptureKeyCode/Modifiers) to RecordingCoordinator, CaptureCoordinator, ModeSwitcherCoordinator, CopyLatestCaptureHandler — each combines settings write + re-registration in a single call
+  - ModesTabView: Moved mode disable/delete fallback logic (setModeDisabled, deleteMode) to AppSettings+Compatibility.swift
+  - OutputDestinationsTabView: Moved isDestinationInUse and deleteDestination to AppSettings+Compatibility.swift
+  - ModeDetailView: Added parameter mutation methods (removeParameter, moveParameterUp, moveParameterDown, addParameter) to Mode struct
+  - CaptureView+History: Moved parseTurnInput to ConversationTurn.parseInput() — removed TurnInputPart enum from view, added InputPart enum to ConversationTurn
+  - HistoryTabView: Moved canContinue eligibility rule to Conversation.canContinue(modes:) — also updated AppDependencies.openConversationFromHistory to use the same method
+- Files changed: 15 modified (no new files)
+- **Learnings for future iterations:**
+  - When adding methods to CaptureCoordinator, put them in extension files (RecordingHandlers, Submission) to stay under 300 lines — the main file is at 295 lines
+  - AppSettings+Compatibility.swift is the right place for business logic methods on AppSettings — the main AppSettings.swift is near 286 lines
+  - CopyLatestCaptureHandler.settings is `private` — but the new update methods are in the same file so they can access it. Same for ModeSwitcherCoordinator.settings
+  - ConversationTurn.InputPart must be Sendable since ConversationTurn is Sendable — CapturedContext is already Sendable so this works
+  - The canContinue logic was duplicated in AppDependencies.openConversationFromHistory — always search for duplicates of extracted logic across the codebase
 ---

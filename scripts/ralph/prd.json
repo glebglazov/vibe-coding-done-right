@@ -290,7 +290,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "This is the largest story in this batch. Each extraction is independent — if one is tricky, skip it and note why. The goal is to move domain decisions out of views, not to refactor the entire view layer. Reference thoughts/shared/research/2026-03-15-architecture-assessment-and-inconsistencies.md for detailed analysis."
     },
     {
