@@ -26,3 +26,6 @@ xcuserdata/
 .env.production.local
 
 thoughts
+
+# Ralph autonomous agent loop
+scripts/ralph/
