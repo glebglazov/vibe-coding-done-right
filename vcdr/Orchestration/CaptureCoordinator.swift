@@ -226,6 +226,12 @@ final class CaptureCoordinator {
     private func startExpandTimer() {
         expandTimerTask?.cancel()
         let delayMs = settings.pushToTypeExpandDelay
+        if delayMs <= 0 {
+            // Expand immediately — no pill state
+            guard panel.isVisible, panel.isMinimized else { return }
+            panel.expand()
+            return
+        }
         expandTimerTask = Task {
             try? await Task.sleep(for: .milliseconds(delayMs))
             guard !Task.isCancelled else { return }
