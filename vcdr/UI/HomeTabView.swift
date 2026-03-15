@@ -66,8 +66,7 @@ struct HomeTabView: View {
                         Button(action: { dependencies.modeSwitcherCoordinator.showSwitcher() }) {
                             let mode = dependencies.settings.activeMode
                             let dest = dependencies.settings.outputDestination(for: mode.defaultOutputDestinationID)
-                            let parts = [mode.name, mode.defaultParameterLabels, dest.symbol].compactMap { $0 }
-                            Text(parts.joined(separator: " · "))
+                            Text(buildModeLabel(modeName: mode.name, parameterLabels: mode.defaultParameterLabels, destinationSymbol: dest.symbol))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

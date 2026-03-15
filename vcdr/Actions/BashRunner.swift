@@ -15,6 +15,33 @@ enum BashRunner {
     private static let conversationIDEnvironmentVariable = "VCDR_CONV_ID"
     private static let shellPath = "/bin/bash"
 
+    // MARK: - Private Helpers
+
+    private static func resolveCommand(_ command: String) -> String {
+        command.replacingOccurrences(of: textPlaceholder, with: "$\(textEnvironmentVariable)")
+    }
+
+    private static func buildEnvironment(
+        text: String,
+        conversationMessages: String?,
+        conversationID: String?,
+        extraEnvironment: [String: String]
+    ) -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        env[textEnvironmentVariable] = text
+        env[dictationEnvironmentVariable] = text
+        if let conversationMessages {
+            env[conversationEnvironmentVariable] = conversationMessages
+        }
+        if let conversationID {
+            env[conversationIDEnvironmentVariable] = conversationID
+        }
+        for (key, value) in extraEnvironment {
+            env[key] = value
+        }
+        return env
+    }
+
     /// Runs a bash command with the given text passed as $VCDR_TEXT environment variable.
     /// The `{}` placeholder in the command is replaced with `$VCDR_TEXT`.
     ///
@@ -33,7 +60,7 @@ enum BashRunner {
         conversationID: String? = nil,
         extraEnvironment: [String: String] = [:]
     ) async throws -> String {
-        let resolvedCommand = command.replacingOccurrences(of: textPlaceholder, with: "$\(textEnvironmentVariable)")
+        let resolvedCommand = resolveCommand(command)
 
         if !extraEnvironment.isEmpty {
             Logger.actions.info("Executing bash command with extra env: \(extraEnvironment)")
@@ -44,20 +71,10 @@ enum BashRunner {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = ["-c", resolvedCommand]
-
-        var env = ProcessInfo.processInfo.environment
-        env[textEnvironmentVariable] = text
-        env[dictationEnvironmentVariable] = text
-        if let conversationMessages {
-            env[conversationEnvironmentVariable] = conversationMessages
-        }
-        if let conversationID {
-            env[conversationIDEnvironmentVariable] = conversationID
-        }
-        for (key, value) in extraEnvironment {
-            env[key] = value
-        }
-        process.environment = env
+        process.environment = buildEnvironment(
+            text: text, conversationMessages: conversationMessages,
+            conversationID: conversationID, extraEnvironment: extraEnvironment
+        )
 
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -102,27 +119,17 @@ enum BashRunner {
         conversationID: String? = nil,
         extraEnvironment: [String: String] = [:]
     ) -> (stream: AsyncThrowingStream<String, Error>, cancel: @Sendable () -> Void) {
-        let resolvedCommand = command.replacingOccurrences(of: textPlaceholder, with: "$\(textEnvironmentVariable)")
+        let resolvedCommand = resolveCommand(command)
 
         Logger.actions.info("Executing streaming bash command")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = ["-c", resolvedCommand]
-
-        var env = ProcessInfo.processInfo.environment
-        env[textEnvironmentVariable] = text
-        env[dictationEnvironmentVariable] = text
-        if let conversationMessages {
-            env[conversationEnvironmentVariable] = conversationMessages
-        }
-        if let conversationID {
-            env[conversationIDEnvironmentVariable] = conversationID
-        }
-        for (key, value) in extraEnvironment {
-            env[key] = value
-        }
-        process.environment = env
+        process.environment = buildEnvironment(
+            text: text, conversationMessages: conversationMessages,
+            conversationID: conversationID, extraEnvironment: extraEnvironment
+        )
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()

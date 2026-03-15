@@ -47,8 +47,7 @@ struct MenuBarView: View {
 
             let mode = dependencies.settings.activeMode
             let dest = dependencies.settings.outputDestination(for: mode.defaultOutputDestinationID)
-            let parts = [mode.name, mode.defaultParameterLabels, dest.symbol].compactMap { $0 }
-            Text("Mode: \(parts.joined(separator: " · "))")
+            Text("Mode: \(buildModeLabel(modeName: mode.name, parameterLabels: mode.defaultParameterLabels, destinationSymbol: dest.symbol))")
                 .foregroundStyle(.secondary)
 
             Text("Hotkey: \(hotkeyDisplay)")

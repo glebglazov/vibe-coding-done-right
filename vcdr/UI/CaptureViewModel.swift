@@ -58,8 +58,11 @@ final class CaptureViewModel {
     var modeLabel: String {
         let destinationID = overrides.destinationOverride ?? settings.activeMode.defaultOutputDestinationID
         let destination = settings.outputDestination(for: destinationID)
-        let parts = [settings.activeMode.name, overrides.resolvedParameterLabels(for: settings.activeMode), destination.symbol].compactMap { $0 }
-        return parts.joined(separator: " · ")
+        return buildModeLabel(
+            modeName: settings.activeMode.name,
+            parameterLabels: overrides.resolvedParameterLabels(for: settings.activeMode),
+            destinationSymbol: destination.symbol
+        )
     }
 
     /// All captures across all segments, preserving order.
@@ -94,10 +97,7 @@ final class CaptureViewModel {
 
     /// Mode label for the minimized pill: "Mode · params · dest symbol" + " ⚡" for quick action
     var pillModeLabel: String {
-        let destinationID = overrides.destinationOverride ?? settings.activeMode.defaultOutputDestinationID
-        let destination = settings.outputDestination(for: destinationID)
-        let parts = [settings.activeMode.name, overrides.resolvedParameterLabels(for: settings.activeMode), destination.symbol].compactMap { $0 }
-        var label = parts.joined(separator: " · ")
+        var label = modeLabel
         if settings.activeMode.quickAction {
             label += " \u{26A1}"
         }

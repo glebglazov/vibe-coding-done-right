@@ -51,23 +51,10 @@ struct OutputDestinationsListView: View {
     }
 
     private func addDestination() {
-        let newDest = OutputDestination.makeNewBashScript(
-            name: nextUniqueName()
-        )
+        let name = nextUniqueName(base: Self.newDestinationBaseName, existingNames: Set(settings.outputDestinations.map(\.name)))
+        let newDest = OutputDestination.makeNewBashScript(name: name)
         settings.outputDestinations.append(newDest)
         path.append(OutputDestinationNavID(id: newDest.id))
-    }
-
-    private func nextUniqueName() -> String {
-        let existingNames = Set(settings.outputDestinations.map(\.name))
-        if !existingNames.contains(Self.newDestinationBaseName) {
-            return Self.newDestinationBaseName
-        }
-        var counter = 1
-        while existingNames.contains("\(Self.newDestinationBaseName) (\(counter))") {
-            counter += 1
-        }
-        return "\(Self.newDestinationBaseName) (\(counter))"
     }
 
     /// A destination is "in use" if any mode references it as its default output
@@ -132,9 +119,6 @@ struct OutputDestinationDetailView: View {
     @Binding var destination: OutputDestination
     @FocusState private var isNameFieldFocused: Bool
 
-    // MARK: - Constants
-    private static let selectAllDelay: Duration = .milliseconds(100)
-
     var body: some View {
         Form {
             Section {
@@ -183,12 +167,6 @@ struct OutputDestinationDetailView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(destination.name)
-        .onAppear {
-            isNameFieldFocused = true
-            Task { @MainActor in
-                try? await Task.sleep(for: Self.selectAllDelay)
-                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
-            }
-        }
+        .modifier(SelectAllOnAppear(focusState: $isNameFieldFocused))
     }
 }

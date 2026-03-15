@@ -117,24 +117,10 @@ struct ModesListView: View {
     }
 
     private func addMode() {
-        let newMode = Mode(
-            id: UUID(),
-            name: nextUniqueModeName()
-        )
+        let name = nextUniqueName(base: Self.newModeBaseName, existingNames: Set(settings.modes.map(\.name)))
+        let newMode = Mode(id: UUID(), name: name)
         settings.modes.append(newMode)
         path.append(newMode.id)
-    }
-
-    private func nextUniqueModeName() -> String {
-        let existingNames = Set(settings.modes.map(\.name))
-        if !existingNames.contains(Self.newModeBaseName) {
-            return Self.newModeBaseName
-        }
-        var counter = 1
-        while existingNames.contains("\(Self.newModeBaseName) (\(counter))") {
-            counter += 1
-        }
-        return "\(Self.newModeBaseName) (\(counter))"
     }
 
     private func deleteMode(_ mode: Mode) {
@@ -214,12 +200,6 @@ struct ModeDetailView: View {
     @Binding var mode: Mode
     let outputDestinations: [OutputDestination]
     @FocusState private var isNameFieldFocused: Bool
-
-    // MARK: - Constants
-
-    /// Delay before selecting all text — needed for the NSTextField first responder
-    /// to settle after SwiftUI focus state change, otherwise selectAll is a no-op.
-    private static let selectAllDelay: Duration = .milliseconds(100)
 
     var body: some View {
         Form {
@@ -313,13 +293,7 @@ struct ModeDetailView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(mode.name)
-        .onAppear {
-            isNameFieldFocused = true
-            Task { @MainActor in
-                try? await Task.sleep(for: Self.selectAllDelay)
-                NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
-            }
-        }
+        .modifier(SelectAllOnAppear(focusState: $isNameFieldFocused))
     }
 
     // MARK: - Parameters

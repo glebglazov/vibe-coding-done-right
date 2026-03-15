@@ -380,8 +380,11 @@ private struct RecordingIndicatorView: View {
                 if phaseState.phase == .recording || phaseState.phase == .processing {
                     let destinationID = overrides.destinationOverride ?? settings.activeMode.defaultOutputDestinationID
                     let destination = settings.outputDestination(for: destinationID)
-                    let labelParts = [settings.activeMode.name, overrides.resolvedParameterLabels(for: settings.activeMode), destination.symbol].compactMap { $0 }
-                    Text(labelParts.joined(separator: " · "))
+                    Text(buildModeLabel(
+                        modeName: settings.activeMode.name,
+                        parameterLabels: overrides.resolvedParameterLabels(for: settings.activeMode),
+                        destinationSymbol: destination.symbol
+                    ))
                         .font(.caption)
                         .foregroundStyle(.primary)
                         .transition(.opacity)
