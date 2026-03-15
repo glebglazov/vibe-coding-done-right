@@ -14,6 +14,10 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - Xcode project uses fileSystemSynchronizedGroups — new files are auto-discovered, no manual project file edits needed
 - Use ClipboardHelper.writeString() for clipboard writes, KeyboardSimulator for CGEvent keystroke simulation, CopiedFeedback.trigger() for copied state feedback
 - Use panelOriginBelowMenuBar() for panel positioning, panel.configureAsOverlay() for NSPanel setup, removeEventMonitor() for event monitor cleanup (PanelHelpers.swift)
+- Use nextUniqueName(base:existingNames:) for generating unique names (NamingHelper.swift)
+- Use SelectAllOnAppear modifier for detail views that auto-select name field on appear
+- Use buildModeLabel(modeName:parameterLabels:destinationSymbol:) for mode label construction (ModeLabel.swift)
+- BashRunner uses buildEnvironment() and resolveCommand() private helpers to avoid duplication between run() and runStreaming()
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -54,4 +58,17 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - ModeSwitcherPanel.show() stores screenFrame and menuBarHeight for reuse in the resize callback — the shared positioning function doesn't eliminate this because the resize callback needs the same values to recompute position
   - CapturePanel.tearDown() has NotificationCenter observer cleanup (becameKeyObserver, resignKeyObserver) which is different from NSEvent monitor cleanup — don't try to unify these
   - The three panel types vary on hasShadow and ignoresMouseEvents — configureAsOverlay takes these as parameters with sensible defaults (both false)
+---
+
+## 2026-03-15 - US-004
+- Extracted buildEnvironment() and resolveCommand() private helpers in BashRunner, eliminating duplicated env setup between run() and runStreaming()
+- Created NamingHelper.swift with nextUniqueName(base:existingNames:) — replaced duplicated implementations in ModesListView and OutputDestinationsListView
+- Created SelectAllOnAppear ViewModifier — replaced duplicated onAppear focus+selectAll pattern in ModeDetailView and OutputDestinationDetailView (including duplicate selectAllDelay constants)
+- Created ModeLabel.swift with buildModeLabel() — replaced 5 duplicated mode label constructions in CaptureViewModel (2x), RecordingIndicatorView, MenuBarView, and HomeTabView
+- Simplified CaptureViewModel.pillModeLabel to reuse modeLabel instead of duplicating the construction
+- Files changed: 7 modified, 3 new (NamingHelper.swift, ModeLabel.swift, SelectAllOnAppear.swift)
+- **Learnings for future iterations:**
+  - When creating a global function with the same name as an existing instance method (e.g., nextUniqueName), Swift resolves to the instance method — inline the call at the call site instead of creating a same-named wrapper method
+  - MenuBarView and HomeTabView use mode.defaultParameterLabels (no overrides), while CaptureViewModel and RecordingIndicator use overrides.resolvedParameterLabels — the buildModeLabel function accepts a parameterLabels parameter to support both variants
+  - BashRunner also had a duplicated resolvedCommand computation (textPlaceholder replacement) — worth extracting alongside the env setup
 ---
