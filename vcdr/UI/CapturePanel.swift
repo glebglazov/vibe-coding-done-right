@@ -216,14 +216,6 @@ final class CapturePanel {
         resizePanel()
     }
 
-    func insertSegment(_ segment: InputSegment) {
-        guard let viewModel else { return }
-        let insertIndex = min(viewModel.activeSegmentIndex + 1, viewModel.segments.count)
-        viewModel.segments.insert(segment, at: insertIndex)
-        viewModel.activeSegmentIndex = insertIndex
-        resizePanel()
-    }
-
     func appendSegment(_ segment: InputSegment) {
         guard let viewModel else { return }
         viewModel.segments.append(segment)
@@ -262,10 +254,6 @@ final class CapturePanel {
     var segmentCount: Int { viewModel?.segments.count ?? 0 }
     var allCaptures: [CapturedContext] { viewModel?.allCaptures ?? [] }
     var fullText: String { viewModel?.fullText ?? "" }
-
-    func insertTextAtCursor(_ text: String) {
-        appendTextToActiveSegment(text)
-    }
 
     func startProcessing(inputText: String) {
         let captures = viewModel?.allCaptures ?? []
@@ -321,24 +309,6 @@ final class CapturePanel {
         viewModel.phase = .idle
         expand()
         Logger.actions.error("Capture panel processing failed: \(message)")
-    }
-
-    func updateCaptures(_ captures: [CapturedContext]) {
-        guard let viewModel else { return }
-        if captures.isEmpty {
-            for i in viewModel.segments.indices {
-                viewModel.segments[i].capture = nil
-            }
-        } else if viewModel.segments.count == 1 && captures.count == 1 {
-            viewModel.segments[0].capture = captures[0]
-        } else {
-            let existingText = viewModel.segments.first?.text ?? ""
-            var newSegments = [InputSegment(text: existingText, capture: captures.first)]
-            for capture in captures.dropFirst() {
-                newSegments.append(InputSegment(capture: capture))
-            }
-            viewModel.segments = newSegments
-        }
     }
 
     func signalClipboardCapture() {
