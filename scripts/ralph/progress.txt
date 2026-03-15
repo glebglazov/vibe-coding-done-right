@@ -438,3 +438,14 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - DebugTabView is wrapped in #if DEBUG — the audioRecorder property is also DEBUG-only in AppDependencies
   - replace_all with `dependencies.` → `` efficiently refactors all references in a tab view file
 ---
+
+## 2026-03-15 - US-027
+- Added `isInitialized` property to AppDependencies, set to true after first checkPermissions() call in initialize()
+- Updated HomeTabView to gate permission banner on `isInitialized && needsPermission` — prevents flash on launch
+- Passed `isInitialized` from MainWindowView to HomeTabView
+- Files changed: AppDependencies.swift, HomeTabView.swift, MainWindowView.swift
+- **Learnings for future iterations:**
+  - AppDependencies now has exactly 5 observable properties (the max allowed) — any new observable state needs to go elsewhere or replace an existing one
+  - The permission banner flash was caused by hasMicrophonePermission/hasAccessibilityPermission defaulting to false before checkPermissions() runs — gating on initialization is the minimal fix
+  - checkPermissions() is synchronous (AVCaptureDevice.authorizationStatus + AXIsProcessTrusted), so isInitialized is set immediately after without any async gap
+---

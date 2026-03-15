@@ -462,7 +462,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 27,
-      "passes": false,
+      "passes": true,
       "notes": "The root cause is that needsPermissionAttention starts true (both booleans default to false), then becomes false after checkPermissions() runs. The fix is to gate the UI on initialization completion. Keep the solution minimal — a simple boolean flag and conditional view, not a full splash screen framework."
     },
     {
