@@ -347,7 +347,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "This is the most architecturally significant change in this batch. The delegate pattern replaces the 16-closure wiring block in AppDependencies with cleaner protocol-based composition. Take care with @MainActor isolation on the delegate protocol methods. CaptureCoordinator's Task handle vars (pillResetTask, autoDismissTask, etc.) can be grouped into a struct to reduce observable property count."
     },
     {

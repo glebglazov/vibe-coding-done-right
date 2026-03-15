@@ -47,6 +47,10 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - Use recordingIndicator.dismissAfterDelay(duration) for scheduled indicator auto-dismiss, and recordingIndicator.cancelPendingDismiss() to cancel — replaces per-coordinator dismissIndicatorTask management
 - Use KeyCodeMap for all US ANSI virtual key code lookups: KeyCodeMap.name(for:) for code→name, KeyCodeMap.keyCode(for:) for char→code, KeyCodeMap.cKeyCode/vKeyCode for common constants
 - Use panel.animateResize(to:) for all panel resize animations — standardized NSAnimationContext-based animation with 0.15s default duration (PanelHelpers.swift)
+- RecordingCoordinator uses RecordingCoordinatorDelegate protocol (CaptureCoordinator conforms) instead of 10 closure vars — delegate is set in AppDependencies
+- ModeSwitcherCoordinator uses ModeSwitcherCoordinatorDelegate protocol (AppDependencies conforms) for contextual switcher callbacks — replaces 4 closure vars
+- Use @ObservationIgnored for var properties not observed by views (task handles, internal state, closures, delegates) to reduce observable property count
+- onModeSelected and onDestinationOverrideChanged on ModeSwitcherCoordinator were dead (never assigned) — removed, not replaced
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -329,4 +333,21 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - KeyCodeMap.keyCode(for:) derives the reverse mapping (name→code) lazily from codeToName by filtering single-character entries — no need to maintain a separate hand-coded reverse table
   - NSPanel.setFrame(_:display:animate:) uses system-default animation duration, while NSAnimationContext.runAnimationGroup allows explicit duration control — standardizing on NSAnimationContext with 0.15s gives consistent behavior
   - RecordingIndicatorPanel.hide() must cancel the dismiss task to prevent the task from firing after the panel is already nil — add dismissTask?.cancel() before panel?.close()
+---
+
+## 2026-03-15 - US-020
+- Replaced 10 closure `var` properties on RecordingCoordinator with RecordingCoordinatorDelegate protocol (CaptureCoordinator conforms)
+- Replaced 6 closure `var` properties on ModeSwitcherCoordinator with ModeSwitcherCoordinatorDelegate protocol (AppDependencies conforms) — 2 closures (onModeSelected, onDestinationOverrideChanged) were dead and removed
+- Added @ObservationIgnored to non-view-observed vars: RecordingCoordinator (delegate, pendingDestinationOverride, recordingRun, recordingStartInstant, processingTask), CaptureCoordinator (session, pillResetTask, autoDismissTask, expandTimerTask, originalCapture, accumulatedCaptures, onWillStartInput), ModeSwitcherCoordinator (delegate)
+- Updated E2ETestEnvironment: CallbackResults now conforms to RecordingCoordinatorDelegate and is set as coordinator.delegate
+- Observable var counts: RecordingCoordinator 1 (state), CaptureCoordinator 0 stored + 3 computed, ModeSwitcherCoordinator 0
+- AppDependencies wiring reduced from ~80 lines of closure assignments to 3 lines (delegate + 1 remaining closure + delegate)
+- Files changed: 7 modified, 2 new (RecordingCoordinatorDelegate.swift, ModeSwitcherCoordinatorDelegate.swift), net +18 lines
+- **Learnings for future iterations:**
+  - `weak var delegate` requires the delegate to be a reference type (class) — test helpers like CallbackResults that conform to the delegate must be `final class`, not struct
+  - `@ObservationIgnored` prevents @Observable macro from tracking a property — use for any var not observed by views (task handles, closures, delegates, internal state)
+  - `onModeSelected` and `onDestinationOverrideChanged` on ModeSwitcherCoordinator were never assigned in AppDependencies — they were dead code. With @Observable, settings.activeModeID changes propagate automatically to views, making explicit callback notifications redundant
+  - AppDependencies is a natural delegate for ModeSwitcherCoordinator since contextual switcher logic needs access to multiple coordinators (recordingIndicator, captureCoordinator, coordinator)
+  - CaptureCoordinator's `onWillStartInput` closure remains as the single callback for mode switcher dismissal — both the delegate's `recordingCoordinatorWillStartRecording()` and the PTT flow's `handlePushToTypeKeyDown()` use it
+  - The `modeSwitcherShouldShowContextual` delegate method accesses `coordinator.recordingIndicator` since recordingIndicator is a property on RecordingCoordinator (not stored separately on AppDependencies)
 ---
