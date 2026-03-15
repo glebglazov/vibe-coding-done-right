@@ -33,6 +33,7 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - ModeSwitcherViewModel + NavigationLevel + KeyCode live in ModeSwitcherViewModel.swift; ModeSwitcherView (pure SwiftUI) lives in ModeSwitcherView.swift
 - CaptureView conversation history rendering (conversationHistorySection, turnView, captureBlockquote) lives in CaptureView+History.swift
 - ModeDetailView + ParameterEditorView live in ModeDetailView.swift (extracted from ModesTabView.swift)
+- SelectionCapturer AX helpers (findCopyMenuItem, axChildren, axIsEnabled, enableEnhancedAccessibility) live in SelectionCapturer+AXHelpers.swift
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -205,4 +206,17 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - `private enum` inside an extension works fine for file-local nested types (TurnInputPart)
   - textPadding needed to be made `internal` because it's used by both the main file and the history extension
   - ParameterEditorView can stay `private struct` in ModeDetailView.swift since ModeDetailView uses it from the same file (private at file scope = fileprivate)
+---
+
+## 2026-03-15 - US-013
+- Extracted AX interaction helpers (findCopyMenuItem, findCopyInMenu, axChildren, axIsEnabled, enableEnhancedAccessibility) to SelectionCapturer+AXHelpers.swift (86 lines)
+- Inlined simulateCmdC() one-liner wrapper — captureViaCmdC() now calls KeyboardSimulator.simulateCmdC() directly
+- Changed cVirtualKeyCode from private to internal for extension file access
+- SelectionCapturer.swift: 356 → 271 lines
+- Verified KeyboardSimulator from US-002 is already in use
+- Files changed: 1 modified (SelectionCapturer.swift), 1 new (SelectionCapturer+AXHelpers.swift)
+- **Learnings for future iterations:**
+  - `private static let` constants referenced by extension files must become `static let` (internal) — same pattern seen in US-007/US-008/US-009
+  - findCopyInMenu is only called by findCopyMenuItem (both in the extension file) so it can stay `private` in the extension — file-scoped privacy works within the same file
+  - One-liner wrapper methods that just delegate to a shared helper (like simulateCmdC → KeyboardSimulator.simulateCmdC) should be inlined rather than extracted
 ---

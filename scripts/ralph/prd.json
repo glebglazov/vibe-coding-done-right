@@ -219,7 +219,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "captureViaEditMenu at ~lines 121-176 is the densest method. Alert volume muting at ~lines 220-260 is another extraction candidate."
     }
   ]
