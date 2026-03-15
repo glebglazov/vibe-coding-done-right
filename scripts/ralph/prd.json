@@ -364,7 +364,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 21,
-      "passes": false,
+      "passes": true,
       "notes": "These are safety and layering fixes. The AudioRecorder timer issue is the most critical — it could cause a data race under Swift 6 strict concurrency. The ToolAvailabilityChecker blocking issue is low-risk since it only runs at startup with fast 'which' commands, but making it async is the correct pattern."
     }
   ]

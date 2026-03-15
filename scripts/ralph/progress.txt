@@ -51,6 +51,10 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - ModeSwitcherCoordinator uses ModeSwitcherCoordinatorDelegate protocol (AppDependencies conforms) for contextual switcher callbacks — replaces 4 closure vars
 - Use @ObservationIgnored for var properties not observed by views (task handles, internal state, closures, delegates) to reduce observable property count
 - onModeSelected and onDestinationOverrideChanged on ModeSwitcherCoordinator were dead (never assigned) — removed, not replaced
+- AudioRecorder is @MainActor — timer callback safely mutates audioLevels on the main actor. levelTimer uses nonisolated(unsafe) for deinit cleanup
+- ToolAvailabilityChecker.checkAll() is async — uses terminationHandler instead of blocking waitUntilExit(). Called from AppDependencies.initialize() and MainWindowView.task
+- CopiedFeedback.trigger() accepts a (Bool) -> Void closure (not SwiftUI Binding) and returns @discardableResult Task — fire-and-forget is documented as safe
+- OutputDestination.activationKeyCharacter uses KeyCodeMap.name(for:) directly — no dependency on GlobalHotkeyManager from model layer
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -350,4 +354,18 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - AppDependencies is a natural delegate for ModeSwitcherCoordinator since contextual switcher logic needs access to multiple coordinators (recordingIndicator, captureCoordinator, coordinator)
   - CaptureCoordinator's `onWillStartInput` closure remains as the single callback for mode switcher dismissal — both the delegate's `recordingCoordinatorWillStartRecording()` and the PTT flow's `handlePushToTypeKeyDown()` use it
   - The `modeSwitcherShouldShowContextual` delegate method accesses `coordinator.recordingIndicator` since recordingIndicator is a property on RecordingCoordinator (not stored separately on AppDependencies)
+---
+
+## 2026-03-15 - US-021
+- Added @MainActor to AudioRecorder, removed vestigial NSObject inheritance (no AVAudioRecorderDelegate adopted). Marked levelTimer as nonisolated(unsafe) for deinit cleanup
+- Made ToolAvailabilityChecker.checkAll() async — replaced blocking process.waitUntilExit() with terminationHandler + withCheckedContinuation. Updated call sites: AppSettings.refreshTemplateAvailability() → async, moved from AppDependencies.init() to initialize(), MainWindowView .onAppear → .task
+- Fixed CopiedFeedback: removed SwiftUI import, changed from Binding<Bool> to (Bool) -> Void closure, returns @discardableResult Task with documented fire-and-forget rationale
+- Removed OutputDestination dependency on GlobalHotkeyManager — activationKeyCharacter now uses KeyCodeMap.name(for:) directly (shared Core utility instead of Hotkeys layer)
+- Files changed: 10 modified (AudioRecorder.swift, ToolAvailabilityChecker.swift, CopiedFeedback.swift, OutputDestination.swift, AppSettings.swift, AppDependencies.swift, MainWindowView.swift, MenuBarView.swift, HistoryTabView.swift, project.pbxproj)
+- **Learnings for future iterations:**
+  - @MainActor class deinit is nonisolated — can't access actor-isolated properties. Use `nonisolated(unsafe)` on properties that need deinit cleanup (like Timer). Safe because deinit runs with no other references
+  - Timer.scheduledTimer callback in @MainActor class runs on the main run loop, which is compatible with @MainActor isolation — no special handling needed for the callback itself
+  - Process.terminationHandler fires on an arbitrary thread — use withCheckedContinuation to bridge to async without blocking
+  - Moving refreshTemplateAvailability() from init to initialize() is safe because template modes are only needed after the UI appears, and the settings window's .task modifier also calls it
+  - CopiedFeedback fire-and-forget is acceptable because the only effect is setting a view-local @State bool to false — if the view disappears, the write is harmless
 ---
