@@ -13,7 +13,7 @@ final class RecordingCoordinator {
         case error(String)
     }
 
-    private struct RecordingRunState {
+    struct RecordingRunState {
         var previousActiveApp: NSRunningApplication?
         var captureTask: Task<CapturedContext?, Never>?
         var captures: [CapturedContext] = []
@@ -26,51 +26,49 @@ final class RecordingCoordinator {
         }
     }
 
-    private(set) var state: State = .idle {
+    // MARK: - Constants
+
+    private static let audioSettleDelayBeforeResume: Duration = .milliseconds(300)
+
+    // MARK: - Properties
+
+    var state: State = .idle {
         didSet {
             if oldValue != state {
                 Logger.consistency.info("RC state: \(String(describing: oldValue)) → \(String(describing: self.state))")
             }
         }
     }
-    private let settings: AppSettings
-    private let transcriptionProvider: any TranscriptionProvider
+    let settings: AppSettings
+    let transcriptionProvider: any TranscriptionProvider
     private let audioRecorder: AudioRecorder
-    private let toggleRecordingHotkeyManager = GlobalHotkeyManager()
-    private let escCancelManager = GlobalHotkeyManager()
-    private let destinationHotkeyManager = DestinationHotkeyManager()
-    private var pendingDestinationOverride: UUID?
+    let toggleRecordingHotkeyManager = GlobalHotkeyManager()
+    let escCancelManager = GlobalHotkeyManager()
+    let destinationHotkeyManager = DestinationHotkeyManager()
+    var pendingDestinationOverride: UUID?
     private let mediaPlaybackController: MediaPlaybackController
-    private let recordingIndicator: RecordingIndicatorPanel
+    let recordingIndicator: RecordingIndicatorPanel
     private let selectionCapturer: SelectionCapturer
     private let clipboardMonitor: ClipboardMonitor
     let overrides: ConversationOverrides
 
     var onWillStartRecording: (() -> Void)?
-
     var isPanelVisible: (() -> Bool)?
-
     var onRecordingStarted: ((_ isFollowUp: Bool) -> Void)?
-
     var onTranscribing: (() -> Void)?
-
     var onRecordingComplete: ((RecordingResult) -> Void)?
-
     var onTranscriptionFailed: ((_ isFollowUp: Bool) -> Void)?
-
     var onRecordingCancelled: ((_ wasFollowUp: Bool, _ wasFreshPill: Bool) -> Void)?
-
     var onRecordingFailed: ((_ message: String) -> Void)?
-
     var onSelectionCaptured: (() -> Void)?
-
     var onClipboardCaptured: (() -> Void)?
 
-    private var recordingRun: RecordingRunState?
-
+    var recordingRun: RecordingRunState?
     private var recordingStartInstant: ContinuousClock.Instant?
-    private var processingTask: Task<Void, Never>?
-    private var dismissIndicatorTask: Task<Void, Never>?
+    var processingTask: Task<Void, Never>?
+    var dismissIndicatorTask: Task<Void, Never>?
+
+    // MARK: - Init
 
     init(
         settings: AppSettings,
@@ -91,6 +89,8 @@ final class RecordingCoordinator {
         self.clipboardMonitor = clipboardMonitor
         self.overrides = overrides
     }
+
+    // MARK: - Recording State Machine
 
     func toggleRecording() {
         switch state {
@@ -204,7 +204,7 @@ final class RecordingCoordinator {
         }
     }
 
-    private func stopRecordingAndTranscribe() {
+    func stopRecordingAndTranscribe() {
         destinationHotkeyManager.isEnabled = false
 
         guard state == .recording else {
@@ -247,139 +247,6 @@ final class RecordingCoordinator {
         }
     }
 
-    private func processTranscription(audioURL: URL, recordingDuration: Duration?) async {
-        do {
-            let transcriptionStart = ContinuousClock.now
-            let rawText = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
-            try Task.checkCancellation()
-            let elapsed = transcriptionStart.duration(to: .now)
-            Logger.app.info("Transcribed in \(elapsed): \(rawText)")
-
-            let cleanedText = settings.removeFillerWords ? FillerWordRemover.remove(from: rawText) : rawText
-            let text = settings.terminatorTemplateEnabled
-                ? Mode.applyTerminator(cleanedText, terminator: settings.terminatorTemplate)
-                : cleanedText
-
-            try? FileManager.default.removeItem(at: audioURL)
-
-            var run = recordingRun ?? RecordingRunState()
-            if let captureTask = run.captureTask {
-                if let captured = await captureTask.value {
-                    run.captures.insert(captured, at: 0)
-                }
-                run.captureTask = nil
-                Logger.recording.info("Captures: \(run.captures.count) items")
-            }
-            run.captures.append(contentsOf: run.clipboardCaptures)
-
-            let hadDestinationOverride: Bool
-            if let pending = pendingDestinationOverride {
-                pendingDestinationOverride = nil
-                hadDestinationOverride = true
-                run.destinationOverrideID = pending
-            } else {
-                hadDestinationOverride = false
-            }
-
-            let isFollowUp = run.isFollowUp
-            recordingRun = nil
-
-            guard !text.isEmpty else {
-                escCancelManager.isEnabled = false
-                onTranscriptionFailed?(isFollowUp)
-                processingTask = nil
-                state = .idle
-                return
-            }
-
-            let result = RecordingResult(
-                text: text,
-                captures: run.captures,
-                previousActiveApp: run.previousActiveApp,
-                destinationOverrideID: run.destinationOverrideID,
-                hadDestinationOverride: hadDestinationOverride,
-                isFollowUp: isFollowUp
-            )
-
-            escCancelManager.isEnabled = false
-            processingTask = nil
-            state = .idle
-            onRecordingComplete?(result)
-            Logger.app.info("Pipeline: result emitted to handler")
-
-        } catch is CancellationError {
-            processingTask = nil
-            Logger.app.info("Processing task cancelled")
-        } catch {
-            escCancelManager.isEnabled = false
-            processingTask = nil
-            recordingRun = nil
-            state = .error(error.localizedDescription)
-            onRecordingFailed?(error.localizedDescription)
-            recordingIndicator.update(phase: .error, message: error.localizedDescription)
-            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
-            Logger.app.error("Pipeline failed: \(error)")
-            resetAfterDelay()
-        }
-    }
-
-    func setupToggleRecordingHotkey() {
-        let binding = settings.toggleRecordingHotkey
-        guard binding.isAssigned else {
-            toggleRecordingHotkeyManager.unregister()
-            return
-        }
-
-        toggleRecordingHotkeyManager.onKeyDown = { [weak self] in
-            self?.toggleRecording()
-        }
-        toggleRecordingHotkeyManager.onKeyUp = nil
-
-        _ = toggleRecordingHotkeyManager.register(
-            keyCode: CGKeyCode(binding.keyCode),
-            modifiers: CGEventFlags(rawValue: binding.modifiers)
-        )
-    }
-
-    func setupEscCancel() {
-        let binding = settings.cancelRecordingHotkey
-        guard binding.isAssigned else {
-            escCancelManager.isEnabled = false
-            return
-        }
-        escCancelManager.isEnabled = false
-        escCancelManager.onKeyDown = { [weak self] in
-            self?.cancelRecording()
-        }
-        escCancelManager.onKeyUp = nil
-        _ = escCancelManager.register(
-            keyCode: CGKeyCode(binding.keyCode),
-            modifiers: CGEventFlags(rawValue: binding.modifiers)
-        )
-    }
-
-    func setupDestinationHotkeys() {
-        let bindings = settings.outputDestinations.map { ($0.id, $0.activationHotkey) }
-        destinationHotkeyManager.onDestinationMatched = { [weak self] destinationID in
-            guard let self else { return }
-            self.pendingDestinationOverride = destinationID
-            self.stopRecordingAndTranscribe()
-        }
-        destinationHotkeyManager.register(bindings: bindings)
-    }
-
-    private func updateEscCancel() {
-        escCancelManager.isEnabled = (state == .preparingToRecord || state == .recording || state == .transcribing)
-    }
-
-    func suspendEscCancel() {
-        escCancelManager.isEnabled = false
-    }
-
-    func resumeEscCancel() {
-        updateEscCancel()
-    }
-
     func cancelRecording() {
         escCancelManager.isEnabled = false
         destinationHotkeyManager.isEnabled = false
@@ -417,32 +284,6 @@ final class RecordingCoordinator {
             Logger.app.info("Recording cancelled via Esc")
         }
     }
-
-    private static let audioSettleDelayBeforeResume: Duration = .milliseconds(300)
-    private static let successIndicatorDuration: Duration = .seconds(2)
-    private static let errorIndicatorDuration: Duration = .seconds(10)
-
-    private func resetAfterDelay() {
-        Task {
-            try? await Task.sleep(for: Self.errorIndicatorDuration)
-            if case .error = state {
-                state = .idle
-            }
-        }
-    }
-
-    private func dismissIndicatorAfterDelay(_ duration: Duration) {
-        dismissIndicatorTask?.cancel()
-        dismissIndicatorTask = Task {
-            try? await Task.sleep(for: duration)
-            guard !Task.isCancelled else { return }
-            let phase = recordingIndicator.currentPhase
-            if phase == .success || phase == .error {
-                recordingIndicator.hide()
-            }
-        }
-    }
-
 }
 
 extension RecordingCoordinator.State {
