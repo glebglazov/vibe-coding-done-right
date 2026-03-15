@@ -273,6 +273,7 @@ final class CaptureCoordinator {
         session = nil
         originalCapture = nil
         accumulatedCaptures = []
+        overrides.clearAll()
         Logger.app.info("Capture view dismissed (capture preserved in history)")
     }
 
