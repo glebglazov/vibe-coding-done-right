@@ -13,6 +13,7 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - onWillStartRecording (RecordingCoordinator) and onWillStartInput (CaptureCoordinator) are distinct entry points for voice-recording and push-to-type flows respectively — both are live
 - Xcode project uses fileSystemSynchronizedGroups — new files are auto-discovered, no manual project file edits needed
 - Use ClipboardHelper.writeString() for clipboard writes, KeyboardSimulator for CGEvent keystroke simulation, CopiedFeedback.trigger() for copied state feedback
+- Use panelOriginBelowMenuBar() for panel positioning, panel.configureAsOverlay() for NSPanel setup, removeEventMonitor() for event monitor cleanup (PanelHelpers.swift)
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -40,4 +41,17 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - CopyAction doesn't need AppKit removed — it's still needed for PostTranscriptionAction protocol context
   - PasteAction still needs ApplicationServices for AXIsProcessTrusted()
   - SelectionCapturer.simulateCmdC() kept as thin wrapper rather than inlining KeyboardSimulator.simulateCmdC() to maintain the method as a named step in the capture strategy
+---
+
+## 2026-03-15 - US-003
+- Created PanelHelpers.swift with three shared helpers: panelOriginBelowMenuBar(), NSPanel.configureAsOverlay(), removeEventMonitor()
+- Updated CapturePanel+Layout.swift: panelOrigin() now delegates to shared panelOriginBelowMenuBar()
+- Updated CapturePanel.swift: uses configureAsOverlay(hasShadow: true) and removeEventMonitor() in tearDown
+- Updated RecordingIndicatorPanel: uses configureAsOverlay(ignoresMouseEvents: true) in show() and makeEphemeralPanel(), panelOriginBelowMenuBar() in positionAtTopCenter(), removeEventMonitor() in hideModeSwitcherCleanup()
+- Updated ModeSwitcherPanel: uses configureAsOverlay(hasShadow: true), panelOriginBelowMenuBar() in show(), removeEventMonitor() in hide()
+- Files changed: 4 modified, 1 new (PanelHelpers.swift) — net -12 lines
+- **Learnings for future iterations:**
+  - ModeSwitcherPanel.show() stores screenFrame and menuBarHeight for reuse in the resize callback — the shared positioning function doesn't eliminate this because the resize callback needs the same values to recompute position
+  - CapturePanel.tearDown() has NotificationCenter observer cleanup (becameKeyObserver, resignKeyObserver) which is different from NSEvent monitor cleanup — don't try to unify these
+  - The three panel types vary on hasShadow and ignoresMouseEvents — configureAsOverlay takes these as parameters with sensible defaults (both false)
 ---

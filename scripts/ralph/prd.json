@@ -55,7 +55,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Panel positioning: CapturePanel+Layout, RecordingIndicator:325-332, ModeSwitcherPanel:54-61. NSPanel config: CapturePanel:124-137, ModeSwitcherPanel:39-64, RecordingIndicator:98-117."
     },
     {
