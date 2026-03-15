@@ -111,7 +111,7 @@ extension CaptureCoordinator {
                     panel.dismiss()
                     if !panelWasVisible {
                         recordingIndicator.update(phase: .success)
-                        dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+                        recordingIndicator.dismissAfterDelay(Self.successIndicatorDuration)
                     }
                 }
 
@@ -130,7 +130,7 @@ extension CaptureCoordinator {
                 Logger.app.info("Quick action pipeline complete")
             } catch {
                 recordingIndicator.update(phase: .error, message: error.localizedDescription)
-                dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+                recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
                 Logger.app.error("Quick action pipeline failed: \(error)")
             }
         }
@@ -209,7 +209,7 @@ extension CaptureCoordinator {
                 } else {
                     panel.dismiss()
                     recordingIndicator.update(phase: .success)
-                    dismissIndicatorAfterDelay(Self.successIndicatorDuration)
+                    recordingIndicator.dismissAfterDelay(Self.successIndicatorDuration)
                 }
 
                 recordOrUpdateHistory(

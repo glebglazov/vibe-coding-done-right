@@ -186,7 +186,7 @@ final class CapturePanel {
         guard let panel,
               let origin = Self.panelOrigin(width: Self.minimizedPanelWidth, height: Self.minimizedPanelHeight) else { return }
         let newFrame = NSRect(origin: origin, size: NSSize(width: Self.minimizedPanelWidth, height: Self.minimizedPanelHeight))
-        panel.setFrame(newFrame, display: true, animate: true)
+        panel.animateResize(to: newFrame)
     }
 
     func resizePanelToExpanded() {
@@ -196,7 +196,7 @@ final class CapturePanel {
         let newHeight = Self.calculateHeight(for: turns, segments: segs, segmentHeights: viewModel.segmentHeights, hasError: viewModel.errorMessage != nil)
         guard let origin = Self.panelOrigin(width: Self.panelWidth, height: newHeight) else { return }
         let newFrame = NSRect(origin: origin, size: NSSize(width: Self.panelWidth, height: newHeight))
-        panel.setFrame(newFrame, display: true, animate: true)
+        panel.animateResize(to: newFrame)
     }
 
     func resizePanel() {
@@ -207,6 +207,6 @@ final class CapturePanel {
         let currentFrame = panel.frame
         let newY = currentFrame.maxY - newHeight
         let newFrame = NSRect(x: currentFrame.origin.x, y: newY, width: currentFrame.width, height: newHeight)
-        panel.setFrame(newFrame, display: true, animate: true)
+        panel.animateResize(to: newFrame)
     }
 }

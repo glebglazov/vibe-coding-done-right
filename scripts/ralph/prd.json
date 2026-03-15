@@ -327,7 +327,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 19,
-      "passes": false,
+      "passes": true,
       "notes": "The keyCode mapping consolidation is the most impactful — having the same data in 3 places means bugs where one is updated but others aren't."
     },
     {

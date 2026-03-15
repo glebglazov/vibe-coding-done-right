@@ -52,7 +52,6 @@ final class RecordingIndicatorPanel {
     private static let menuBarGap: CGFloat = 8
     /// Gap between pill and mode switcher list
     private static let modeSwitcherGap: CGFloat = 4
-    private static let resizeAnimationDuration: CGFloat = 0.15
     private static let cancelledDisplayDuration: Duration = .seconds(1)
     private static let copiedDisplayDuration: Duration = .seconds(1.5)
     private static let copyErrorDisplayDuration: Duration = .seconds(2)
@@ -69,6 +68,7 @@ final class RecordingIndicatorPanel {
     private var currentTopOffset: CGFloat = 0
     private var localEventMonitor: Any?
     private var globalClickMonitor: Any?
+    private var dismissTask: Task<Void, Never>?
 
     var isVisible: Bool { panel != nil }
 
@@ -137,9 +137,31 @@ final class RecordingIndicatorPanel {
     }
 
     func hide() {
+        dismissTask?.cancel()
+        dismissTask = nil
         hideModeSwitcherCleanup()
         panel?.close()
         panel = nil
+    }
+
+    /// Schedules an auto-dismiss after the given duration if the indicator is still
+    /// showing a terminal phase (.success or .error). Cancels any previously scheduled dismiss.
+    func dismissAfterDelay(_ duration: Duration) {
+        dismissTask?.cancel()
+        dismissTask = Task {
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            let phase = currentPhase
+            if phase == .success || phase == .error {
+                hide()
+            }
+        }
+    }
+
+    /// Cancels a pending auto-dismiss scheduled by dismissAfterDelay.
+    func cancelPendingDismiss() {
+        dismissTask?.cancel()
+        dismissTask = nil
     }
 
     // MARK: - Contextual Mode Switcher
@@ -203,10 +225,7 @@ final class RecordingIndicatorPanel {
         let newY = currentFrame.maxY - totalHeight
         let newX = currentFrame.midX - width / 2
         let newFrame = NSRect(x: newX, y: newY, width: width, height: totalHeight)
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.resizeAnimationDuration
-            panel.animator().setFrame(newFrame, display: true)
-        }
+        panel.animateResize(to: newFrame)
     }
 
     private func resizeToNormal() {
@@ -215,10 +234,7 @@ final class RecordingIndicatorPanel {
         let newY = currentFrame.maxY - Self.panelHeight
         let newX = currentFrame.midX - Self.panelWidth / 2
         let newFrame = NSRect(x: newX, y: newY, width: Self.panelWidth, height: Self.panelHeight)
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.resizeAnimationDuration
-            panel.animator().setFrame(newFrame, display: true)
-        }
+        panel.animateResize(to: newFrame)
     }
 
     // MARK: - Ephemeral Indicators

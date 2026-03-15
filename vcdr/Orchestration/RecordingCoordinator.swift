@@ -66,7 +66,6 @@ final class RecordingCoordinator {
     var recordingRun: RecordingRunState?
     private var recordingStartInstant: ContinuousClock.Instant?
     var processingTask: Task<Void, Never>?
-    var dismissIndicatorTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -119,7 +118,7 @@ final class RecordingCoordinator {
         }
 
         state = .preparingToRecord
-        dismissIndicatorTask?.cancel()
+        recordingIndicator.cancelPendingDismiss()
         defer {
             if state == .preparingToRecord {
                 Logger.app.error("startRecording exited while still in .preparingToRecord — resetting to .idle")
@@ -137,7 +136,7 @@ final class RecordingCoordinator {
             onRecordingFailed?("Model still loading...")
             recordingIndicator.show()
             recordingIndicator.update(phase: .error, message: "Model still loading...")
-            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
             return
         }
@@ -198,7 +197,7 @@ final class RecordingCoordinator {
             state = .error("Failed to start recording")
             onRecordingFailed?("Failed to start recording")
             recordingIndicator.update(phase: .error, message: "Failed to start recording")
-            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Failed to start recording")
             resetAfterDelay()
         }
@@ -224,7 +223,7 @@ final class RecordingCoordinator {
             state = .error("No audio recorded")
             onRecordingFailed?("No audio recorded")
             recordingIndicator.update(phase: .error, message: "No audio recorded")
-            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
             return
         }

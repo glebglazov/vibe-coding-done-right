@@ -79,7 +79,7 @@ extension RecordingCoordinator {
             state = .error(error.localizedDescription)
             onRecordingFailed?(error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
-            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Pipeline failed: \(error)")
             resetAfterDelay()
         }
@@ -96,15 +96,4 @@ extension RecordingCoordinator {
         }
     }
 
-    func dismissIndicatorAfterDelay(_ duration: Duration) {
-        dismissIndicatorTask?.cancel()
-        dismissIndicatorTask = Task {
-            try? await Task.sleep(for: duration)
-            guard !Task.isCancelled else { return }
-            let phase = recordingIndicator.currentPhase
-            if phase == .success || phase == .error {
-                recordingIndicator.hide()
-            }
-        }
-    }
 }

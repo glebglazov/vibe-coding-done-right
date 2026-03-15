@@ -25,8 +25,6 @@ final class CaptureCoordinator {
 
     var autoDismissTask: Task<Void, Never>?
 
-    var dismissIndicatorTask: Task<Void, Never>?
-
     private var expandTimerTask: Task<Void, Never>?
 
     var onWillStartInput: (() -> Void)?

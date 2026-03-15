@@ -30,6 +30,22 @@ extension NSPanel {
     }
 }
 
+// MARK: - Panel Resize Animation
+
+extension NSPanel {
+    /// Standard resize animation duration used across all panel types.
+    static let resizeAnimationDuration: CGFloat = 0.15
+
+    /// Animates a panel resize using NSAnimationContext for consistent animation behavior.
+    /// Used by CapturePanel, RecordingIndicatorPanel, and ModeSwitcherPanel.
+    func animateResize(to frame: NSRect, duration: CGFloat = resizeAnimationDuration) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = duration
+            self.animator().setFrame(frame, display: true)
+        }
+    }
+}
+
 // MARK: - Event Monitor Cleanup
 
 /// Removes an NSEvent monitor and sets the reference to nil.

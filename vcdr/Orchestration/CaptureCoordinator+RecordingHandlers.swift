@@ -10,7 +10,7 @@ extension CaptureCoordinator {
         }
         pillResetTask?.cancel()
         autoDismissTask?.cancel()
-        dismissIndicatorTask?.cancel()
+        recordingIndicator.cancelPendingDismiss()
         if isFollowUp && panel.isVisible {
             panel.lockForFollowUp()
             panel.setPhase(.recording)
@@ -57,7 +57,7 @@ extension CaptureCoordinator {
             }
         } else if !isFollowUp {
             recordingIndicator.update(phase: .error, message: "No speech detected")
-            dismissIndicatorAfterDelay(Self.errorIndicatorDuration)
+            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
         }
     }
 
@@ -182,18 +182,6 @@ extension CaptureCoordinator {
         configurePanelAndShow()
         panel.setPhase(phase)
         panel.minimize()
-    }
-
-    func dismissIndicatorAfterDelay(_ duration: Duration) {
-        dismissIndicatorTask?.cancel()
-        dismissIndicatorTask = Task {
-            try? await Task.sleep(for: duration)
-            guard !Task.isCancelled else { return }
-            let phase = recordingIndicator.currentPhase
-            if phase == .success || phase == .error {
-                recordingIndicator.hide()
-            }
-        }
     }
 
     // MARK: - Settings + Re-registration

@@ -22,9 +22,9 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - No updateHotkey() aliases — callers call setupHotkey()/setupEscCancel()/setupDestinationHotkeys() directly
 - RecordingIndicatorPanel uses showEphemeral(content:duration:topOffset:) for all brief auto-dismissing indicators — add new ones via thin wrappers calling showEphemeral
 - CaptureCoordinator submission methods (submitText, executeQuickAction, executeStreamingSubmission, executeNonStreamingSubmission, recordOrUpdateHistory, rebuildSessionForFollowUp) live in CaptureCoordinator+Submission.swift
-- CaptureCoordinator recording handler methods (handleRecordingStarted, handleRecordingComplete, handleTranscriptionFailed, handleRecordingCancelled, populateWithTranscription, flashPill, dismissIndicatorAfterDelay) live in CaptureCoordinator+RecordingHandlers.swift
+- CaptureCoordinator recording handler methods (handleRecordingStarted, handleRecordingComplete, handleTranscriptionFailed, handleRecordingCancelled, populateWithTranscription, flashPill) live in CaptureCoordinator+RecordingHandlers.swift
 - RecordingCoordinator hotkey methods (setupToggleRecordingHotkey, setupEscCancel, setupDestinationHotkeys, updateEscCancel, suspendEscCancel, resumeEscCancel) live in RecordingCoordinator+Hotkeys.swift
-- RecordingCoordinator processing methods (processTranscription, resetAfterDelay, dismissIndicatorAfterDelay, errorIndicatorDuration) live in RecordingCoordinator+Processing.swift
+- RecordingCoordinator processing methods (processTranscription, resetAfterDelay, errorIndicatorDuration) live in RecordingCoordinator+Processing.swift
 - CapturePanel event monitoring (setupEventMonitors, focusActiveTextView) lives in CapturePanel+Events.swift
 - CapturePanel content manipulation, processing, mode switcher, and follow-up methods live in CapturePanel+Content.swift
 - CapturePanel layout constants and height calculation live in CapturePanel+Layout.swift
@@ -44,6 +44,9 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - ConversationTurn.parseInput() parses <capture-N> tags and returns [InputPart] — used by CaptureView+History for rendering
 - Conversation.canContinue(modes:) checks eligibility for continuing a conversation — used by HistoryTabView and AppDependencies
 - For CoreFoundation type casts (AXUIElement, CFBoolean): use `guard let ref = anyObj else { return }` + `unsafeBitCast(ref, to: AXUIElement.self)` — `as?` triggers "always succeeds" error, `as!` is a force unwrap. For CFBoolean, cast to NSNumber and use `.boolValue`
+- Use recordingIndicator.dismissAfterDelay(duration) for scheduled indicator auto-dismiss, and recordingIndicator.cancelPendingDismiss() to cancel — replaces per-coordinator dismissIndicatorTask management
+- Use KeyCodeMap for all US ANSI virtual key code lookups: KeyCodeMap.name(for:) for code→name, KeyCodeMap.keyCode(for:) for char→code, KeyCodeMap.cKeyCode/vKeyCode for common constants
+- Use panel.animateResize(to:) for all panel resize animations — standardized NSAnimationContext-based animation with 0.15s default duration (PanelHelpers.swift)
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -314,4 +317,16 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - `ModeSwitcherPanel.maxModesInSwitcher` is the shared constant for the 9-mode switcher limit — used by both ModeSwitcherPanel.calculateHeight and ModesTabView.switcherNumber
   - `KeyCode` enum in ModeSwitcherViewModel.swift is the shared keycode constant source — CaptureViewModel can reference it since both are in the same module
   - `AppSettings.defaultPushToTypeExpandDelay` already existed as a static let — SettingsTypes.swift just needed to reference it instead of duplicating the value
+---
+
+## 2026-03-15 - US-019
+- Extracted dismissIndicatorAfterDelay into RecordingIndicatorPanel as dismissAfterDelay/cancelPendingDismiss — removed duplicate implementations from RecordingCoordinator+Processing and CaptureCoordinator+RecordingHandlers, removed dismissIndicatorTask properties from both coordinators
+- Created KeyCodeMap.swift (vcdr/Core/) — single source-of-truth for US ANSI virtual key code mappings. GlobalHotkeyManager.keyNameForCode now delegates to KeyCodeMap.name(for:), OutputDestination.charToKeyCode replaced with KeyCodeMap.keyCode(for:), KeyboardSimulator uses KeyCodeMap.cKeyCode/vKeyCode
+- Added panel.animateResize(to:) extension on NSPanel in PanelHelpers.swift — standardized resize animation using NSAnimationContext across all three panel types. Replaced NSAnimationContext.runAnimationGroup in RecordingIndicatorPanel and ModeSwitcherPanel, and panel.setFrame(_:display:animate:) in CapturePanel. Removed per-panel resizeAnimationDuration constants
+- Files changed: 11 modified, 1 new (KeyCodeMap.swift)
+- **Learnings for future iterations:**
+  - Moving task management (dismissIndicatorTask) from coordinators to the indicator panel itself is cleaner — the indicator owns its lifecycle and both coordinators were doing identical work
+  - KeyCodeMap.keyCode(for:) derives the reverse mapping (name→code) lazily from codeToName by filtering single-character entries — no need to maintain a separate hand-coded reverse table
+  - NSPanel.setFrame(_:display:animate:) uses system-default animation duration, while NSAnimationContext.runAnimationGroup allows explicit duration control — standardizing on NSAnimationContext with 0.15s gives consistent behavior
+  - RecordingIndicatorPanel.hide() must cancel the dismiss task to prevent the task from firing after the panel is already nil — add dismissTask?.cancel() before panel?.close()
 ---

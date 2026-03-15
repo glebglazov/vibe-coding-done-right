@@ -18,8 +18,6 @@ final class ModeSwitcherPanel {
     static let headerHeight: CGFloat = 24
     /// Maximum number of modes shown in the quick switcher (keys 1-9)
     static let maxModesInSwitcher = 9
-    private static let resizeAnimationDuration: CGFloat = 0.15
-
     /// Stored screen positioning state for reuse during resize
     private var screenFrame: NSRect = .zero
     private var menuBarHeight: CGFloat = 0
@@ -75,10 +73,7 @@ final class ModeSwitcherPanel {
             let x = self.screenFrame.midX - Self.panelWidth / 2
             let y = self.screenFrame.maxY - self.menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar
             let newFrame = NSRect(x: x, y: y, width: Self.panelWidth, height: newHeight)
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = Self.resizeAnimationDuration
-                panel.animator().setFrame(newFrame, display: true)
-            }
+            panel.animateResize(to: newFrame)
         }
 
         // Handle keyboard events via local monitor (works even with nonactivatingPanel + canBecomeKey)
