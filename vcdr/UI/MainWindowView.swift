@@ -71,15 +71,32 @@ struct MainWindowView: View {
                 Group {
                     switch selection {
                     case .home:
-                        HomeTabView(dependencies: dependencies)
+                        HomeTabView(
+                            settings: dependencies.settings,
+                            coordinator: dependencies.coordinator,
+                            modeSwitcherCoordinator: dependencies.modeSwitcherCoordinator,
+                            captureCoordinator: dependencies.captureCoordinator,
+                            copyLatestCaptureHandler: dependencies.copyLatestCaptureHandler,
+                            hasMicrophonePermission: dependencies.hasMicrophonePermission,
+                            hasAccessibilityPermission: dependencies.hasAccessibilityPermission
+                        )
                     case .audio:
-                        AudioTabView(dependencies: dependencies)
+                        AudioTabView(
+                            audioDeviceMonitor: dependencies.audioDeviceMonitor,
+                            inputLevelMonitor: dependencies.inputLevelMonitor,
+                            settings: dependencies.settings,
+                            hasMicrophonePermission: dependencies.hasMicrophonePermission
+                        )
                     case .modes:
                         ModesListView(settings: dependencies.settings, path: $path)
                     case .outputDestinations:
                         OutputDestinationsListView(settings: dependencies.settings, path: $path)
                     case .transcription:
-                        TranscriptionTabView(dependencies: dependencies)
+                        TranscriptionTabView(
+                            settings: dependencies.settings,
+                            isTranscriptionReady: dependencies.isTranscriptionReady,
+                            initializationStatus: dependencies.initializationStatus
+                        )
                     case .history:
                         HistoryTabView(
                             history: dependencies.transcriptionHistory,
@@ -90,7 +107,11 @@ struct MainWindowView: View {
                         )
                     #if DEBUG
                     case .debug:
-                        DebugTabView(dependencies: dependencies)
+                        DebugTabView(
+                            coordinator: dependencies.coordinator,
+                            audioRecorder: dependencies.audioRecorder,
+                            isTranscriptionReady: dependencies.isTranscriptionReady
+                        )
                     #endif
                     case .none:
                         Text("Select a section")

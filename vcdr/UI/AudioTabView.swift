@@ -1,33 +1,36 @@
 import SwiftUI
 
 struct AudioTabView: View {
-    let dependencies: AppDependencies
+    let audioDeviceMonitor: AudioDeviceMonitor
+    let inputLevelMonitor: InputLevelMonitor
+    let settings: AppSettings
+    let hasMicrophonePermission: Bool
 
     var body: some View {
         Form {
             Section("Microphone") {
                 Picker("Input Device", selection: Binding(
-                    get: { dependencies.audioDeviceMonitor.selectedDeviceID },
-                    set: { dependencies.audioDeviceMonitor.selectedDeviceID = $0 }
+                    get: { audioDeviceMonitor.selectedDeviceID },
+                    set: { audioDeviceMonitor.selectedDeviceID = $0 }
                 )) {
-                    ForEach(dependencies.audioDeviceMonitor.devices) { device in
+                    ForEach(audioDeviceMonitor.devices) { device in
                         Text(device.name).tag(device.id)
                     }
                 }
 
-                if dependencies.hasMicrophonePermission {
+                if hasMicrophonePermission {
                     HStack {
                         Text("Sound Check")
                         Spacer()
-                        if dependencies.inputLevelMonitor.isMonitoring {
-                            AudioLevelMeter(level: dependencies.inputLevelMonitor.level)
+                        if inputLevelMonitor.isMonitoring {
+                            AudioLevelMeter(level: inputLevelMonitor.level)
                         }
-                        Button(dependencies.inputLevelMonitor.isMonitoring ? "Stop" : "Test") {
-                            let enable = !dependencies.inputLevelMonitor.isMonitoring
+                        Button(inputLevelMonitor.isMonitoring ? "Stop" : "Test") {
+                            let enable = !inputLevelMonitor.isMonitoring
                             if enable {
                                 startLevelMonitoring()
                             } else {
-                                dependencies.inputLevelMonitor.stop()
+                                inputLevelMonitor.stop()
                             }
                         }
                         .controlSize(.small)
@@ -47,8 +50,8 @@ struct AudioTabView: View {
                 Toggle(
                     "Pause media during recording",
                     isOn: Binding(
-                        get: { dependencies.settings.audioSettings.pauseMediaDuringRecording },
-                        set: { dependencies.settings.audioSettings.pauseMediaDuringRecording = $0 }
+                        get: { settings.audioSettings.pauseMediaDuringRecording },
+                        set: { settings.audioSettings.pauseMediaDuringRecording = $0 }
                     )
                 )
                 .help("Automatically pause music and other media while recording, resume when done.")
@@ -62,19 +65,19 @@ struct AudioTabView: View {
             }
         }
         .onDisappear {
-            dependencies.inputLevelMonitor.stop()
+            inputLevelMonitor.stop()
         }
-        .onChange(of: dependencies.audioDeviceMonitor.selectedDeviceID) {
+        .onChange(of: audioDeviceMonitor.selectedDeviceID) {
             // Restart on the new device only if already monitoring
-            if dependencies.inputLevelMonitor.isMonitoring {
+            if inputLevelMonitor.isMonitoring {
                 startLevelMonitoring()
             }
         }
     }
 
     private func startLevelMonitoring() {
-        dependencies.inputLevelMonitor.start(
-            deviceUID: dependencies.audioDeviceMonitor.selectedDeviceUID
+        inputLevelMonitor.start(
+            deviceUID: audioDeviceMonitor.selectedDeviceUID
         )
     }
 }

@@ -6,7 +6,9 @@ import UniformTypeIdentifiers
 // MARK: - Debug Tab View
 
 struct DebugTabView: View {
-    let dependencies: AppDependencies
+    let coordinator: RecordingCoordinator
+    let audioRecorder: AudioRecorder
+    let isTranscriptionReady: Bool
 
     @State private var testRunner: DebugTestRunner?
     @State private var showingFilePicker = false
@@ -30,7 +32,7 @@ struct DebugTabView: View {
         .navigationTitle("Debug")
         .onAppear {
             if testRunner == nil {
-                testRunner = DebugTestRunner(coordinator: dependencies.coordinator)
+                testRunner = DebugTestRunner(coordinator: coordinator)
             }
         }
     }
@@ -43,12 +45,12 @@ struct DebugTabView: View {
             HStack {
                 Text("Test Audio File")
                 Spacer()
-                if let url = dependencies.audioRecorder.testAudioFileURL {
+                if let url = audioRecorder.testAudioFileURL {
                     Text(url.lastPathComponent)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Button("Clear") {
-                        dependencies.audioRecorder.testAudioFileURL = nil
+                        audioRecorder.testAudioFileURL = nil
                     }
                 } else {
                     Text("None selected")
@@ -61,7 +63,7 @@ struct DebugTabView: View {
             .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.wav, .audio]) { result in
                 if case .success(let url) = result {
                     _ = url.startAccessingSecurityScopedResource()
-                    dependencies.audioRecorder.testAudioFileURL = url
+                    audioRecorder.testAudioFileURL = url
                 }
             }
 
@@ -71,8 +73,8 @@ struct DebugTabView: View {
             }
 
             LabeledContent("Model Ready") {
-                Text(dependencies.isTranscriptionReady ? "Yes" : "No")
-                    .foregroundStyle(dependencies.isTranscriptionReady ? .green : .orange)
+                Text(isTranscriptionReady ? "Yes" : "No")
+                    .foregroundStyle(isTranscriptionReady ? .green : .orange)
             }
 
             if !canRun {
@@ -225,11 +227,11 @@ struct DebugTabView: View {
     // MARK: - Helpers
 
     private var canRun: Bool {
-        dependencies.audioRecorder.testAudioFileURL != nil && dependencies.isTranscriptionReady
+        audioRecorder.testAudioFileURL != nil && isTranscriptionReady
     }
 
     private var stateLabel: String {
-        switch dependencies.coordinator.state {
+        switch coordinator.state {
         case .idle: "Idle"
         case .preparingToRecord: "Preparing..."
         case .recording: "Recording"
@@ -239,7 +241,7 @@ struct DebugTabView: View {
     }
 
     private var stateColor: Color {
-        switch dependencies.coordinator.state {
+        switch coordinator.state {
         case .idle: .green
         case .recording: .red
         case .preparingToRecord, .transcribing: .orange

@@ -2,13 +2,23 @@ import SwiftUI
 import AVFoundation
 
 struct HomeTabView: View {
-    let dependencies: AppDependencies
+    let settings: AppSettings
+    let coordinator: RecordingCoordinator
+    let modeSwitcherCoordinator: ModeSwitcherCoordinator
+    let captureCoordinator: CaptureCoordinator
+    let copyLatestCaptureHandler: CopyLatestCaptureHandler
+    let hasMicrophonePermission: Bool
+    let hasAccessibilityPermission: Bool
+
+    private var needsPermissionAttention: Bool {
+        !hasMicrophonePermission || !hasAccessibilityPermission
+    }
 
     var body: some View {
         Form {
-            if dependencies.needsPermissionAttention {
+            if needsPermissionAttention {
                 Section {
-                    if !dependencies.hasMicrophonePermission {
+                    if !hasMicrophonePermission {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text("Microphone")
@@ -24,7 +34,7 @@ struct HomeTabView: View {
                             .controlSize(.small)
                         }
                     }
-                    if !dependencies.hasAccessibilityPermission {
+                    if !hasAccessibilityPermission {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text("Accessibility")
@@ -52,7 +62,7 @@ struct HomeTabView: View {
                 HStack {
                     Spacer()
                     VStack(spacing: 8) {
-                        Button(action: { dependencies.coordinator.toggleRecording() }) {
+                        Button(action: { coordinator.toggleRecording() }) {
                             Label(
                                 isRecording ? "Stop Recording" : "Start Recording",
                                 systemImage: isRecording ? "stop.circle.fill" : "record.circle"
@@ -63,9 +73,9 @@ struct HomeTabView: View {
                         .tint(isRecording ? .red : .accentColor)
                         .disabled(!canToggleRecording)
 
-                        Button(action: { dependencies.modeSwitcherCoordinator.showSwitcher() }) {
-                            let mode = dependencies.settings.activeMode
-                            let dest = dependencies.settings.outputDestination(for: mode.defaultOutputDestinationID)
+                        Button(action: { modeSwitcherCoordinator.showSwitcher() }) {
+                            let mode = settings.activeMode
+                            let dest = settings.outputDestination(for: mode.defaultOutputDestinationID)
                             Text(buildModeLabel(modeName: mode.name, parameterLabels: mode.defaultParameterLabels, destinationSymbol: dest.symbol))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -78,8 +88,8 @@ struct HomeTabView: View {
 
             Section("Mode Switcher") {
                 Toggle("Show output destination hint", isOn: Binding(
-                    get: { dependencies.settings.showModeSwitcherHint },
-                    set: { dependencies.settings.showModeSwitcherHint = $0 }
+                    get: { settings.showModeSwitcherHint },
+                    set: { settings.showModeSwitcherHint = $0 }
                 ))
                 Text("Shows a hint in the mode switcher about pressing ? to see output destinations.")
                     .font(.caption)
@@ -90,23 +100,23 @@ struct HomeTabView: View {
                 ShortcutRecorderRow(
                     label: "Toggle Recording",
                     keyCode: Binding(
-                        get: { dependencies.settings.toggleRecordingHotkey.keyCode },
-                        set: { dependencies.coordinator.updateToggleRecordingKeyCode($0) }
+                        get: { settings.toggleRecordingHotkey.keyCode },
+                        set: { coordinator.updateToggleRecordingKeyCode($0) }
                     ),
                     modifiers: Binding(
-                        get: { dependencies.settings.toggleRecordingHotkey.modifiers },
-                        set: { dependencies.coordinator.updateToggleRecordingModifiers($0) }
+                        get: { settings.toggleRecordingHotkey.modifiers },
+                        set: { coordinator.updateToggleRecordingModifiers($0) }
                     )
                 )
                 ShortcutRecorderRow(
                     label: "Push-to-Type",
                     keyCode: Binding(
-                        get: { dependencies.settings.pushToTypeHotkey.keyCode },
-                        set: { dependencies.captureCoordinator.updatePushToTypeKeyCode($0) }
+                        get: { settings.pushToTypeHotkey.keyCode },
+                        set: { captureCoordinator.updatePushToTypeKeyCode($0) }
                     ),
                     modifiers: Binding(
-                        get: { dependencies.settings.pushToTypeHotkey.modifiers },
-                        set: { dependencies.captureCoordinator.updatePushToTypeModifiers($0) }
+                        get: { settings.pushToTypeHotkey.modifiers },
+                        set: { captureCoordinator.updatePushToTypeModifiers($0) }
                     )
                 )
                 HStack {
@@ -115,8 +125,8 @@ struct HomeTabView: View {
                     TextField(
                         "ms",
                         value: Binding(
-                            get: { dependencies.settings.pushToTypeExpandDelay },
-                            set: { dependencies.settings.pushToTypeExpandDelay = $0 }
+                            get: { settings.pushToTypeExpandDelay },
+                            set: { settings.pushToTypeExpandDelay = $0 }
                         ),
                         format: .number
                     )
@@ -128,34 +138,34 @@ struct HomeTabView: View {
                 ShortcutRecorderRow(
                     label: "Mode Switcher",
                     keyCode: Binding(
-                        get: { dependencies.settings.modeSwitcherHotkey.keyCode },
-                        set: { dependencies.modeSwitcherCoordinator.updateModeSwitcherKeyCode($0) }
+                        get: { settings.modeSwitcherHotkey.keyCode },
+                        set: { modeSwitcherCoordinator.updateModeSwitcherKeyCode($0) }
                     ),
                     modifiers: Binding(
-                        get: { dependencies.settings.modeSwitcherHotkey.modifiers },
-                        set: { dependencies.modeSwitcherCoordinator.updateModeSwitcherModifiers($0) }
+                        get: { settings.modeSwitcherHotkey.modifiers },
+                        set: { modeSwitcherCoordinator.updateModeSwitcherModifiers($0) }
                     )
                 )
                 ShortcutRecorderRow(
                     label: "Cancel Capture",
                     keyCode: Binding(
-                        get: { dependencies.settings.cancelRecordingHotkey.keyCode },
-                        set: { dependencies.coordinator.updateCancelRecordingKeyCode($0) }
+                        get: { settings.cancelRecordingHotkey.keyCode },
+                        set: { coordinator.updateCancelRecordingKeyCode($0) }
                     ),
                     modifiers: Binding(
-                        get: { dependencies.settings.cancelRecordingHotkey.modifiers },
-                        set: { dependencies.coordinator.updateCancelRecordingModifiers($0) }
+                        get: { settings.cancelRecordingHotkey.modifiers },
+                        set: { coordinator.updateCancelRecordingModifiers($0) }
                     )
                 )
                 ShortcutRecorderRow(
                     label: "Copy Latest Capture",
                     keyCode: Binding(
-                        get: { dependencies.settings.copyLatestCaptureHotkey.keyCode },
-                        set: { dependencies.copyLatestCaptureHandler.updateCopyLatestCaptureKeyCode($0) }
+                        get: { settings.copyLatestCaptureHotkey.keyCode },
+                        set: { copyLatestCaptureHandler.updateCopyLatestCaptureKeyCode($0) }
                     ),
                     modifiers: Binding(
-                        get: { dependencies.settings.copyLatestCaptureHotkey.modifiers },
-                        set: { dependencies.copyLatestCaptureHandler.updateCopyLatestCaptureModifiers($0) }
+                        get: { settings.copyLatestCaptureHotkey.modifiers },
+                        set: { copyLatestCaptureHandler.updateCopyLatestCaptureModifiers($0) }
                     )
                 )
             }
@@ -170,12 +180,12 @@ struct HomeTabView: View {
     }
 
     private var isRecording: Bool {
-        let state = dependencies.coordinator.state
+        let state = coordinator.state
         return state == .preparingToRecord || state == .recording
     }
 
     private var canToggleRecording: Bool {
-        let state = dependencies.coordinator.state
+        let state = coordinator.state
         return state == .idle || state == .preparingToRecord || state == .recording
     }
 }

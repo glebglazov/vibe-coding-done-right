@@ -1,7 +1,9 @@
 import SwiftUI
 
 struct TranscriptionTabView: View {
-    let dependencies: AppDependencies
+    let settings: AppSettings
+    let isTranscriptionReady: Bool
+    let initializationStatus: String
 
     var body: some View {
         Form {
@@ -18,28 +20,28 @@ struct TranscriptionTabView: View {
                     Spacer()
 
                     ModelStatusBadge(
-                        isReady: dependencies.isTranscriptionReady,
-                        statusText: dependencies.initializationStatus
+                        isReady: isTranscriptionReady,
+                        statusText: initializationStatus
                     )
                 }
             }
 
             Section("Pre-processing") {
                 Toggle("Remove filler words (um, uh, etc.)", isOn: Binding(
-                    get: { dependencies.settings.removeFillerWords },
-                    set: { dependencies.settings.removeFillerWords = $0 }
+                    get: { settings.removeFillerWords },
+                    set: { settings.removeFillerWords = $0 }
                 ))
 
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle("Append terminator template", isOn: Binding(
-                        get: { dependencies.settings.terminatorTemplateEnabled },
-                        set: { dependencies.settings.terminatorTemplateEnabled = $0 }
+                        get: { settings.terminatorTemplateEnabled },
+                        set: { settings.terminatorTemplateEnabled = $0 }
                     ))
 
-                    if dependencies.settings.terminatorTemplateEnabled {
+                    if settings.terminatorTemplateEnabled {
                         TextField("Terminator template", text: Binding(
-                            get: { dependencies.settings.terminatorTemplate },
-                            set: { dependencies.settings.terminatorTemplate = $0 }
+                            get: { settings.terminatorTemplate },
+                            set: { settings.terminatorTemplate = $0 }
                         ))
                         .labelsHidden()
                         .help("Appended after transcription if it doesn't end with punctuation. Tokens: <dot>, <space>, <newline>.")
