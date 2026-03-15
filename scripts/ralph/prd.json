@@ -312,7 +312,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 18,
-      "passes": false,
+      "passes": true,
       "notes": "Mechanical changes — each is a simple extract-to-constant refactor. The ModeSwitcherPanel/ModesTabView `9` should share one constant since they enforce the same rule."
     },
     {

@@ -295,3 +295,23 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - ConversationTurn.InputPart must be Sendable since ConversationTurn is Sendable — CapturedContext is already Sendable so this works
   - The canContinue logic was duplicated in AppDependencies.openConversationFromHistory — always search for duplicates of extracted logic across the codebase
 ---
+
+## 2026-03-15 - US-018
+- Named ~15 bare numeric/string literals across 10 files:
+  - ParakeetProvider.swift: `1e15` → `attosecondsPerMillisecond`
+  - ModeSwitcherPanel.swift: promoted `headerHeight` to static let, added `maxModesInSwitcher = 9`
+  - ModesTabView.swift: `index < 9` → `index < ModeSwitcherPanel.maxModesInSwitcher`
+  - CapturePanel+Layout.swift: `0.9` → `captureLineHeightScale`
+  - AudioRecorder.swift: `1` → `channelCount`, `16` → `bitDepth`
+  - AudioSectionView.swift: `120` → `meterWidth`
+  - RecordingIndicatorViews.swift: `0.15` → `dotStaggerDelay`
+  - SettingsTypes.swift: `500` → `AppSettings.defaultPushToTypeExpandDelay`
+  - CaptureViewModel.swift: bare `53`/`36` → `KeyCode.escape`/`KeyCode.returnKey`
+  - MediaRemoteClient.swift: `"test"`, `"get"`, `"send"`, `"1"`, `"0"` → named static constants
+- Files changed: 10 modified
+- **Learnings for future iterations:**
+  - Swift `switch` cases can match against `static let` values (e.g., `case KeyCode.returnKey:`) — the `~=` operator for Equatable types makes this work
+  - `ModeSwitcherPanel.maxModesInSwitcher` is the shared constant for the 9-mode switcher limit — used by both ModeSwitcherPanel.calculateHeight and ModesTabView.switcherNumber
+  - `KeyCode` enum in ModeSwitcherViewModel.swift is the shared keycode constant source — CaptureViewModel can reference it since both are in the same module
+  - `AppSettings.defaultPushToTypeExpandDelay` already existed as a static let — SettingsTypes.swift just needed to reference it instead of duplicating the value
+---
