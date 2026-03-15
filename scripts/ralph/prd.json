@@ -509,7 +509,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 30,
-      "passes": false,
+      "passes": true,
       "notes": "AnimatedDotsView and AudioWaveformView are self-contained animation views that can be extracted to a separate file (e.g., RecordingIndicatorAnimations.swift)."
     },
     {

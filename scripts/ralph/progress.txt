@@ -473,3 +473,12 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - The file was already under 300 lines (278) due to prior story cleanups, but the split was still valuable for separation of concerns (submission pipeline vs quick action execution)
   - fileSystemSynchronizedGroups means new Swift files are auto-discovered by Xcode — no project file edits needed
 ---
+
+## 2026-03-15 - US-030
+- Extracted AudioWaveformView and AnimatedDotsView from RecordingIndicatorViews.swift into new RecordingIndicatorAnimations.swift
+- RecordingIndicatorViews.swift: 321 → 257 lines; new file: 64 lines
+- Files changed: vcdr/UI/RecordingIndicatorViews.swift, vcdr/UI/RecordingIndicatorAnimations.swift (new)
+- **Learnings for future iterations:**
+  - AudioWaveformView and AnimatedDotsView are self-contained animation views with no dependencies on the indicator state types — clean extraction targets
+  - fileSystemSynchronizedGroups means new Swift files are auto-discovered by Xcode — no project file edits needed
+---
