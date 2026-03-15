@@ -116,6 +116,10 @@ final class RecordingIndicatorPanel {
     func update(phase: IndicatorPhase, message: String? = nil) {
         phaseState.errorMessage = (phase == .error) ? message : nil
         phaseState.phase = phase
+        if phase == .error {
+            // Allow clicks on the error message pill for copy-to-clipboard
+            panel?.ignoresMouseEvents = false
+        }
     }
 
     /// Trigger a shake animation to reject a hotkey press during processing

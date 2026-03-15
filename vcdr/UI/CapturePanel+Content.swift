@@ -67,6 +67,7 @@ extension CapturePanel {
         let captures = viewModel?.allCaptures ?? []
         let pendingTurn = ConversationTurn(input: inputText, output: "...", captures: captures)
         viewModel?.conversationTurns.append(pendingTurn)
+        viewModel?.errorMessage = nil
         viewModel?.phase = .processing
         viewModel?.segments = [InputSegment()]
         viewModel?.scrollTrigger += 1
@@ -114,9 +115,16 @@ extension CapturePanel {
     func showProcessingError(_ message: String) {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         viewModel.conversationTurns.removeLast()
-        viewModel.phase = .idle
+        viewModel.errorMessage = message
+        viewModel.phase = .error
         expand()
         Logger.actions.error("Capture panel processing failed: \(message)")
+    }
+
+    func setError(_ message: String) {
+        viewModel?.errorMessage = message
+        viewModel?.phase = .error
+        resizePanel()
     }
 
     func signalClipboardCapture() {

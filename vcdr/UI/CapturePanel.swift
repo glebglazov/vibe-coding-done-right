@@ -149,7 +149,7 @@ final class CapturePanel {
     func expand() {
         let wasMinimized = viewModel?.isMinimized == true
         viewModel?.isMinimized = false
-        if viewModel?.phase != .recording {
+        if viewModel?.phase != .recording && viewModel?.phase != .error {
             viewModel?.phase = .idle
         }
         if wasMinimized {
@@ -193,7 +193,7 @@ final class CapturePanel {
         guard let panel, let viewModel else { return }
         let turns = viewModel.conversationTurns
         let segs = viewModel.segments
-        let newHeight = Self.calculateHeight(for: turns, segments: segs, segmentHeights: viewModel.segmentHeights)
+        let newHeight = Self.calculateHeight(for: turns, segments: segs, segmentHeights: viewModel.segmentHeights, hasError: viewModel.errorMessage != nil)
         guard let origin = Self.panelOrigin(width: Self.panelWidth, height: newHeight) else { return }
         let newFrame = NSRect(origin: origin, size: NSSize(width: Self.panelWidth, height: newHeight))
         panel.setFrame(newFrame, display: true, animate: true)
@@ -203,7 +203,7 @@ final class CapturePanel {
         guard let panel, let viewModel else { return }
         let turns = viewModel.conversationTurns
         let segs = viewModel.segments
-        let newHeight = Self.calculateHeight(for: turns, segments: segs, segmentHeights: viewModel.segmentHeights)
+        let newHeight = Self.calculateHeight(for: turns, segments: segs, segmentHeights: viewModel.segmentHeights, hasError: viewModel.errorMessage != nil)
         let currentFrame = panel.frame
         let newY = currentFrame.maxY - newHeight
         let newFrame = NSRect(x: currentFrame.origin.x, y: newY, width: currentFrame.width, height: newHeight)

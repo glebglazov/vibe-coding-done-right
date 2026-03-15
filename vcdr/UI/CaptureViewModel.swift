@@ -33,6 +33,7 @@ final class CaptureViewModel {
         case cancelled
     }
     var phase: CapturePhase = .idle
+    var errorMessage: String?
 
     /// Convenience for view compatibility
     var isRecording: Bool { phase == .recording }
@@ -124,6 +125,12 @@ final class CaptureViewModel {
         self.onDismiss = onDismiss
         self.onExpand = onExpand
         self.audioRecorder = audioRecorder
+    }
+
+    func clearError() {
+        errorMessage = nil
+        phase = .idle
+        onContentHeightChanged?()
     }
 
     // MARK: - Key Handling

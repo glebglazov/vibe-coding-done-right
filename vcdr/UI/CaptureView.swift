@@ -83,9 +83,9 @@ struct CaptureView: View {
                     .foregroundStyle(.green)
             }
 
-            Text(viewModel.pillModeLabel)
+            Text((viewModel.phase == .error ? viewModel.errorMessage : nil) ?? viewModel.pillModeLabel)
                 .font(.caption)
-                .foregroundStyle(.primary)
+                .foregroundStyle(viewModel.phase == .error && viewModel.errorMessage != nil ? Color.red : Color.primary)
                 .lineLimit(1)
         }
         .padding(.horizontal, Self.pillHPadding)
@@ -94,7 +94,10 @@ struct CaptureView: View {
         .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
         .shadow(radius: 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onTapGesture { viewModel.onExpand() }
+        .onTapGesture {
+            if viewModel.phase == .error, let msg = viewModel.errorMessage { ClipboardHelper.writeString(msg) }
+            viewModel.onExpand()
+        }
         .animation(.easeInOut(duration: 0.2), value: viewModel.clipboardCaptureCount)
     }
 
@@ -147,6 +150,10 @@ struct CaptureView: View {
             .padding(.bottom, Self.headerBottomPadding)
 
             Divider()
+            if viewModel.phase == .error, let errorMessage = viewModel.errorMessage {
+                ErrorBannerView(message: errorMessage, onDismiss: { viewModel.clearError() })
+                Divider()
+            }
         }
         .background(Color.primary.opacity(Self.headerBackgroundOpacity))
     }

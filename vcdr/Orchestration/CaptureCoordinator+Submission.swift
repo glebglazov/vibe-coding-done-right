@@ -175,6 +175,7 @@ extension CaptureCoordinator {
                     panel.showProcessingError(error.localizedDescription)
                 } else {
                     panel.finishStreaming(outputText: accumulated)
+                    panel.setError(error.localizedDescription)
                 }
                 if panel.isVisible {
                     self.rewirePanelCallbacks()

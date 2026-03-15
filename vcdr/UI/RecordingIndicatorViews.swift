@@ -8,18 +8,16 @@ struct CancelledIndicatorView: View {
     private static let iconSize: CGFloat = 16
 
     var body: some View {
-        VStack {
-            HStack {
-                Image(systemName: "xmark")
-                    .font(.system(size: Self.iconSize, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, Self.pillHPadding)
-            .frame(height: Self.pillHeight)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-            .shadow(radius: 2)
+        HStack {
+            Image(systemName: "xmark")
+                .font(.system(size: Self.iconSize, weight: .semibold))
+                .foregroundStyle(.secondary)
         }
+        .padding(.horizontal, Self.pillHPadding)
+        .frame(height: Self.pillHeight)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
+        .shadow(radius: 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
@@ -221,6 +219,7 @@ struct RecordingIndicatorView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
                     .shadow(radius: 2)
                     .transition(.opacity)
+                    .onTapGesture { ClipboardHelper.writeString(message) }
             }
 
             if let vm = modeSwitcherState.viewModel {
