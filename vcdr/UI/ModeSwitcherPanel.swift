@@ -42,22 +42,16 @@ final class ModeSwitcherPanel {
             backing: .buffered,
             defer: false
         )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.configureAsOverlay(hasShadow: true)
         panel.contentView = hostingView
-        panel.isMovableByWindowBackground = false
-        panel.hidesOnDeactivate = false
 
         if let screen = NSScreen.main {
             screenFrame = screen.frame
             let visibleFrame = screen.visibleFrame
             menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
-            let x = screenFrame.midX - Self.panelWidth / 2
-            let y = screenFrame.maxY - menuBarHeight - panelHeight - Self.panelOffsetBelowMenuBar
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+        if let origin = panelOriginBelowMenuBar(width: Self.panelWidth, height: panelHeight, offset: Self.panelOffsetBelowMenuBar) {
+            panel.setFrameOrigin(origin)
         }
 
         panel.orderFrontRegardless()
@@ -166,14 +160,8 @@ final class ModeSwitcherPanel {
     }
 
     func hide() {
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
-        }
-        if let monitor = localEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            localEventMonitor = nil
-        }
+        removeEventMonitor(&eventMonitor)
+        removeEventMonitor(&localEventMonitor)
         panel?.close()
         panel = nil
         viewModel = nil

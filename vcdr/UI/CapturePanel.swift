@@ -86,14 +86,8 @@ final class CapturePanel {
     private func tearDown() {
         isLockedForFollowUp = false
         removeTrailingEmptySegments()
-        if let monitor = globalEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalEventMonitor = nil
-        }
-        if let monitor = localEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            localEventMonitor = nil
-        }
+        removeEventMonitor(&globalEventMonitor)
+        removeEventMonitor(&localEventMonitor)
         if let observer = becameKeyObserver {
             NotificationCenter.default.removeObserver(observer)
             becameKeyObserver = nil
@@ -127,14 +121,8 @@ final class CapturePanel {
             backing: .buffered,
             defer: false
         )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.configureAsOverlay(hasShadow: true)
         panel.contentView = hostingView
-        panel.isMovableByWindowBackground = false
-        panel.hidesOnDeactivate = false
 
         if let origin = Self.panelOrigin(width: Self.panelWidth, height: panelHeight) {
             panel.setFrameOrigin(origin)

@@ -101,15 +101,8 @@ final class RecordingIndicatorPanel {
             backing: .buffered,
             defer: false
         )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.configureAsOverlay(ignoresMouseEvents: true)
         panel.contentView = hostingView
-        panel.isMovableByWindowBackground = false
-        panel.hidesOnDeactivate = false
-        panel.ignoresMouseEvents = true
 
         positionAtTopCenter(panel, topOffset: topOffset)
 
@@ -182,14 +175,8 @@ final class RecordingIndicatorPanel {
     private func hideModeSwitcherCleanup() {
         modeSwitcherState.viewModel = nil
         panel?.ignoresMouseEvents = true
-        if let monitor = localEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            localEventMonitor = nil
-        }
-        if let monitor = globalClickMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalClickMonitor = nil
-        }
+        removeEventMonitor(&localEventMonitor)
+        removeEventMonitor(&globalClickMonitor)
     }
 
     private func resizeForModeSwitcher(viewModel: ModeSwitcherViewModel) {
@@ -310,26 +297,15 @@ final class RecordingIndicatorPanel {
             backing: .buffered,
             defer: false
         )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.configureAsOverlay(ignoresMouseEvents: true)
         panel.contentView = contentView
-        panel.isMovableByWindowBackground = false
-        panel.hidesOnDeactivate = false
-        panel.ignoresMouseEvents = true
         return panel
     }
 
     private func positionAtTopCenter(_ panel: NSPanel, topOffset: CGFloat = 0) {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-        let screenFrame = screen.frame
-        let visibleFrame = screen.visibleFrame
-        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
-        let x = screenFrame.midX - Self.panelWidth / 2
-        let y = screenFrame.maxY - menuBarHeight - Self.panelHeight - Self.menuBarGap - topOffset
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        if let origin = panelOriginBelowMenuBar(width: Self.panelWidth, height: Self.panelHeight, offset: Self.menuBarGap + topOffset) {
+            panel.setFrameOrigin(origin)
+        }
     }
 
     // MARK: - Constants (cancel indicator)

@@ -64,12 +64,6 @@ extension CapturePanel {
     }
 
     static func panelOrigin(width: CGFloat, height: CGFloat) -> NSPoint? {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return nil }
-        let screenFrame = screen.frame
-        let visibleFrame = screen.visibleFrame
-        let menuBarHeight = screenFrame.height - visibleFrame.height - visibleFrame.origin.y
-        let x = screenFrame.midX - width / 2
-        let y = screenFrame.maxY - menuBarHeight - height - panelOffsetBelowMenuBar
-        return NSPoint(x: x, y: y)
+        panelOriginBelowMenuBar(width: width, height: height, offset: panelOffsetBelowMenuBar)
     }
 }
