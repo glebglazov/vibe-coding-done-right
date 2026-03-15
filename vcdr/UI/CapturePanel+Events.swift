@@ -3,8 +3,8 @@ import OSLog
 
 extension CapturePanel {
 
-    static let focusMaxAttempts = 10
-    static let focusRetryDelay: Duration = .milliseconds(10)
+    static let focusMaxAttempts = 20
+    static let focusRetryDelay: Duration = .milliseconds(20)
 
     func setupEventMonitors(panel: NSPanel, hostingView: NSView) {
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel, weak panel] event in
@@ -61,6 +61,8 @@ extension CapturePanel {
                 let index = min(targetIndex, textViews.count - 1)
                 if index >= 0, index < textViews.count {
                     let textView = textViews[index]
+                    // Guard against stale references — the text view must belong to this panel
+                    guard textView.window === panel else { continue }
                     panel.makeFirstResponder(textView)
                     if panel.firstResponder === textView {
                         if cursorAtEnd {
@@ -72,7 +74,8 @@ extension CapturePanel {
                 }
                 try? await Task.sleep(for: Self.focusRetryDelay)
             }
-            Logger.ui.warning("Capture panel: failed to focus text view at index \(targetIndex) after \(Self.focusMaxAttempts) attempts")
+            let textViewCount = Self.findAllTextViews(in: view).count
+            Logger.ui.warning("Capture panel: failed to focus text view at index \(targetIndex) after \(Self.focusMaxAttempts) attempts (found \(textViewCount) text views)")
         }
     }
 

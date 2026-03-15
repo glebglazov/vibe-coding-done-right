@@ -158,8 +158,13 @@ final class CapturePanel {
         panel?.makeKey()
         if viewModel?.isRecording != true {
             Task { @MainActor [weak self] in
+                // Wait for SwiftUI to lay out the expanded hosting view
                 try? await Task.sleep(for: Self.expandFocusDelay)
-                guard let self, let contentView = self.panel?.contentView, let panel = self.panel else { return }
+                guard let self,
+                      self.isVisible,
+                      !self.isMinimized,
+                      let contentView = self.panel?.contentView,
+                      let panel = self.panel else { return }
                 self.focusActiveTextView(in: contentView, panel: panel)
             }
         }

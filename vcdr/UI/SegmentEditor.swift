@@ -84,7 +84,12 @@ struct SegmentEditor: NSViewRepresentable {
             let length = (textView.string as NSString).length
             let loc = focusCursorAtEnd ? length : 0
             textView.setSelectedRange(NSRange(location: loc, length: 0))
-            nsView.window?.makeFirstResponder(textView)
+            if let window = nsView.window {
+                window.makeFirstResponder(textView)
+            } else {
+                // View not yet in a window (SwiftUI layout pending) — retry after a runloop cycle
+                context.coordinator.scheduleDeferredFocus(for: textView, cursorAtEnd: focusCursorAtEnd)
+            }
         }
         // Report height on every update to catch layout changes (initial layout,
         // external text changes, width changes). The coordinator deduplicates
@@ -144,6 +149,26 @@ struct SegmentEditor: NSViewRepresentable {
                 }
             }
             return false
+        }
+
+        // MARK: - Deferred Focus
+
+        private static let deferredFocusMaxAttempts = 10
+        private static let deferredFocusRetryDelay: Duration = .milliseconds(20)
+
+        /// Retries makeFirstResponder until the text view is added to a window.
+        func scheduleDeferredFocus(for textView: NSTextView, cursorAtEnd: Bool) {
+            Task { @MainActor in
+                for _ in 0..<Self.deferredFocusMaxAttempts {
+                    try? await Task.sleep(for: Self.deferredFocusRetryDelay)
+                    guard let window = textView.window else { continue }
+                    let length = (textView.string as NSString).length
+                    let loc = cursorAtEnd ? length : 0
+                    textView.setSelectedRange(NSRange(location: loc, length: 0))
+                    window.makeFirstResponder(textView)
+                    return
+                }
+            }
         }
 
         // MARK: - Cursor Boundary Detection
