@@ -21,4 +21,55 @@ struct ConversationTurn: Identifiable, Sendable {
         self.output = output
         self.captures = captures
     }
+
+    // MARK: - Input Parsing
+
+    enum InputPart: Sendable {
+        case text(String)
+        case capture(CapturedContext)
+    }
+
+    /// Splits input text on `<capture-N>...</capture-N>` boundaries, pairing each
+    /// tag with the corresponding `CapturedContext` from the turn.
+    func parseInput() -> [InputPart] {
+        guard !captures.isEmpty else {
+            let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? [] : [.text(trimmed)]
+        }
+
+        var parts: [InputPart] = []
+        var remaining = input
+        var captureIndex = 0
+
+        while captureIndex < captures.count {
+            let tag = "<capture-\(captureIndex + 1)>"
+            let endTag = "</capture-\(captureIndex + 1)>"
+
+            if let tagRange = remaining.range(of: tag) {
+                let before = String(remaining[remaining.startIndex..<tagRange.lowerBound])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !before.isEmpty {
+                    parts.append(.text(before))
+                }
+                parts.append(.capture(captures[captureIndex]))
+
+                if let endRange = remaining.range(of: endTag) {
+                    remaining = String(remaining[endRange.upperBound...])
+                } else {
+                    remaining = ""
+                }
+            } else {
+                // Tag not found — append capture from the model directly
+                parts.append(.capture(captures[captureIndex]))
+            }
+            captureIndex += 1
+        }
+
+        let trailing = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trailing.isEmpty {
+            parts.append(.text(trailing))
+        }
+
+        return parts
+    }
 }

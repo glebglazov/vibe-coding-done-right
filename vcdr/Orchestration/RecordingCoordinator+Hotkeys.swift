@@ -59,4 +59,26 @@ extension RecordingCoordinator {
     func resumeEscCancel() {
         updateEscCancel()
     }
+
+    // MARK: - Settings + Re-registration
+
+    func updateToggleRecordingKeyCode(_ code: UInt16) {
+        settings.toggleRecordingHotkey.keyCode = code
+        setupToggleRecordingHotkey()
+    }
+
+    func updateToggleRecordingModifiers(_ mods: UInt64) {
+        settings.toggleRecordingHotkey.modifiers = mods
+        setupToggleRecordingHotkey()
+    }
+
+    func updateCancelRecordingKeyCode(_ code: UInt16) {
+        settings.cancelRecordingHotkey.keyCode = code
+        setupEscCancel()
+    }
+
+    func updateCancelRecordingModifiers(_ mods: UInt64) {
+        settings.cancelRecordingHotkey.modifiers = mods
+        setupEscCancel()
+    }
 }

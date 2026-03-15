@@ -110,23 +110,19 @@ struct ModeDetailView: View {
             ParameterEditorView(
                 parameter: $mode.parameters[index],
                 onDelete: {
-                    mode.parameters.remove(at: index)
+                    mode.removeParameter(at: index)
                 },
                 onMoveUp: index > 0 ? {
-                    mode.parameters.swapAt(index, index - 1)
+                    mode.moveParameterUp(at: index)
                 } : nil,
                 onMoveDown: index < mode.parameters.count - 1 ? {
-                    mode.parameters.swapAt(index, index + 1)
+                    mode.moveParameterDown(at: index)
                 } : nil
             )
         }
 
         Button("Add Parameter") {
-            mode.parameters.append(
-                ModeParameter(id: UUID(), name: "", options: [
-                    ModeParameterOption(id: UUID(), label: "", value: "")
-                ])
-            )
+            mode.addParameter()
         }
     }
 }

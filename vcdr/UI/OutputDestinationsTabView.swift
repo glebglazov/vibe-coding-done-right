@@ -57,14 +57,12 @@ struct OutputDestinationsListView: View {
         path.append(OutputDestinationNavID(id: newDest.id))
     }
 
-    /// A destination is "in use" if any mode references it as its default output
     private func isDestinationInUse(_ destination: OutputDestination) -> Bool {
-        settings.modes.contains { $0.defaultOutputDestinationID == destination.id }
+        settings.isDestinationInUse(destination)
     }
 
     private func deleteDestination(_ destination: OutputDestination) {
-        guard !destination.isBuiltIn, !isDestinationInUse(destination) else { return }
-        settings.outputDestinations.removeAll { $0.id == destination.id }
+        settings.deleteDestination(destination)
     }
 }
 

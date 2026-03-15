@@ -123,6 +123,30 @@ struct Mode: Identifiable, Codable, Equatable {
         return trimmed + resolved
     }
 
+    // MARK: - Parameter Mutation
+
+    mutating func removeParameter(at index: Int) {
+        parameters.remove(at: index)
+    }
+
+    mutating func moveParameterUp(at index: Int) {
+        guard index > 0 else { return }
+        parameters.swapAt(index, index - 1)
+    }
+
+    mutating func moveParameterDown(at index: Int) {
+        guard index < parameters.count - 1 else { return }
+        parameters.swapAt(index, index + 1)
+    }
+
+    mutating func addParameter() {
+        parameters.append(
+            ModeParameter(id: UUID(), name: "", options: [
+                ModeParameterOption(id: UUID(), label: "", value: "")
+            ])
+        )
+    }
+
     static func makeDefault() -> Mode {
         Mode(id: UUID(), name: "Default")
     }

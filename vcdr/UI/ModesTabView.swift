@@ -98,15 +98,7 @@ struct ModesListView: View {
     }
 
     private func toggleDisabled(_ mode: Mode, disabled: Bool) {
-        guard let index = settings.modes.firstIndex(where: { $0.id == mode.id }) else { return }
-        settings.modes[index].isDisabled = disabled
-
-        // If we disabled the active mode, switch to first visible
-        if disabled && settings.activeModeID == mode.id {
-            if let firstVisible = settings.visibleModes.first {
-                settings.activeModeID = firstVisible.id
-            }
-        }
+        settings.setModeDisabled(mode, disabled: disabled)
     }
 
     private func resetToDefaults(_ mode: Mode) {
@@ -124,12 +116,7 @@ struct ModesListView: View {
     }
 
     private func deleteMode(_ mode: Mode) {
-        guard settings.modes.count > 1 else { return }
-        settings.modes.removeAll { $0.id == mode.id }
-        // If we deleted the active mode, activate the first remaining
-        if settings.activeModeID == mode.id {
-            settings.activeModeID = settings.modes.first?.id ?? UUID()
-        }
+        settings.deleteMode(mode)
     }
 }
 

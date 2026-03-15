@@ -43,6 +43,13 @@ struct Conversation: Identifiable, Equatable {
         turns.last?.output ?? ""
     }
 
+    /// Whether this conversation can be continued — requires external processing
+    /// and the original mode still exists with bash script processing.
+    func canContinue(modes: [Mode]) -> Bool {
+        hadExternalProcessing
+            && modes.contains(where: { $0.id == modeID && $0.processingType == .bashScript })
+    }
+
     // MARK: - Codable (backward-compatible)
 
     private enum CodingKeys: String, CodingKey {

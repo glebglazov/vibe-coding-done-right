@@ -270,8 +270,7 @@ final class AppDependencies {
     }
 
     func openConversationFromHistory(_ conversation: Conversation) {
-        let canContinue = conversation.hadExternalProcessing
-            && settings.modes.contains(where: { $0.id == conversation.modeID && $0.processingType == .bashScript })
+        let canContinue = conversation.canContinue(modes: settings.modes)
         if canContinue {
             settings.activeModeID = conversation.modeID
         }

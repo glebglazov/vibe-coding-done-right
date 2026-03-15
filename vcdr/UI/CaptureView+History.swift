@@ -88,11 +88,9 @@ extension CaptureView {
     // MARK: - Turn Input
 
     /// Renders the turn's input text interleaved with capture blockquotes.
-    /// Parses `<capture-N>...</capture-N>` tags from `resolveSubmissionText()` and
-    /// displays the text parts as monospaced body and captures as blockquotes.
     @ViewBuilder
     private func turnInputView(_ turn: ConversationTurn) -> some View {
-        let parts = parseTurnInput(turn.input, captures: turn.captures)
+        let parts = turn.parseInput()
         ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
             switch part {
             case .text(let value):
@@ -104,55 +102,6 @@ extension CaptureView {
                 captureBlockquote(context)
             }
         }
-    }
-
-    private enum TurnInputPart {
-        case text(String)
-        case capture(CapturedContext)
-    }
-
-    /// Splits input text on `<capture-N>...</capture-N>` boundaries, pairing each
-    /// tag with the corresponding `CapturedContext` from the turn.
-    private func parseTurnInput(_ input: String, captures: [CapturedContext]) -> [TurnInputPart] {
-        guard !captures.isEmpty else {
-            let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? [] : [.text(trimmed)]
-        }
-
-        var parts: [TurnInputPart] = []
-        var remaining = input
-        var captureIndex = 0
-
-        while captureIndex < captures.count {
-            let tag = "<capture-\(captureIndex + 1)>"
-            let endTag = "</capture-\(captureIndex + 1)>"
-
-            if let tagRange = remaining.range(of: tag) {
-                let before = String(remaining[remaining.startIndex..<tagRange.lowerBound])
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !before.isEmpty {
-                    parts.append(.text(before))
-                }
-                parts.append(.capture(captures[captureIndex]))
-
-                if let endRange = remaining.range(of: endTag) {
-                    remaining = String(remaining[endRange.upperBound...])
-                } else {
-                    remaining = ""
-                }
-            } else {
-                // Tag not found — append capture from the model directly
-                parts.append(.capture(captures[captureIndex]))
-            }
-            captureIndex += 1
-        }
-
-        let trailing = remaining.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trailing.isEmpty {
-            parts.append(.text(trailing))
-        }
-
-        return parts
     }
 
     // MARK: - Capture Blockquote

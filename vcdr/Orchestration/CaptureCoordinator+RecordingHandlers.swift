@@ -195,4 +195,16 @@ extension CaptureCoordinator {
             }
         }
     }
+
+    // MARK: - Settings + Re-registration
+
+    func updatePushToTypeKeyCode(_ code: UInt16) {
+        settings.pushToTypeHotkey.keyCode = code
+        setupHotkey()
+    }
+
+    func updatePushToTypeModifiers(_ mods: UInt64) {
+        settings.pushToTypeHotkey.modifiers = mods
+        setupHotkey()
+    }
 }

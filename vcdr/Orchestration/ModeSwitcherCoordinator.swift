@@ -158,4 +158,16 @@ final class ModeSwitcherCoordinator {
         // 4. Standalone panel (existing behavior)
         showSwitcher()
     }
+
+    // MARK: - Settings + Re-registration
+
+    func updateModeSwitcherKeyCode(_ code: UInt16) {
+        settings.modeSwitcherHotkey.keyCode = code
+        setupHotkey()
+    }
+
+    func updateModeSwitcherModifiers(_ mods: UInt64) {
+        settings.modeSwitcherHotkey.modifiers = mods
+        setupHotkey()
+    }
 }

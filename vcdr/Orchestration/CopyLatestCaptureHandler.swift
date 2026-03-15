@@ -49,4 +49,16 @@ final class CopyLatestCaptureHandler {
         recordingIndicator.showCopied()
         Logger.actions.info("Copied latest capture to clipboard")
     }
+
+    // MARK: - Settings + Re-registration
+
+    func updateCopyLatestCaptureKeyCode(_ code: UInt16) {
+        settings.copyLatestCaptureHotkey.keyCode = code
+        setupHotkey()
+    }
+
+    func updateCopyLatestCaptureModifiers(_ mods: UInt64) {
+        settings.copyLatestCaptureHotkey.modifiers = mods
+        setupHotkey()
+    }
 }

@@ -91,34 +91,22 @@ struct HomeTabView: View {
                     label: "Toggle Recording",
                     keyCode: Binding(
                         get: { dependencies.settings.toggleRecordingHotkey.keyCode },
-                        set: {
-                            dependencies.settings.toggleRecordingHotkey.keyCode = $0
-                            dependencies.coordinator.setupToggleRecordingHotkey()
-                        }
+                        set: { dependencies.coordinator.updateToggleRecordingKeyCode($0) }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.toggleRecordingHotkey.modifiers },
-                        set: {
-                            dependencies.settings.toggleRecordingHotkey.modifiers = $0
-                            dependencies.coordinator.setupToggleRecordingHotkey()
-                        }
+                        set: { dependencies.coordinator.updateToggleRecordingModifiers($0) }
                     )
                 )
                 ShortcutRecorderRow(
                     label: "Push-to-Type",
                     keyCode: Binding(
                         get: { dependencies.settings.pushToTypeHotkey.keyCode },
-                        set: {
-                            dependencies.settings.pushToTypeHotkey.keyCode = $0
-                            dependencies.captureCoordinator.setupHotkey()
-                        }
+                        set: { dependencies.captureCoordinator.updatePushToTypeKeyCode($0) }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.pushToTypeHotkey.modifiers },
-                        set: {
-                            dependencies.settings.pushToTypeHotkey.modifiers = $0
-                            dependencies.captureCoordinator.setupHotkey()
-                        }
+                        set: { dependencies.captureCoordinator.updatePushToTypeModifiers($0) }
                     )
                 )
                 HStack {
@@ -141,51 +129,33 @@ struct HomeTabView: View {
                     label: "Mode Switcher",
                     keyCode: Binding(
                         get: { dependencies.settings.modeSwitcherHotkey.keyCode },
-                        set: {
-                            dependencies.settings.modeSwitcherHotkey.keyCode = $0
-                            dependencies.modeSwitcherCoordinator.setupHotkey()
-                        }
+                        set: { dependencies.modeSwitcherCoordinator.updateModeSwitcherKeyCode($0) }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.modeSwitcherHotkey.modifiers },
-                        set: {
-                            dependencies.settings.modeSwitcherHotkey.modifiers = $0
-                            dependencies.modeSwitcherCoordinator.setupHotkey()
-                        }
+                        set: { dependencies.modeSwitcherCoordinator.updateModeSwitcherModifiers($0) }
                     )
                 )
                 ShortcutRecorderRow(
                     label: "Cancel Capture",
                     keyCode: Binding(
                         get: { dependencies.settings.cancelRecordingHotkey.keyCode },
-                        set: {
-                            dependencies.settings.cancelRecordingHotkey.keyCode = $0
-                            dependencies.coordinator.setupEscCancel()
-                        }
+                        set: { dependencies.coordinator.updateCancelRecordingKeyCode($0) }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.cancelRecordingHotkey.modifiers },
-                        set: {
-                            dependencies.settings.cancelRecordingHotkey.modifiers = $0
-                            dependencies.coordinator.setupEscCancel()
-                        }
+                        set: { dependencies.coordinator.updateCancelRecordingModifiers($0) }
                     )
                 )
                 ShortcutRecorderRow(
                     label: "Copy Latest Capture",
                     keyCode: Binding(
                         get: { dependencies.settings.copyLatestCaptureHotkey.keyCode },
-                        set: {
-                            dependencies.settings.copyLatestCaptureHotkey.keyCode = $0
-                            dependencies.copyLatestCaptureHandler.setupHotkey()
-                        }
+                        set: { dependencies.copyLatestCaptureHandler.updateCopyLatestCaptureKeyCode($0) }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.copyLatestCaptureHotkey.modifiers },
-                        set: {
-                            dependencies.settings.copyLatestCaptureHotkey.modifiers = $0
-                            dependencies.copyLatestCaptureHandler.setupHotkey()
-                        }
+                        set: { dependencies.copyLatestCaptureHandler.updateCopyLatestCaptureModifiers($0) }
                     )
                 )
             }
