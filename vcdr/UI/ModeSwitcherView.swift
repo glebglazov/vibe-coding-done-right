@@ -12,7 +12,7 @@ struct ModeSwitcherView: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            switch viewModel.navigationLevel {
+            switch viewModel.navigation.level {
             case .modes:
                 modesContent
             case .parameters(let modeIndex):
@@ -37,7 +37,7 @@ struct ModeSwitcherView: View {
         }
 
         if !viewModel.outputDestinations.isEmpty {
-            if viewModel.showingDestinations {
+            if viewModel.navigation.showingDestinations {
                 Divider()
                     .padding(.vertical, 4)
 
@@ -163,11 +163,11 @@ struct ModeSwitcherView: View {
             ForEach(Array(mode.parameters.enumerated()), id: \.element.id) { index, parameter in
                 parameterRow(index: index, parameter: parameter)
                     .onHover { hovering in
-                        if hovering { viewModel.subHighlightedIndex = index }
+                        if hovering { viewModel.navigation.subHighlightedIndex = index }
                     }
                     .onTapGesture {
-                        viewModel.navigationLevel = .options(modeIndex: modeIndex, parameterIndex: index)
-                        viewModel.subHighlightedIndex = 0
+                        viewModel.navigation.level = .options(modeIndex: modeIndex, parameterIndex: index)
+                        viewModel.navigation.subHighlightedIndex = 0
                         viewModel.onResize?()
                     }
             }
@@ -175,7 +175,7 @@ struct ModeSwitcherView: View {
     }
 
     private func parameterRow(index: Int, parameter: ModeParameter) -> some View {
-        let isHighlighted = index == viewModel.subHighlightedIndex
+        let isHighlighted = index == viewModel.navigation.subHighlightedIndex
         let currentValue = viewModel.parameterOverrides[parameter.id]
             ?? parameter.options.first?.value ?? ""
         let currentLabel = parameter.options.first(where: { $0.value == currentValue })?.label ?? currentValue
@@ -217,7 +217,7 @@ struct ModeSwitcherView: View {
             ForEach(Array(parameter.options.enumerated()), id: \.element.id) { index, option in
                 optionRow(index: index, option: option, isSelected: option.value == selectedValue)
                     .onHover { hovering in
-                        if hovering { viewModel.subHighlightedIndex = index }
+                        if hovering { viewModel.navigation.subHighlightedIndex = index }
                     }
                     .onTapGesture {
                         viewModel.parameterOverrides[parameter.id] = option.value
@@ -229,7 +229,7 @@ struct ModeSwitcherView: View {
     }
 
     private func optionRow(index: Int, option: ModeParameterOption, isSelected: Bool) -> some View {
-        let isHighlighted = index == viewModel.subHighlightedIndex
+        let isHighlighted = index == viewModel.navigation.subHighlightedIndex
         return HStack(spacing: 8) {
             Text("\(index + 1)")
                 .font(.system(.caption, design: .monospaced))

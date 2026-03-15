@@ -366,6 +366,121 @@
       "priority": 21,
       "passes": true,
       "notes": "These are safety and layering fixes. The AudioRecorder timer issue is the most critical — it could cause a data race under Swift 6 strict concurrency. The ToolAvailabilityChecker blocking issue is low-risk since it only runs at startup with fast 'which' commands, but making it async is the correct pattern."
+    },
+    {
+      "id": "US-022",
+      "title": "Reduce ModeSwitcherViewModel observable property count to at most 5",
+      "description": "ModeSwitcherViewModel has 9 observable stored `var` properties (grew from 8 since the assessment), making it the worst remaining violator of the max-5 rule. Several of these are closures or internal state that views never observe.",
+      "acceptanceCriteria": [
+        "Group non-view-facing properties into a struct or mark them @ObservationIgnored — candidates: onParameterOverride (closure), onResize (closure), parameterOverrides (internal dict), showingDestinations (internal state)",
+        "ModeSwitcherViewModel must have at most 5 observable stored `var` properties after changes",
+        "Verify that all SwiftUI views that depend on ModeSwitcherViewModel still update correctly — test mode switching, parameter override, destination selection UI",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "Current observable vars: highlightedIndex, activeModeID, onParameterOverride, navigationLevel, subHighlightedIndex, parameterOverrides, showingDestinations, onResize, activeDestinationOverrideID. The closures (onParameterOverride, onResize) and internal dict (parameterOverrides) are strong candidates for @ObservationIgnored since views don't read them for rendering."
+    },
+    {
+      "id": "US-023",
+      "title": "Reduce AppSettings observable property count to at most 5",
+      "description": "AppSettings has 7 observable stored `var` properties, exceeding the max-5 rule. The sub-struct grouping from US-011 reduced the count from 15 to 7, but it's still over the limit.",
+      "acceptanceCriteria": [
+        "Further group related properties — candidates: merge `modes` + `activeModeID` into a single `ModeConfiguration` struct, or merge `hotkeySettings` + `audioSettings` into a broader config struct",
+        "Alternatively, mark `availableTemplateIDs` as @ObservationIgnored if views don't directly render based on it (it's refreshed at startup and used for filtering)",
+        "AppSettings must have at most 5 observable stored `var` properties after changes",
+        "All existing call sites must still compile — use computed property accessors for backward compatibility where needed",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "Current observable vars: hotkeySettings, transcriptionSettings, modes, activeModeID, outputDestinations, audioSettings, availableTemplateIDs. The simplest fix is marking availableTemplateIDs as @ObservationIgnored (reducing to 6) and then grouping modes + activeModeID. Be careful: views like ModesListView and MenuBarView observe modes and activeModeID for rendering."
+    },
+    {
+      "id": "US-024",
+      "title": "Extract remaining business logic from ModeDetailView parameter editing",
+      "description": "ModeDetailView's ParameterEditorView still contains direct array mutations on `parameter.options` (append, swapAt, remove) in button action closures. This is the last remaining business-logic-in-views violation from the architecture assessment.",
+      "acceptanceCriteria": [
+        "Add methods to ModeParameter (or Mode) for parameter option mutations: addOption(), removeOption(at:), moveOptionUp(at:), moveOptionDown(at:)",
+        "Replace inline `parameter.options.append(...)`, `parameter.options.swapAt(...)`, and `parameter.options.remove(at:)` in ParameterEditorView with calls to these methods",
+        "The view action closures should be one-liners calling model methods, not performing array surgery",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Small change — follows the same pattern already applied in US-017 for mode.removeParameter(at:), mode.moveParameterUp(at:), mode.moveParameterDown(at:). Just extend it to the parameter options level."
+    },
+    {
+      "id": "US-025",
+      "title": "Simplify complex conditionals in coordinator recording lifecycle",
+      "description": "The coordinator layer contains the densest conditional logic in the codebase. RecordingCoordinator.startRecording() has 4 levels of nesting with interleaved follow-up, panel visibility, and quick-action checks. CaptureCoordinator's populateWithTranscription has a 6-branch conditional tree. handleTranscriptionFailed has 3 near-identical branches.",
+      "acceptanceCriteria": [
+        "Simplify RecordingCoordinator.startRecording() — extract early returns for edge cases (transcribing → cancel-and-retry, panel visible + minimized → expand-and-return) into clearly named guard methods or use early-return pattern to flatten nesting",
+        "Simplify CaptureCoordinator.populateWithTranscription — extract the panel-visible branch and the panel-not-visible branch into separate methods (e.g., populateVisiblePanel and populateHiddenPanel). The hasOnlyEmptySegment 3-way conditional should be a named helper",
+        "Simplify handleTranscriptionFailed — the three branches share near-identical logic; extract a common path with a parameter for the differing behavior",
+        "No method should have more than 3 levels of nesting after changes",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "This is the most complex change in this batch. Focus on readability over mechanical refactoring — the goal is that a reader can understand each method's branching without tracing through nested if/else trees. Reference thoughts/shared/research/2026-03-15-architecture-assessment-and-inconsistencies.md section 2 for the conditional structure diagrams."
+    },
+    {
+      "id": "US-026",
+      "title": "Pass scoped dependencies to remaining tab views instead of full AppDependencies",
+      "description": "HomeTabView, AudioTabView, TranscriptionTabView, and DebugTabView all receive the full AppDependencies container even when they need only 2-3 dependencies. ModesListView, OutputDestinationsListView, and HistoryTabView already receive scoped dependencies — extend this pattern to the remaining tabs.",
+      "acceptanceCriteria": [
+        "AudioTabView should receive only what it needs (audioDeviceMonitor, hasMicrophonePermission, inputLevelMonitor) instead of full AppDependencies",
+        "TranscriptionTabView should receive only transcription-related dependencies",
+        "HomeTabView should receive only settings, coordinator references it actually uses",
+        "DebugTabView should receive only the dependencies it uses for test running",
+        "Each tab view init takes explicit typed parameters, not AppDependencies",
+        "Update MainWindowView to pass scoped dependencies to each tab",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "Mechanical refactor. Read each tab view to identify which dependencies it actually accesses, then change the init to accept only those. This makes each view's dependencies explicit and testable."
+    },
+    {
+      "id": "US-027",
+      "title": "Show splash/loading state during initial permission checks instead of flashing permission banner",
+      "description": "On every app launch, the permission-attention banner in HomeTabView flashes briefly while AppDependencies.checkPermissions() runs and the 2-second polling timer hasn't yet confirmed permissions. This is jarring for users who have already granted all permissions — they see 'Grant Access' buttons for a split second before they disappear. Replace this with a brief loading/splash state that gates the UI until the first permission check completes.",
+      "acceptanceCriteria": [
+        "Add an `isInitialized: Bool` (or similar) property to AppDependencies, initially false, set to true after the first checkPermissions() call completes in initialize()",
+        "In the main UI (MenuBarExtra content or MainWindowView), show a minimal loading state (e.g., ProgressView with 'Loading...' or app icon) while isInitialized is false",
+        "The permission banner in HomeTabView should only appear after isInitialized is true AND needsPermissionAttention is true — never flash during the initial check",
+        "The loading state should be brief (only as long as the synchronous checkPermissions + initial setup takes, typically <100ms) — not an artificial delay",
+        "If permissions are already granted, user sees the normal UI immediately after the loading state clears — no permission banner flash",
+        "If permissions are NOT granted, the permission banner appears after loading completes and stays visible until granted",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "The root cause is that needsPermissionAttention starts true (both booleans default to false), then becomes false after checkPermissions() runs. The fix is to gate the UI on initialization completion. Keep the solution minimal — a simple boolean flag and conditional view, not a full splash screen framework."
+    },
+    {
+      "id": "US-028",
+      "title": "Improve capture view text field focus reliability",
+      "description": "The cursor sometimes fails to appear in the capture view text field. The focusActiveTextView retry loop (10 attempts × 10ms = 100ms max) may not be enough time for SwiftUI to lay out the NSHostingView tree, especially on first show or after expand. Additionally, SegmentEditor.updateNSView uses window?.makeFirstResponder which silently no-ops if the view hasn't been added to a window yet.",
+      "acceptanceCriteria": [
+        "Increase focusMaxAttempts or focusRetryDelay to give SwiftUI more time to render — e.g., 20 attempts × 20ms = 400ms, or use exponential backoff starting at 10ms",
+        "In focusActiveTextView, after makeFirstResponder succeeds, verify the text view's window is the panel (guard against stale references)",
+        "In SegmentEditor.updateNSView focus-trigger path (line ~87), add a fallback: if window?.makeFirstResponder fails or window is nil, schedule a deferred retry via Task that waits for the view to be added to a window",
+        "Add a log (Logger.ui or similar) when focus fails after all retries, including the number of text views found and the target index, to aid future debugging",
+        "The expand() path's 200ms delay before focusActiveTextView should verify the panel is still visible and not minimized before attempting focus",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "Root causes identified by analysis: (1) 100ms retry window too short for SwiftUI layout on first show, (2) SegmentEditor.updateNSView window?.makeFirstResponder silently no-ops when window is nil, (3) expand() focus attempt doesn't guard against panel being dismissed during the 200ms delay, (4) nonactivatingPanel style can cause makeFirstResponder to not retain first responder. The retry budget increase is the highest-impact fix."
     }
   ]
 }

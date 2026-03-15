@@ -23,6 +23,14 @@ enum KeyCode {
     static let l: UInt16 = 37
 }
 
+// MARK: - Navigation State
+
+struct NavigationState {
+    var level: NavigationLevel = .modes
+    var subHighlightedIndex: Int = 0
+    var showingDestinations = false
+}
+
 // MARK: - View Model
 
 @Observable
@@ -36,21 +44,17 @@ final class ModeSwitcherViewModel {
     /// Activates a mode without dismissing the switcher
     let onActivate: (UUID) -> Void
     let onOutputDestinationSelect: (UUID?) -> Void
-    var onParameterOverride: (UUID, String) -> Void
+    @ObservationIgnored var onParameterOverride: (UUID, String) -> Void
     let onDismiss: () -> Void
 
-    /// Current navigation level in the mode switcher
-    var navigationLevel: NavigationLevel = .modes
-    /// Highlighted row index in sub-levels (parameters or options)
-    var subHighlightedIndex: Int = 0
-    /// Parameter value overrides, keyed by parameter ID -> option value
-    var parameterOverrides: [UUID: String]
-
-    /// Whether the destination rows are currently expanded (toggled by "?" key)
-    var showingDestinations = false
+    /// Navigation state: level, sub-highlighted index, and destination visibility
+    var navigation = NavigationState()
+    /// Parameter value overrides, keyed by parameter ID -> option value.
+    /// @ObservationIgnored because changes always coincide with navigation state changes.
+    @ObservationIgnored var parameterOverrides: [UUID: String]
 
     /// Callback to notify panel when content height changes (e.g. destinations toggled)
-    var onResize: (() -> Void)?
+    @ObservationIgnored var onResize: (() -> Void)?
 
     /// Active destination override, applied immediately when toggled.
     /// Shown on all mode rows (not just highlighted) since it's already in effect.
@@ -118,7 +122,7 @@ final class ModeSwitcherViewModel {
             return true
         }
 
-        switch navigationLevel {
+        switch navigation.level {
         case .modes:
             return handleModesKeyEvent(keyCode: keyCode, chars: chars, charsIgnoringModifiers: charsIgnoringModifiers)
         case .parameters(let modeIndex):
@@ -131,7 +135,7 @@ final class ModeSwitcherViewModel {
     private func handleModesKeyEvent(keyCode: UInt16, chars: String, charsIgnoringModifiers: String) -> Bool {
         // Toggle destination list with "?" key
         if chars == "?" && !outputDestinations.isEmpty {
-            showingDestinations.toggle()
+            navigation.showingDestinations.toggle()
             onResize?()
             return true
         }
@@ -153,12 +157,12 @@ final class ModeSwitcherViewModel {
                 return true
             }
             if mode.parameters.count == 1 {
-                navigationLevel = .options(modeIndex: highlightedIndex, parameterIndex: 0)
+                navigation.level = .options(modeIndex: highlightedIndex, parameterIndex: 0)
             } else {
-                navigationLevel = .parameters(modeIndex: highlightedIndex)
+                navigation.level = .parameters(modeIndex: highlightedIndex)
             }
-            subHighlightedIndex = 0
-            showingDestinations = false
+            navigation.subHighlightedIndex = 0
+            navigation.showingDestinations = false
             onResize?()
             return true
         case KeyCode.returnKey:
@@ -189,22 +193,22 @@ final class ModeSwitcherViewModel {
 
         switch keyCode {
         case KeyCode.downArrow, KeyCode.j:
-            subHighlightedIndex = min(subHighlightedIndex + 1, paramCount - 1)
+            navigation.subHighlightedIndex = min(navigation.subHighlightedIndex + 1, paramCount - 1)
             return true
         case KeyCode.upArrow, KeyCode.k:
-            subHighlightedIndex = max(subHighlightedIndex - 1, 0)
+            navigation.subHighlightedIndex = max(navigation.subHighlightedIndex - 1, 0)
             return true
         case KeyCode.returnKey:
             confirmMode(mode.id)
             return true
         case KeyCode.rightArrow, KeyCode.l:
-            navigationLevel = .options(modeIndex: modeIndex, parameterIndex: subHighlightedIndex)
-            subHighlightedIndex = 0
+            navigation.level = .options(modeIndex: modeIndex, parameterIndex: navigation.subHighlightedIndex)
+            navigation.subHighlightedIndex = 0
             onResize?()
             return true
         case KeyCode.leftArrow, KeyCode.h:
-            navigationLevel = .modes
-            subHighlightedIndex = 0
+            navigation.level = .modes
+            navigation.subHighlightedIndex = 0
             onResize?()
             return true
         default:
@@ -219,22 +223,22 @@ final class ModeSwitcherViewModel {
 
         switch keyCode {
         case KeyCode.downArrow, KeyCode.j:
-            subHighlightedIndex = min(subHighlightedIndex + 1, optionCount - 1)
+            navigation.subHighlightedIndex = min(navigation.subHighlightedIndex + 1, optionCount - 1)
             return true
         case KeyCode.upArrow, KeyCode.k:
-            subHighlightedIndex = max(subHighlightedIndex - 1, 0)
+            navigation.subHighlightedIndex = max(navigation.subHighlightedIndex - 1, 0)
             return true
         case KeyCode.returnKey:
-            if subHighlightedIndex < optionCount {
-                let option = parameter.options[subHighlightedIndex]
+            if navigation.subHighlightedIndex < optionCount {
+                let option = parameter.options[navigation.subHighlightedIndex]
                 parameterOverrides[parameter.id] = option.value
                 onParameterOverride(parameter.id, option.value)
             }
             confirmMode(mode.id)
             return true
         case KeyCode.rightArrow, KeyCode.l:
-            guard subHighlightedIndex < optionCount else { return true }
-            let option = parameter.options[subHighlightedIndex]
+            guard navigation.subHighlightedIndex < optionCount else { return true }
+            let option = parameter.options[navigation.subHighlightedIndex]
             parameterOverrides[parameter.id] = option.value
             onParameterOverride(parameter.id, option.value)
             goBackFromOptions(modeIndex: modeIndex)
@@ -260,11 +264,11 @@ final class ModeSwitcherViewModel {
     func goBackFromOptions(modeIndex: Int) {
         let mode = modes[modeIndex]
         if mode.parameters.count > 1 {
-            navigationLevel = .parameters(modeIndex: modeIndex)
+            navigation.level = .parameters(modeIndex: modeIndex)
         } else {
-            navigationLevel = .modes
+            navigation.level = .modes
         }
-        subHighlightedIndex = 0
+        navigation.subHighlightedIndex = 0
         onResize?()
     }
 }

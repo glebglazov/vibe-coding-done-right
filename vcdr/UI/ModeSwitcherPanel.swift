@@ -26,10 +26,10 @@ final class ModeSwitcherPanel {
         hide()
 
         let panelHeight = Self.calculateHeight(
-            navigationLevel: viewModel.navigationLevel,
+            navigationLevel: viewModel.navigation.level,
             modes: viewModel.modes,
             destinationCount: viewModel.outputDestinations.count,
-            showingDestinations: viewModel.showingDestinations,
+            showingDestinations: viewModel.navigation.showingDestinations,
             showHint: viewModel.showHint
         )
 
@@ -64,10 +64,10 @@ final class ModeSwitcherPanel {
         viewModel.onResize = { [weak self, weak viewModel] in
             guard let self, let viewModel, let panel = self.panel else { return }
             let newHeight = Self.calculateHeight(
-                navigationLevel: viewModel.navigationLevel,
+                navigationLevel: viewModel.navigation.level,
                 modes: viewModel.modes,
                 destinationCount: viewModel.outputDestinations.count,
-                showingDestinations: viewModel.showingDestinations,
+                showingDestinations: viewModel.navigation.showingDestinations,
                 showHint: viewModel.showHint
             )
             let x = self.screenFrame.midX - Self.panelWidth / 2
@@ -135,12 +135,12 @@ final class ModeSwitcherPanel {
     func confirmAndHide() {
         if let viewModel {
             // Apply the highlighted option if drilling into parameters
-            switch viewModel.navigationLevel {
+            switch viewModel.navigation.level {
             case .options(let modeIndex, let parameterIndex):
                 let parameter = viewModel.modes[modeIndex].parameters[parameterIndex]
                 let options = parameter.options
-                if viewModel.subHighlightedIndex < options.count {
-                    let option = options[viewModel.subHighlightedIndex]
+                if viewModel.navigation.subHighlightedIndex < options.count {
+                    let option = options[viewModel.navigation.subHighlightedIndex]
                     viewModel.parameterOverrides[parameter.id] = option.value
                     viewModel.onParameterOverride(parameter.id, option.value)
                 }

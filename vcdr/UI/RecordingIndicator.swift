@@ -213,10 +213,10 @@ final class RecordingIndicatorPanel {
     private func resizeForModeSwitcher(viewModel: ModeSwitcherViewModel) {
         guard let panel else { return }
         let modeSwitcherHeight = ModeSwitcherPanel.calculateHeight(
-            navigationLevel: viewModel.navigationLevel,
+            navigationLevel: viewModel.navigation.level,
             modes: viewModel.modes,
             destinationCount: viewModel.outputDestinations.count,
-            showingDestinations: viewModel.showingDestinations,
+            showingDestinations: viewModel.navigation.showingDestinations,
             showHint: viewModel.showHint
         )
         let totalHeight = Self.panelHeight + Self.modeSwitcherGap + modeSwitcherHeight
