@@ -16,18 +16,18 @@ final class CaptureCoordinator {
     let transcriptionHistory: TranscriptionHistory
     let overrides: ConversationOverrides
 
-    var session: PipelineSession?
+    @ObservationIgnored var session: PipelineSession?
 
-    private var originalCapture: CapturedContext?
-    private var accumulatedCaptures: [CapturedContext] = []
+    @ObservationIgnored private var originalCapture: CapturedContext?
+    @ObservationIgnored private var accumulatedCaptures: [CapturedContext] = []
 
-    var pillResetTask: Task<Void, Never>?
+    @ObservationIgnored var pillResetTask: Task<Void, Never>?
 
-    var autoDismissTask: Task<Void, Never>?
+    @ObservationIgnored var autoDismissTask: Task<Void, Never>?
 
-    private var expandTimerTask: Task<Void, Never>?
+    @ObservationIgnored private var expandTimerTask: Task<Void, Never>?
 
-    var onWillStartInput: (() -> Void)?
+    @ObservationIgnored var onWillStartInput: (() -> Void)?
 
     var isModeSwitcherHostVisible: Bool { panel.isVisible && !panel.isMinimized }
 

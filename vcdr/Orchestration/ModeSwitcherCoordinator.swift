@@ -10,23 +10,7 @@ final class ModeSwitcherCoordinator {
     private let panel = ModeSwitcherPanel()
     private let overrides: ConversationOverrides
 
-    /// Called when a mode is selected (so the indicator can update labels)
-    var onModeSelected: ((UUID) -> Void)?
-
-    /// Called when the destination override changes (for UI label updates on indicator/push-to-type)
-    var onDestinationOverrideChanged: ((UUID?) -> Void)?
-
-    /// Returns true if a contextual host is available and mode list was shown there
-    var showContextual: (() -> Bool)?
-
-    /// Returns true if a contextual mode list was visible and was dismissed
-    var dismissContextual: (() -> Bool)?
-
-    /// Called when contextual mode switcher is shown (to suspend Escape tap)
-    var onContextualSwitcherShown: (() -> Void)?
-
-    /// Called when contextual mode switcher is hidden (to resume Escape tap)
-    var onContextualSwitcherHidden: (() -> Void)?
+    @ObservationIgnored weak var delegate: ModeSwitcherCoordinatorDelegate?
 
     init(settings: AppSettings, overrides: ConversationOverrides) {
         self.settings = settings
@@ -73,20 +57,17 @@ final class ModeSwitcherCoordinator {
             onSelect: { [weak self] id in
                 guard let self else { return }
                 self.settings.activeModeID = id
-                self.onModeSelected?(id)
                 onDismiss()
                 Logger.settings.info("Mode switched to \(id)")
             },
             onActivate: { [weak self] id in
                 guard let self else { return }
                 self.settings.activeModeID = id
-                self.onModeSelected?(id)
                 Logger.settings.info("Mode activated (no dismiss): \(id)")
             },
             onOutputDestinationSelect: { [weak self] destinationID in
                 guard let self else { return }
                 self.overrides.destinationOverride = destinationID
-                self.onDestinationOverrideChanged?(destinationID)
                 Logger.settings.info("Output destination override set to \(String(describing: destinationID))")
             },
             onParameterOverride: { _ , _ in },
@@ -100,7 +81,6 @@ final class ModeSwitcherCoordinator {
                 let modeID = vm.modes[vm.highlightedIndex].id
                 self.settings.activeModeID = modeID
                 vm.activeModeID = modeID
-                self.onModeSelected?(modeID)
                 Logger.settings.info("Mode auto-activated via parameter change: \(modeID)")
             }
             self.overrides.parameterOverrides[parameterID] = value
@@ -131,15 +111,15 @@ final class ModeSwitcherCoordinator {
             return
         }
         // Try contextual dismiss (confirm is handled via the VM's onSelect callback)
-        if dismissContextual?() == true {
-            onContextualSwitcherHidden?()
+        if delegate?.modeSwitcherShouldDismissContextual() == true {
+            delegate?.modeSwitcherDidHideContextual()
         }
     }
 
     private func toggleSwitcher() {
         // 1. If contextual mode list is showing, dismiss it
-        if dismissContextual?() == true {
-            onContextualSwitcherHidden?()
+        if delegate?.modeSwitcherShouldDismissContextual() == true {
+            delegate?.modeSwitcherDidHideContextual()
             return
         }
 
@@ -150,8 +130,8 @@ final class ModeSwitcherCoordinator {
         }
 
         // 3. Try contextual host first
-        if showContextual?() == true {
-            onContextualSwitcherShown?()
+        if delegate?.modeSwitcherShouldShowContextual() == true {
+            delegate?.modeSwitcherDidShowContextual()
             return
         }
 

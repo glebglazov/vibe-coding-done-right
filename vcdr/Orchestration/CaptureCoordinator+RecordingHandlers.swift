@@ -196,3 +196,48 @@ extension CaptureCoordinator {
         setupHotkey()
     }
 }
+
+// MARK: - RecordingCoordinatorDelegate
+
+extension CaptureCoordinator: RecordingCoordinatorDelegate {
+
+    func recordingCoordinatorWillStartRecording() {
+        onWillStartInput?()
+    }
+
+    func recordingCoordinatorIsPanelVisible() -> Bool {
+        isPanelVisible
+    }
+
+    func recordingCoordinatorDidStartRecording(isFollowUp: Bool) {
+        handleRecordingStarted(isFollowUp: isFollowUp)
+    }
+
+    func recordingCoordinatorDidStartTranscribing() {
+        handleTranscribing()
+    }
+
+    func recordingCoordinatorDidCompleteRecording(result: RecordingResult) {
+        handleRecordingComplete(result: result)
+    }
+
+    func recordingCoordinatorDidFailTranscription(isFollowUp: Bool) {
+        handleTranscriptionFailed(isFollowUp: isFollowUp)
+    }
+
+    func recordingCoordinatorDidCancelRecording(wasFollowUp: Bool, wasFreshPill: Bool) {
+        handleRecordingCancelled(wasFollowUp: wasFollowUp, wasFreshPill: wasFreshPill)
+    }
+
+    func recordingCoordinatorDidFailRecording(message: String) {
+        handleRecordingFailed(message: message)
+    }
+
+    func recordingCoordinatorDidCaptureSelection() {
+        panel.signalClipboardCapture()
+    }
+
+    func recordingCoordinatorDidCaptureClipboard() {
+        panel.signalClipboardCapture()
+    }
+}

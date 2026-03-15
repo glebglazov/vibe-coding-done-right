@@ -48,7 +48,7 @@ extension RecordingCoordinator {
 
             guard !text.isEmpty else {
                 escCancelManager.isEnabled = false
-                onTranscriptionFailed?(isFollowUp)
+                delegate?.recordingCoordinatorDidFailTranscription(isFollowUp: isFollowUp)
                 processingTask = nil
                 state = .idle
                 return
@@ -66,7 +66,7 @@ extension RecordingCoordinator {
             escCancelManager.isEnabled = false
             processingTask = nil
             state = .idle
-            onRecordingComplete?(result)
+            delegate?.recordingCoordinatorDidCompleteRecording(result: result)
             Logger.app.info("Pipeline: result emitted to handler")
 
         } catch is CancellationError {
@@ -77,7 +77,7 @@ extension RecordingCoordinator {
             processingTask = nil
             recordingRun = nil
             state = .error(error.localizedDescription)
-            onRecordingFailed?(error.localizedDescription)
+            delegate?.recordingCoordinatorDidFailRecording(message: error.localizedDescription)
             recordingIndicator.update(phase: .error, message: error.localizedDescription)
             recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Pipeline failed: \(error)")

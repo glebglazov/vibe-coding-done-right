@@ -23,12 +23,32 @@ struct E2ETestEnvironment {
     private let userDefaultsSuiteName: String
 
     /// Mutable container for callback captures, shared via reference.
+    /// Also acts as the RecordingCoordinatorDelegate for test assertions.
     @MainActor
-    final class CallbackResults {
+    final class CallbackResults: RecordingCoordinatorDelegate {
         var completed: [RecordingResult] = []
         var failedMessages: [String] = []
         var transcriptionFailedCount = 0
         var cancelledCount = 0
+
+        func recordingCoordinatorWillStartRecording() {}
+        func recordingCoordinatorIsPanelVisible() -> Bool { false }
+        func recordingCoordinatorDidStartRecording(isFollowUp: Bool) {}
+        func recordingCoordinatorDidStartTranscribing() {}
+        func recordingCoordinatorDidCompleteRecording(result: RecordingResult) {
+            completed.append(result)
+        }
+        func recordingCoordinatorDidFailTranscription(isFollowUp: Bool) {
+            transcriptionFailedCount += 1
+        }
+        func recordingCoordinatorDidCancelRecording(wasFollowUp: Bool, wasFreshPill: Bool) {
+            cancelledCount += 1
+        }
+        func recordingCoordinatorDidFailRecording(message: String) {
+            failedMessages.append(message)
+        }
+        func recordingCoordinatorDidCaptureSelection() {}
+        func recordingCoordinatorDidCaptureClipboard() {}
     }
 
     init(
@@ -80,19 +100,7 @@ struct E2ETestEnvironment {
 
         let results = CallbackResults()
         self.results = results
-
-        coordinator.onRecordingComplete = { result in
-            results.completed.append(result)
-        }
-        coordinator.onRecordingFailed = { message in
-            results.failedMessages.append(message)
-        }
-        coordinator.onTranscriptionFailed = { _ in
-            results.transcriptionFailedCount += 1
-        }
-        coordinator.onRecordingCancelled = { _, _ in
-            results.cancelledCount += 1
-        }
+        coordinator.delegate = results
     }
 
     // MARK: - State Helpers

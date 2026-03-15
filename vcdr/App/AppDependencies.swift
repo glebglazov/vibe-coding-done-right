@@ -85,93 +85,16 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator
         )
 
-        // Recording delegate closures
-        coordinator.isPanelVisible = { [weak captureCoordinator] in
-            captureCoordinator?.isPanelVisible ?? false
-        }
+        // Wire RecordingCoordinator → CaptureCoordinator via delegate
+        coordinator.delegate = captureCoordinator
 
-        coordinator.onRecordingStarted = { [weak captureCoordinator] isFollowUp in
-            captureCoordinator?.handleRecordingStarted(isFollowUp: isFollowUp)
-        }
-
-        coordinator.onTranscribing = { [weak captureCoordinator] in
-            captureCoordinator?.handleTranscribing()
-        }
-
-        coordinator.onRecordingComplete = { [weak captureCoordinator] result in
-            captureCoordinator?.handleRecordingComplete(result: result)
-        }
-
-        coordinator.onTranscriptionFailed = { [weak captureCoordinator] isFollowUp in
-            captureCoordinator?.handleTranscriptionFailed(isFollowUp: isFollowUp)
-        }
-
-        coordinator.onRecordingCancelled = { [weak captureCoordinator] wasFollowUp, wasFreshPill in
-            captureCoordinator?.handleRecordingCancelled(wasFollowUp: wasFollowUp, wasFreshPill: wasFreshPill)
-        }
-
-        coordinator.onRecordingFailed = { [weak captureCoordinator] message in
-            captureCoordinator?.handleRecordingFailed(message: message)
-        }
-
-        coordinator.onSelectionCaptured = { [weak captureCoordinator] in
-            captureCoordinator?.panel.signalClipboardCapture()
-        }
-
-        coordinator.onClipboardCaptured = { [weak captureCoordinator] in
-            captureCoordinator?.panel.signalClipboardCapture()
-        }
-
-        // Dismiss mode switcher when recording starts
-        coordinator.onWillStartRecording = { [weak self] in
-            self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
-        }
+        // Dismiss mode switcher when recording or input starts
         captureCoordinator.onWillStartInput = { [weak self] in
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
         }
 
-        // Wire contextual mode switcher: show mode list inside recording indicator or capture panel
-        modeSwitcherCoordinator.showContextual = { [weak self] in
-            guard let self else { return false }
-            if recordingIndicator.isVisible {
-                let vm = self.modeSwitcherCoordinator.makeViewModel(onDismiss: {
-                    recordingIndicator.hideModeSwitcher()
-                    self.modeSwitcherCoordinator.onContextualSwitcherHidden?()
-                })
-                recordingIndicator.showModeSwitcher(viewModel: vm)
-                return true
-            }
-            if self.captureCoordinator.isModeSwitcherHostVisible {
-                let vm = self.modeSwitcherCoordinator.makeViewModel(onDismiss: {
-                    self.captureCoordinator.hideModeSwitcher()
-                    self.modeSwitcherCoordinator.onContextualSwitcherHidden?()
-                })
-                self.captureCoordinator.showModeSwitcher(viewModel: vm)
-                return true
-            }
-            return false
-        }
-
-        modeSwitcherCoordinator.dismissContextual = { [weak self] in
-            guard let self else { return false }
-            if recordingIndicator.isModeSwitcherVisible {
-                recordingIndicator.hideModeSwitcher()
-                return true
-            }
-            if self.captureCoordinator.isModeSwitcherVisible {
-                self.captureCoordinator.hideModeSwitcher()
-                return true
-            }
-            return false
-        }
-
-        modeSwitcherCoordinator.onContextualSwitcherShown = { [weak self] in
-            self?.coordinator.suspendEscCancel()
-        }
-
-        modeSwitcherCoordinator.onContextualSwitcherHidden = { [weak self] in
-            self?.coordinator.resumeEscCancel()
-        }
+        // Wire ModeSwitcherCoordinator → AppDependencies via delegate
+        modeSwitcherCoordinator.delegate = self
 
         // Wire Escape-to-cancel: when the capture panel is locked for follow-up
         // (recording/processing in progress), Escape cancels the recording.
@@ -279,5 +202,52 @@ final class AppDependencies {
 
     deinit {
         permissionTimer?.invalidate()
+    }
+}
+
+// MARK: - ModeSwitcherCoordinatorDelegate
+
+extension AppDependencies: ModeSwitcherCoordinatorDelegate {
+
+    func modeSwitcherShouldShowContextual() -> Bool {
+        let indicator = coordinator.recordingIndicator
+        if indicator.isVisible {
+            let vm = modeSwitcherCoordinator.makeViewModel(onDismiss: { [weak self] in
+                indicator.hideModeSwitcher()
+                self?.coordinator.resumeEscCancel()
+            })
+            indicator.showModeSwitcher(viewModel: vm)
+            return true
+        }
+        if captureCoordinator.isModeSwitcherHostVisible {
+            let vm = modeSwitcherCoordinator.makeViewModel(onDismiss: { [weak self] in
+                self?.captureCoordinator.hideModeSwitcher()
+                self?.coordinator.resumeEscCancel()
+            })
+            captureCoordinator.showModeSwitcher(viewModel: vm)
+            return true
+        }
+        return false
+    }
+
+    func modeSwitcherShouldDismissContextual() -> Bool {
+        let indicator = coordinator.recordingIndicator
+        if indicator.isModeSwitcherVisible {
+            indicator.hideModeSwitcher()
+            return true
+        }
+        if captureCoordinator.isModeSwitcherVisible {
+            captureCoordinator.hideModeSwitcher()
+            return true
+        }
+        return false
+    }
+
+    func modeSwitcherDidShowContextual() {
+        coordinator.suspendEscCancel()
+    }
+
+    func modeSwitcherDidHideContextual() {
+        coordinator.resumeEscCancel()
     }
 }

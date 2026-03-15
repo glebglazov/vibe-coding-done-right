@@ -45,27 +45,18 @@ final class RecordingCoordinator {
     let toggleRecordingHotkeyManager = GlobalHotkeyManager()
     let escCancelManager = GlobalHotkeyManager()
     let destinationHotkeyManager = DestinationHotkeyManager()
-    var pendingDestinationOverride: UUID?
     private let mediaPlaybackController: MediaPlaybackController
     let recordingIndicator: RecordingIndicatorPanel
     private let selectionCapturer: SelectionCapturer
     private let clipboardMonitor: ClipboardMonitor
     let overrides: ConversationOverrides
 
-    var onWillStartRecording: (() -> Void)?
-    var isPanelVisible: (() -> Bool)?
-    var onRecordingStarted: ((_ isFollowUp: Bool) -> Void)?
-    var onTranscribing: (() -> Void)?
-    var onRecordingComplete: ((RecordingResult) -> Void)?
-    var onTranscriptionFailed: ((_ isFollowUp: Bool) -> Void)?
-    var onRecordingCancelled: ((_ wasFollowUp: Bool, _ wasFreshPill: Bool) -> Void)?
-    var onRecordingFailed: ((_ message: String) -> Void)?
-    var onSelectionCaptured: (() -> Void)?
-    var onClipboardCaptured: (() -> Void)?
+    @ObservationIgnored weak var delegate: RecordingCoordinatorDelegate?
 
-    var recordingRun: RecordingRunState?
-    private var recordingStartInstant: ContinuousClock.Instant?
-    var processingTask: Task<Void, Never>?
+    @ObservationIgnored var pendingDestinationOverride: UUID?
+    @ObservationIgnored var recordingRun: RecordingRunState?
+    @ObservationIgnored private var recordingStartInstant: ContinuousClock.Instant?
+    @ObservationIgnored var processingTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -103,7 +94,7 @@ final class RecordingCoordinator {
     }
 
     private func startRecording() async {
-        onWillStartRecording?()
+        delegate?.recordingCoordinatorWillStartRecording()
 
         if case .error = state {
             state = .idle
@@ -126,14 +117,14 @@ final class RecordingCoordinator {
             }
         }
 
-        let isFollowUp = isPanelVisible?() ?? false
+        let isFollowUp = delegate?.recordingCoordinatorIsPanelVisible() ?? false
         recordingRun = RecordingRunState(isFollowUp: isFollowUp)
 
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
             state = .error("Model still loading...")
             recordingRun = nil
-            onRecordingFailed?("Model still loading...")
+            delegate?.recordingCoordinatorDidFailRecording(message: "Model still loading...")
             recordingIndicator.show()
             recordingIndicator.update(phase: .error, message: "Model still loading...")
             recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
@@ -141,11 +132,11 @@ final class RecordingCoordinator {
             return
         }
 
-        if !isFollowUp, let checkPanel = isPanelVisible, checkPanel() {
+        if !isFollowUp, delegate?.recordingCoordinatorIsPanelVisible() == true {
             Logger.consistency.warning("onRecordingStarted(isFollowUp=false) but panel is already visible — potential stale panel from previous cycle")
         }
 
-        onRecordingStarted?(isFollowUp)
+        delegate?.recordingCoordinatorDidStartRecording(isFollowUp: isFollowUp)
 
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         recordingRun?.previousActiveApp = frontmostApp
@@ -164,7 +155,7 @@ final class RecordingCoordinator {
         Task { @MainActor [weak self] in
             guard let captured = await self?.recordingRun?.captureTask?.value,
                   captured != nil else { return }
-            self?.onSelectionCaptured?()
+            self?.delegate?.recordingCoordinatorDidCaptureSelection()
         }
 
         if !isFollowUp {
@@ -188,14 +179,14 @@ final class RecordingCoordinator {
             Task {
                 await clipboardMonitor.start(baselineChangeCount: clipboardBaseline) { [weak self] _ in
                     self?.recordingIndicator.signalClipboardCapture()
-                    self?.onClipboardCaptured?()
+                    self?.delegate?.recordingCoordinatorDidCaptureClipboard()
                 }
             }
 
         } else {
             await mediaPlaybackController.resumeIfNeeded()
             state = .error("Failed to start recording")
-            onRecordingFailed?("Failed to start recording")
+            delegate?.recordingCoordinatorDidFailRecording(message: "Failed to start recording")
             recordingIndicator.update(phase: .error, message: "Failed to start recording")
             recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Failed to start recording")
@@ -221,7 +212,7 @@ final class RecordingCoordinator {
             Task { await mediaPlaybackController.resumeIfNeeded() }
             escCancelManager.isEnabled = false
             state = .error("No audio recorded")
-            onRecordingFailed?("No audio recorded")
+            delegate?.recordingCoordinatorDidFailRecording(message: "No audio recorded")
             recordingIndicator.update(phase: .error, message: "No audio recorded")
             recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
@@ -229,7 +220,7 @@ final class RecordingCoordinator {
         }
 
         state = .transcribing
-        onTranscribing?()
+        delegate?.recordingCoordinatorDidStartTranscribing()
         recordingIndicator.update(phase: .processing)
         Logger.app.info("Recording stopped, transcribing...")
 
@@ -275,7 +266,7 @@ final class RecordingCoordinator {
         recordingStartInstant = nil
         overrides.clearAll()
 
-        onRecordingCancelled?(wasFollowUp, !wasFollowUp)
+        delegate?.recordingCoordinatorDidCancelRecording(wasFollowUp: wasFollowUp, wasFreshPill: !wasFollowUp)
 
         if wasProcessing {
             Logger.app.info("Processing cancelled via Esc")
