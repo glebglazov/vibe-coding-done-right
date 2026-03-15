@@ -423,3 +423,18 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - `guard started else { ... return }` works well with the defer because the error path sets state before returning, and the defer only fires for `.preparingToRecord`
   - The PRD referenced "transcribing → cancel-and-retry" and "panel visible + minimized → expand-and-return" in startRecording, but these patterns don't exist in the current code — the guard at line 103 just returns with a buzz
 ---
+
+## 2026-03-15 - US-026
+- Replaced `let dependencies: AppDependencies` with scoped typed parameters in HomeTabView, AudioTabView, TranscriptionTabView, and DebugTabView
+- Updated MainWindowView to pass individual dependencies when constructing each tab
+- HomeTabView: settings, coordinator, modeSwitcherCoordinator, captureCoordinator, copyLatestCaptureHandler, hasMicrophonePermission, hasAccessibilityPermission (computed needsPermissionAttention locally)
+- AudioTabView: audioDeviceMonitor, inputLevelMonitor, settings, hasMicrophonePermission
+- TranscriptionTabView: settings, isTranscriptionReady, initializationStatus
+- DebugTabView: coordinator, audioRecorder, isTranscriptionReady
+- Files changed: HomeTabView.swift, AudioTabView.swift, TranscriptionTabView.swift, DebugTabView.swift, MainWindowView.swift
+- **Learnings for future iterations:**
+  - Permission booleans (hasMicrophonePermission, hasAccessibilityPermission) live on AppDependencies @Observable, so parent view reads them and passes as plain Bool — still reactive because parent body re-evaluates
+  - needsPermissionAttention is a computed property (!hasMic || !hasAccessibility) — can be computed locally in child view rather than passed
+  - DebugTabView is wrapped in #if DEBUG — the audioRecorder property is also DEBUG-only in AppDependencies
+  - replace_all with `dependencies.` → `` efficiently refactors all references in a tab view file
+---

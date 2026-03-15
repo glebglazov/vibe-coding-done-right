@@ -444,7 +444,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 26,
-      "passes": false,
+      "passes": true,
       "notes": "Mechanical refactor. Read each tab view to identify which dependencies it actually accesses, then change the init to accept only those. This makes each view's dependencies explicit and testable."
     },
     {
