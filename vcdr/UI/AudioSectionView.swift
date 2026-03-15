@@ -7,6 +7,7 @@ struct AudioLevelMeter: View {
 
     // MARK: - Constants
 
+    private static let meterWidth: CGFloat = 120
     private static let meterHeight: CGFloat = 8
     private static let cornerRadius: CGFloat = 4
     private static let yellowThreshold: Float = 0.5
@@ -24,7 +25,7 @@ struct AudioLevelMeter: View {
                     .animation(.linear(duration: 0.05), value: level)
             }
         }
-        .frame(width: 120, height: Self.meterHeight)
+        .frame(width: Self.meterWidth, height: Self.meterHeight)
     }
 
     private var meterColor: Color {

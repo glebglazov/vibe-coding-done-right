@@ -19,11 +19,12 @@ actor ParakeetProvider: TranscriptionProvider {
 
     // MARK: - Constants
     private static let millisecondsPerSecond: Double = 1000
+    private static let attosecondsPerMillisecond: Double = 1e15
 
     private func elapsedMs(since start: ContinuousClock.Instant) -> String {
         let duration = ContinuousClock.now - start
         let ms = Double(duration.components.seconds) * Self.millisecondsPerSecond
-            + Double(duration.components.attoseconds) / 1e15
+            + Double(duration.components.attoseconds) / Self.attosecondsPerMillisecond
         return String(format: "%.0fms", ms)
     }
 

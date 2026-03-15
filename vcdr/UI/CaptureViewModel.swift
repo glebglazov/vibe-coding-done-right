@@ -144,7 +144,7 @@ final class CaptureViewModel {
 
         // During recording, only handle submit/dismiss — let typing pass through
         if isRecording {
-            if event.keyCode == 53 { // Escape
+            if event.keyCode == KeyCode.escape {
                 onDismiss()
                 return true
             }
@@ -166,7 +166,7 @@ final class CaptureViewModel {
         }
 
         switch event.keyCode {
-        case 36: // Return
+        case KeyCode.returnKey:
             // Shift+Return inserts newline (pass through to text editor)
             if event.modifierFlags.contains(.shift) { return false }
             guard !isProcessing else { return true }
@@ -174,7 +174,7 @@ final class CaptureViewModel {
             guard !effectiveText.isEmpty else { return true }
             onSubmit(effectiveText)
             return true
-        case 53: // Escape
+        case KeyCode.escape:
             onDismiss()
             return true
         default:

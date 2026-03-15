@@ -38,6 +38,10 @@ final class AudioRecorder: NSObject {
     private static let minimumFrameCount: AVAudioFrameCount = 16000
     /// Duration threshold below which silence padding is needed
     private static let minimumRecordingDuration: Duration = .seconds(1)
+    /// Mono channel for voice recording
+    private static let channelCount = 1
+    /// 16-bit PCM depth for Parakeet compatibility
+    private static let bitDepth = 16
 
     nonisolated func requestMicrophonePermission() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -84,8 +88,8 @@ final class AudioRecorder: NSObject {
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
             AVSampleRateKey: Self.sampleRate,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
+            AVNumberOfChannelsKey: Self.channelCount,
+            AVLinearPCMBitDepthKey: Self.bitDepth,
             AVLinearPCMIsFloatKey: false,
             AVLinearPCMIsBigEndianKey: false
         ]

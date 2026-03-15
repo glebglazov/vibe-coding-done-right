@@ -93,7 +93,7 @@ struct ModesListView: View {
     /// Returns the 1-based switcher shortcut number for a mode, or nil if not in the switcher.
     private func switcherNumber(for mode: Mode) -> Int? {
         guard let index = settings.visibleModes.firstIndex(where: { $0.id == mode.id }),
-              index < 9 else { return nil }
+              index < ModeSwitcherPanel.maxModesInSwitcher else { return nil }
         return index + 1
     }
 

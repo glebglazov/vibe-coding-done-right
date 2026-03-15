@@ -12,7 +12,7 @@ struct HotkeySettings: Codable, Equatable {
     static let `default` = HotkeySettings(
         modeSwitcherHotkey: .unassigned,
         pushToTypeHotkey: .unassigned,
-        pushToTypeExpandDelay: 500,
+        pushToTypeExpandDelay: AppSettings.defaultPushToTypeExpandDelay,
         toggleRecordingHotkey: .defaultToggleRecording,
         copyLatestCaptureHotkey: .unassigned,
         cancelRecordingHotkey: .defaultCancelRecording,

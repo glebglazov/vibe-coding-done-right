@@ -10,6 +10,8 @@ extension CapturePanel {
     static let panelMinBaseHeight: CGFloat = 60
     static let segmentSectionMinHeight: CGFloat = 28
     static let errorBannerHeight: CGFloat = 28
+    /// Scaling factor for capture text line height (slightly tighter than normal text)
+    private static let captureLineHeightScale: CGFloat = 0.9
 
     static func maxPanelHeight() -> CGFloat {
         let screen = NSScreen.main ?? NSScreen.screens.first
@@ -31,7 +33,7 @@ extension CapturePanel {
 
             if let capture = segment.capture {
                 let captureLines = CGFloat(capture.text.components(separatedBy: .newlines).count)
-                segmentContentHeight += captureLines * lineHeight * 0.9
+                segmentContentHeight += captureLines * lineHeight * captureLineHeightScale
                 segmentContentHeight += 8 // separator spacing
             }
         }

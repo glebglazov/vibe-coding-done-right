@@ -15,6 +15,9 @@ final class ModeSwitcherPanel {
     private static let panelOffsetBelowMenuBar: CGFloat = 8
     static let separatorHeight: CGFloat = 17
     static let hintRowHeight: CGFloat = 24
+    static let headerHeight: CGFloat = 24
+    /// Maximum number of modes shown in the quick switcher (keys 1-9)
+    static let maxModesInSwitcher = 9
     private static let resizeAnimationDuration: CGFloat = 0.15
 
     /// Stored screen positioning state for reuse during resize
@@ -102,11 +105,9 @@ final class ModeSwitcherPanel {
         showingDestinations: Bool,
         showHint: Bool
     ) -> CGFloat {
-        let headerHeight: CGFloat = 24
-
         switch navigationLevel {
         case .modes:
-            let modeRowsHeight = rowHeight * CGFloat(min(modes.count, 9))
+            let modeRowsHeight = rowHeight * CGFloat(min(modes.count, maxModesInSwitcher))
             let hasDestinations = destinationCount > 0
 
             if !hasDestinations {

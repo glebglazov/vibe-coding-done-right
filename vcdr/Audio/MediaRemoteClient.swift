@@ -15,6 +15,13 @@ final class MediaRemoteClient: Sendable {
     private static let libraryName = "MediaRemoteAdapter"
     private static let libraryExtension = "dylib"
     private static let resourceSubdirectory = "MediaRemote"
+    private static let commandTest = "test"
+    private static let commandGet = "get"
+    private static let commandSend = "send"
+    /// MRMediaRemoteSendCommand kMRPause
+    private static let sendArgPause = "1"
+    /// MRMediaRemoteSendCommand kMRPlay
+    private static let sendArgPlay = "0"
 
     // MARK: - Now Playing Info
 
@@ -37,7 +44,7 @@ final class MediaRemoteClient: Sendable {
         let result = await runAdapter(
             scriptPath: scriptPath,
             libraryPath: libraryPath,
-            command: "test"
+            command: Self.commandTest
         )
         let success = result?.exitCode == 0
         Logger.audio.info("MediaRemote adapter test: \(success ? "passed" : "failed")")
@@ -52,7 +59,7 @@ final class MediaRemoteClient: Sendable {
         guard let result = await runAdapter(
             scriptPath: scriptPath,
             libraryPath: libraryPath,
-            command: "get"
+            command: Self.commandGet
         ), result.exitCode == 0 else { return nil }
 
         return parseNowPlayingJSON(result.stdout)
@@ -64,8 +71,8 @@ final class MediaRemoteClient: Sendable {
         _ = await runAdapter(
             scriptPath: scriptPath,
             libraryPath: libraryPath,
-            command: "send",
-            arguments: ["1"]
+            command: Self.commandSend,
+            arguments: [Self.sendArgPause]
         )
         Logger.audio.info("MediaRemote: sent pause command")
     }
@@ -76,8 +83,8 @@ final class MediaRemoteClient: Sendable {
         _ = await runAdapter(
             scriptPath: scriptPath,
             libraryPath: libraryPath,
-            command: "send",
-            arguments: ["0"]
+            command: Self.commandSend,
+            arguments: [Self.sendArgPlay]
         )
         Logger.audio.info("MediaRemote: sent play command")
     }

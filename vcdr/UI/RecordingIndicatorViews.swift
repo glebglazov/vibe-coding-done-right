@@ -275,6 +275,7 @@ struct AnimatedDotsView: View {
     private static let dotSpacing: CGFloat = 3
     private static let bounceHeight: CGFloat = 4
     private static let animationDuration: Double = 0.4
+    private static let dotStaggerDelay: Double = 0.15
     private static let dotCount = 3
 
     @State private var isAnimating = false
@@ -289,7 +290,7 @@ struct AnimatedDotsView: View {
                     .animation(
                         .easeInOut(duration: Self.animationDuration)
                             .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.15),
+                            .delay(Double(index) * Self.dotStaggerDelay),
                         value: isAnimating
                     )
             }
