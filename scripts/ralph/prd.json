@@ -187,7 +187,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "This is a broad refactor — take care to keep all call sites working. The computed property delegation pattern preserves API compatibility."
     },
     {

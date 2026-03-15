@@ -28,6 +28,8 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - CapturePanel event monitoring (setupEventMonitors, focusActiveTextView) lives in CapturePanel+Events.swift
 - CapturePanel content manipulation, processing, mode switcher, and follow-up methods live in CapturePanel+Content.swift
 - CapturePanel layout constants and height calculation live in CapturePanel+Layout.swift
+- AppSettings groups hotkey properties into HotkeySettings and transcription properties into TranscriptionSettings sub-structs (SettingsTypes.swift). Computed compatibility accessors in AppSettings+Compatibility.swift preserve the original API (e.g., settings.toggleRecordingHotkey still works)
+- Use AppSettings.decodeSetting(from:forKey:default:) and boolSetting(from:forKey:default:) for UserDefaults decode patterns, and encode(_:forKey:) for Codable save patterns
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -166,4 +168,22 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - `panelBaseHeight` was declared but never used (calculateHeight uses `panelMinBaseHeight` from Layout extension) — safe to remove
   - `onSubmitText` callback was declared but never assigned or called anywhere — safe to remove
   - CapturePanel+Content.swift groups content manipulation + processing + mode switcher + follow-up into a coherent "content operations" extension
+---
+
+## 2026-03-15 - US-011
+- Grouped 6 hotkey properties + showModeSwitcherHint into HotkeySettings Codable sub-struct
+- Grouped removeFillerWords, terminatorTemplateEnabled, terminatorTemplate into TranscriptionSettings Codable sub-struct
+- Reduced observable stored properties from 15 to 7 (hotkeySettings, transcriptionSettings, modes, activeModeID, outputDestinations, audioSettings, availableTemplateIDs)
+- Extracted generic decode helpers: decodeSetting<T>(from:forKey:default:) for Codable, boolSetting(from:forKey:default:) for bools, encode<T>(_:forKey:) for save
+- Created AppSettings+Compatibility.swift with 10 computed property accessors delegating to sub-structs (preserves all existing call sites unchanged)
+- Created SettingsTypes.swift with HotkeySettings and TranscriptionSettings struct definitions
+- AppSettings.swift: 356 → 286 lines; init reduced from ~147 to ~80 lines; save reduced from ~33 to ~16 lines
+- Files changed: 1 modified (AppSettings.swift), 2 new (AppSettings+Compatibility.swift, SettingsTypes.swift)
+- **Learnings for future iterations:**
+  - Static helper methods (decodeSetting, boolSetting) are needed for use during init because instance methods can't be called before all stored properties are initialized
+  - The encode helper can be an instance method since save() is only called from didSet (after init completes)
+  - didSet on stored properties DOES fire during init phase 2 (after all properties are initialized) — the existing outputDestinations.append() at end of init triggers save(), which works because userDefaults is set first
+  - @Observable computed properties in extension files work correctly — they access stored properties which are tracked, so observation propagates across files
+  - Individual UserDefaults keys are kept for backward compatibility — save() writes to the same keys as before, init reads them with generic helpers
+  - Moving sub-struct definitions to SettingsTypes.swift freed ~30 lines to get AppSettings.swift under 300
 ---
