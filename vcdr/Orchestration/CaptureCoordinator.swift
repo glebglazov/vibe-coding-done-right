@@ -369,10 +369,6 @@ final class CaptureCoordinator {
         setupEscCancelForCollapsed()
     }
 
-    func updateHotkey() {
-        setupHotkey()
-    }
-
     private func setupEscCancelForCollapsed() {
         escCancelManager.isEnabled = false
         escCancelManager.onKeyDown = { [weak self] in

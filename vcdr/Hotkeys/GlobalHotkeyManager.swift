@@ -4,8 +4,7 @@ import ApplicationServices
 import OSLog
 
 final class GlobalHotkeyManager {
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    private let tap = EventTapManager()
 
     private var targetKeyCode: CGKeyCode = 0
     private var targetModifiers: CGEventFlags = []
@@ -34,13 +33,10 @@ final class GlobalHotkeyManager {
             return false
         }
 
-        let eventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let eventMask = CGEventMask((1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue))
 
-        eventTap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: CGEventMask(eventMask),
+        let installed = tap.install(
+            eventMask: eventMask,
             callback: { _, type, event, refcon -> Unmanaged<CGEvent>? in
                 guard let refcon else { return Unmanaged.passUnretained(event) }
                 let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
@@ -49,14 +45,10 @@ final class GlobalHotkeyManager {
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         )
 
-        guard let eventTap else {
+        guard installed else {
             Logger.hotkeys.error("Failed to create event tap")
             return false
         }
-
-        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        CGEvent.tapEnable(tap: eventTap, enable: true)
 
         let display = Self.shortcutDisplayString(keyCode: keyCode, modifiers: modifiers)
         Logger.hotkeys.info("Hotkey registered: \(display)")
@@ -64,21 +56,15 @@ final class GlobalHotkeyManager {
     }
 
     func unregister() {
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
-            if let runLoopSource {
-                CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-                self.runLoopSource = nil
-            }
-            self.eventTap = nil
-            Logger.hotkeys.info("Hotkey unregistered")
-        }
+        guard tap.isInstalled else { return }
+        tap.uninstall()
+        Logger.hotkeys.info("Hotkey unregistered")
     }
 
     private func handleEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             Logger.hotkeys.warning("Event tap disabled, re-enabling")
-            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+            tap.reEnableTap()
 
             // If the hotkey was active but the key is no longer physically held,
             // we missed the key-up while the tap was disabled. Fire it now.
@@ -179,7 +165,7 @@ final class GlobalHotkeyManager {
         return names[keyCode] ?? "Key\(keyCode)"
     }
 
-    var isRegistered: Bool { eventTap != nil }
+    var isRegistered: Bool { tap.isInstalled }
 
     deinit { unregister() }
 }

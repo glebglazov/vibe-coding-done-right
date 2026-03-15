@@ -341,10 +341,6 @@ final class RecordingCoordinator {
         )
     }
 
-    func updateToggleRecordingHotkey() {
-        setupToggleRecordingHotkey()
-    }
-
     func setupEscCancel() {
         let binding = settings.cancelRecordingHotkey
         guard binding.isAssigned else {
@@ -362,10 +358,6 @@ final class RecordingCoordinator {
         )
     }
 
-    func updateCancelRecordingHotkey() {
-        setupEscCancel()
-    }
-
     func setupDestinationHotkeys() {
         let bindings = settings.outputDestinations.map { ($0.id, $0.activationHotkey) }
         destinationHotkeyManager.onDestinationMatched = { [weak self] destinationID in
@@ -374,10 +366,6 @@ final class RecordingCoordinator {
             self.stopRecordingAndTranscribe()
         }
         destinationHotkeyManager.register(bindings: bindings)
-    }
-
-    func updateDestinationHotkeys() {
-        setupDestinationHotkeys()
     }
 
     private func updateEscCancel() {

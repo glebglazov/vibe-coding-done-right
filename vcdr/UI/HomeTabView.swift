@@ -93,14 +93,14 @@ struct HomeTabView: View {
                         get: { dependencies.settings.toggleRecordingHotkey.keyCode },
                         set: {
                             dependencies.settings.toggleRecordingHotkey.keyCode = $0
-                            dependencies.coordinator.updateToggleRecordingHotkey()
+                            dependencies.coordinator.setupToggleRecordingHotkey()
                         }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.toggleRecordingHotkey.modifiers },
                         set: {
                             dependencies.settings.toggleRecordingHotkey.modifiers = $0
-                            dependencies.coordinator.updateToggleRecordingHotkey()
+                            dependencies.coordinator.setupToggleRecordingHotkey()
                         }
                     )
                 )
@@ -110,14 +110,14 @@ struct HomeTabView: View {
                         get: { dependencies.settings.pushToTypeHotkey.keyCode },
                         set: {
                             dependencies.settings.pushToTypeHotkey.keyCode = $0
-                            dependencies.captureCoordinator.updateHotkey()
+                            dependencies.captureCoordinator.setupHotkey()
                         }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.pushToTypeHotkey.modifiers },
                         set: {
                             dependencies.settings.pushToTypeHotkey.modifiers = $0
-                            dependencies.captureCoordinator.updateHotkey()
+                            dependencies.captureCoordinator.setupHotkey()
                         }
                     )
                 )
@@ -143,14 +143,14 @@ struct HomeTabView: View {
                         get: { dependencies.settings.modeSwitcherHotkey.keyCode },
                         set: {
                             dependencies.settings.modeSwitcherHotkey.keyCode = $0
-                            dependencies.modeSwitcherCoordinator.updateHotkey()
+                            dependencies.modeSwitcherCoordinator.setupHotkey()
                         }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.modeSwitcherHotkey.modifiers },
                         set: {
                             dependencies.settings.modeSwitcherHotkey.modifiers = $0
-                            dependencies.modeSwitcherCoordinator.updateHotkey()
+                            dependencies.modeSwitcherCoordinator.setupHotkey()
                         }
                     )
                 )
@@ -160,14 +160,14 @@ struct HomeTabView: View {
                         get: { dependencies.settings.cancelRecordingHotkey.keyCode },
                         set: {
                             dependencies.settings.cancelRecordingHotkey.keyCode = $0
-                            dependencies.coordinator.updateCancelRecordingHotkey()
+                            dependencies.coordinator.setupEscCancel()
                         }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.cancelRecordingHotkey.modifiers },
                         set: {
                             dependencies.settings.cancelRecordingHotkey.modifiers = $0
-                            dependencies.coordinator.updateCancelRecordingHotkey()
+                            dependencies.coordinator.setupEscCancel()
                         }
                     )
                 )
@@ -177,14 +177,14 @@ struct HomeTabView: View {
                         get: { dependencies.settings.copyLatestCaptureHotkey.keyCode },
                         set: {
                             dependencies.settings.copyLatestCaptureHotkey.keyCode = $0
-                            dependencies.copyLatestCaptureHandler.updateHotkey()
+                            dependencies.copyLatestCaptureHandler.setupHotkey()
                         }
                     ),
                     modifiers: Binding(
                         get: { dependencies.settings.copyLatestCaptureHotkey.modifiers },
                         set: {
                             dependencies.settings.copyLatestCaptureHotkey.modifiers = $0
-                            dependencies.copyLatestCaptureHandler.updateHotkey()
+                            dependencies.copyLatestCaptureHandler.setupHotkey()
                         }
                     )
                 )

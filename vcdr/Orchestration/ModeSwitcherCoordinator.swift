@@ -56,10 +56,6 @@ final class ModeSwitcherCoordinator {
         _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
     }
 
-    func updateHotkey() {
-        setupHotkey()
-    }
-
     /// Creates a ModeSwitcherViewModel with standard callbacks.
     /// `onDismiss` is caller-provided to handle context-specific cleanup.
     func makeViewModel(onDismiss: @escaping () -> Void) -> ModeSwitcherViewModel {

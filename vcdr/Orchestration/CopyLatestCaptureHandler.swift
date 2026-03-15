@@ -36,10 +36,6 @@ final class CopyLatestCaptureHandler {
         _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
     }
 
-    func updateHotkey() {
-        setupHotkey()
-    }
-
     private func copyLatestCapture() {
         guard let conversation = transcriptionHistory.latestConversation else {
             recordingIndicator.showCopyError("No captures yet")

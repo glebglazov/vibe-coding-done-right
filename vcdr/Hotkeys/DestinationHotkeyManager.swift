@@ -7,8 +7,7 @@ import OSLog
 /// Ctrl+Cmd+Option+C (because push-to-talk modifiers are held), it still matches.
 /// This naturally handles push-to-talk (extra modifiers) and toggle mode (no extra modifiers).
 final class DestinationHotkeyManager {
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    private let tap = EventTapManager()
     private var bindings: [(id: UUID, keyCode: CGKeyCode, modifiers: CGEventFlags)] = []
 
     /// When false, matched key events pass through unconsumed.
@@ -33,13 +32,10 @@ final class DestinationHotkeyManager {
             return
         }
 
-        let eventMask = 1 << CGEventType.keyDown.rawValue
+        let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
 
-        eventTap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: CGEventMask(eventMask),
+        let installed = tap.install(
+            eventMask: eventMask,
             callback: { _, type, event, refcon -> Unmanaged<CGEvent>? in
                 guard let refcon else { return Unmanaged.passUnretained(event) }
                 let manager = Unmanaged<DestinationHotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
@@ -48,27 +44,16 @@ final class DestinationHotkeyManager {
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         )
 
-        guard let eventTap else {
+        if !installed {
             Logger.hotkeys.error("DestinationHotkeyManager: failed to create event tap")
             return
         }
-
-        runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        CGEvent.tapEnable(tap: eventTap, enable: true)
 
         Logger.hotkeys.info("DestinationHotkeyManager: registered \(self.bindings.count) bindings")
     }
 
     func unregister() {
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
-            if let runLoopSource {
-                CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-                self.runLoopSource = nil
-            }
-            self.eventTap = nil
-        }
+        tap.uninstall()
         bindings = []
     }
 
@@ -78,7 +63,7 @@ final class DestinationHotkeyManager {
         // Re-enable tap if macOS disabled it
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             Logger.hotkeys.warning("DestinationHotkeyManager: tap disabled, re-enabling")
-            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+            tap.reEnableTap()
             return Unmanaged.passUnretained(event)
         }
 
