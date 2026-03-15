@@ -204,9 +204,12 @@ final class CapturePanel {
         let turns = viewModel.conversationTurns
         let segs = viewModel.segments
         let newHeight = Self.calculateHeight(for: turns, segments: segs, segmentHeights: viewModel.segmentHeights, hasError: viewModel.errorMessage != nil)
-        let currentFrame = panel.frame
-        let newY = currentFrame.maxY - newHeight
-        let newFrame = NSRect(x: currentFrame.origin.x, y: newY, width: currentFrame.width, height: newHeight)
+        // Use explicit target width instead of panel.frame.width — the animator proxy
+        // may return intermediate values during resize animations, causing the panel
+        // to get stuck at the wrong width (e.g. 200pt minimized width after expanding).
+        let targetWidth = viewModel.isMinimized ? Self.minimizedPanelWidth : Self.panelWidth
+        guard let origin = Self.panelOrigin(width: targetWidth, height: newHeight) else { return }
+        let newFrame = NSRect(origin: origin, size: NSSize(width: targetWidth, height: newHeight))
         panel.animateResize(to: newFrame)
     }
 }

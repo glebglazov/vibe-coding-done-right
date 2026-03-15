@@ -113,11 +113,20 @@ extension CapturePanel {
     }
 
     func showProcessingError(_ message: String) {
-        guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
-        viewModel.conversationTurns.removeLast()
+        guard let viewModel else { return }
+        // Remove the pending "..." turn if one was added by startProcessing.
+        // For non-bashScript modes, startProcessing is not called, so there may be no pending turn.
+        if !viewModel.conversationTurns.isEmpty {
+            viewModel.conversationTurns.removeLast()
+        }
         viewModel.errorMessage = message
         viewModel.phase = .error
-        expand()
+        if viewModel.isMinimized {
+            expand()
+        } else {
+            // Panel is already expanded (non-bashScript mode) — resize to fit error banner
+            resizePanel()
+        }
         Logger.actions.error("Capture panel processing failed: \(message)")
     }
 
