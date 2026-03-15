@@ -11,6 +11,8 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - RecordingCoordinator.State has 5 cases: idle, preparingToRecord, recording, transcribing, error — no .executing
 - PostTranscriptionActionType enum and TranscriptionRecord.swift are legacy migration decoders — still needed, don't remove
 - onWillStartRecording (RecordingCoordinator) and onWillStartInput (CaptureCoordinator) are distinct entry points for voice-recording and push-to-type flows respectively — both are live
+- Xcode project uses fileSystemSynchronizedGroups — new files are auto-discovered, no manual project file edits needed
+- Use ClipboardHelper.writeString() for clipboard writes, KeyboardSimulator for CGEvent keystroke simulation, CopiedFeedback.trigger() for copied state feedback
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -22,4 +24,20 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - PostTranscriptionActionType and TranscriptionRecord are used in migration decode paths — needed for backward compatibility with old UserDefaults/JSON
   - onWillStartRecording and onWillStartInput look like duplicates but fire from different code paths (voice recording vs push-to-type)
   - The captures-based segment resolution in configurePanelAndShow is live — nil segments fallback is used by showPillForNewCapture and showPanelMinimized
+---
+
+## 2026-03-15 - US-002
+- Created ClipboardHelper (vcdr/Core/ClipboardHelper.swift) with writeString method encapsulating clearContents + setString
+- Created KeyboardSimulator (vcdr/Core/KeyboardSimulator.swift) with simulateCmdC() and simulateCmdV() using shared simulateCommandKeystroke helper
+- Created CopiedFeedback (vcdr/Core/CopiedFeedback.swift) with trigger() encapsulating showCopied=true + Task.sleep + reset
+- Replaced clipboard writes in: CopyAction, PasteAction, CopyLatestCaptureHandler, CaptureView, MenuBarView, HistoryTabView
+- Replaced CGEvent Cmd+V in PasteAction and Cmd+C in SelectionCapturer.simulateCmdC()
+- Replaced duplicated copiedFeedbackDuration constant and Task.sleep pattern in MenuBarView and HistoryTabView
+- Files changed: 7 modified, 3 new (ClipboardHelper.swift, KeyboardSimulator.swift, CopiedFeedback.swift)
+- **Learnings for future iterations:**
+  - The Xcode project uses fileSystemSynchronizedGroups — no need to manually add new files to the project
+  - SelectionCapturer also has clipboard restore writes (clearContents + setString with previous contents) at lines 164 and 287 — these are NOT candidates for ClipboardHelper.writeString because they conditionally restore previous contents
+  - CopyAction doesn't need AppKit removed — it's still needed for PostTranscriptionAction protocol context
+  - PasteAction still needs ApplicationServices for AXIsProcessTrusted()
+  - SelectionCapturer.simulateCmdC() kept as thin wrapper rather than inlining KeyboardSimulator.simulateCmdC() to maintain the method as a named step in the capture strategy
 ---
