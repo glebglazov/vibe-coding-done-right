@@ -37,6 +37,7 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - CaptureViewModel.errorMessage stores the last processing error; CaptureViewModel.clearError() resets error state and triggers panel resize
 - ErrorBannerView provides click-to-copy error display with dismiss button — use it for showing actionable error messages in panel headers
 - CapturePanel.expand() preserves both .recording and .error phases — add new persistent phases to the preserve check
+- For CoreFoundation type casts (AXUIElement, CFBoolean): use `guard let ref = anyObj else { return }` + `unsafeBitCast(ref, to: AXUIElement.self)` — `as?` triggers "always succeeds" error, `as!` is a force unwrap. For CFBoolean, cast to NSNumber and use `.boolValue`
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -244,4 +245,18 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - CancelledIndicatorView's VStack wrapper is unnecessary — the .frame(maxWidth/maxHeight) modifier with alignment works directly on the HStack, saving 2 lines
   - RecordingIndicatorPanel sets `ignoresMouseEvents: true` by default — must toggle to false when showing clickable error content
   - The streaming error with partial output path calls finishStreaming (which sets phase=.idle) then setError (which overrides to .error) — order matters since both are @MainActor sequential
+---
+
+## 2026-03-15 - US-015
+- Replaced 5 force unwraps with safe alternatives:
+  - SelectionCapturer.swift:80 — `focusedElementRef as! AXUIElement` → `guard let ref` + `unsafeBitCast`
+  - SelectionCapturer.swift:134 — `menuBarRef as! AXUIElement` → same pattern
+  - SelectionCapturer+AXHelpers.swift:70 — `enabledRef as! CFBoolean` → `as? NSNumber` + `.boolValue`
+  - Mode.swift:119 — `trimmed.last!` → reuse existing `guard let lastChar = trimmed.last`
+  - SegmentEditor.swift:39 — `scrollView.documentView as! NSTextView` → `guard let textView = ... as? NSTextView`
+- Files changed: 4 modified (SelectionCapturer.swift, SelectionCapturer+AXHelpers.swift, Mode.swift, SegmentEditor.swift)
+- **Learnings for future iterations:**
+  - CoreFoundation types (AXUIElement, CFBoolean) cannot use `as?` in Swift — the compiler warns "conditional downcast will always succeed" and treats it as an error. Use `unsafeBitCast` for AXUIElement and toll-free bridge to NSNumber for CFBoolean
+  - `guard let ref = anyObjectOptional else { return }` + `unsafeBitCast(ref, to: AXUIElement.self)` is the idiomatic pattern for safely unwrapping CF type references without force casts
+  - CFBoolean is toll-free bridged to NSNumber — cast to `NSNumber` and use `.boolValue` instead of `CFBooleanGetValue(x as! CFBoolean)`
 ---

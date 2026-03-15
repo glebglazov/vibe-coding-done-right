@@ -256,7 +256,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "Small, safe changes — each is a one-line replacement. The AX casts are after .success checks so they should never fail, but safe unwrapping costs nothing and prevents future regressions."
     },
     {
