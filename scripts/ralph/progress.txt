@@ -464,3 +464,12 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - The expand() path's guard chain (isVisible, !isMinimized, contentView, panel) prevents focus attempts on a dismissed or re-minimized panel — important because the 200ms sleep allows user interactions to change state
   - `textView.window === panel` identity check catches cases where SwiftUI recycles views between panels — without this, makeFirstResponder could succeed but on a different window
 ---
+
+## 2026-03-15 - US-029
+- Extracted `executeQuickAction` method from CaptureCoordinator+Submission.swift into new CaptureCoordinator+QuickAction.swift
+- CaptureCoordinator+Submission.swift: 278 → 205 lines; new file: 79 lines — both well under 300-line limit
+- Files changed: 1 modified (CaptureCoordinator+Submission.swift), 1 created (CaptureCoordinator+QuickAction.swift)
+- **Learnings for future iterations:**
+  - The file was already under 300 lines (278) due to prior story cleanups, but the split was still valuable for separation of concerns (submission pipeline vs quick action execution)
+  - fileSystemSynchronizedGroups means new Swift files are auto-discovered by Xcode — no project file edits needed
+---

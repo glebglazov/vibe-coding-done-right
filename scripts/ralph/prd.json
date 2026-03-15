@@ -481,6 +481,50 @@
       "priority": 28,
       "passes": true,
       "notes": "Root causes identified by analysis: (1) 100ms retry window too short for SwiftUI layout on first show, (2) SegmentEditor.updateNSView window?.makeFirstResponder silently no-ops when window is nil, (3) expand() focus attempt doesn't guard against panel being dismissed during the 200ms delay, (4) nonactivatingPanel style can cause makeFirstResponder to not retain first responder. The retry budget increase is the highest-impact fix."
+    },
+    {
+      "id": "US-029",
+      "title": "Split CaptureCoordinator+Submission.swift to stay under 300-line limit",
+      "description": "CaptureCoordinator+Submission.swift is 335 lines, exceeding the 300-line limit from CLAUDE.md Rule 1. The file contains both the submission pipeline and quick-action execution logic, which are separable concerns.",
+      "acceptanceCriteria": [
+        "CaptureCoordinator+Submission.swift is under 300 lines after the split",
+        "The extracted file is also under 300 lines",
+        "No behavioral changes — pure structural refactor",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": "The executeQuickAction method (75 lines) and its helpers are a natural extraction point into a new CaptureCoordinator+QuickAction.swift extension file."
+    },
+    {
+      "id": "US-030",
+      "title": "Split RecordingIndicatorViews.swift to stay under 300-line limit",
+      "description": "RecordingIndicatorViews.swift is 321 lines, exceeding the 300-line limit from CLAUDE.md Rule 1. It contains 7 distinct view structs (InfoPillView, CancelledIndicatorView, CopiedIndicatorView, CopyErrorIndicatorView, ShakeEffect, RecordingIndicatorView, AudioWaveformView, AnimatedDotsView).",
+      "acceptanceCriteria": [
+        "RecordingIndicatorViews.swift is under 300 lines after the split",
+        "The extracted file is also under 300 lines",
+        "No behavioral changes — pure structural refactor",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": "AnimatedDotsView and AudioWaveformView are self-contained animation views that can be extracted to a separate file (e.g., RecordingIndicatorAnimations.swift)."
+    },
+    {
+      "id": "US-031",
+      "title": "Replace remaining magic number 0.9 in CapturePanel+Layout.swift",
+      "description": "CapturePanel+Layout.swift line 58 has a bare 0.9 literal in the conversation-turns loop. The named constant captureLineHeightScale already exists at line 14 but is not used in this second occurrence.",
+      "acceptanceCriteria": [
+        "The bare 0.9 at line 58 in CapturePanel+Layout.swift is replaced with the existing captureLineHeightScale constant (or Self.captureLineHeightScale)",
+        "No behavioral changes",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": "One-line fix. The constant already exists — just needs to be referenced in the second location."
     }
   ]
 }
