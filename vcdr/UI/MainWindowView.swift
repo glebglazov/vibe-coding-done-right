@@ -78,7 +78,8 @@ struct MainWindowView: View {
                             captureCoordinator: dependencies.captureCoordinator,
                             copyLatestCaptureHandler: dependencies.copyLatestCaptureHandler,
                             hasMicrophonePermission: dependencies.hasMicrophonePermission,
-                            hasAccessibilityPermission: dependencies.hasAccessibilityPermission
+                            hasAccessibilityPermission: dependencies.hasAccessibilityPermission,
+                            isInitialized: dependencies.isInitialized
                         )
                     case .audio:
                         AudioTabView(

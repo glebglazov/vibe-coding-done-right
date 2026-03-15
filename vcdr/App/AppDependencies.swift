@@ -24,6 +24,7 @@ final class AppDependencies {
     private(set) var initializationStatus = "Loading model..."
     private(set) var hasMicrophonePermission = false
     private(set) var hasAccessibilityPermission = false
+    private(set) var isInitialized = false
 
     var needsPermissionAttention: Bool {
         !hasMicrophonePermission || !hasAccessibilityPermission
@@ -113,6 +114,7 @@ final class AppDependencies {
         await settings.refreshTemplateAvailability()
 
         checkPermissions()
+        isInitialized = true
         startPermissionPolling()
 
         // Register hotkeys immediately — don't wait for model loading.

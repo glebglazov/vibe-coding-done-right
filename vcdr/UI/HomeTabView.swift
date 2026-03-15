@@ -9,9 +9,10 @@ struct HomeTabView: View {
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
     let hasMicrophonePermission: Bool
     let hasAccessibilityPermission: Bool
+    let isInitialized: Bool
 
     private var needsPermissionAttention: Bool {
-        !hasMicrophonePermission || !hasAccessibilityPermission
+        isInitialized && (!hasMicrophonePermission || !hasAccessibilityPermission)
     }
 
     var body: some View {
