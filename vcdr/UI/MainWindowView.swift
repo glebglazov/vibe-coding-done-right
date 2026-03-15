@@ -16,6 +16,9 @@ struct MainWindowView: View {
         case outputDestinations
         case transcription
         case history
+        #if DEBUG
+        case debug
+        #endif
 
         var title: String {
             switch self {
@@ -25,6 +28,9 @@ struct MainWindowView: View {
             case .outputDestinations: "Output"
             case .transcription: "Transcription"
             case .history: "History"
+            #if DEBUG
+            case .debug: "Debug"
+            #endif
             }
         }
 
@@ -36,6 +42,9 @@ struct MainWindowView: View {
             case .outputDestinations: "arrow.right.square"
             case .transcription: "waveform"
             case .history: "clock.arrow.circlepath"
+            #if DEBUG
+            case .debug: "ant"
+            #endif
             }
         }
     }
@@ -79,6 +88,10 @@ struct MainWindowView: View {
                                 dependencies.openConversationFromHistory(conversation)
                             }
                         )
+                    #if DEBUG
+                    case .debug:
+                        DebugTabView(dependencies: dependencies)
+                    #endif
                     case .none:
                         Text("Select a section")
                             .foregroundStyle(.secondary)

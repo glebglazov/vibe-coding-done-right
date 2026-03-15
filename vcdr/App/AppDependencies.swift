@@ -16,6 +16,10 @@ final class AppDependencies {
     let transcriptionHistory: TranscriptionHistory
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
 
+    #if DEBUG
+    let audioRecorder: AudioRecorder
+    #endif
+
     private(set) var isTranscriptionReady = false
     private(set) var initializationStatus = "Loading model..."
     private(set) var hasMicrophonePermission = false
@@ -39,6 +43,9 @@ final class AppDependencies {
         let history = TranscriptionHistory()
         self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
+        #if DEBUG
+        self.audioRecorder = audioRecorder
+        #endif
         let overrides = ConversationOverrides()
         let recordingIndicator = RecordingIndicatorPanel(settings: settings, overrides: overrides, audioRecorder: audioRecorder)
         let selectionCapturer = SelectionCapturer()

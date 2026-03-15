@@ -2,53 +2,82 @@ import Foundation
 import Testing
 @testable import vcdr
 
+// MARK: - Test Helpers
+
+/// Creates a Mode with sensible defaults for testing.
+/// Only `id`, `name`, and the parameters under test need to be specified.
+@MainActor
+private func makeMode(
+    id: UUID = UUID(),
+    name: String = "Test",
+    processingType: ProcessingType = .none,
+    processingCommand: String = "",
+    systemPromptEnabled: Bool = false,
+    systemPrompt: String = "",
+    quickAction: Bool = false
+) -> Mode {
+    Mode(
+        id: id,
+        name: name,
+        isDisabled: false,
+        templateID: nil,
+        processingType: processingType,
+        processingCommand: processingCommand,
+        systemPromptEnabled: systemPromptEnabled,
+        systemPrompt: systemPrompt,
+        defaultOutputDestinationID: OutputDestination.builtInPasteID,
+        parameters: [],
+        quickAction: quickAction
+    )
+}
+
 // MARK: - applyTerminator
 
 @Suite("Mode.applyTerminator")
 struct ModeApplyTerminatorTests {
 
     @Test("Returns text unchanged when terminator is empty")
-    func emptyTerminator() {
+    @MainActor func emptyTerminator() {
         #expect(Mode.applyTerminator("Hello", terminator: "") == "Hello")
     }
 
     @Test("Returns text unchanged when text is whitespace-only")
-    func whitespaceOnlyText() {
+    @MainActor func whitespaceOnlyText() {
         #expect(Mode.applyTerminator("   ", terminator: "<dot><space>") == "   ")
     }
 
     @Test("Returns text unchanged when text is empty")
-    func emptyText() {
+    @MainActor func emptyText() {
         #expect(Mode.applyTerminator("", terminator: "<dot><space>") == "")
     }
 
     @Test("Resolves <dot> token to period")
-    func dotToken() {
+    @MainActor func dotToken() {
         #expect(Mode.applyTerminator("Hello", terminator: "<dot>") == "Hello.")
     }
 
     @Test("Resolves <space> token to space")
-    func spaceToken() {
+    @MainActor func spaceToken() {
         #expect(Mode.applyTerminator("Hello", terminator: "<space>") == "Hello ")
     }
 
     @Test("Resolves <newline> token to newline")
-    func newlineToken() {
+    @MainActor func newlineToken() {
         #expect(Mode.applyTerminator("Hello", terminator: "<newline>") == "Hello\n")
     }
 
     @Test("Resolves compound <dot><space> template")
-    func dotSpaceTemplate() {
+    @MainActor func dotSpaceTemplate() {
         #expect(Mode.applyTerminator("Hello world", terminator: "<dot><space>") == "Hello world. ")
     }
 
     @Test("Resolves <dot><newline> template")
-    func dotNewlineTemplate() {
+    @MainActor func dotNewlineTemplate() {
         #expect(Mode.applyTerminator("Hello", terminator: "<dot><newline>") == "Hello.\n")
     }
 
     @Test("Strips leading/trailing whitespace from text before appending")
-    func trims() {
+    @MainActor func trims() {
         #expect(Mode.applyTerminator("  Hello  ", terminator: "<dot>") == "Hello.")
     }
 
@@ -60,24 +89,23 @@ struct ModeApplyTerminatorTests {
             ("Hello!", "<dot><space>", "Hello! "),
         ]
     )
-    func skipsRedundantPunctuation(text: String, terminator: String, expected: String) {
+    @MainActor func skipsRedundantPunctuation(text: String, terminator: String, expected: String) {
         #expect(Mode.applyTerminator(text, terminator: terminator) == expected)
     }
 
     @Test("Appends full terminator when text ends with non-sentence punctuation")
-    func nonSentencePunctuation() {
-        // Comma is not in sentenceEndingPunctuation, so the full terminator is appended
+    @MainActor func nonSentencePunctuation() {
         #expect(Mode.applyTerminator("Hello,", terminator: "<dot><space>") == "Hello,. ")
     }
 
     @Test("Terminator with only spacing and no punctuation prefix appends as-is")
-    func spacingOnlyTerminator() {
+    @MainActor func spacingOnlyTerminator() {
         #expect(Mode.applyTerminator("Hello.", terminator: "<space>") == "Hello. ")
         #expect(Mode.applyTerminator("Hello", terminator: "<space>") == "Hello ")
     }
 
     @Test("Literal characters pass through without token replacement")
-    func literalTerminator() {
+    @MainActor func literalTerminator() {
         #expect(Mode.applyTerminator("Hello", terminator: " -") == "Hello -")
     }
 }
@@ -88,42 +116,21 @@ struct ModeApplyTerminatorTests {
 struct ModeApplyPreProcessingTests {
 
     @Test("Returns text as-is when all options disabled")
-    func passthrough() {
-        let mode = Mode(id: UUID(), name: "Test")
-        #expect(mode.applyPreProcessing("hello", captures: []) == "hello")
-    }
-
-    @Test("Applies terminator when enabled")
-    func terminatorEnabled() {
-        let mode = Mode(
-            id: UUID(), name: "Test",
-            terminatorTemplateEnabled: true,
-            terminatorTemplate: "<dot><space>"
-        )
-        #expect(mode.applyPreProcessing("hello", captures: []) == "hello. ")
-    }
-
-    @Test("Does not apply terminator when disabled")
-    func terminatorDisabled() {
-        let mode = Mode(
-            id: UUID(), name: "Test",
-            terminatorTemplateEnabled: false,
-            terminatorTemplate: "<dot><space>"
-        )
+    @MainActor func passthrough() {
+        let mode = makeMode()
         #expect(mode.applyPreProcessing("hello", captures: []) == "hello")
     }
 
     @Test("Prepends follow-up context before new dictation")
-    func followUpContext() {
-        let mode = Mode(id: UUID(), name: "Test")
+    @MainActor func followUpContext() {
+        let mode = makeMode()
         let result = mode.applyPreProcessing("new text", captures: [], followUpContext: "previous")
         #expect(result == "previous\n\nnew text")
     }
 
     @Test("Prepends system prompt when bash processing and system prompt enabled")
-    func systemPromptWithBash() {
-        let mode = Mode(
-            id: UUID(), name: "Test",
+    @MainActor func systemPromptWithBash() {
+        let mode = makeMode(
             processingType: .bashScript,
             systemPromptEnabled: true,
             systemPrompt: "Fix grammar:"
@@ -132,9 +139,8 @@ struct ModeApplyPreProcessingTests {
     }
 
     @Test("Does NOT prepend system prompt when processing type is none")
-    func systemPromptIgnoredForNoneType() {
-        let mode = Mode(
-            id: UUID(), name: "Test",
+    @MainActor func systemPromptIgnoredForNoneType() {
+        let mode = makeMode(
             processingType: .none,
             systemPromptEnabled: true,
             systemPrompt: "Fix grammar:"
@@ -143,9 +149,8 @@ struct ModeApplyPreProcessingTests {
     }
 
     @Test("Does NOT prepend system prompt when system prompt disabled")
-    func systemPromptDisabled() {
-        let mode = Mode(
-            id: UUID(), name: "Test",
+    @MainActor func systemPromptDisabled() {
+        let mode = makeMode(
             processingType: .bashScript,
             systemPromptEnabled: false,
             systemPrompt: "Fix grammar:"
@@ -154,9 +159,8 @@ struct ModeApplyPreProcessingTests {
     }
 
     @Test("Does NOT prepend system prompt when system prompt is empty")
-    func systemPromptEmpty() {
-        let mode = Mode(
-            id: UUID(), name: "Test",
+    @MainActor func systemPromptEmpty() {
+        let mode = makeMode(
             processingType: .bashScript,
             systemPromptEnabled: true,
             systemPrompt: ""
@@ -165,19 +169,17 @@ struct ModeApplyPreProcessingTests {
     }
 
     @Test("Appends captured selection after text")
-    func capturedSelection() {
-        let mode = Mode(id: UUID(), name: "Test")
+    @MainActor func capturedSelection() {
+        let mode = makeMode()
         let captures = [CapturedContext(text: "selected text", source: .selection)]
-        #expect(mode.applyPreProcessing("rewrite this", captures: captures) == "rewrite this\n\nselected text")
+        #expect(mode.applyPreProcessing("rewrite this", captures: captures)
+            == "rewrite this\n\n<capture-1>selected text</capture-1>")
     }
 
-    @Test("Full pipeline: terminator + follow-up + system prompt + captures in correct order")
-    func fullPipeline() {
-        let mode = Mode(
-            id: UUID(), name: "Test",
+    @Test("Full pipeline: follow-up + system prompt + captures in correct order")
+    @MainActor func fullPipeline() {
+        let mode = makeMode(
             processingType: .bashScript,
-            terminatorTemplateEnabled: true,
-            terminatorTemplate: "<dot>",
             systemPromptEnabled: true,
             systemPrompt: "Prompt:"
         )
@@ -187,8 +189,8 @@ struct ModeApplyPreProcessingTests {
             captures: captures,
             followUpContext: "context"
         )
-        // Order: terminator applied to text → follow-up prepended → system prompt prepended → captures appended
-        #expect(result == "Prompt:\n\ncontext\n\ndictation.\n\nselection")
+        // Order: follow-up prepended → system prompt prepended → captures appended
+        #expect(result == "Prompt:\n\ncontext\n\ndictation\n\n<capture-1>selection</capture-1>")
     }
 }
 
@@ -198,14 +200,10 @@ struct ModeApplyPreProcessingTests {
 struct ModeCodableTests {
 
     @Test("Round-trips through encode/decode preserving all fields")
-    func roundTrip() throws {
-        let original = Mode(
-            id: UUID(),
-            name: "My Mode",
+    @MainActor func roundTrip() throws {
+        let original = makeMode(
             processingType: .bashScript,
             processingCommand: "echo $VCDR_TEXT",
-            terminatorTemplateEnabled: true,
-            terminatorTemplate: "<dot><newline>",
             systemPromptEnabled: true,
             systemPrompt: "Fix it"
         )
@@ -215,7 +213,7 @@ struct ModeCodableTests {
     }
 
     @Test("Decodes legacy actionType=bash as processingType=bashScript")
-    func legacyBashMigration() throws {
+    @MainActor func legacyBashMigration() throws {
         let json = """
         {
             "id": "11111111-1111-1111-1111-111111111111",
@@ -230,7 +228,7 @@ struct ModeCodableTests {
     }
 
     @Test("Decodes legacy actionType=paste as processingType=none")
-    func legacyPasteMigration() throws {
+    @MainActor func legacyPasteMigration() throws {
         let json = """
         {
             "id": "11111111-1111-1111-1111-111111111111",
@@ -243,7 +241,7 @@ struct ModeCodableTests {
     }
 
     @Test("Missing optional fields get correct defaults")
-    func defaultValues() throws {
+    @MainActor func defaultValues() throws {
         let json = """
         {
             "id": "11111111-1111-1111-1111-111111111111",
@@ -253,8 +251,6 @@ struct ModeCodableTests {
         }
         """
         let decoded = try JSONDecoder().decode(Mode.self, from: Data(json.utf8))
-        #expect(decoded.terminatorTemplateEnabled == false)
-        #expect(decoded.terminatorTemplate == Mode.defaultTerminatorTemplate)
         #expect(decoded.systemPromptEnabled == false)
         #expect(decoded.systemPrompt == "")
     }

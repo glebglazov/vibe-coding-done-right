@@ -15,6 +15,12 @@ final class AudioRecorder: NSObject {
     private var levelTimer: Timer?
     private var recordingStartTime: ContinuousClock.Instant?
 
+    #if DEBUG
+    /// When set, startRecording() copies this file instead of using the real microphone.
+    var testAudioFileURL: URL?
+    private var testRecordingURL: URL?
+    #endif
+
     /// The system default input device before we changed it, restored on stop.
     /// Prevents the Bluetooth A2DP→HFP codec switch when the user selects
     /// a non-Bluetooth mic (e.g. built-in MacBook mic) in the app's settings.
@@ -55,6 +61,12 @@ final class AudioRecorder: NSObject {
     /// whatever macOS auto-selected (which may be a Bluetooth mic, triggering
     /// the A2DP→HFP codec switch and degrading output quality).
     func startRecording(deviceUID: String? = nil) async -> Bool {
+        #if DEBUG
+        if let testURL = testAudioFileURL {
+            return startTestRecording(sourceURL: testURL)
+        }
+        #endif
+
         guard await requestMicrophonePermission() else {
             Logger.recording.warning("Microphone permission denied")
             return false
@@ -100,6 +112,12 @@ final class AudioRecorder: NSObject {
     }
 
     func stopRecording() -> URL? {
+        #if DEBUG
+        if testRecordingURL != nil {
+            return stopTestRecording()
+        }
+        #endif
+
         guard let recorder = audioRecorder else { return nil }
 
         let url = recorder.url
@@ -238,6 +256,36 @@ final class AudioRecorder: NSObject {
             Logger.recording.warning("Failed to set system input device: \(status)")
         }
     }
+
+    #if DEBUG
+    // MARK: - Test Mode
+
+    private func startTestRecording(sourceURL: URL) -> Bool {
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFile = tempDir.appendingPathComponent("vcdr_test_\(UUID().uuidString).wav")
+        do {
+            try FileManager.default.copyItem(at: sourceURL, to: tempFile)
+        } catch {
+            Logger.recording.error("Failed to copy test audio file: \(error)")
+            return false
+        }
+        testRecordingURL = tempFile
+        isRecording = true
+        recordingStartTime = .now
+        Logger.recording.info("Test recording started with: \(sourceURL.lastPathComponent)")
+        return true
+    }
+
+    private func stopTestRecording() -> URL? {
+        let url = testRecordingURL
+        testRecordingURL = nil
+        isRecording = false
+        audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
+        recordingStartTime = nil
+        Logger.recording.info("Test recording stopped")
+        return url
+    }
+    #endif
 
     deinit {
         levelTimer?.invalidate()
