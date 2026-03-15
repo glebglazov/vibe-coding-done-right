@@ -1,0 +1,226 @@
+{
+  "project": "VCDR",
+  "branchName": "ralph/simplify-codebase",
+  "description": "Simplify and deduplicate the VCDR codebase. Remove dead code, extract shared concerns, eliminate duplication, and split oversized files — all while keeping the build green and behavior unchanged. Reference thoughts/shared/research/2026-03-14-complexity-and-comprehensibility-audit.md and thoughts/shared/plans/2026-03-14-simplify-coordinators-and-capture-panel.md for detailed analysis.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Remove dead code across the codebase",
+      "description": "Remove unused code that adds noise and maintenance burden. Verify each deletion by searching for all callers before removing.",
+      "acceptanceCriteria": [
+        "Remove CapturePanel.updateCaptures() method — no callers exist",
+        "Remove CapturePanel.insertSegment() method — no callers exist",
+        "Remove CapturePanel.insertTextAtCursor() if it is just an alias for appendTextToActiveSegment with no distinct callers",
+        "Remove PostTranscriptionActionType enum in AppSettings.swift if only used for legacy Mode decoding — inline the migration type or remove if decoding path is dead",
+        "Remove TranscriptionRecord.swift if only used as a migration decoder in TranscriptionHistory — inline the migration Codable struct if still needed, otherwise delete entirely",
+        "Remove the phantom .executing state from RecordingCoordinator — it is declared but never entered. Remove it from the State enum and simplify the ~5 guard conditions that reference it (menuBarIcon, updateEscCancel, cancelRecording guard, cancelRecording wasProcessing, onHotkeyDown buzz check, stopRecordingAndTranscribe indicator hide)",
+        "Remove duplicate onWillStartRecording/onWillStartInput callback if both trigger the same modeSwitcherCoordinator.confirmAndHideSwitcher() call — keep one, remove the other",
+        "Remove dead captures-based segment resolution in CaptureCoordinator.configurePanelAndShow (lines ~481-486) — no caller passes non-empty captures when segments is nil. Simplify to let resolvedSegments = segments ?? [InputSegment()]",
+        "Inline showPanelWithText into its single call site in executeQuickAction and delete the method",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Safest first step — pure deletions and simplifications. Reference the complexity audit: thoughts/shared/research/2026-03-14-complexity-and-comprehensibility-audit.md"
+    },
+    {
+      "id": "US-002",
+      "title": "Extract clipboard and keyboard simulation helpers",
+      "description": "The clipboard write pattern (clearContents + setString) is repeated in 4+ places. CGEvent keyboard simulation (Cmd+C, Cmd+V) is duplicated between SelectionCapturer and PasteAction. The 'copied feedback' pattern is duplicated. Extract shared helpers.",
+      "acceptanceCriteria": [
+        "Create a small ClipboardHelper (or extension on NSPasteboard) with a writeString(_:) method encapsulating clearContents + setString",
+        "Replace all clipboard write call sites: CaptureView (~line 457), MenuBarView (~line 25), HistoryTabView (~line 156), CopyLatestCaptureHandler (~line 51)",
+        "Create a KeyboardSimulator (or similar) with methods for simulateCmdC() and simulateCmdV() using CGEvent",
+        "Replace duplicated CGEvent code in SelectionCapturer.simulateCmdC (~line 303) and PasteAction's Cmd+V simulation (~line 56)",
+        "Extract the 'copied feedback' pattern (set showCopied=true, sleep duration, set false) that is duplicated between MenuBarView and HistoryTabView — both define the same copiedFeedbackDuration constant separately",
+        "New helper files should be small and focused (under 50 lines each)",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Extract panel positioning and NSPanel configuration helpers",
+      "description": "Panel positioning (menu bar geometry calculation), NSPanel property configuration, and event monitor cleanup are each repeated in 3 places. Extract shared utilities.",
+      "acceptanceCriteria": [
+        "Extract a shared panel positioning function that computes the origin centered below the menu bar — the formula (screenFrame.maxY - menuBarHeight - height - offset, screenFrame.midX - width/2) is repeated in CapturePanel+Layout, RecordingIndicator.positionAtTopCenter, and ModeSwitcherPanel.show",
+        "Extract a shared NSPanel configuration method or extension that sets the common properties (isOpaque=false, backgroundColor=.clear, level=.statusBar, collectionBehavior, isMovableByWindowBackground=false, hidesOnDeactivate=false) with parameters for differences (hasShadow, ignoresMouseEvents) — repeated in CapturePanel, ModeSwitcherPanel, RecordingIndicator",
+        "Extract the event monitor cleanup pattern (if let monitor { removeMonitor; monitor = nil } for both global and local) used by CapturePanel, RecordingIndicator, and ModeSwitcherPanel",
+        "All three panel types use the extracted helpers instead of inline duplication",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Panel positioning: CapturePanel+Layout, RecordingIndicator:325-332, ModeSwitcherPanel:54-61. NSPanel config: CapturePanel:124-137, ModeSwitcherPanel:39-64, RecordingIndicator:98-117."
+    },
+    {
+      "id": "US-004",
+      "title": "Deduplicate BashRunner and extract shared view helpers",
+      "description": "BashRunner has internal duplication. Several view helpers are duplicated across settings tab views. The mode label construction is repeated 5 times.",
+      "acceptanceCriteria": [
+        "Extract a private buildEnvironment() method in BashRunner called from both run() and runStreaming() — eliminate the duplicated env setup blocks (~lines 47-59 and 113-125)",
+        "Extract a shared nextUniqueName(base:existingNames:) function used by both ModesTabView (~line 128) and OutputDestinationsTabView (~line 61) instead of their duplicated implementations",
+        "Extract the shared onAppear focus + selectAll delay pattern into a reusable ViewModifier — duplicated between ModeDetailView and OutputDestinationDetailView, both with identical selectAllDelay constant",
+        "Extract the mode label construction ([mode.name, parameterLabels, destination.symbol].compactMap.joined(separator: ' · ')) into a single function — it appears in CaptureViewModel (2x), RecordingIndicatorView, MenuBarView, and HomeTabView",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Extract shared EventTapManager for hotkey managers",
+      "description": "GlobalHotkeyManager and DestinationHotkeyManager duplicate the entire CGEvent tap creation, CFRunLoopSource setup, tap enable/disable, and teardown logic. Extract the shared infrastructure.",
+      "acceptanceCriteria": [
+        "Create a shared EventTapManager (base class or protocol with default implementation) that handles: CGEvent tap creation with tapCreate, CFRunLoopSource management, adding source to CFRunLoopGetMain, tap enable/disable, and cleanup in unregister()",
+        "GlobalHotkeyManager and DestinationHotkeyManager use the shared tap infrastructure — their tap setup (GlobalHotkeyManager:37-63, DestinationHotkeyManager:38-61) and unregister (GlobalHotkeyManager:66-76, DestinationHotkeyManager:63-73) should not duplicate the boilerplate",
+        "Collapse the setupHotkey/updateHotkey one-liner aliases where updateX just calls setupX — check all 4 types: RecordingCoordinator, CaptureCoordinator, ModeSwitcherCoordinator, CopyLatestCaptureHandler. If update does nothing beyond calling setup, remove the alias and have callers call setup directly",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Consolidate RecordingIndicator ephemeral methods and get under 300 lines",
+      "description": "RecordingIndicator has three near-identical ephemeral indicator methods (showCancelled, showCopied, showCopyError). The file is 511 lines.",
+      "acceptanceCriteria": [
+        "Replace the three near-identical methods (showCancelled ~line 232, showCopied ~line 259, showCopyError ~line 284) with a single parameterized showEphemeral(content:duration:) that takes the view content and auto-dismiss duration",
+        "The three public methods can remain as thin one-line wrappers calling showEphemeral with their specific content and duration",
+        "Extract SwiftUI indicator views to separate file(s) if needed to get under 300 lines — RecordingIndicatorViews.swift already exists at 129 lines, more can move there",
+        "RecordingIndicator.swift must be under 300 lines after changes",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "The three methods follow identical pattern: hide(), create NSHostingView, makeEphemeralPanel, positionAtTopCenter, orderFrontRegardless, assign to self.panel, Task sleep then conditionally nil panel. Only difference is the view content and sleep duration constant."
+    },
+    {
+      "id": "US-007",
+      "title": "Simplify CaptureCoordinator submitText into dispatcher + focused methods",
+      "description": "CaptureCoordinator is the largest file at 766 lines. The submitText method is ~148 lines with two completely independent branches (streaming/non-streaming). The hasUnsubmittedDraft history pattern is duplicated 3 times. Break into clear dispatcher + focused sub-methods. Reference thoughts/shared/plans/2026-03-14-simplify-coordinators-and-capture-panel.md Phase 1.",
+      "acceptanceCriteria": [
+        "Extract recordOrUpdateHistory() helper that encapsulates the hasUnsubmittedDraft branching (recordTurn vs updateLastTurn) — currently duplicated in populateWithTranscription, streaming success, and non-streaming success",
+        "Extract rebuildSessionForFollowUp() helper — the session rebuild pattern appears in streaming and non-streaming completion paths",
+        "Extract a SubmissionSnapshot value struct that captures all needed state from session/settings/overrides before submission, so session can be niled immediately",
+        "submitText becomes a ~15-line dispatcher: create snapshot, nil session, dispatch to streaming or non-streaming",
+        "executeStreamingSubmission and executeNonStreamingSubmission are separate focused methods taking a snapshot",
+        "Unify the three identical pill notification methods (notifyTranscriptionFailed, notifyCancelled, notifySuccess) into a single flashPill(phase:minimize:duration:) with thin wrappers",
+        "CaptureCoordinator.swift line count should decrease significantly (target: under 550 lines after this step)",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "This story focuses on internal extraction within CaptureCoordinator. Further splitting into separate files happens in US-009."
+    },
+    {
+      "id": "US-008",
+      "title": "Simplify RecordingCoordinator and move hotkeys to extension",
+      "description": "RecordingCoordinator is 471 lines. It's not annotated @MainActor despite assuming main-thread execution everywhere. The 8 hotkey setup/update methods (~100 lines) are interleaved with core state machine logic. Reference thoughts/shared/plans/2026-03-14-simplify-coordinators-and-capture-panel.md Phase 3.",
+      "acceptanceCriteria": [
+        "Add @MainActor annotation to RecordingCoordinator class — it already assumes main-thread execution everywhere, this makes it compiler-verified. If the compiler flags issues with CGEvent tap callbacks, mark those specific closures as nonisolated(unsafe) with a comment",
+        "Move hotkey setup methods to a new extension file RecordingCoordinator+Hotkeys.swift: setupHotkey, updateHotkey (if not already removed in US-001/US-005), setupToggleRecordingHotkey, updateToggleRecordingHotkey, setupEscCancel, updateCancelRecordingHotkey, setupDestinationHotkeys, updateDestinationHotkeys, updateEscCancel, suspendEscCancel, resumeEscCancel",
+        "Change access level of properties these methods need from private to internal (remove private keyword): hotkeyManager, toggleRecordingHotkeyManager, escCancelManager, destinationHotkeyManager, pendingDestinationOverride, settings, isToggleMode",
+        "RecordingCoordinator.swift must be under 300 lines after extraction",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "The .executing phantom state should already be removed by US-001."
+    },
+    {
+      "id": "US-009",
+      "title": "Split CaptureCoordinator under 300 lines",
+      "description": "After US-007 simplified internals, CaptureCoordinator should be smaller but likely still over 300 lines. Extract submission execution and recording event handlers into extension files.",
+      "acceptanceCriteria": [
+        "Extract submission execution methods (executeQuickAction, executeStreamingSubmission, executeNonStreamingSubmission, recordOrUpdateHistory, rebuildSessionForFollowUp, captureSubmissionSnapshot, submitText, flashPill and related helpers) into CaptureCoordinator+Submission.swift",
+        "Extract recording event handler methods (handleRecordingStarted, handleRecordingComplete, handleTranscriptionFailed, handleRecordingCancelled, populateWithTranscription) into CaptureCoordinator+RecordingHandlers.swift if needed to get under 300",
+        "Change access level of properties these extensions need from private to internal",
+        "CaptureCoordinator.swift must be under 300 lines — it should contain only init, panel lifecycle (show/hide/toggle/collapse/expand), session management, and property declarations",
+        "All extracted extensions receive dependencies through self (same class, just extension files)",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Depends on US-007 having simplified the submission methods first."
+    },
+    {
+      "id": "US-010",
+      "title": "Simplify CapturePanel and extract layout/events",
+      "description": "CapturePanel is 522 lines. Height calculation, resize geometry, and event monitor setup are interleaved with panel lifecycle. Reference thoughts/shared/plans/2026-03-14-simplify-coordinators-and-capture-panel.md Phase 4.",
+      "acceptanceCriteria": [
+        "Move height calculation (calculateHeight, maxPanelHeight) and related layout constants to CapturePanel+Layout.swift (file already exists at 76 lines, add to it)",
+        "Extract setupEventMonitors() from presentPanel — the 4 event monitor registrations (local key monitor, becameKey observer, resignKey observer, global click monitor) are ~50 lines that can be a separate method",
+        "Consolidate the duplicate screen geometry computation (menuBarHeight, origin calculation) across presentPanel, resizePanelToMinimized, resizePanelToExpanded using the shared panel positioning helper from US-003",
+        "CapturePanel.swift must be under 300 lines",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "The shared panelOrigin helper should already exist from US-003."
+    },
+    {
+      "id": "US-011",
+      "title": "Simplify AppSettings observable properties and init",
+      "description": "AppSettings has 15 observable properties (limit is 5), a 148-line init with 8 repeated decode blocks, and a 33-line save repeating the same encode pattern.",
+      "acceptanceCriteria": [
+        "Group related settings into Codable sub-structs (e.g., HotkeySettings for the 5 hotkey bindings, TranscriptionSettings for filler words and terminator template settings, AudioSettings already exists). AppSettings should have at most 5-7 top-level observable stored properties after regrouping",
+        "Extract a generic decode helper (e.g., decode<T: Codable>(forKey:default:) using UserDefaults) to replace the 8 repeated if-let-data-decode blocks in init (~lines 148-208 for hotkeys alone)",
+        "Similarly simplify save() with a generic encode helper",
+        "All existing call sites (e.g., settings.toggleRecordingHotkey, settings.removeFillerWords) must still compile — use computed property accessors that delegate to sub-structs if needed for migration",
+        "AppSettings.swift should be under 300 lines",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "This is a broad refactor — take care to keep all call sites working. The computed property delegation pattern preserves API compatibility."
+    },
+    {
+      "id": "US-012",
+      "title": "Split oversized UI view files under 300 lines",
+      "description": "ModeSwitcherView (543 lines), CaptureView (479 lines), and ModesTabView (464 lines) all exceed the 300-line limit.",
+      "acceptanceCriteria": [
+        "ModeSwitcherView.swift under 300 lines — extract ModeSwitcherViewModel to its own file (it's ~60 lines of properties + ~200 lines of key handling). Extract sub-views (mode row, parameter views, destination views) to separate files if needed",
+        "CaptureView.swift under 300 lines — extract toolbar, segment editor, or other substantial sub-views into separate files",
+        "ModesTabView.swift under 300 lines — extract ModeDetailView to a separate file",
+        "Each extracted file has one primary type",
+        "No business logic in views — if any is found during extraction, move it to a view model or coordinator",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "ModeSwitcherView contains the ViewModel + 3 key-handling methods (~8 branches in handleModesKeyEvent alone). CaptureView is dense SwiftUI. ModesTabView has inline ModeDetailView."
+    },
+    {
+      "id": "US-013",
+      "title": "Split SelectionCapturer under 300 lines",
+      "description": "SelectionCapturer is 363 lines with a 3-layer fallback strategy using AX direct, AX Edit menu, and CGEvent Cmd+C.",
+      "acceptanceCriteria": [
+        "SelectionCapturer.swift under 300 lines",
+        "The CGEvent Cmd+C simulation should already use the shared KeyboardSimulator from US-002 — verify this is the case",
+        "Extract AX interaction helpers (menu traversal, element querying) to an extension file or helper if it helps readability",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "captureViaEditMenu at ~lines 121-176 is the densest method. Alert volume muting at ~lines 220-260 is another extraction candidate."
+    }
+  ]
+}

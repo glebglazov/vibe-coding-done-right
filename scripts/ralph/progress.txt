@@ -1,0 +1,25 @@
+# Ralph Progress Log
+Started: Sun Mar 15 11:31:57 CET 2026
+---
+
+## Codebase Patterns
+- All dependencies are wired through AppDependencies.swift (DI container)
+- Use OSLog via Logger extensions, never print()
+- Named constants for all numeric literals
+- Protocol-first design for new subsystems
+- CapturePanel is the NSPanel controller; CaptureViewModel holds the state; CaptureView is the SwiftUI view
+- RecordingCoordinator.State has 5 cases: idle, preparingToRecord, recording, transcribing, error — no .executing
+- PostTranscriptionActionType enum and TranscriptionRecord.swift are legacy migration decoders — still needed, don't remove
+- onWillStartRecording (RecordingCoordinator) and onWillStartInput (CaptureCoordinator) are distinct entry points for voice-recording and push-to-type flows respectively — both are live
+
+## 2026-03-15 - US-001
+- Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
+- Verified 6 other items were already addressed, still needed for migration, or non-existent
+- Files changed: vcdr/UI/CapturePanel.swift (30 lines deleted)
+- **Learnings for future iterations:**
+  - The .executing state referenced in the PRD doesn't exist — RecordingCoordinator.State has only 5 cases (idle, preparingToRecord, recording, transcribing, error)
+  - showPanelWithText doesn't exist — the actual method is showPanelWithSegments in CaptureCoordinator
+  - PostTranscriptionActionType and TranscriptionRecord are used in migration decode paths — needed for backward compatibility with old UserDefaults/JSON
+  - onWillStartRecording and onWillStartInput look like duplicates but fire from different code paths (voice recording vs push-to-type)
+  - The captures-based segment resolution in configurePanelAndShow is live — nil segments fallback is used by showPillForNewCapture and showPanelMinimized
+---
