@@ -18,6 +18,8 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - Use SelectAllOnAppear modifier for detail views that auto-select name field on appear
 - Use buildModeLabel(modeName:parameterLabels:destinationSymbol:) for mode label construction (ModeLabel.swift)
 - BashRunner uses buildEnvironment() and resolveCommand() private helpers to avoid duplication between run() and runStreaming()
+- Use EventTapManager for CGEvent tap lifecycle (install/uninstall/reEnableTap) — shared by GlobalHotkeyManager and DestinationHotkeyManager
+- No updateHotkey() aliases — callers call setupHotkey()/setupEscCancel()/setupDestinationHotkeys() directly
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -71,4 +73,17 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - When creating a global function with the same name as an existing instance method (e.g., nextUniqueName), Swift resolves to the instance method — inline the call at the call site instead of creating a same-named wrapper method
   - MenuBarView and HomeTabView use mode.defaultParameterLabels (no overrides), while CaptureViewModel and RecordingIndicator use overrides.resolvedParameterLabels — the buildModeLabel function accepts a parameterLabels parameter to support both variants
   - BashRunner also had a duplicated resolvedCommand computation (textPlaceholder replacement) — worth extracting alongside the env setup
+---
+
+## 2026-03-15 - US-005
+- Created EventTapManager.swift (vcdr/Hotkeys/) — shared CGEvent tap lifecycle: install(), uninstall(), reEnableTap(), isInstalled
+- Updated GlobalHotkeyManager to use EventTapManager instead of managing eventTap/runLoopSource directly
+- Updated DestinationHotkeyManager to use EventTapManager instead of managing eventTap/runLoopSource directly
+- Removed 6 one-liner updateHotkey aliases: updateToggleRecordingHotkey, updateCancelRecordingHotkey, updateDestinationHotkeys (RecordingCoordinator), updateHotkey (CaptureCoordinator, ModeSwitcherCoordinator, CopyLatestCaptureHandler)
+- Updated HomeTabView callers to call setupX() directly instead of updateX()
+- Files changed: 7 modified, 1 new (EventTapManager.swift) — net +8 lines
+- **Learnings for future iterations:**
+  - The updateEscCancel() private method in RecordingCoordinator is NOT an alias — it controls isEnabled based on state, distinct from setupEscCancel() which does full registration. Don't remove it
+  - updateDestinationHotkeys() had zero external callers (only defined, never called from outside RecordingCoordinator), safe to delete without updating any call sites
+  - The CGEvent tap callback uses Unmanaged pointer passing — each manager still owns its callback logic, only the tap infrastructure (create/source/enable/cleanup) is shared
 ---
