@@ -1,17 +1,29 @@
 import SwiftUI
 
-// MARK: - Cancelled Indicator View
+// MARK: - Info Pill View
 
-struct CancelledIndicatorView: View {
+/// Reusable ephemeral pill with an SF Symbol icon and optional label text.
+/// Used for dismiss, cancel, success, and other brief informational indicators.
+struct InfoPillView: View {
     private static let pillHeight: CGFloat = 32
     private static let pillHPadding: CGFloat = 12
     private static let iconSize: CGFloat = 16
+    private static let spacing: CGFloat = 4
+
+    let icon: String
+    let iconColor: Color
+    var label: String? = nil
 
     var body: some View {
-        HStack {
-            Image(systemName: "xmark")
+        HStack(spacing: Self.spacing) {
+            Image(systemName: icon)
                 .font(.system(size: Self.iconSize, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(iconColor)
+            if let label {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, Self.pillHPadding)
         .frame(height: Self.pillHeight)
@@ -19,6 +31,14 @@ struct CancelledIndicatorView: View {
         .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
         .shadow(radius: 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+// MARK: - Cancelled Indicator View
+
+struct CancelledIndicatorView: View {
+    var body: some View {
+        InfoPillView(icon: "xmark", iconColor: .secondary)
     }
 }
 

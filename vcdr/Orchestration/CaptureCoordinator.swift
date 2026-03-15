@@ -184,6 +184,7 @@ final class CaptureCoordinator {
             Task { await expandFromCollapsed() }
         } else {
             onWillStartInput?()
+            recordingIndicator.hide()
             overrides.clearIfCompletedPipeline()
             if session == nil {
                 session = PipelineSession()
@@ -270,6 +271,7 @@ final class CaptureCoordinator {
         panel.onFocusLost = nil
         panel.onPillClicked = nil
         panel.dismiss()
+        recordingIndicator.showDismissed()
         session = nil
         originalCapture = nil
         accumulatedCaptures = []
@@ -288,7 +290,9 @@ final class CaptureCoordinator {
             transcriptionHistory.removeConversation(conversation)
             Logger.app.info("Capture cancelled and removed from history")
         }
+        // Use dismissOverlay's cleanup but override the pill with a cancel indicator
         dismissOverlay()
+        recordingIndicator.showCancelled()
     }
 
 }

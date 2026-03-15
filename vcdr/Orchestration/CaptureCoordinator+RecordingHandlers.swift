@@ -11,6 +11,9 @@ extension CaptureCoordinator {
         pillResetTask?.cancel()
         autoDismissTask?.cancel()
         recordingIndicator.cancelPendingDismiss()
+        // Dismiss any ephemeral indicator (dismissed/cancelled/success pill) so it
+        // doesn't overlap with the new capture panel or recording indicator.
+        recordingIndicator.hide()
         if isFollowUp && panel.isVisible {
             panel.lockForFollowUp()
             panel.setPhase(.recording)

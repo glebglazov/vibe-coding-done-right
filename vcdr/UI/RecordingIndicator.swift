@@ -53,6 +53,8 @@ final class RecordingIndicatorPanel {
     /// Gap between pill and mode switcher list
     private static let modeSwitcherGap: CGFloat = 4
     private static let cancelledDisplayDuration: Duration = .seconds(1)
+    private static let dismissedDisplayDuration: Duration = .seconds(1)
+    private static let successDisplayDuration: Duration = .seconds(1.5)
     private static let copiedDisplayDuration: Duration = .seconds(1.5)
     private static let copyErrorDisplayDuration: Duration = .seconds(2)
 
@@ -245,6 +247,16 @@ final class RecordingIndicatorPanel {
         let offset = currentTopOffset
         currentTopOffset = 0
         showEphemeral(content: CancelledIndicatorView(), duration: Self.cancelledDisplayDuration, topOffset: offset)
+    }
+
+    /// Show a brief "dismissed" indicator that auto-hides.
+    func showDismissed() {
+        showEphemeral(content: InfoPillView(icon: "checkmark", iconColor: .green, label: "dismissed"), duration: Self.dismissedDisplayDuration)
+    }
+
+    /// Show a brief success indicator with the destination name that auto-hides.
+    func showSuccess(destinationName: String) {
+        showEphemeral(content: InfoPillView(icon: "checkmark", iconColor: .green, label: destinationName), duration: Self.successDisplayDuration)
     }
 
     /// Show a brief "copied" indicator (clipboard icon → green checkmark pill) that auto-hides

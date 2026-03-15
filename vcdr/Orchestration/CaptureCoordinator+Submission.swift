@@ -107,12 +107,8 @@ extension CaptureCoordinator {
                     }
                     recordingIndicator.hide()
                 } else {
-                    let panelWasVisible = panel.isVisible
                     panel.dismiss()
-                    if !panelWasVisible {
-                        recordingIndicator.update(phase: .success)
-                        recordingIndicator.dismissAfterDelay(Self.successIndicatorDuration)
-                    }
+                    recordingIndicator.showSuccess(destinationName: destination.name.lowercased())
                 }
 
                 SubmissionPipeline.recordTurn(
@@ -208,8 +204,7 @@ extension CaptureCoordinator {
                     }
                 } else {
                     panel.dismiss()
-                    recordingIndicator.update(phase: .success)
-                    recordingIndicator.dismissAfterDelay(Self.successIndicatorDuration)
+                    recordingIndicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
                 }
 
                 recordOrUpdateHistory(
