@@ -523,7 +523,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 31,
-      "passes": false,
+      "passes": true,
       "notes": "One-line fix. The constant already exists — just needs to be referenced in the second location."
     }
   ]

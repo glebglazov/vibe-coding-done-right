@@ -482,3 +482,10 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - AudioWaveformView and AnimatedDotsView are self-contained animation views with no dependencies on the indicator state types — clean extraction targets
   - fileSystemSynchronizedGroups means new Swift files are auto-discovered by Xcode — no project file edits needed
 ---
+
+## 2026-03-15 - US-031
+- Replaced bare `0.9` magic number on line 58 of CapturePanel+Layout.swift with the existing `captureLineHeightScale` named constant
+- Files changed: vcdr/UI/CapturePanel+Layout.swift
+- **Learnings for future iterations:**
+  - The constant `captureLineHeightScale` was already defined at line 14 but not used consistently — always check for existing constants before introducing new ones
+---
