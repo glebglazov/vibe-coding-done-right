@@ -53,6 +53,9 @@ final class RecordingIndicatorPanel {
     /// Gap between pill and mode switcher list
     private static let modeSwitcherGap: CGFloat = 4
     private static let resizeAnimationDuration: CGFloat = 0.15
+    private static let cancelledDisplayDuration: Duration = .seconds(1)
+    private static let copiedDisplayDuration: Duration = .seconds(1.5)
+    private static let copyErrorDisplayDuration: Duration = .seconds(2)
 
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
@@ -214,81 +217,47 @@ final class RecordingIndicatorPanel {
         }
     }
 
+    // MARK: - Ephemeral Indicators
+
     /// Show a brief "cancelled" indicator (grey X pill) that auto-hides.
     /// Uses the stored topOffset so it appears where the recording indicator was.
     func showCancelled() {
         let offset = currentTopOffset
         currentTopOffset = 0
-        hide()
-
-        let hostingView = NSHostingView(rootView: CancelledIndicatorView())
-        hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
-
-        let cancelPanel = makeEphemeralPanel(contentView: hostingView)
-        positionAtTopCenter(cancelPanel, topOffset: offset)
-        cancelPanel.orderFrontRegardless()
-        self.panel = cancelPanel
-
-        Task {
-            try? await Task.sleep(for: Self.cancelledDisplayDuration)
-            cancelPanel.close()
-            if self.panel === cancelPanel {
-                self.panel = nil
-            }
-        }
+        showEphemeral(content: CancelledIndicatorView(), duration: Self.cancelledDisplayDuration, topOffset: offset)
     }
-
-    // MARK: - Copied Indicator
-
-    private static let copiedDisplayDuration: Duration = .seconds(1.5)
 
     /// Show a brief "copied" indicator (clipboard icon → green checkmark pill) that auto-hides
     func showCopied() {
-        hide()
-
-        let hostingView = NSHostingView(rootView: CopiedIndicatorView())
-        hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
-
-        let copiedPanel = makeEphemeralPanel(contentView: hostingView)
-        positionAtTopCenter(copiedPanel)
-        copiedPanel.orderFrontRegardless()
-        self.panel = copiedPanel
-
-        Task {
-            try? await Task.sleep(for: Self.copiedDisplayDuration)
-            copiedPanel.close()
-            if self.panel === copiedPanel {
-                self.panel = nil
-            }
-        }
+        showEphemeral(content: CopiedIndicatorView(), duration: Self.copiedDisplayDuration)
     }
-
-    // MARK: - Copy Error Indicator
-
-    private static let copyErrorDisplayDuration: Duration = .seconds(2)
 
     /// Show a brief error indicator with a message that auto-hides
     func showCopyError(_ message: String) {
+        showEphemeral(content: CopyErrorIndicatorView(message: message), duration: Self.copyErrorDisplayDuration)
+    }
+
+    // MARK: - Private Helpers
+
+    private func showEphemeral<V: View>(content: V, duration: Duration, topOffset: CGFloat = 0) {
         hide()
 
-        let hostingView = NSHostingView(rootView: CopyErrorIndicatorView(message: message))
+        let hostingView = NSHostingView(rootView: content)
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight)
 
-        let errorPanel = makeEphemeralPanel(contentView: hostingView)
-        positionAtTopCenter(errorPanel)
-        errorPanel.orderFrontRegardless()
-        self.panel = errorPanel
+        let ephemeralPanel = makeEphemeralPanel(contentView: hostingView)
+        positionAtTopCenter(ephemeralPanel, topOffset: topOffset)
+        ephemeralPanel.orderFrontRegardless()
+        self.panel = ephemeralPanel
 
         Task {
-            try? await Task.sleep(for: Self.copyErrorDisplayDuration)
-            errorPanel.close()
-            if self.panel === errorPanel {
+            try? await Task.sleep(for: duration)
+            ephemeralPanel.close()
+            if self.panel === ephemeralPanel {
                 self.panel = nil
             }
         }
     }
-
-    // MARK: - Ephemeral Panel Helpers
 
     private func makeEphemeralPanel(contentView: NSView) -> NSPanel {
         let panel = NSPanel(
@@ -306,185 +275,6 @@ final class RecordingIndicatorPanel {
         if let origin = panelOriginBelowMenuBar(width: Self.panelWidth, height: Self.panelHeight, offset: Self.menuBarGap + topOffset) {
             panel.setFrameOrigin(origin)
         }
-    }
-
-    // MARK: - Constants (cancel indicator)
-    private static let cancelledDisplayDuration: Duration = .seconds(1)
-}
-
-// MARK: - SwiftUI View
-
-private struct RecordingIndicatorView: View {
-    // MARK: - Constants
-
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
-    private static let pillSpacing: CGFloat = 6
-    private static let iconSize: CGFloat = 16
-    private static let phaseTransitionDuration: Double = 0.2
-
-    private static let errorPillSpacing: CGFloat = 4
-    private static let errorPillHPadding: CGFloat = 8
-    private static let errorPillVPadding: CGFloat = 3
-    private static let errorPillCornerRadius: CGFloat = 6
-    private static let errorPillFontSize: CGFloat = 11
-    private static let captureBadgeSize: CGFloat = 12
-    private static let captureCountFontSize: CGFloat = 9
-
-    let phaseState: IndicatorPhaseState
-    let captureState: IndicatorCaptureState
-    let modeSwitcherState: IndicatorModeSwitcherState
-    let settings: AppSettings
-    let overrides: ConversationOverrides
-    let audioRecorder: AudioRecorder
-
-    var body: some View {
-        VStack(spacing: Self.errorPillSpacing) {
-            HStack(spacing: Self.pillSpacing) {
-                switch phaseState.phase {
-                case .recording:
-                    if captureState.captureCount > 0 {
-                        HStack(spacing: 1) {
-                            Image(systemName: "doc.on.clipboard")
-                                .font(.system(size: Self.captureBadgeSize, weight: .medium))
-                                .foregroundStyle(.secondary)
-                            if captureState.captureCount > 1 {
-                                Text("×\(captureState.captureCount)")
-                                    .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .transition(.opacity)
-                    }
-
-                    AudioWaveformView(audioLevels: audioRecorder.audioLevels)
-                        .transition(.opacity)
-
-                case .processing:
-                    AnimatedDotsView()
-                        .transition(.opacity)
-
-                case .success:
-                    Image(systemName: "checkmark")
-                        .font(.system(size: Self.iconSize, weight: .semibold))
-                        .foregroundStyle(.green)
-                        .transition(.opacity)
-
-                case .error:
-                    Image(systemName: "xmark")
-                        .font(.system(size: Self.iconSize, weight: .semibold))
-                        .foregroundStyle(.red)
-                        .transition(.opacity)
-                }
-
-                if phaseState.phase == .recording || phaseState.phase == .processing {
-                    let destinationID = overrides.destinationOverride ?? settings.activeMode.defaultOutputDestinationID
-                    let destination = settings.outputDestination(for: destinationID)
-                    Text(buildModeLabel(
-                        modeName: settings.activeMode.name,
-                        parameterLabels: overrides.resolvedParameterLabels(for: settings.activeMode),
-                        destinationSymbol: destination.symbol
-                    ))
-                        .font(.caption)
-                        .foregroundStyle(.primary)
-                        .transition(.opacity)
-                }
-            }
-            .padding(.horizontal, Self.pillHPadding)
-            .frame(height: Self.pillHeight)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-            .shadow(radius: 2)
-
-            if let message = phaseState.errorMessage, phaseState.phase == .error {
-                Text(message)
-                    .font(.system(size: Self.errorPillFontSize))
-                    .foregroundStyle(.primary)
-                    .lineLimit(4)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Self.errorPillHPadding)
-                    .padding(.vertical, Self.errorPillVPadding)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.errorPillCornerRadius))
-                    .shadow(radius: 2)
-                    .transition(.opacity)
-            }
-
-            if let vm = modeSwitcherState.viewModel {
-                ModeSwitcherView(viewModel: vm)
-                    .frame(width: ModeSwitcherPanel.panelWidth)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .modifier(ShakeEffect(shakeCount: phaseState.rejectCount))
-        .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: phaseState.phase)
-        .animation(.default, value: phaseState.rejectCount)
-        .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: captureState.captureCount)
-    }
-}
-
-// MARK: - Audio Waveform View
-
-/// Visualizes real microphone input as vertical bars with a symmetric
-/// bell-curve shape — tallest in the center, tapering to the edges.
-struct AudioWaveformView: View {
-    // MARK: - Constants
-
-    private static let barWidth: CGFloat = 3
-    private static let barSpacing: CGFloat = 2
-    private static let minBarHeight: CGFloat = 3
-    private static let maxBarHeight: CGFloat = 14
-    private static let animationDuration: Double = 0.06
-    /// Symmetric taper: edges are much shorter, center is tallest
-    private static let barScales: [CGFloat] = [0.25, 0.6, 1.0, 0.6, 0.25]
-
-    let audioLevels: [Float]
-
-    var body: some View {
-        HStack(spacing: Self.barSpacing) {
-            ForEach(Array(audioLevels.enumerated()), id: \.offset) { index, level in
-                let scale = Self.barScales[index]
-                let height = Self.minBarHeight + (Self.maxBarHeight - Self.minBarHeight) * CGFloat(level) * scale
-                Capsule()
-                    .fill(.red)
-                    .frame(width: Self.barWidth, height: height)
-            }
-        }
-        .animation(.easeOut(duration: Self.animationDuration), value: audioLevels)
-    }
-}
-
-// MARK: - Animated Dots View
-
-/// Three bouncing dots with staggered animation for processing state.
-struct AnimatedDotsView: View {
-    // MARK: - Constants
-
-    private static let dotSize: CGFloat = 5
-    private static let dotSpacing: CGFloat = 3
-    private static let bounceHeight: CGFloat = 4
-    private static let animationDuration: Double = 0.4
-    private static let dotCount = 3
-
-    @State private var isAnimating = false
-
-    var body: some View {
-        HStack(spacing: Self.dotSpacing) {
-            ForEach(0..<Self.dotCount, id: \.self) { index in
-                Circle()
-                    .fill(.secondary)
-                    .frame(width: Self.dotSize, height: Self.dotSize)
-                    .offset(y: isAnimating ? -Self.bounceHeight : 0)
-                    .animation(
-                        .easeInOut(duration: Self.animationDuration)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.15),
-                        value: isAnimating
-                    )
-            }
-        }
-        .onAppear { isAnimating = true }
     }
 }
 
