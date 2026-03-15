@@ -30,6 +30,9 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - CapturePanel layout constants and height calculation live in CapturePanel+Layout.swift
 - AppSettings groups hotkey properties into HotkeySettings and transcription properties into TranscriptionSettings sub-structs (SettingsTypes.swift). Computed compatibility accessors in AppSettings+Compatibility.swift preserve the original API (e.g., settings.toggleRecordingHotkey still works)
 - Use AppSettings.decodeSetting(from:forKey:default:) and boolSetting(from:forKey:default:) for UserDefaults decode patterns, and encode(_:forKey:) for Codable save patterns
+- ModeSwitcherViewModel + NavigationLevel + KeyCode live in ModeSwitcherViewModel.swift; ModeSwitcherView (pure SwiftUI) lives in ModeSwitcherView.swift
+- CaptureView conversation history rendering (conversationHistorySection, turnView, captureBlockquote) lives in CaptureView+History.swift
+- ModeDetailView + ParameterEditorView live in ModeDetailView.swift (extracted from ModesTabView.swift)
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -186,4 +189,20 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - @Observable computed properties in extension files work correctly — they access stored properties which are tracked, so observation propagates across files
   - Individual UserDefaults keys are kept for backward compatibility — save() writes to the same keys as before, init reads them with generic helpers
   - Moving sub-struct definitions to SettingsTypes.swift freed ~30 lines to get AppSettings.swift under 300
+---
+
+## 2026-03-15 - US-012
+- Extracted ModeSwitcherViewModel (+ NavigationLevel enum + KeyCode enum) from ModeSwitcherView.swift to ModeSwitcherViewModel.swift (270 lines)
+- Extracted conversation history rendering (conversationHistorySection, turnView, turnInputView, parseTurnInput, captureBlockquote, copyButton) from CaptureView.swift to CaptureView+History.swift (189 lines)
+- Extracted ModeDetailView + ParameterEditorView from ModesTabView.swift to ModeDetailView.swift (243 lines)
+- Final line counts: ModeSwitcherView.swift 271, CaptureView.swift 293, ModesTabView.swift 195 — all under 300
+- Files changed: 3 modified (ModeSwitcherView.swift, CaptureView.swift, ModesTabView.swift), 3 new (ModeSwitcherViewModel.swift, CaptureView+History.swift, ModeDetailView.swift)
+- **Learnings for future iterations:**
+  - When extracting methods from a SwiftUI struct to an extension file, `private` methods/constants are file-scoped — use `internal` (remove `private`) for anything called across files
+  - `static let` constants CAN be added in struct extensions (they're type properties, not instance stored properties)
+  - `private static let` in an extension file scopes constants to that file only — good for extension-local constants
+  - captureBlockquote is used from both the main CaptureView (in segmentedInputSection) and the history extension — it must be `internal` (not `private`) in the extension
+  - `private enum` inside an extension works fine for file-local nested types (TurnInputPart)
+  - textPadding needed to be made `internal` because it's used by both the main file and the history extension
+  - ParameterEditorView can stay `private struct` in ModeDetailView.swift since ModeDetailView uses it from the same file (private at file scope = fileprivate)
 ---

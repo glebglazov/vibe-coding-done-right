@@ -204,7 +204,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "ModeSwitcherView contains the ViewModel + 3 key-handling methods (~8 branches in handleModesKeyEvent alone). CaptureView is dense SwiftUI. ModesTabView has inline ModeDetailView."
     },
     {
