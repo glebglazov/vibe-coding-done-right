@@ -183,9 +183,7 @@ private struct ParameterEditorView: View {
             }
 
             Button {
-                parameter.options.append(
-                    ModeParameterOption(id: UUID(), label: "", value: "")
-                )
+                parameter.addOption()
             } label: {
                 Label("Add Option", systemImage: "plus")
                     .font(.caption)
@@ -206,8 +204,7 @@ private struct ParameterEditorView: View {
                 .font(.system(.body, design: .monospaced))
 
             Button {
-                guard index > 0 else { return }
-                parameter.options.swapAt(index, index - 1)
+                parameter.moveOptionUp(at: index)
             } label: {
                 Image(systemName: "chevron.up")
                     .font(.caption2)
@@ -216,8 +213,7 @@ private struct ParameterEditorView: View {
             .disabled(index == 0)
 
             Button {
-                guard index < parameter.options.count - 1 else { return }
-                parameter.options.swapAt(index, index + 1)
+                parameter.moveOptionDown(at: index)
             } label: {
                 Image(systemName: "chevron.down")
                     .font(.caption2)
@@ -226,7 +222,7 @@ private struct ParameterEditorView: View {
             .disabled(index >= parameter.options.count - 1)
 
             Button {
-                parameter.options.remove(at: index)
+                parameter.removeOption(at: index)
             } label: {
                 Image(systemName: "minus.circle.fill")
                     .foregroundStyle(.red.opacity(0.7))

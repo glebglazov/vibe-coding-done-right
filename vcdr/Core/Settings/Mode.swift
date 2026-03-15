@@ -22,6 +22,26 @@ struct ModeParameter: Identifiable, Codable, Equatable {
             .filter { $0.isLetter || $0.isNumber || $0 == " " }
             .replacingOccurrences(of: " ", with: "_")
     }
+
+    // MARK: - Option Mutation
+
+    mutating func addOption() {
+        options.append(ModeParameterOption(id: UUID(), label: "", value: ""))
+    }
+
+    mutating func removeOption(at index: Int) {
+        options.remove(at: index)
+    }
+
+    mutating func moveOptionUp(at index: Int) {
+        guard index > 0 else { return }
+        options.swapAt(index, index - 1)
+    }
+
+    mutating func moveOptionDown(at index: Int) {
+        guard index < options.count - 1 else { return }
+        options.swapAt(index, index + 1)
+    }
 }
 
 struct Mode: Identifiable, Codable, Equatable {
