@@ -154,7 +154,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-007 having simplified the submission methods first."
     },
     {

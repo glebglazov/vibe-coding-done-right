@@ -22,6 +22,7 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - No updateHotkey() aliases — callers call setupHotkey()/setupEscCancel()/setupDestinationHotkeys() directly
 - RecordingIndicatorPanel uses showEphemeral(content:duration:topOffset:) for all brief auto-dismissing indicators — add new ones via thin wrappers calling showEphemeral
 - CaptureCoordinator submission methods (submitText, executeQuickAction, executeStreamingSubmission, executeNonStreamingSubmission, recordOrUpdateHistory, rebuildSessionForFollowUp) live in CaptureCoordinator+Submission.swift
+- CaptureCoordinator recording handler methods (handleRecordingStarted, handleRecordingComplete, handleTranscriptionFailed, handleRecordingCancelled, populateWithTranscription, flashPill, dismissIndicatorAfterDelay) live in CaptureCoordinator+RecordingHandlers.swift
 - RecordingCoordinator hotkey methods (setupToggleRecordingHotkey, setupEscCancel, setupDestinationHotkeys, updateEscCancel, suspendEscCancel, resumeEscCancel) live in RecordingCoordinator+Hotkeys.swift
 - RecordingCoordinator processing methods (processTranscription, resetAfterDelay, dismissIndicatorAfterDelay, errorIndicatorDuration) live in RecordingCoordinator+Processing.swift
 
@@ -133,4 +134,17 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - `private(set) var` restricts the setter to the *file*, not the class — extensions in different files can't set it. Must change to plain `var` (internal setter) for cross-file extension access
   - `private struct` inside a class is scoped to the file — must become `struct` (internal) when extensions in other files reference properties of that type
   - `successIndicatorDuration` was declared in RecordingCoordinator but never used there — only CaptureCoordinator uses its own copy. Safe to remove
+---
+
+## 2026-03-15 - US-009
+- Extracted recording event handler methods (handleRecordingStarted, handleTranscribing, handleRecordingComplete, handleTranscriptionFailed, handleRecordingCancelled, handleRecordingFailed, flashPill, populateWithTranscription, showPanelWithSegments, showPanelMinimized, dismissIndicatorAfterDelay) to CaptureCoordinator+RecordingHandlers.swift (198 lines)
+- Changed access levels on Task properties needed by extensions: pillResetTask, autoDismissTask, dismissIndicatorTask (private → internal)
+- CaptureCoordinator.swift: 486 → 295 lines
+- Submission methods were already in CaptureCoordinator+Submission.swift (282 lines) from US-007
+- Files changed: 1 modified (CaptureCoordinator.swift), 1 new (CaptureCoordinator+RecordingHandlers.swift)
+- **Learnings for future iterations:**
+  - When extracting methods from a 486-line file to get under 300, you typically need to move ~190+ lines — plan for two extraction targets (recording handlers + submission) rather than one
+  - `private var` Task properties used for cancellation (pillResetTask, autoDismissTask, dismissIndicatorTask) need to become internal when extensions set them in closures
+  - `dismissIndicatorAfterDelay` is used from both RecordingHandlers and Submission extensions — place it in whichever extension is the primary user (RecordingHandlers) since all extensions can call it
+  - The main CaptureCoordinator.swift now contains: properties, init, panel lifecycle (show/hide/collapse/expand), session management, hotkey setup, and push-to-type handlers — a coherent "core" subset
 ---
