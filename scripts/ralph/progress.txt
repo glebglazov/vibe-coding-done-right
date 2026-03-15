@@ -449,3 +449,18 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - The permission banner flash was caused by hasMicrophonePermission/hasAccessibilityPermission defaulting to false before checkPermissions() runs — gating on initialization is the minimal fix
   - checkPermissions() is synchronous (AVCaptureDevice.authorizationStatus + AXIsProcessTrusted), so isInitialized is set immediately after without any async gap
 ---
+
+## 2026-03-15 - US-028
+- Improved capture view text field focus reliability across CapturePanel and SegmentEditor
+- Increased focusMaxAttempts from 10 to 20 and focusRetryDelay from 10ms to 20ms (100ms → 400ms total budget)
+- Added window identity check in focusActiveTextView: `textView.window === panel` guard prevents stale references
+- Enhanced failure log to include text view count for easier debugging
+- Added `scheduleDeferredFocus` to SegmentEditor.Coordinator — retries focus when window is nil during updateNSView
+- Guarded expand() focus path against panel being dismissed or re-minimized during the 200ms delay
+- Files changed: 3 modified (CapturePanel+Events.swift, CapturePanel.swift, SegmentEditor.swift)
+- **Learnings for future iterations:**
+  - focusActiveTextView's retry loop runs as a Task on @MainActor — it yields via Task.sleep between attempts, giving SwiftUI time to lay out the NSHostingView tree
+  - SegmentEditor.updateNSView's `nsView.window?.makeFirstResponder(textView)` silently no-ops when window is nil — the optional chaining hides the failure. Explicit nil check + deferred retry is more reliable
+  - The expand() path's guard chain (isVisible, !isMinimized, contentView, panel) prevents focus attempts on a dismissed or re-minimized panel — important because the 200ms sleep allows user interactions to change state
+  - `textView.window === panel` identity check catches cases where SwiftUI recycles views between panels — without this, makeFirstResponder could succeed but on a different window
+---

@@ -479,7 +479,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 28,
-      "passes": false,
+      "passes": true,
       "notes": "Root causes identified by analysis: (1) 100ms retry window too short for SwiftUI layout on first show, (2) SegmentEditor.updateNSView window?.makeFirstResponder silently no-ops when window is nil, (3) expand() focus attempt doesn't guard against panel being dismissed during the 200ms delay, (4) nonactivatingPanel style can cause makeFirstResponder to not retain first responder. The retry budget increase is the highest-impact fix."
     }
   ]
