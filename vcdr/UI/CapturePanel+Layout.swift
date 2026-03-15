@@ -55,7 +55,7 @@ extension CapturePanel {
 
             for capture in turn.captures {
                 totalLines += labelLineHeight / lineHeight
-                totalLines += CGFloat(capture.text.components(separatedBy: .newlines).count) * 0.9
+                totalLines += CGFloat(capture.text.components(separatedBy: .newlines).count) * captureLineHeightScale
             }
 
             if index < turns.count - 1 {
