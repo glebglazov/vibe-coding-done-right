@@ -1,7 +1,7 @@
 {
   "project": "VCDR",
   "branchName": "ralph/simplify-codebase",
-  "description": "Simplify and deduplicate the VCDR codebase. Remove dead code, extract shared concerns, eliminate duplication, and split oversized files — all while keeping the build green and behavior unchanged. Reference thoughts/shared/research/2026-03-14-complexity-and-comprehensibility-audit.md and thoughts/shared/plans/2026-03-14-simplify-coordinators-and-capture-panel.md for detailed analysis.",
+  "description": "Simplify and deduplicate the VCDR codebase. Remove dead code, extract shared concerns, eliminate duplication, and split oversized files — all while keeping the build green and behavior unchanged. Reference thoughts/shared/research/2026-03-14-complexity-and-comprehensibility-audit.md, thoughts/shared/plans/2026-03-14-simplify-coordinators-and-capture-panel.md, and thoughts/shared/research/2026-03-15-architecture-assessment-and-inconsistencies.md for detailed analysis.",
   "userStories": [
     {
       "id": "US-001",
@@ -221,6 +221,151 @@
       "priority": 13,
       "passes": true,
       "notes": "captureViaEditMenu at ~lines 121-176 is the densest method. Alert volume muting at ~lines 220-260 is another extraction candidate."
+    },
+    {
+      "id": "US-014",
+      "title": "Show actionable error feedback for script execution failures",
+      "description": "When a bash script mode fails, the user gets no actionable feedback. In the panel path, showProcessingError() logs the error and resets to idle — the error message is never displayed. In the pill/minimized path, the error is shown in a tiny 11pt sub-pill for a few seconds then auto-dismissed. Users need to see what went wrong and be able to copy the error text.",
+      "acceptanceCriteria": [
+        "Add an `errorMessage: String?` property to CaptureViewModel that stores the last processing error",
+        "When CapturePanel is expanded (panel.isVisible && !panel.isMinimized): show the error message in the header bar area with a red error icon. The error text should be truncated with ellipsis if too long, but clicking on it copies the full error text to the clipboard (via ClipboardHelper.writeString) and shows brief 'Copied' feedback",
+        "When CapturePanel is minimized (pill state): show the error in the pill with a red phase indicator (use existing .error phase). The pill error text should also be clickable to copy the full error",
+        "Update CapturePanel+Content.showProcessingError() to set viewModel.phase = .error and viewModel.errorMessage = message instead of resetting to .idle and discarding the message",
+        "For streaming errors with partial output (accumulated not empty): still show the partial output AND display the error in the header — don't silently drop the error",
+        "The error message should persist until the user starts a new recording or dismisses it (not auto-dismissed on a timer)",
+        "Clear errorMessage when starting a new recording, new submission, or when the user dismisses the error",
+        "The existing quick-action pill error path (RecordingIndicatorPanel) should also support click-to-copy on the error message sub-pill",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Current error flow: BashRunner throws ActionError.executionFailed('Exit code N: <stderr>') → SubmissionPipeline passes through → CaptureCoordinator catches. Panel path: showProcessingError() logs and resets to idle (error discarded). Quick action path: recordingIndicator shows error in small pill for errorIndicatorDuration then auto-dismisses. Reference thoughts/shared/research/2026-03-15-architecture-assessment-and-inconsistencies.md."
+    },
+    {
+      "id": "US-015",
+      "title": "Remove force unwraps in production code",
+      "description": "Four force unwraps exist in production code paths, violating CLAUDE.md Rule 7. These are runtime crashes waiting to happen, even if currently guarded by prior checks.",
+      "acceptanceCriteria": [
+        "Replace `focusedElementRef as! AXUIElement` at SelectionCapturer.swift:80 with a safe `guard let focusedElement = focusedElementRef as? AXUIElement else { return nil }` pattern",
+        "Replace `menuBarRef as! AXUIElement` at SelectionCapturer+AXHelpers.swift (originally SelectionCapturer.swift:134) with a safe `guard let menuBar = menuBarRef as? AXUIElement else { return nil }` pattern",
+        "Replace `trimmed.last!` at Mode.swift:119 with the existing shadowed `guard let lastChar = trimmed.last` pattern — the guard already exists at line 106 but uses a different variable",
+        "Replace `scrollView.documentView as! NSTextView` at SegmentEditor.swift:39 with `guard let textView = scrollView.documentView as? NSTextView else { return scrollView }` or similar safe unwrap",
+        "Zero `as!` or `!` force unwraps remain in production code paths (static constants like UUID(uuidString:)! are exempt per Rule 7)",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Small, safe changes — each is a one-line replacement. The AX casts are after .success checks so they should never fail, but safe unwrapping costs nothing and prevents future regressions."
+    },
+    {
+      "id": "US-016",
+      "title": "Split DebugTabView under 300 lines",
+      "description": "DebugTabView.swift is 450 lines and contains two primary types: DebugTestRunner (@Observable class, ~193 lines) and DebugTabView (view, ~257 lines). This violates both the 300-line limit and the one-primary-type-per-file rule.",
+      "acceptanceCriteria": [
+        "Extract DebugTestRunner to its own file (e.g., Debug/DebugTestRunner.swift or a suitable location)",
+        "Extract the Duration.debugFormatted extension to a shared location if used elsewhere, or keep it in the DebugTestRunner file if only used there",
+        "DebugTabView.swift must be under 300 lines",
+        "Each file has one primary type",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "Straightforward file split. DebugTestRunner is already a separate class — just move it to its own file."
+    },
+    {
+      "id": "US-017",
+      "title": "Extract business logic from views into coordinators or dedicated types",
+      "description": "Six views contain domain logic that should live in coordinators or dedicated types per CLAUDE.md Rule 5. Views should only contain layout and binding code.",
+      "acceptanceCriteria": [
+        "HomeTabView.swift: Move hotkey re-registration logic out of ShortcutRecorderRow binding `set:` closures (lines ~95-190). The view should call a single method on a coordinator/settings type that handles the re-registration side effect",
+        "ModesTabView.swift: Move mode activation fallback rules (lines ~100-133) — 'if disabled active mode, switch to first visible' and 'if deleted active mode, activate first remaining' — to AppSettings or a dedicated ModeManager helper",
+        "OutputDestinationsTabView.swift: Move the `isDestinationInUse()` business constraint (line ~61) and `deleteDestination()` (line ~65) to AppSettings or a dedicated helper",
+        "ModeDetailView.swift: Move direct array mutations of `mode.parameters` (remove, swap, append at lines ~113-131) to methods on Mode itself (e.g., mode.removeParameter(at:), mode.moveParameterUp(at:))",
+        "CaptureView+History.swift: Move parseTurnInput() string parsing algorithm (~40 lines) to ConversationTurn or a dedicated TurnFormatter type",
+        "HistoryTabView.swift: Move the canContinue() eligibility rule (line ~47) to Conversation or AppSettings",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "This is the largest story in this batch. Each extraction is independent — if one is tricky, skip it and note why. The goal is to move domain decisions out of views, not to refactor the entire view layer. Reference thoughts/shared/research/2026-03-15-architecture-assessment-and-inconsistencies.md for detailed analysis."
+    },
+    {
+      "id": "US-018",
+      "title": "Name remaining magic numbers across the codebase",
+      "description": "~15 bare numeric/string literals exist in production code without named constants, violating CLAUDE.md Rule 3. Each should be extracted to a `static let` in the relevant type's `// MARK: - Constants` section.",
+      "acceptanceCriteria": [
+        "ParakeetProvider.swift:26 — name `1e15` (e.g., `attosecondsPerMillisecond`)",
+        "ModeSwitcherPanel.swift:105 — promote `headerHeight: CGFloat = 24` from local var to `static let` in Constants section",
+        "ModeSwitcherPanel.swift:109 and ModesTabView.swift:96 — extract the shared `9` max-modes-in-switcher limit to a single named constant accessible to both files (e.g., on Mode or AppSettings)",
+        "CapturePanel+Layout.swift:33,53 — name the `0.9` capture line height scaling factor",
+        "AudioRecorder.swift:87-88 — name channel count `1` and bit depth `16` as named constants alongside existing `sampleRate`",
+        "AudioSectionView.swift:27 — name the `120` meter width",
+        "RecordingIndicatorViews.swift:293 — name the `0.15` dot animation stagger delay",
+        "SettingsTypes.swift:15 — reference AppSettings.defaultPushToTypeExpandDelay instead of bare `500`",
+        "CaptureViewModel.swift:140,162,170 — replace bare key codes `53` (Escape) and `36` (Return) with named constants. ModeSwitcherViewModel already has a KeyCode enum — consider reusing or creating similar constants",
+        "MediaRemoteClient.swift:40,55,67,79 — name command strings `\"test\"`, `\"get\"`, `\"send\"` and argument strings `\"1\"`, `\"0\"` as static constants",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "Mechanical changes — each is a simple extract-to-constant refactor. The ModeSwitcherPanel/ModesTabView `9` should share one constant since they enforce the same rule."
+    },
+    {
+      "id": "US-019",
+      "title": "Deduplicate cross-file code: indicator delay, keyCode mapping, and panel animation",
+      "description": "Three patterns are duplicated across files: dismissIndicatorAfterDelay appears in 2 locations verbatim, ANSI keyCode-to-character mapping exists in 3 files, and panel resize uses two different animation APIs inconsistently.",
+      "acceptanceCriteria": [
+        "Extract dismissIndicatorAfterDelay into a single shared location — it appears in both RecordingCoordinator+Processing.swift and CaptureCoordinator+RecordingHandlers.swift with identical logic. Options: (a) free function, (b) extension on RecordingIndicatorPanel, (c) method on a shared type. Both coordinators should call the single implementation",
+        "Consolidate ANSI keyCode mapping: GlobalHotkeyManager.keyNameForCode() (full table), OutputDestination.charToKeyCode (subset for migration), and KeyboardSimulator key constants (2 entries) should reference a single source-of-truth table. Extract a shared KeyCodeMap or extend GlobalHotkeyManager's table to serve all three use cases",
+        "Standardize panel resize animation: RecordingIndicator and ModeSwitcherPanel use NSAnimationContext.runAnimationGroup + panel.animator(), while CapturePanel uses panel.setFrame(_:display:animate:). Pick one approach and use it consistently across all three panel types",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "The keyCode mapping consolidation is the most impactful — having the same data in 3 places means bugs where one is updated but others aren't."
+    },
+    {
+      "id": "US-020",
+      "title": "Reduce coordinator observable property count with delegate protocols",
+      "description": "RecordingCoordinator has 10 closure `var` callbacks, CaptureCoordinator has 8 observable vars, and ModeSwitcherCoordinator has 6 closure vars — all exceeding the 5-property limit. The closure vars exist only for inter-coordinator wiring (never observed by views) but still participate in @Observable tracking. Replace closure-based callbacks with delegate protocols.",
+      "acceptanceCriteria": [
+        "Define a RecordingCoordinatorDelegate protocol with methods for onRecordingStarted, onTranscribing, onRecordingComplete, onTranscriptionFailed, onRecordingCancelled, onRecordingFailed, onSelectionCaptured, onClipboardCaptured, onWillStartRecording, plus isPanelVisible query",
+        "Replace the 10 closure `var` properties on RecordingCoordinator with a single `weak var delegate: RecordingCoordinatorDelegate?`",
+        "Have CaptureCoordinator conform to RecordingCoordinatorDelegate (it already implements all the handler methods)",
+        "Define a ModeSwitcherCoordinatorDelegate protocol (or use closures reduced to 2-3 essential ones) and reduce ModeSwitcherCoordinator's closure count",
+        "RecordingCoordinator must have at most 5 observable `var` properties after changes",
+        "ModeSwitcherCoordinator must have at most 5 observable `var` properties after changes",
+        "CaptureCoordinator must have at most 5 observable `var` properties after changes (may require grouping Task handles into a struct or making them non-observable)",
+        "Update AppDependencies.init() wiring to use delegate assignment instead of individual closure assignments",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "This is the most architecturally significant change in this batch. The delegate pattern replaces the 16-closure wiring block in AppDependencies with cleaner protocol-based composition. Take care with @MainActor isolation on the delegate protocol methods. CaptureCoordinator's Task handle vars (pillResetTask, autoDismissTask, etc.) can be grouped into a struct to reduce observable property count."
+    },
+    {
+      "id": "US-021",
+      "title": "Fix concurrency gaps and cross-layer coupling",
+      "description": "AudioRecorder's timer callback runs without actor isolation, ToolAvailabilityChecker blocks the calling thread synchronously, CopiedFeedback has a fire-and-forget Task, OutputDestination depends on GlobalHotkeyManager, and CopiedFeedback imports SwiftUI from the Core layer.",
+      "acceptanceCriteria": [
+        "AudioRecorder: Either add @MainActor to the class or ensure levelTimer callback dispatches to the main actor for audioLevels mutation. The timer fires from Timer.scheduledTimer which uses the current run loop — if called from a background context, it could mutate audioLevels off the main thread",
+        "ToolAvailabilityChecker: Make checkAll() async, running process.waitUntilExit() calls via Task.detached or withCheckedContinuation to avoid blocking the main thread. Update the single call site in AppSettings.refreshTemplateAvailability()",
+        "CopiedFeedback: Store the Task handle and cancel it in a cleanup path, or document why fire-and-forget is acceptable here. Remove the SwiftUI import by accepting a closure instead of Binding<Bool>",
+        "OutputDestination.activationKeyCharacter: Remove the direct dependency on GlobalHotkeyManager.keyNameForCode() from the model layer. Either pass the key name as a parameter from the call site, or move the keyCode-to-name table to a shared Core utility",
+        "Remove vestigial NSObject inheritance from AudioRecorder if AVAudioRecorderDelegate is not adopted",
+        "Build passes: xcodebuild -scheme vcdr -destination 'platform=macOS' build",
+        "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "These are safety and layering fixes. The AudioRecorder timer issue is the most critical — it could cause a data race under Swift 6 strict concurrency. The ToolAvailabilityChecker blocking issue is low-risk since it only runs at startup with fast 'which' commands, but making it async is the correct pattern."
     }
   ]
 }

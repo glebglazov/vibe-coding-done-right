@@ -34,6 +34,9 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - CaptureView conversation history rendering (conversationHistorySection, turnView, captureBlockquote) lives in CaptureView+History.swift
 - ModeDetailView + ParameterEditorView live in ModeDetailView.swift (extracted from ModesTabView.swift)
 - SelectionCapturer AX helpers (findCopyMenuItem, axChildren, axIsEnabled, enableEnhancedAccessibility) live in SelectionCapturer+AXHelpers.swift
+- CaptureViewModel.errorMessage stores the last processing error; CaptureViewModel.clearError() resets error state and triggers panel resize
+- ErrorBannerView provides click-to-copy error display with dismiss button — use it for showing actionable error messages in panel headers
+- CapturePanel.expand() preserves both .recording and .error phases — add new persistent phases to the preserve check
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -219,4 +222,26 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - `private static let` constants referenced by extension files must become `static let` (internal) — same pattern seen in US-007/US-008/US-009
   - findCopyInMenu is only called by findCopyMenuItem (both in the extension file) so it can stay `private` in the extension — file-scoped privacy works within the same file
   - One-liner wrapper methods that just delegate to a shared helper (like simulateCmdC → KeyboardSimulator.simulateCmdC) should be inlined rather than extracted
+---
+
+## 2026-03-15 - US-014
+- Added `errorMessage: String?` property to CaptureViewModel with `clearError()` method
+- Updated `showProcessingError()` in CapturePanel+Content to set `.error` phase and errorMessage instead of resetting to `.idle`
+- Added `setError()` method to CapturePanel+Content for setting error after streaming with partial output
+- Created ErrorBannerView.swift (51 lines) — red error icon, truncated message, click-to-copy with "Copied" feedback, X dismiss button
+- Added error banner to CaptureView headerBar (shown when phase == .error)
+- Updated minimized pill to show error message in red instead of mode label, click copies error text
+- Updated CapturePanel.expand() to preserve `.error` phase (alongside `.recording`)
+- Updated calculateHeight to accept `hasError:` parameter, accounted for in resizePanel/resizePanelToExpanded
+- Updated streaming error catch in CaptureCoordinator+Submission to show partial output AND error (via finishStreaming + setError)
+- Added errorMessage clearing in startProcessing()
+- Made RecordingIndicatorPanel error pill clickable (ignoresMouseEvents = false when error phase, onTapGesture copies error text)
+- Files changed: 8 modified, 1 new (ErrorBannerView.swift)
+- **Learnings for future iterations:**
+  - CapturePanel.expand() resets phase to .idle for all phases except .recording — must add .error to the preserve list if error should persist across expand
+  - calculateHeight is a static function that doesn't have access to viewModel state — must pass hasError as a parameter to account for the error banner height
+  - SwiftUI ternaries with `.foregroundStyle` need explicit type unification when mixing `Color.red` and `Color.primary` (or `.secondary` and `.red`) since they're different `ShapeStyle` conformances
+  - CancelledIndicatorView's VStack wrapper is unnecessary — the .frame(maxWidth/maxHeight) modifier with alignment works directly on the HStack, saving 2 lines
+  - RecordingIndicatorPanel sets `ignoresMouseEvents: true` by default — must toggle to false when showing clickable error content
+  - The streaming error with partial output path calls finishStreaming (which sets phase=.idle) then setError (which overrides to .error) — order matters since both are @MainActor sequential
 ---
