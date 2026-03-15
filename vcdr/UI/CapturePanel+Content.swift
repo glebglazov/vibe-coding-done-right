@@ -149,9 +149,14 @@ extension CapturePanel {
     }
 
     func setError(_ message: String) {
-        viewModel?.errorMessage = message
-        viewModel?.phase = .error
-        resizePanel()
+        guard let viewModel else { return }
+        viewModel.errorMessage = message
+        viewModel.phase = .error
+        if viewModel.isMinimized {
+            expand()
+        } else {
+            resizePanel()
+        }
     }
 
     func signalClipboardCapture() {
