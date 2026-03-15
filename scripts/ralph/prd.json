@@ -272,7 +272,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "Straightforward file split. DebugTestRunner is already a separate class — just move it to its own file."
     },
     {

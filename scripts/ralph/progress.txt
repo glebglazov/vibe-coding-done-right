@@ -260,3 +260,15 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - `guard let ref = anyObjectOptional else { return }` + `unsafeBitCast(ref, to: AXUIElement.self)` is the idiomatic pattern for safely unwrapping CF type references without force casts
   - CFBoolean is toll-free bridged to NSNumber — cast to `NSNumber` and use `.boolValue` instead of `CFBooleanGetValue(x as! CFBoolean)`
 ---
+
+## 2026-03-15 - US-016
+- Extracted DebugTestRunner class to its own file (vcdr/UI/DebugTestRunner.swift, 203 lines)
+- Moved Duration.debugFormatted extension from private to internal in DebugTestRunner.swift (used by both DebugTestRunner and DebugTabView)
+- DebugTabView.swift: 451 → 251 lines; DebugTestRunner.swift: 203 lines — both under 300
+- Removed OSLog import from DebugTabView.swift (only needed by DebugTestRunner)
+- Files changed: 1 modified (DebugTabView.swift), 1 new (DebugTestRunner.swift)
+- **Learnings for future iterations:**
+  - Duration.debugFormatted was `private extension` (file-scoped) — when splitting files that both use it, change to `extension` (internal) so both files can access it
+  - DebugTestRunner and DebugTabView are both `#if DEBUG` gated — the new file must also wrap in `#if DEBUG`
+  - Xcode's fileSystemSynchronizedGroups auto-discovers new files — no project file changes needed (same pattern as US-002)
+---
