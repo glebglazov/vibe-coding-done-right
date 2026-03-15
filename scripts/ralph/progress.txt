@@ -21,6 +21,7 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - Use EventTapManager for CGEvent tap lifecycle (install/uninstall/reEnableTap) — shared by GlobalHotkeyManager and DestinationHotkeyManager
 - No updateHotkey() aliases — callers call setupHotkey()/setupEscCancel()/setupDestinationHotkeys() directly
 - RecordingIndicatorPanel uses showEphemeral(content:duration:topOffset:) for all brief auto-dismissing indicators — add new ones via thin wrappers calling showEphemeral
+- CaptureCoordinator submission methods (submitText, executeQuickAction, executeStreamingSubmission, executeNonStreamingSubmission, recordOrUpdateHistory, rebuildSessionForFollowUp) live in CaptureCoordinator+Submission.swift
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -100,4 +101,17 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - When moving `private struct` views to another file in the same module, just remove the `private` keyword — Swift's default `internal` access works across files in the same module
   - The existing views in RecordingIndicatorViews.swift don't use `// MARK: - Constants` headers inside their structs — removed them from the moved views for consistency and to stay under 300 lines
   - showCancelled() has a unique topOffset parameter (uses stored currentTopOffset) while the other two always use 0 — the generic showEphemeral takes topOffset as a defaulted parameter to handle both cases
+---
+
+## 2026-03-15 - US-007
+- Extracted submission methods (SubmissionSnapshot, captureSubmissionSnapshot, submitText, executeQuickAction, executeStreamingSubmission, executeNonStreamingSubmission, recordOrUpdateHistory, rebuildSessionForFollowUp) to CaptureCoordinator+Submission.swift
+- Changed access levels on properties/methods needed by extension: settings, recordingIndicator, overrides, transcriptionHistory, session (private → internal), plus rewirePanelCallbacks, configurePanelAndShow, dismissIndicatorAfterDelay, and static duration constants
+- CaptureCoordinator.swift: 763 → 486 lines; CaptureCoordinator+Submission.swift: 282 lines (new)
+- Internal simplification (recordOrUpdateHistory, rebuildSessionForFollowUp, SubmissionSnapshot, flashPill) was already done by prior iterations — this iteration focused on file extraction to meet the <550 line target
+- Files changed: 1 modified (CaptureCoordinator.swift), 1 new (CaptureCoordinator+Submission.swift)
+- **Learnings for future iterations:**
+  - The internal simplification criteria (SubmissionSnapshot, submitText dispatcher, recordOrUpdateHistory, rebuildSessionForFollowUp, flashPill) were already implemented in the original codebase — the missing piece was extracting to extension files to reduce line count
+  - When extracting methods to an extension file in the same module, `private` properties/methods are NOT accessible — must change to `internal` (remove `private` keyword)
+  - `private static let` constants are also scoped to the declaring file — must become `static let` (internal) for extension file access
+  - US-009 will further extract recording handlers to get CaptureCoordinator.swift under 300 lines
 ---

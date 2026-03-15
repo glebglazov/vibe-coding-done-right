@@ -121,7 +121,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "This story focuses on internal extraction within CaptureCoordinator. Further splitting into separate files happens in US-009."
     },
     {
