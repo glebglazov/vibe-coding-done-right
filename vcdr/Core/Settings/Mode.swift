@@ -103,7 +103,7 @@ struct Mode: Identifiable, Codable, Equatable {
         guard !terminator.isEmpty else { return text }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.last != nil else { return text }
+        guard let lastChar = trimmed.last else { return text }
 
         let resolved = terminator
             .replacingOccurrences(of: "<dot>", with: ".")
@@ -116,7 +116,7 @@ struct Mode: Identifiable, Codable, Equatable {
         let punctuationPrefix = String(resolved.prefix(while: { sentenceEndingPunctuation.contains($0) }))
         let spacingSuffix = String(resolved.dropFirst(punctuationPrefix.count))
 
-        if sentenceEndingPunctuation.contains(trimmed.last!) {
+        if sentenceEndingPunctuation.contains(lastChar) {
             return trimmed + spacingSuffix
         }
 

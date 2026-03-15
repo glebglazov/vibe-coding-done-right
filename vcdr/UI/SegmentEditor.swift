@@ -36,7 +36,7 @@ struct SegmentEditor: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
-        let textView = scrollView.documentView as! NSTextView
+        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
         textView.isRichText = false
         textView.font = NSFont.systemFont(ofSize: Self.fontSize)
         textView.isAutomaticQuoteSubstitutionEnabled = false

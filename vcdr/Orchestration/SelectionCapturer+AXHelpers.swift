@@ -67,7 +67,8 @@ extension SelectionCapturer {
         ) == .success else {
             return false
         }
-        return CFBooleanGetValue(enabledRef as! CFBoolean)
+        guard let enabled = enabledRef as? NSNumber else { return false }
+        return enabled.boolValue
     }
 
     /// Sets AXEnhancedUserInterface on the app element to enable AX text

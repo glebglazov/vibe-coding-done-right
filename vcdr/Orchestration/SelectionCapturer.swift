@@ -75,9 +75,11 @@ struct SelectionCapturer: Sendable {
             return nil
         }
 
-        // AXUIElementCopyAttributeValue returns AnyObject; cast to AXUIElement.
-        // Safe: AX guarantees the type when returning .success for element attributes.
-        let focusedElement = focusedElementRef as! AXUIElement
+        // AXUIElementCopyAttributeValue returns AnyObject; bridge to AXUIElement.
+        // AX guarantees the type when returning .success for element attributes.
+        // unsafeBitCast avoids as! (force unwrap) and as? (always-succeeds warning for CF types).
+        guard let ref = focusedElementRef else { return nil }
+        let focusedElement = unsafeBitCast(ref, to: AXUIElement.self)
 
         // Try standard kAXSelectedTextAttribute (works in native Cocoa apps)
         var selectedTextRef: AnyObject?
@@ -131,7 +133,8 @@ struct SelectionCapturer: Sendable {
             Logger.actions.info("Edit menu capture: cannot access menu bar")
             return nil
         }
-        let menuBar = menuBarRef as! AXUIElement
+        guard let ref = menuBarRef else { return nil }
+        let menuBar = unsafeBitCast(ref, to: AXUIElement.self)
 
         // Find the Copy menu item by its keyboard shortcut (Cmd+C), locale-independent
         guard let copyItem = findCopyMenuItem(in: menuBar) else {
