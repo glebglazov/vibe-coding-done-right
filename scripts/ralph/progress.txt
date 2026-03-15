@@ -25,6 +25,9 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - CaptureCoordinator recording handler methods (handleRecordingStarted, handleRecordingComplete, handleTranscriptionFailed, handleRecordingCancelled, populateWithTranscription, flashPill, dismissIndicatorAfterDelay) live in CaptureCoordinator+RecordingHandlers.swift
 - RecordingCoordinator hotkey methods (setupToggleRecordingHotkey, setupEscCancel, setupDestinationHotkeys, updateEscCancel, suspendEscCancel, resumeEscCancel) live in RecordingCoordinator+Hotkeys.swift
 - RecordingCoordinator processing methods (processTranscription, resetAfterDelay, dismissIndicatorAfterDelay, errorIndicatorDuration) live in RecordingCoordinator+Processing.swift
+- CapturePanel event monitoring (setupEventMonitors, focusActiveTextView) lives in CapturePanel+Events.swift
+- CapturePanel content manipulation, processing, mode switcher, and follow-up methods live in CapturePanel+Content.swift
+- CapturePanel layout constants and height calculation live in CapturePanel+Layout.swift
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -147,4 +150,20 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - `private var` Task properties used for cancellation (pillResetTask, autoDismissTask, dismissIndicatorTask) need to become internal when extensions set them in closures
   - `dismissIndicatorAfterDelay` is used from both RecordingHandlers and Submission extensions — place it in whichever extension is the primary user (RecordingHandlers) since all extensions can call it
   - The main CaptureCoordinator.swift now contains: properties, init, panel lifecycle (show/hide/collapse/expand), session management, hotkey setup, and push-to-type handlers — a coherent "core" subset
+---
+
+## 2026-03-15 - US-010
+- Extracted event monitoring methods (setupEventMonitors, focusActiveTextView, findAllTextViews, collectTextViews) to CapturePanel+Events.swift (94 lines)
+- Extracted content manipulation, processing, mode switcher, and follow-up methods to CapturePanel+Content.swift (183 lines)
+- Changed access levels on properties needed by extensions: panel, viewModel, globalEventMonitor, localEventMonitor, becameKeyObserver, resignKeyObserver, isLockedForFollowUp (private → internal)
+- Changed resizePanel() and resizePanelToExpanded() from private to internal for extension access
+- Removed dead code: unused `panelBaseHeight` constant and unused `onSubmitText` callback
+- CapturePanel.swift: 480 → 212 lines; CapturePanel+Layout.swift unchanged at 69 lines
+- Files changed: 1 modified (CapturePanel.swift), 2 new (CapturePanel+Events.swift, CapturePanel+Content.swift)
+- **Learnings for future iterations:**
+  - Height calculation (calculateHeight, maxPanelHeight) and layout constants were already in CapturePanel+Layout.swift — no extraction needed
+  - Screen geometry computation was already consolidated via panelOrigin() delegating to panelOriginBelowMenuBar() from US-003
+  - `panelBaseHeight` was declared but never used (calculateHeight uses `panelMinBaseHeight` from Layout extension) — safe to remove
+  - `onSubmitText` callback was declared but never assigned or called anywhere — safe to remove
+  - CapturePanel+Content.swift groups content manipulation + processing + mode switcher + follow-up into a coherent "content operations" extension
 ---
