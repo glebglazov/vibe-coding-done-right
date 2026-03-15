@@ -137,7 +137,7 @@
         "E2E tests pass: xcodebuild test -scheme vcdr -destination 'platform=macOS' -only-testing vcdrTests"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "The .executing phantom state should already be removed by US-001."
     },
     {

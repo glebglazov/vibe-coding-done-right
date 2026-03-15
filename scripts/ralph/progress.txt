@@ -22,6 +22,8 @@ Started: Sun Mar 15 11:31:57 CET 2026
 - No updateHotkey() aliases — callers call setupHotkey()/setupEscCancel()/setupDestinationHotkeys() directly
 - RecordingIndicatorPanel uses showEphemeral(content:duration:topOffset:) for all brief auto-dismissing indicators — add new ones via thin wrappers calling showEphemeral
 - CaptureCoordinator submission methods (submitText, executeQuickAction, executeStreamingSubmission, executeNonStreamingSubmission, recordOrUpdateHistory, rebuildSessionForFollowUp) live in CaptureCoordinator+Submission.swift
+- RecordingCoordinator hotkey methods (setupToggleRecordingHotkey, setupEscCancel, setupDestinationHotkeys, updateEscCancel, suspendEscCancel, resumeEscCancel) live in RecordingCoordinator+Hotkeys.swift
+- RecordingCoordinator processing methods (processTranscription, resetAfterDelay, dismissIndicatorAfterDelay, errorIndicatorDuration) live in RecordingCoordinator+Processing.swift
 
 ## 2026-03-15 - US-001
 - Removed 3 dead methods from CapturePanel.swift: updateCaptures(), insertSegment(), insertTextAtCursor()
@@ -114,4 +116,21 @@ Started: Sun Mar 15 11:31:57 CET 2026
   - When extracting methods to an extension file in the same module, `private` properties/methods are NOT accessible — must change to `internal` (remove `private` keyword)
   - `private static let` constants are also scoped to the declaring file — must become `static let` (internal) for extension file access
   - US-009 will further extract recording handlers to get CaptureCoordinator.swift under 300 lines
+---
+
+## 2026-03-15 - US-008
+- Moved hotkey setup methods (setupToggleRecordingHotkey, setupEscCancel, setupDestinationHotkeys, updateEscCancel, suspendEscCancel, resumeEscCancel) to RecordingCoordinator+Hotkeys.swift (62 lines)
+- Moved processing methods (processTranscription, resetAfterDelay, dismissIndicatorAfterDelay, errorIndicatorDuration) to RecordingCoordinator+Processing.swift (110 lines)
+- Changed access levels on properties/methods needed by extensions: settings, transcriptionProvider, toggleRecordingHotkeyManager, escCancelManager, destinationHotkeyManager, pendingDestinationOverride, recordingIndicator, recordingRun, processingTask, dismissIndicatorTask, state (private(set) → var), stopRecordingAndTranscribe (private → internal)
+- Removed dead `successIndicatorDuration` constant (never used in RecordingCoordinator — CaptureCoordinator has its own)
+- Changed RecordingRunState from private struct to internal struct for extension access
+- RecordingCoordinator.swift: 459 → 299 lines
+- @MainActor was already present on the class (line 6 of original)
+- Files changed: 1 modified (RecordingCoordinator.swift), 2 new (RecordingCoordinator+Hotkeys.swift, RecordingCoordinator+Processing.swift)
+- **Learnings for future iterations:**
+  - RecordingCoordinator was already @MainActor — the PRD acceptance criteria assumed it wasn't
+  - To get under 300 lines, moving just the hotkey methods (~56 lines) wasn't enough — also needed to extract processTranscription and helpers (~100 lines) to a second extension file
+  - `private(set) var` restricts the setter to the *file*, not the class — extensions in different files can't set it. Must change to plain `var` (internal setter) for cross-file extension access
+  - `private struct` inside a class is scoped to the file — must become `struct` (internal) when extensions in other files reference properties of that type
+  - `successIndicatorDuration` was declared in RecordingCoordinator but never used there — only CaptureCoordinator uses its own copy. Safe to remove
 ---
