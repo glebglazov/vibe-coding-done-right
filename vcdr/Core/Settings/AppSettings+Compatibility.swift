@@ -3,6 +3,21 @@ import Foundation
 /// Computed property accessors that delegate to sub-structs, preserving the original API.
 /// All existing call sites (e.g., settings.toggleRecordingHotkey) continue to compile unchanged.
 extension AppSettings {
+    var modes: [Mode] {
+        get { modeConfig.modes }
+        set { modeConfig.modes = newValue }
+    }
+
+    var activeModeID: UUID {
+        get { modeConfig.activeModeID }
+        set { modeConfig.activeModeID = newValue }
+    }
+
+    var availableTemplateIDs: Set<String> {
+        get { modeConfig.availableTemplateIDs }
+        set { modeConfig.availableTemplateIDs = newValue }
+    }
+
     var modeSwitcherHotkey: HotkeyBinding {
         get { hotkeySettings.modeSwitcherHotkey }
         set { hotkeySettings.modeSwitcherHotkey = newValue }

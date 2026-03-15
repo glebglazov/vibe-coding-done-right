@@ -47,10 +47,7 @@ final class AppSettings {
     var transcriptionSettings: TranscriptionSettings {
         didSet { save() }
     }
-    var modes: [Mode] {
-        didSet { save() }
-    }
-    var activeModeID: UUID {
+    var modeConfig: ModeConfiguration {
         didSet { save() }
     }
     var outputDestinations: [OutputDestination] {
@@ -59,16 +56,14 @@ final class AppSettings {
     var audioSettings: AudioSettings {
         didSet { save() }
     }
-    /// Template IDs whose CLI tools are currently available. Not persisted.
-    var availableTemplateIDs: Set<String> = []
 
     /// Modes visible in the mode switcher and default settings list.
     /// Excludes disabled modes and template modes whose tools are unavailable.
     var visibleModes: [Mode] {
-        modes.filter { mode in
+        modeConfig.modes.filter { mode in
             guard !mode.isDisabled else { return false }
             if let templateID = mode.templateID {
-                return availableTemplateIDs.contains(templateID)
+                return modeConfig.availableTemplateIDs.contains(templateID)
             }
             return true
         }
@@ -76,9 +71,9 @@ final class AppSettings {
 
     /// Active mode looked up by ID, falling back to first visible mode, then first mode overall
     var activeMode: Mode {
-        modes.first(where: { $0.id == activeModeID })
+        modeConfig.modes.first(where: { $0.id == modeConfig.activeModeID })
             ?? visibleModes.first
-            ?? modes.first
+            ?? modeConfig.modes.first
             ?? Mode.makeDefault()
     }
 
@@ -199,7 +194,15 @@ final class AppSettings {
                 processingCommand: migratedProcessingType == .bashScript ? oldBashCommand : ""
             )]
         }
-        self.modes = loadedModes
+        // Load active mode ID
+        let loadedActiveModeID: UUID
+        if let savedActiveID = userDefaults.string(forKey: Keys.activeModeID),
+           let uuid = UUID(uuidString: savedActiveID) {
+            loadedActiveModeID = uuid
+        } else {
+            loadedActiveModeID = loadedModes.first?.id ?? UUID()
+        }
+        self.modeConfig = ModeConfiguration(modes: loadedModes, activeModeID: loadedActiveModeID)
 
         // Load output destinations
         if let data = userDefaults.data(forKey: Keys.outputDestinations),
@@ -208,14 +211,6 @@ final class AppSettings {
             self.outputDestinations = decoded
         } else {
             self.outputDestinations = [OutputDestination.makeDefaultOutputPanel(), OutputDestination.makeDefaultPaste()]
-        }
-
-        // Load active mode ID
-        if let savedActiveID = userDefaults.string(forKey: Keys.activeModeID),
-           let uuid = UUID(uuidString: savedActiveID) {
-            self.activeModeID = uuid
-        } else {
-            self.activeModeID = loadedModes.first?.id ?? UUID()
         }
 
         // Load audio settings (with legacy migration)
@@ -244,8 +239,8 @@ final class AppSettings {
         encode(hotkeySettings.copyLatestCaptureHotkey, forKey: Keys.copyLatestCaptureHotkey)
         encode(hotkeySettings.cancelRecordingHotkey, forKey: Keys.cancelRecordingHotkey)
         userDefaults.set(hotkeySettings.showModeSwitcherHint, forKey: Keys.showModeSwitcherHint)
-        userDefaults.set(activeModeID.uuidString, forKey: Keys.activeModeID)
-        encode(modes, forKey: Keys.modes)
+        userDefaults.set(modeConfig.activeModeID.uuidString, forKey: Keys.activeModeID)
+        encode(modeConfig.modes, forKey: Keys.modes)
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
@@ -256,29 +251,29 @@ final class AppSettings {
 
     /// Creates template modes for newly available tools and refreshes availability state.
     func refreshTemplateAvailability() async {
-        availableTemplateIDs = await ToolAvailabilityChecker.checkAll()
+        modeConfig.availableTemplateIDs = await ToolAvailabilityChecker.checkAll()
 
         // Migrate legacy "dictation" template to "plain"
-        for i in modes.indices where modes[i].templateID == "dictation" {
-            modes[i].templateID = "plain"
-            if modes[i].name == "Dictation" {
-                modes[i].name = "Plain"
+        for i in modeConfig.modes.indices where modeConfig.modes[i].templateID == "dictation" {
+            modeConfig.modes[i].templateID = "plain"
+            if modeConfig.modes[i].name == "Dictation" {
+                modeConfig.modes[i].name = "Plain"
             }
             Logger.settings.info("Migrated dictation template mode to plain")
         }
 
         // Create missing template modes for available tools
-        for template in ModeTemplate.all where availableTemplateIDs.contains(template.id) {
-            if !modes.contains(where: { $0.templateID == template.id }) {
-                modes.append(template.makeMode())
+        for template in ModeTemplate.all where modeConfig.availableTemplateIDs.contains(template.id) {
+            if !modeConfig.modes.contains(where: { $0.templateID == template.id }) {
+                modeConfig.modes.append(template.makeMode())
                 Logger.settings.info("Created template mode: \(template.defaultName)")
             }
         }
 
         // Auto-switch if active mode is no longer visible
-        if !visibleModes.contains(where: { $0.id == activeModeID }) {
+        if !visibleModes.contains(where: { $0.id == modeConfig.activeModeID }) {
             if let firstVisible = visibleModes.first {
-                activeModeID = firstVisible.id
+                modeConfig.activeModeID = firstVisible.id
                 Logger.settings.info("Active mode hidden, switched to: \(firstVisible.name)")
             }
         }
