@@ -224,7 +224,11 @@ final class CaptureCoordinator {
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
         Task {
-            guard let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid) else { return }
+            guard let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid) else {
+                Logger.app.info("Push-to-type: no selection captured")
+                return
+            }
+            Logger.app.info("Push-to-type: storing captured selection (\(capturedText.count) chars): \"\(capturedText.prefix(80))\"")
             let context = CapturedContext(text: capturedText, source: .selection)
             session?.captures = [context]
             originalCapture = context

@@ -142,13 +142,15 @@ final class RecordingCoordinator {
         recordingRun?.previousActiveApp = frontmostApp
         Logger.recording.info("Capturing selection from app: \(frontmostApp?.bundleIdentifier ?? "unknown")")
 
-        let clipboardBaseline = NSPasteboard.general.changeCount
-
         let capturer = selectionCapturer
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
         recordingRun?.captureTask = Task {
-            guard let text = await capturer.capture(bundleIdentifier: bundleID, pid: pid) else { return nil }
+            guard let text = await capturer.capture(bundleIdentifier: bundleID, pid: pid) else {
+                Logger.recording.info("Toggle-record: no selection captured")
+                return nil
+            }
+            Logger.recording.info("Toggle-record: storing captured selection (\(text.count) chars): \"\(text.prefix(80))\"")
             return CapturedContext(text: text, source: .selection)
         }
 
@@ -177,8 +179,15 @@ final class RecordingCoordinator {
         destinationHotkeyManager.isEnabled = true
         updateEscCancel()
 
+        // Start clipboard monitoring only after SelectionCapturer finishes.
+        // SelectionCapturer's Layer 2/3 manipulate the clipboard (copy → read → restore),
+        // which can bump changeCount. Taking the baseline AFTER capture completes
+        // eliminates the race where the grace period expires before the restore finishes.
+        let captureTask = recordingRun?.captureTask
         Task {
-            await clipboardMonitor.start(baselineChangeCount: clipboardBaseline) { [weak self] _ in
+            _ = await captureTask?.value
+            let freshBaseline = NSPasteboard.general.changeCount
+            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] _ in
                 self?.delegate?.recordingCoordinatorDidCaptureClipboard()
             }
         }

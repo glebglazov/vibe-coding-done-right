@@ -2,14 +2,11 @@ import AppKit
 import OSLog
 
 /// Monitors clipboard changes during recording to capture additional text selections.
-/// Starts polling after an initial grace period (to let SelectionCapturer finish its
-/// clipboard save-copy-restore cycle), then watches for real user Cmd+C events.
+/// Callers are responsible for starting the monitor only after any clipboard-manipulating
+/// operations (e.g. SelectionCapturer) have finished, and passing a fresh baseline.
 actor ClipboardMonitor {
     // MARK: - Constants
 
-    /// Delay before starting to poll. SelectionCapturer's worst case (Layer 3 Cmd+C)
-    /// takes ~400ms for its clipboard save-copy-restore cycle.
-    private static let initialGracePeriod: Duration = .milliseconds(500)
     /// How often to check NSPasteboard.general.changeCount.
     private static let pollInterval: Duration = .milliseconds(250)
 
@@ -19,31 +16,16 @@ actor ClipboardMonitor {
     /// Starts monitoring clipboard changes. Calls `onCapture` on each new capture.
     /// The callback receives the captured text.
     ///
-    /// - Parameter baselineChangeCount: If provided, the monitor ignores any clipboard
-    ///   changes until `changeCount` exceeds this value. Use the pasteboard's `changeCount`
-    ///   captured **before** SelectionCapturer runs so its internal clipboard manipulation
-    ///   (copy → read → restore) is ignored regardless of timing.
+    /// - Parameter baselineChangeCount: If provided, the monitor starts from this
+    ///   changeCount value. Pass the pasteboard's `changeCount` captured **after**
+    ///   any clipboard-manipulating operations (e.g. SelectionCapturer) have finished.
     func start(baselineChangeCount: Int? = nil, onCapture: @MainActor @Sendable @escaping (String) -> Void) {
         stop()
 
         pollingTask = Task { [weak self] in
-            // Grace period: let SelectionCapturer finish its clipboard manipulation
-            try? await Task.sleep(for: Self.initialGracePeriod)
-            guard !Task.isCancelled else { return }
-
-            // Use the provided baseline or snapshot after the grace period.
-            // SelectionCapturer's clipboard cycle (copy → read → restore) produces
-            // multiple changeCount bumps. By anchoring to the pre-capture count,
-            // we skip all of them regardless of timing.
             let pasteboard = NSPasteboard.general
             var lastChangeCount = baselineChangeCount ?? pasteboard.changeCount
-            var lastContent: String? = nil
-            // Fast-forward: if the pasteboard has already moved past baseline,
-            // record its current content so we don't re-fire for stale changes.
-            if pasteboard.changeCount != lastChangeCount {
-                lastChangeCount = pasteboard.changeCount
-                lastContent = pasteboard.string(forType: .string)
-            }
+            var lastContent = pasteboard.string(forType: .string)
 
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.pollInterval)
@@ -63,7 +45,7 @@ actor ClipboardMonitor {
 
                 lastContent = newContent
                 await self?.appendCapture(newContent)
-                Logger.recording.info("Clipboard capture: \(newContent.count) chars")
+                Logger.recording.info("ClipboardMonitor: captured \(newContent.count) chars: \"\(newContent.prefix(80))\"")
 
                 await onCapture(newContent)
             }

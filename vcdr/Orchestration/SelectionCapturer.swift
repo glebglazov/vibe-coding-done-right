@@ -36,7 +36,13 @@ struct SelectionCapturer: Sendable {
     ///   - bundleIdentifier: The bundle ID of the frontmost app.
     ///   - pid: The process ID of the frontmost app.
     /// - Returns: The selected text, or nil if nothing is selected.
+    /// Maximum characters to include in diagnostic log messages.
+    private static let logPreviewLength = 80
+
     func capture(bundleIdentifier: String?, pid: pid_t?) async -> String? {
+        let appName = bundleIdentifier ?? "unknown"
+        Logger.actions.info("SelectionCapturer: starting capture from \(appName)")
+
         // Enable enhanced UI for browsers that need it for AX text exposure
         if let bundleID = bundleIdentifier, Self.enhancedUIBundleIDs.contains(bundleID), let pid = pid {
             enableEnhancedAccessibility(pid: pid)
@@ -44,17 +50,25 @@ struct SelectionCapturer: Sendable {
 
         // Layer 1: Try AX direct (fastest, no clipboard interaction)
         if let text = captureViaAccessibility() {
+            Logger.actions.info("SelectionCapturer: result from AX direct: \"\(text.prefix(Self.logPreviewLength))\" (\(text.count) chars)")
             return text
         }
 
         // Layer 2: Try Edit > Copy via AX menu bar (works for apps with standard menus)
         if let pid = pid, let text = await captureViaEditMenu(pid: pid) {
+            Logger.actions.info("SelectionCapturer: result from Edit menu: \"\(text.prefix(Self.logPreviewLength))\" (\(text.count) chars)")
             return text
         }
 
         // Layer 3: Cmd+C with muted alert volume (last resort for apps like Telegram
         // where AX is completely unsupported)
-        return await captureViaCmdC()
+        if let text = await captureViaCmdC() {
+            Logger.actions.info("SelectionCapturer: result from Cmd+C: \"\(text.prefix(Self.logPreviewLength))\" (\(text.count) chars)")
+            return text
+        }
+
+        Logger.actions.info("SelectionCapturer: no text captured from any layer")
+        return nil
     }
 
     // MARK: - Layer 1: Accessibility Direct
@@ -163,13 +177,14 @@ struct SelectionCapturer: Sendable {
         // Wait for clipboard to update
         let captured = await pollForClipboardChange(previousChangeCount: previousChangeCount)
 
-        // Restore previous clipboard contents
-        pasteboard.clearContents()
-        if let previous = previousContents {
-            pasteboard.setString(previous, forType: .string)
-        }
-
         if let text = captured, !text.isEmpty {
+            // Restore previous clipboard contents only when Copy actually changed the clipboard.
+            // Skipping restore when clipboard is unchanged avoids unnecessary changeCount bumps
+            // that can race with ClipboardMonitor's polling.
+            pasteboard.clearContents()
+            if let previous = previousContents {
+                pasteboard.setString(previous, forType: .string)
+            }
             Logger.actions.info("Captured selection via Edit menu (\(text.count) chars)")
             return text
         }
@@ -206,13 +221,14 @@ struct SelectionCapturer: Sendable {
             setAlertVolume(volume)
         }
 
-        // Restore previous clipboard contents
-        pasteboard.clearContents()
-        if let previous = previousContents {
-            pasteboard.setString(previous, forType: .string)
-        }
-
         if let text = captured, !text.isEmpty {
+            // Restore previous clipboard contents only when Cmd+C actually changed the clipboard.
+            // Skipping restore when clipboard is unchanged avoids unnecessary changeCount bumps
+            // that can race with ClipboardMonitor's polling.
+            pasteboard.clearContents()
+            if let previous = previousContents {
+                pasteboard.setString(previous, forType: .string)
+            }
             Logger.actions.info("Captured selection via Cmd+C (\(text.count) chars)")
             return text
         }
