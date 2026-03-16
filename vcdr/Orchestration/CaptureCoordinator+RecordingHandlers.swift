@@ -210,7 +210,11 @@ extension CaptureCoordinator: RecordingCoordinatorDelegate {
     }
 
     func recordingCoordinatorIsPanelVisible() -> Bool {
-        isPanelVisible
+        // A panel showing only because of a pending quick action or scheduled
+        // auto-dismiss is a transient leftover from the previous recording cycle
+        // and should not cause the new recording to be treated as a follow-up.
+        if quickActionTask != nil || autoDismissTask != nil { return false }
+        return isPanelVisible
     }
 
     func recordingCoordinatorDidStartRecording(isFollowUp: Bool) {
