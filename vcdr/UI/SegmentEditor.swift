@@ -13,8 +13,9 @@ struct SegmentEditor: NSViewRepresentable {
     var isEditable: Bool
     /// Bump to request focus. The editor becomes first responder when this changes.
     var focusTrigger: Int = 0
-    /// When focus is requested, place cursor at end (true) or start (false).
-    var focusCursorAtEnd: Bool = false
+    /// Exact character offset for cursor placement when focus is requested.
+    /// Use Int.max to place at end (clamped to text length).
+    var focusCursorPosition: Int = 0
     /// Cursor position to restore when the view is first created (e.g., after expand from pill).
     /// If nil, cursor defaults to position 0.
     var initialCursorPosition: Int? = nil
@@ -82,13 +83,13 @@ struct SegmentEditor: NSViewRepresentable {
         if context.coordinator.lastFocusTrigger != focusTrigger {
             context.coordinator.lastFocusTrigger = focusTrigger
             let length = (textView.string as NSString).length
-            let loc = focusCursorAtEnd ? length : 0
+            let loc = min(focusCursorPosition, length)
             textView.setSelectedRange(NSRange(location: loc, length: 0))
             if let window = nsView.window {
                 window.makeFirstResponder(textView)
             } else {
                 // View not yet in a window (SwiftUI layout pending) — retry after a runloop cycle
-                context.coordinator.scheduleDeferredFocus(for: textView, cursorAtEnd: focusCursorAtEnd)
+                context.coordinator.scheduleDeferredFocus(for: textView, cursorPosition: focusCursorPosition)
             }
         }
         // Report height on every update to catch layout changes (initial layout,
@@ -157,13 +158,13 @@ struct SegmentEditor: NSViewRepresentable {
         private static let deferredFocusRetryDelay: Duration = .milliseconds(20)
 
         /// Retries makeFirstResponder until the text view is added to a window.
-        func scheduleDeferredFocus(for textView: NSTextView, cursorAtEnd: Bool) {
+        func scheduleDeferredFocus(for textView: NSTextView, cursorPosition: Int) {
             Task { @MainActor in
                 for _ in 0..<Self.deferredFocusMaxAttempts {
                     try? await Task.sleep(for: Self.deferredFocusRetryDelay)
                     guard let window = textView.window else { continue }
                     let length = (textView.string as NSString).length
-                    let loc = cursorAtEnd ? length : 0
+                    let loc = min(cursorPosition, length)
                     textView.setSelectedRange(NSRange(location: loc, length: 0))
                     window.makeFirstResponder(textView)
                     return

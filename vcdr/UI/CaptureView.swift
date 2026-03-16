@@ -34,9 +34,9 @@ struct CaptureView: View {
     /// Per-segment focus trigger counters. Bumped to shift focus to a specific editor
     /// when the user arrows past the boundary of the current editor.
     @State private var focusTriggers: [UUID: Int] = [:]
-    /// Whether the focus request should place the cursor at end (arrow-up from below)
-    /// vs start (arrow-down from above).
-    @State private var focusCursorAtEnd: [UUID: Bool] = [:]
+    /// Exact character offset for cursor placement when focus is requested.
+    /// Arrow-up from below uses Int.max (clamped to end), arrow-down from above uses 0.
+    @State private var focusCursorPosition: [UUID: Int] = [:]
 
     var body: some View {
         if viewModel.isMinimized {
@@ -133,9 +133,12 @@ struct CaptureView: View {
         guard newValue > 0 else { return }
         let index = viewModel.activeSegmentIndex
         guard index < viewModel.segments.count else { return }
-        let segmentID = viewModel.segments[index].id
-        focusCursorAtEnd[segmentID] = false
-        focusTriggers[segmentID, default: 0] += 1
+        let segment = viewModel.segments[index]
+        // Use saved cursor position if available (e.g., after dictation insertion),
+        // otherwise place cursor at end (e.g., first dictation, expand from pill).
+        focusCursorPosition[segment.id] = viewModel.savedCursorPositions[segment.id]
+            ?? (segment.text as NSString).length
+        focusTriggers[segment.id, default: 0] += 1
     }
     }
 
@@ -196,7 +199,7 @@ struct CaptureView: View {
                         text: segmentTextBinding(at: index),
                         isEditable: !viewModel.isProcessing,
                         focusTrigger: focusTriggers[segment.id, default: 0],
-                        focusCursorAtEnd: focusCursorAtEnd[segment.id, default: false],
+                        focusCursorPosition: focusCursorPosition[segment.id, default: 0],
                         initialCursorPosition: viewModel.savedCursorPositions[segment.id],
                         onFocus: { cursorPosition in
                             viewModel.activeSegmentIndex = index
@@ -204,14 +207,14 @@ struct CaptureView: View {
                         },
                         onMoveUp: index > 0 ? {
                             let target = viewModel.segments[index - 1]
-                            focusCursorAtEnd[target.id] = true
+                            focusCursorPosition[target.id] = Int.max
                             focusTriggers[target.id, default: 0] += 1
                         } : nil,
                         onMoveDown: {
                             if index < viewModel.segments.count - 1 {
                                 // Focus the next existing editor
                                 let target = viewModel.segments[index + 1]
-                                focusCursorAtEnd[target.id] = false
+                                focusCursorPosition[target.id] = 0
                                 focusTriggers[target.id, default: 0] += 1
                             } else if segment.capture != nil {
                                 // Last segment has a capture below — create a new
@@ -219,7 +222,7 @@ struct CaptureView: View {
                                 let newSegment = InputSegment()
                                 viewModel.segments.append(newSegment)
                                 viewModel.activeSegmentIndex = viewModel.segments.count - 1
-                                focusCursorAtEnd[newSegment.id] = false
+                                focusCursorPosition[newSegment.id] = 0
                                 // Defer focus request — the new SegmentEditor's NSTextView
                                 // must be in the window hierarchy before makeFirstResponder
                                 // works. Bumping the trigger in a Task lets SwiftUI complete
