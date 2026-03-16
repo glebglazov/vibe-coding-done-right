@@ -7,11 +7,12 @@ enum OutputActionFactory {
     static func makeAction(
         for destination: OutputDestination,
         targetAppPID: pid_t?,
-        conversationID: UUID
+        conversationID: UUID,
+        saveResultToClipboard: Bool
     ) -> (any PostTranscriptionAction)? {
         switch destination.type {
         case .paste:
-            return PasteAction(targetAppPID: targetAppPID)
+            return PasteAction(targetAppPID: targetAppPID, saveResultToClipboard: saveResultToClipboard)
         case .bashScript:
             return OutputBashAction(
                 name: destination.name,

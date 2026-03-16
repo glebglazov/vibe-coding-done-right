@@ -64,6 +64,7 @@ struct Mode: Identifiable, Codable, Equatable {
 
     // Behavior
     var quickAction: Bool
+    var saveResultToClipboard: Bool
 
     /// Joined labels from the first option of each parameter (the defaults, without overrides).
     /// Used in static UI contexts (settings, menu bar, quick actions) where there's no active session.
@@ -182,7 +183,8 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt: String = "",
         defaultOutputDestinationID: UUID = OutputDestination.builtInOutputPanelID,
         parameters: [ModeParameter] = [],
-        quickAction: Bool = false
+        quickAction: Bool = false,
+        saveResultToClipboard: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -195,6 +197,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.parameters = parameters
         self.quickAction = quickAction
+        self.saveResultToClipboard = saveResultToClipboard
     }
 
     // MARK: - Codable (backward-compatible)
@@ -206,6 +209,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case defaultOutputDestinationID
         case parameters
         case quickAction
+        case saveResultToClipboard
         // Legacy keys (read-only, for migration)
         case actionType, bashCommand, pasteScriptOutput
     }
@@ -223,6 +227,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
         try container.encode(quickAction, forKey: .quickAction)
+        try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
         // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
         // Once saved in new format, old keys are gone (one-way migration).
     }
@@ -238,6 +243,7 @@ struct Mode: Identifiable, Codable, Equatable {
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInOutputPanelID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
         quickAction = try container.decodeIfPresent(Bool.self, forKey: .quickAction) ?? false
+        saveResultToClipboard = try container.decodeIfPresent(Bool.self, forKey: .saveResultToClipboard) ?? false
 
         // New fields
         if let newProcessingType = try container.decodeIfPresent(ProcessingType.self, forKey: .processingType) {

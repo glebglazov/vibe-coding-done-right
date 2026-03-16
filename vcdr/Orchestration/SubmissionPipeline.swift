@@ -15,6 +15,7 @@ enum SubmissionPipeline {
         let parameterValues: [String: String]
         let destination: OutputDestination
         let targetAppPID: pid_t?
+        let saveResultToClipboard: Bool
     }
 
     struct Result {
@@ -47,7 +48,8 @@ enum SubmissionPipeline {
         if let action = OutputActionFactory.makeAction(
             for: context.destination,
             targetAppPID: context.targetAppPID,
-            conversationID: context.conversationID
+            conversationID: context.conversationID,
+            saveResultToClipboard: context.saveResultToClipboard
         ) {
             try await action.execute(text: processedText)
         }

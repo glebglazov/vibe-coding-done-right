@@ -95,6 +95,13 @@ struct ModeDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Save result to clipboard", isOn: $mode.saveResultToClipboard)
+                    Text("When enabled, the result is saved to your clipboard after the output action completes.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)

@@ -8,6 +8,7 @@ struct PasteAction: PostTranscriptionAction {
     /// PID of the app to restore focus to before pasting.
     /// Using pid_t instead of NSRunningApplication to keep the action Sendable.
     private let targetAppPID: pid_t?
+    private let saveResultToClipboard: Bool
 
     // MARK: - Constants
 
@@ -20,8 +21,9 @@ struct PasteAction: PostTranscriptionAction {
     /// Allows the target app's run loop to render each chunk.
     private static let streamingInterWordDelay: Duration = .milliseconds(10)
 
-    init(targetAppPID: pid_t? = nil) {
+    init(targetAppPID: pid_t? = nil, saveResultToClipboard: Bool = false) {
         self.targetAppPID = targetAppPID
+        self.saveResultToClipboard = saveResultToClipboard
     }
 
     func execute(text: String) async throws -> String? {
@@ -124,13 +126,28 @@ struct PasteAction: PostTranscriptionAction {
     // MARK: - Clipboard Paste Fallback
 
     private func clipboardPaste(text: String) async throws {
-        ClipboardHelper.writeString(text)
-        Logger.actions.info("Text copied to clipboard")
+        // When not saving result to clipboard, use concealed write + restore
+        let snapshot: ClipboardHelper.PasteboardSnapshot?
+        if saveResultToClipboard {
+            snapshot = nil
+            ClipboardHelper.writeString(text)
+            Logger.actions.info("Text copied to clipboard")
+        } else {
+            snapshot = ClipboardHelper.saveContents()
+            ClipboardHelper.writeConcealedString(text)
+            Logger.actions.info("Text written to clipboard (concealed, will restore)")
+        }
 
         // Brief delay for clipboard to settle before simulating Cmd+V
         try await Task.sleep(for: Self.clipboardSettleDelay)
 
         KeyboardSimulator.simulateCmdV()
         Logger.actions.info("Paste simulated via Cmd+V")
+
+        // Restore original clipboard contents after the target app has consumed the paste
+        if let snapshot {
+            try await Task.sleep(for: ClipboardHelper.clipboardRestorationDelay)
+            ClipboardHelper.restoreContents(snapshot)
+        }
     }
 }

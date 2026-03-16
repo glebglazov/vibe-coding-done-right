@@ -28,7 +28,8 @@ extension CaptureCoordinator {
                 followUpContext: ps.followUpContext, conversationTurns: ps.conversationTurns,
                 conversationID: conversationID,
                 parameterValues: overrides.resolvedParameterValues(for: mode),
-                destination: destination, targetAppPID: ps.previousActiveApp?.processIdentifier
+                destination: destination, targetAppPID: ps.previousActiveApp?.processIdentifier,
+                saveResultToClipboard: mode.saveResultToClipboard
             ),
             mode: mode, captures: ps.captures, hasUnsubmittedDraft: ps.hasUnsubmittedDraft,
             conversationID: conversationID, previousActiveApp: ps.previousActiveApp,
@@ -48,7 +49,8 @@ extension CaptureCoordinator {
                 conversationTurns: session?.conversationTurns ?? [],
                 conversationID: conversationID,
                 parameterValues: overrides.resolvedParameterValues(for: mode),
-                destination: destination, targetAppPID: result.previousActiveApp?.processIdentifier
+                destination: destination, targetAppPID: result.previousActiveApp?.processIdentifier,
+                saveResultToClipboard: mode.saveResultToClipboard
             ),
             mode: mode, captures: result.captures, hasUnsubmittedDraft: false,
             conversationID: conversationID, previousActiveApp: result.previousActiveApp,
