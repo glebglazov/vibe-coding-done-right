@@ -103,7 +103,7 @@ final class RecordingCoordinator {
         guard state == .idle else {
             Logger.app.warning("Hotkey pressed but not idle (state: \(String(describing: self.state)))")
             if state == .transcribing {
-                recordingIndicator.buzz()
+                delegate?.recordingCoordinatorDidRejectInput()
             }
             return
         }
@@ -158,10 +158,6 @@ final class RecordingCoordinator {
             self?.delegate?.recordingCoordinatorDidCaptureSelection()
         }
 
-        if !isFollowUp && settings.activeMode.quickAction {
-            recordingIndicator.show()
-        }
-
         if settings.audioSettings.pauseMediaDuringRecording {
             await mediaPlaybackController.pauseIfNeeded()
         }
@@ -171,8 +167,6 @@ final class RecordingCoordinator {
             await mediaPlaybackController.resumeIfNeeded()
             state = .error("Failed to start recording")
             delegate?.recordingCoordinatorDidFailRecording(message: "Failed to start recording")
-            recordingIndicator.update(phase: .error, message: "Failed to start recording")
-            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Failed to start recording")
             resetAfterDelay()
             return
@@ -185,7 +179,6 @@ final class RecordingCoordinator {
 
         Task {
             await clipboardMonitor.start(baselineChangeCount: clipboardBaseline) { [weak self] _ in
-                self?.recordingIndicator.signalClipboardCapture()
                 self?.delegate?.recordingCoordinatorDidCaptureClipboard()
             }
         }
@@ -210,15 +203,12 @@ final class RecordingCoordinator {
             escCancelManager.isEnabled = false
             state = .error("No audio recorded")
             delegate?.recordingCoordinatorDidFailRecording(message: "No audio recorded")
-            recordingIndicator.update(phase: .error, message: "No audio recorded")
-            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             resetAfterDelay()
             return
         }
 
         state = .transcribing
         delegate?.recordingCoordinatorDidStartTranscribing()
-        recordingIndicator.update(phase: .processing)
         Logger.app.info("Recording stopped, transcribing...")
 
         Task { @MainActor in

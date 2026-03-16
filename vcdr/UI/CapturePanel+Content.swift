@@ -63,6 +63,19 @@ extension CapturePanel {
     var allCaptures: [CapturedContext] { viewModel?.allCaptures ?? [] }
     var fullText: String { viewModel?.fullText ?? "" }
 
+    /// Populates the panel with transcribed text during quick-action processing.
+    /// Creates a pending conversation turn with "..." output so the history view
+    /// shows "You: [text]" + "Result: [animated dots]" when expanded.
+    /// Does NOT minimize — the panel is already minimized from recording start.
+    func populateQuickActionText(inputText: String, captures: [CapturedContext]) {
+        let pendingTurn = ConversationTurn(input: inputText, output: "...", captures: captures)
+        viewModel?.conversationTurns.append(pendingTurn)
+        viewModel?.errorMessage = nil
+        // Phase is already .processing from handleTranscribing → setPhase(.processing)
+        viewModel?.segments = [InputSegment()]
+        viewModel?.scrollTrigger += 1
+    }
+
     func startProcessing(inputText: String) {
         let captures = viewModel?.allCaptures ?? []
         let pendingTurn = ConversationTurn(input: inputText, output: "...", captures: captures)
@@ -161,6 +174,10 @@ extension CapturePanel {
 
     func signalClipboardCapture() {
         viewModel?.clipboardCaptureCount += 1
+    }
+
+    func buzz() {
+        viewModel?.rejectCount += 1
     }
 
     func showModeSwitcher(viewModel: ModeSwitcherViewModel) {

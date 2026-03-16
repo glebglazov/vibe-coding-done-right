@@ -8,6 +8,8 @@ extension CaptureCoordinator {
         if isFollowUp && !panel.isVisible {
             Logger.consistency.warning("handleRecordingStarted(isFollowUp=true) but panel is not visible — RC/CC disagree on follow-up status")
         }
+        quickActionTask?.cancel()
+        quickActionTask = nil
         pillResetTask?.cancel()
         autoDismissTask?.cancel()
         recordingIndicator.cancelPendingDismiss()
@@ -17,7 +19,7 @@ extension CaptureCoordinator {
         if isFollowUp && panel.isVisible {
             panel.lockForFollowUp()
             panel.setPhase(.recording)
-        } else if !isFollowUp && !settings.activeMode.quickAction {
+        } else if !isFollowUp {
             showPanelMinimized(phase: .recording)
         }
     }
@@ -48,14 +50,11 @@ extension CaptureCoordinator {
 
     func handleTranscriptionFailed(isFollowUp: Bool) {
         panel.unlockFollowUp()
-        if panel.isVisible {
-            flashPill(phase: .error, duration: Self.pillErrorDisplayDuration)
-            if !isFollowUp {
-                scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
-            }
-        } else if !isFollowUp {
-            recordingIndicator.update(phase: .error, message: "No speech detected")
-            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
+        quickActionTask?.cancel()
+        quickActionTask = nil
+        flashPill(phase: .error, duration: Self.pillErrorDisplayDuration)
+        if !isFollowUp {
+            scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
         }
     }
 
@@ -70,7 +69,10 @@ extension CaptureCoordinator {
 
     func handleRecordingFailed(message: String) {
         panel.unlockFollowUp()
-        panel.setPhase(.idle)
+        quickActionTask?.cancel()
+        quickActionTask = nil
+        panel.setError(message)
+        scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
     }
 
     func flashPill(
@@ -233,6 +235,10 @@ extension CaptureCoordinator: RecordingCoordinatorDelegate {
 
     func recordingCoordinatorDidFailRecording(message: String) {
         handleRecordingFailed(message: message)
+    }
+
+    func recordingCoordinatorDidRejectInput() {
+        panel.buzz()
     }
 
     func recordingCoordinatorDidCaptureSelection() {

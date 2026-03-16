@@ -93,6 +93,8 @@ struct CaptureView: View {
         .background(.regularMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
         .shadow(radius: 2)
+        .modifier(ShakeEffect(shakeCount: viewModel.rejectCount))
+        .animation(.default, value: viewModel.rejectCount)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onTapGesture {
             if viewModel.phase == .error, let msg = viewModel.errorMessage { ClipboardHelper.writeString(msg) }

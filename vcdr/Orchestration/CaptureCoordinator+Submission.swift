@@ -74,15 +74,10 @@ extension CaptureCoordinator {
         _ error: Error, snapshot: SubmissionSnapshot,
         savedTurns: [ConversationTurn], savedSegments: [InputSegment]
     ) {
-        if panel.isVisible {
-            panel.restoreConversation(turns: savedTurns, segments: savedSegments, error: error.localizedDescription)
-            rebuildSessionAfterError(snapshot: snapshot, followUpContext: snapshot.pipelineContext.followUpContext)
-            rewirePanelCallbacks()
-            recordingIndicator.hide()
-        } else {
-            recordingIndicator.update(phase: .error, message: error.localizedDescription)
-            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
-        }
+        panel.restoreConversation(turns: savedTurns, segments: savedSegments, error: error.localizedDescription)
+        rebuildSessionAfterError(snapshot: snapshot, followUpContext: snapshot.pipelineContext.followUpContext)
+        rewirePanelCallbacks()
+        recordingIndicator.hide()
         Logger.app.error("Pipeline processing failed: \(error)")
     }
 
@@ -91,22 +86,17 @@ extension CaptureCoordinator {
         _ error: Error, snapshot: SubmissionSnapshot,
         input: String, output: String, hadExternalProcessing: Bool
     ) {
-        if panel.isVisible {
-            panel.setError(error.localizedDescription)
-            panel.setSegments([InputSegment()])
-            recordOrUpdateHistory(
-                hasUnsubmittedDraft: snapshot.hasUnsubmittedDraft,
-                conversationID: snapshot.conversationID,
-                input: input, output: output, captures: snapshot.captures,
-                mode: snapshot.mode, hadExternalProcessing: hadExternalProcessing
-            )
-            rebuildSessionAfterError(snapshot: snapshot)
-            rewirePanelCallbacks()
-            recordingIndicator.hide()
-        } else {
-            recordingIndicator.update(phase: .error, message: error.localizedDescription)
-            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
-        }
+        panel.setError(error.localizedDescription)
+        panel.setSegments([InputSegment()])
+        recordOrUpdateHistory(
+            hasUnsubmittedDraft: snapshot.hasUnsubmittedDraft,
+            conversationID: snapshot.conversationID,
+            input: input, output: output, captures: snapshot.captures,
+            mode: snapshot.mode, hadExternalProcessing: hadExternalProcessing
+        )
+        rebuildSessionAfterError(snapshot: snapshot)
+        rewirePanelCallbacks()
+        recordingIndicator.hide()
         Logger.app.error("Pipeline action failed: \(error)")
     }
 
@@ -114,32 +104,30 @@ extension CaptureCoordinator {
 
     func executeQuickAction(result: RecordingResult, mode: Mode) {
         let snapshot = captureQuickActionSnapshot(result: result, mode: mode)
-        Task { @MainActor in
+
+        // Populate the panel with transcribed text so user can see it if they expand
+        panel.populateQuickActionText(inputText: result.text, captures: result.captures)
+
+        quickActionTask = Task { @MainActor in
             let pipelineResult: SubmissionPipeline.Result
             do {
                 pipelineResult = try await SubmissionPipeline.process(context: snapshot.pipelineContext)
             } catch {
+                guard !Task.isCancelled else { return }
                 recoverFromProcessingError(
                     error, snapshot: snapshot, savedTurns: [], savedSegments: [InputSegment()]
                 )
                 return
             }
 
+            guard !Task.isCancelled else { return }
+
             do {
                 try await SubmissionPipeline.executeAction(
                     context: snapshot.pipelineContext, processedText: pipelineResult.processedText
                 )
             } catch {
-                // Show the processing result on the panel before error recovery
-                if panel.isVisible {
-                    let turn = ConversationTurn(
-                        input: result.text, output: pipelineResult.processedText, captures: snapshot.captures
-                    )
-                    configurePanelAndShow(conversationTurns: [turn], segments: [InputSegment()])
-                    if pipelineResult.hadExternalProcessing {
-                        panel.setProcessedByModeName(snapshot.mode.name)
-                    }
-                }
+                guard !Task.isCancelled else { return }
                 recoverFromActionError(
                     error, snapshot: snapshot, input: result.text, output: pipelineResult.processedText,
                     hadExternalProcessing: pipelineResult.hadExternalProcessing
@@ -147,26 +135,24 @@ extension CaptureCoordinator {
                 return
             }
 
+            guard !Task.isCancelled else { return }
+            quickActionTask = nil
+
             // Full success
             if snapshot.destination.type == .outputPanel {
-                let turn = ConversationTurn(
-                    input: result.text, output: pipelineResult.processedText, captures: snapshot.captures
-                )
-                panel.dismiss()
+                // Update the pending turn with processed text and expand
+                panel.finishProcessing(outputText: pipelineResult.processedText)
+                if pipelineResult.hadExternalProcessing {
+                    panel.setProcessedByModeName(snapshot.mode.name)
+                }
+                // Rebuild session for follow-up
                 session = PipelineSession()
                 session?.previousActiveApp = snapshot.previousActiveApp
                 session?.captures = snapshot.captures
                 session?.conversationID = snapshot.conversationID
-                session?.conversationTurns = [turn]
+                session?.conversationTurns = panel.currentTurns
                 session?.followUpContext = pipelineResult.processedText
-                let segments = snapshot.captures.isEmpty
-                    ? [InputSegment()]
-                    : [InputSegment(capture: snapshot.captures.first)]
-                        + snapshot.captures.dropFirst().map { InputSegment(capture: $0) }
-                configurePanelAndShow(conversationTurns: [turn], segments: segments)
-                if pipelineResult.hadExternalProcessing {
-                    panel.setProcessedByModeName(snapshot.mode.name)
-                }
+                rewirePanelCallbacks()
                 recordingIndicator.hide()
             } else {
                 panel.dismiss()

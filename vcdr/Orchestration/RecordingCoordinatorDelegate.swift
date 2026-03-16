@@ -10,6 +10,7 @@ protocol RecordingCoordinatorDelegate: AnyObject {
     func recordingCoordinatorDidFailTranscription(isFollowUp: Bool)
     func recordingCoordinatorDidCancelRecording(wasFollowUp: Bool, wasFreshPill: Bool)
     func recordingCoordinatorDidFailRecording(message: String)
+    func recordingCoordinatorDidRejectInput()
     func recordingCoordinatorDidCaptureSelection()
     func recordingCoordinatorDidCaptureClipboard()
 }

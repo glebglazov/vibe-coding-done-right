@@ -214,13 +214,13 @@ final class AppDependencies {
 extension AppDependencies: ModeSwitcherCoordinatorDelegate {
 
     func modeSwitcherShouldShowContextual() -> Bool {
-        let indicator = coordinator.recordingIndicator
-        if indicator.isVisible {
+        if captureCoordinator.isPanelVisible && captureCoordinator.panel.isMinimized {
+            // Panel is in pill state (recording/processing) — expand and show mode switcher
             let vm = modeSwitcherCoordinator.makeViewModel(onDismiss: { [weak self] in
-                indicator.hideModeSwitcher()
+                self?.captureCoordinator.hideModeSwitcherAndMinimize()
                 self?.coordinator.resumeEscCancel()
             })
-            indicator.showModeSwitcher(viewModel: vm)
+            captureCoordinator.showModeSwitcherOnPill(viewModel: vm)
             return true
         }
         if captureCoordinator.isModeSwitcherHostVisible {
@@ -235,11 +235,6 @@ extension AppDependencies: ModeSwitcherCoordinatorDelegate {
     }
 
     func modeSwitcherShouldDismissContextual() -> Bool {
-        let indicator = coordinator.recordingIndicator
-        if indicator.isModeSwitcherVisible {
-            indicator.hideModeSwitcher()
-            return true
-        }
         if captureCoordinator.isModeSwitcherVisible {
             captureCoordinator.hideModeSwitcher()
             return true

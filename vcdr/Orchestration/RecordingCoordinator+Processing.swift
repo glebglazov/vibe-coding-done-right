@@ -78,8 +78,6 @@ extension RecordingCoordinator {
             recordingRun = nil
             state = .error(error.localizedDescription)
             delegate?.recordingCoordinatorDidFailRecording(message: error.localizedDescription)
-            recordingIndicator.update(phase: .error, message: error.localizedDescription)
-            recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
             Logger.app.error("Pipeline failed: \(error)")
             resetAfterDelay()
         }

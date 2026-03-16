@@ -27,6 +27,8 @@ final class CaptureCoordinator {
 
     @ObservationIgnored private var expandTimerTask: Task<Void, Never>?
 
+    @ObservationIgnored var quickActionTask: Task<Void, Never>?
+
     @ObservationIgnored var onWillStartInput: (() -> Void)?
 
     var isModeSwitcherHostVisible: Bool { panel.isVisible && !panel.isMinimized }
@@ -39,8 +41,18 @@ final class CaptureCoordinator {
         panel.showModeSwitcher(viewModel: viewModel)
     }
 
+    func showModeSwitcherOnPill(viewModel: ModeSwitcherViewModel) {
+        panel.showModeSwitcher(viewModel: viewModel)
+        panel.expand()
+    }
+
     func hideModeSwitcher() {
         panel.hideModeSwitcher()
+    }
+
+    func hideModeSwitcherAndMinimize() {
+        panel.hideModeSwitcher()
+        panel.minimize()
     }
 
     static let successIndicatorDuration: Duration = .seconds(2)
@@ -274,6 +286,8 @@ final class CaptureCoordinator {
         expandTimerTask = nil
         autoDismissTask?.cancel()
         autoDismissTask = nil
+        quickActionTask?.cancel()
+        quickActionTask = nil
         panel.onFocusLost = nil
         panel.onPillClicked = nil
         panel.dismiss()

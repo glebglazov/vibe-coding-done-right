@@ -20,6 +20,7 @@ final class CaptureViewModel {
     var focusRequest: Int = 0
     var clipboardCaptureCount: Int = 0
     var processedByModeName: String?
+    var rejectCount: Int = 0
     var modeSwitcherViewModel: ModeSwitcherViewModel?
     /// Actual content heights per segment, reported by SegmentEditor layout manager.
     var segmentHeights: [UUID: CGFloat] = [:]

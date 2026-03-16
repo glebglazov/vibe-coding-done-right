@@ -149,7 +149,7 @@ final class CapturePanel {
     func expand() {
         let wasMinimized = viewModel?.isMinimized == true
         viewModel?.isMinimized = false
-        if viewModel?.phase != .recording && viewModel?.phase != .error {
+        if viewModel?.phase != .recording && viewModel?.phase != .error && viewModel?.phase != .processing {
             viewModel?.phase = .idle
         }
         if wasMinimized {
