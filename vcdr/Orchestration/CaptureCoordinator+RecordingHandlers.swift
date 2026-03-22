@@ -183,7 +183,7 @@ extension CaptureCoordinator {
     }
 
     func showPanelMinimized(phase: CaptureViewModel.CapturePhase) {
-        configurePanelAndShow()
+        configurePanelAndShow(minimized: true)
         panel.setPhase(phase)
         panel.minimize()
     }

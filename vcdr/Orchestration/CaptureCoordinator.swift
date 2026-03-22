@@ -148,7 +148,8 @@ final class CaptureCoordinator {
 
     func configurePanelAndShow(
         conversationTurns: [ConversationTurn] = [],
-        segments: [InputSegment]? = nil
+        segments: [InputSegment]? = nil,
+        minimized: Bool = false
     ) {
         rewirePanelCallbacks()
 
@@ -161,6 +162,7 @@ final class CaptureCoordinator {
             segments: resolvedSegments,
             outputDestinations: settings.outputDestinations,
             audioRecorder: audioRecorder,
+            minimized: minimized,
             onSubmit: { [weak self] text in
                 self?.clearSubmissionCallbacks()
                 self?.submitText(text)
@@ -205,7 +207,7 @@ final class CaptureCoordinator {
         session?.previousActiveApp = frontmostApp
 
         // Show pill immediately with empty content
-        configurePanelAndShow()
+        configurePanelAndShow(minimized: true)
         panel.setPhase(.idle)
         panel.minimize()
         onCancelHotkeyEnabled?(true)

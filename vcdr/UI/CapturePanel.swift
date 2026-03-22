@@ -37,6 +37,7 @@ final class CapturePanel {
         segments: [InputSegment] = [InputSegment()],
         outputDestinations: [OutputDestination] = [],
         audioRecorder: AudioRecorder? = nil,
+        minimized: Bool = false,
         onSubmit: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -67,7 +68,7 @@ final class CapturePanel {
         }
         self.viewModel = viewModel
 
-        presentPanel(viewModel: viewModel, turns: conversationTurns, segments: segments)
+        presentPanel(viewModel: viewModel, turns: conversationTurns, segments: segments, skipFocus: minimized)
     }
 
     func hide() {
@@ -108,7 +109,7 @@ final class CapturePanel {
 
     var currentTurns: [ConversationTurn] { viewModel?.conversationTurns ?? [] }
 
-    private func presentPanel(viewModel: CaptureViewModel, turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()]) {
+    private func presentPanel(viewModel: CaptureViewModel, turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()], skipFocus: Bool = false) {
         let view = CaptureView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
         let panelHeight = Self.calculateHeight(for: turns, segments: segments, segmentHeights: viewModel.segmentHeights)
@@ -131,7 +132,7 @@ final class CapturePanel {
         panel.makeKey()
         self.panel = panel
 
-        if !viewModel.isRecording {
+        if !skipFocus && !viewModel.isRecording {
             focusActiveTextView(in: hostingView, panel: panel)
         }
 
@@ -155,21 +156,24 @@ final class CapturePanel {
         if wasMinimized {
             resizePanelToExpanded()
         }
-        panel?.makeKey()
         if viewModel?.isRecording != true {
-            // Trigger focus through SwiftUI's own view update mechanism — more reliable than
-            // the NSView tree walk when the view hierarchy is being recreated after minimize.
             viewModel?.focusRequest += 1
             Task { @MainActor [weak self] in
-                // Wait for SwiftUI to lay out the expanded hosting view
+                // Wait for SwiftUI to lay out the expanded hosting view before
+                // making the panel key. Calling makeKey() immediately would fire
+                // becameKeyNotification before text views exist, wasting all
+                // focus retry attempts on a not-yet-ready view hierarchy.
                 try? await Task.sleep(for: Self.expandFocusDelay)
                 guard let self,
                       self.isVisible,
                       !self.isMinimized,
                       let contentView = self.panel?.contentView,
                       let panel = self.panel else { return }
+                panel.makeKey()
                 self.focusActiveTextView(in: contentView, panel: panel)
             }
+        } else {
+            panel?.makeKey()
         }
     }
 
