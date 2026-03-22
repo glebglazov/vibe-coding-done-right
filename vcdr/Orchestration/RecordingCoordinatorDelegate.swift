@@ -12,5 +12,4 @@ protocol RecordingCoordinatorDelegate: AnyObject {
     func recordingCoordinatorDidFailRecording(message: String)
     func recordingCoordinatorDidRejectInput()
     func recordingCoordinatorDidCaptureSelection()
-    func recordingCoordinatorDidCaptureClipboard()
 }

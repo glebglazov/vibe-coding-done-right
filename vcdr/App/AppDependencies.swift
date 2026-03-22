@@ -54,14 +54,13 @@ final class AppDependencies {
         self.inputLevelMonitor = InputLevelMonitor()
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
         let capturePanel = CapturePanel()
-        let pttClipboardMonitor = ClipboardMonitor()
         let captureCoordinator = CaptureCoordinator(
             settings: settings,
             panel: capturePanel,
             recordingIndicator: recordingIndicator,
             audioRecorder: audioRecorder,
             selectionCapturer: selectionCapturer,
-            clipboardMonitor: pttClipboardMonitor,
+            clipboardMonitor: clipboardMonitor,
             transcriptionHistory: history,
             overrides: overrides
         )
@@ -73,7 +72,6 @@ final class AppDependencies {
             mediaPlaybackController: mediaPlayback,
             recordingIndicator: recordingIndicator,
             selectionCapturer: selectionCapturer,
-            clipboardMonitor: clipboardMonitor,
             overrides: overrides
         )
 

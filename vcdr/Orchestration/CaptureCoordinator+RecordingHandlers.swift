@@ -26,6 +26,14 @@ extension CaptureCoordinator {
 
     func handleTranscribing() {
         panel.setPhase(.processing)
+        // Stop clipboard monitoring and store captures before transcription completes.
+        // The transcription await gives this Task time to finish first.
+        Task {
+            let clips = await clipboardMonitor.stop()
+            for text in clips {
+                accumulatedCaptures.append(CapturedContext(text: text, source: .clipboard))
+            }
+        }
     }
 
     func handleRecordingComplete(result: RecordingResult) {
@@ -34,17 +42,33 @@ extension CaptureCoordinator {
         }
         panel.unlockFollowUp()
 
-        if let overrideID = result.destinationOverrideID {
+        // Merge clipboard captures accumulated during recording into the result
+        let mergedResult: RecordingResult
+        if accumulatedCaptures.isEmpty {
+            mergedResult = result
+        } else {
+            mergedResult = RecordingResult(
+                text: result.text,
+                captures: result.captures + accumulatedCaptures,
+                previousActiveApp: result.previousActiveApp,
+                destinationOverrideID: result.destinationOverrideID,
+                hadDestinationOverride: result.hadDestinationOverride,
+                isFollowUp: result.isFollowUp
+            )
+            accumulatedCaptures = []
+        }
+
+        if let overrideID = mergedResult.destinationOverrideID {
             overrides.destinationOverride = overrideID
         }
 
         let mode = settings.activeMode
-        let isQuickAction = !result.isFollowUp && (mode.quickAction || result.hadDestinationOverride)
+        let isQuickAction = !mergedResult.isFollowUp && (mode.quickAction || mergedResult.hadDestinationOverride)
 
         if isQuickAction {
-            executeQuickAction(result: result, mode: mode)
+            executeQuickAction(result: mergedResult, mode: mode)
         } else {
-            populateWithTranscription(result: result)
+            populateWithTranscription(result: mergedResult)
         }
     }
 
@@ -59,6 +83,8 @@ extension CaptureCoordinator {
     }
 
     func handleRecordingCancelled(wasFollowUp: Bool, wasFreshPill: Bool) {
+        Task { await clipboardMonitor.stop() }
+        accumulatedCaptures = []
         panel.unlockFollowUp()
         guard panel.isVisible else { return }
         flashPill(phase: .cancelled, shouldMinimize: true, duration: Self.pillFlashDuration)
@@ -247,9 +273,14 @@ extension CaptureCoordinator: RecordingCoordinatorDelegate {
 
     func recordingCoordinatorDidCaptureSelection() {
         panel.signalClipboardCapture()
-    }
-
-    func recordingCoordinatorDidCaptureClipboard() {
-        panel.signalClipboardCapture()
+        // Start clipboard monitoring after SelectionCapturer finishes — same pattern
+        // as push-to-type. Take a fresh baseline to avoid false positives from
+        // SelectionCapturer's clipboard manipulation.
+        let freshBaseline = NSPasteboard.general.changeCount
+        Task {
+            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] _ in
+                self?.panel.signalClipboardCapture()
+            }
+        }
     }
 }

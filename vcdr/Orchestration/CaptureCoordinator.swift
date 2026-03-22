@@ -11,14 +11,14 @@ final class CaptureCoordinator {
     let recordingIndicator: RecordingIndicatorPanel
     private let audioRecorder: AudioRecorder
     private let selectionCapturer: SelectionCapturer
-    private let clipboardMonitor: ClipboardMonitor
+    let clipboardMonitor: ClipboardMonitor
     let transcriptionHistory: TranscriptionHistory
     let overrides: ConversationOverrides
 
     @ObservationIgnored var session: PipelineSession?
 
     @ObservationIgnored private var originalCapture: CapturedContext?
-    @ObservationIgnored private var accumulatedCaptures: [CapturedContext] = []
+    @ObservationIgnored var accumulatedCaptures: [CapturedContext] = []
 
     @ObservationIgnored var pillResetTask: Task<Void, Never>?
 
@@ -212,20 +212,28 @@ final class CaptureCoordinator {
         panel.minimize()
         onCancelHotkeyEnabled?(true)
 
-        // Capture selection in background — populates segments when ready
+        // Capture selection in background — populates segments when ready.
+        // Start clipboard monitoring after capture completes (same pattern as
+        // toggle-recording) so copies during the pill state register immediately.
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
         Task {
-            guard let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid) else {
-                Logger.app.info("Push-to-type: no selection captured")
-                return
+            let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
+            if let capturedText {
+                Logger.app.info("Push-to-type: storing captured selection (\(capturedText.count) chars): \"\(capturedText.prefix(80))\"")
+                let context = CapturedContext(text: capturedText, source: .selection)
+                session?.captures = [context]
+                originalCapture = context
+                panel.setSegments([InputSegment(capture: context)])
+                panel.signalClipboardCapture()
             }
-            Logger.app.info("Push-to-type: storing captured selection (\(capturedText.count) chars): \"\(capturedText.prefix(80))\"")
-            let context = CapturedContext(text: capturedText, source: .selection)
-            session?.captures = [context]
-            originalCapture = context
-            panel.setSegments([InputSegment(capture: context)])
-            panel.signalClipboardCapture()
+
+            // Take baseline after SelectionCapturer finishes — its clipboard
+            // copy/read/restore can bump changeCount and cause false positives.
+            let freshBaseline = NSPasteboard.general.changeCount
+            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] _ in
+                self?.panel.signalClipboardCapture()
+            }
         }
 
         Logger.app.info("Capture view: pill shown for new capture")

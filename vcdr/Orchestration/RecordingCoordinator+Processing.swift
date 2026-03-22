@@ -32,8 +32,6 @@ extension RecordingCoordinator {
                 run.captureTask = nil
                 Logger.recording.info("Captures: \(run.captures.count) items")
             }
-            run.captures.append(contentsOf: run.clipboardCaptures)
-
             let hadDestinationOverride: Bool
             if let pending = pendingDestinationOverride {
                 pendingDestinationOverride = nil

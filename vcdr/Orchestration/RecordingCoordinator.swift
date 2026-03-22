@@ -17,7 +17,6 @@ final class RecordingCoordinator {
         var previousActiveApp: NSRunningApplication?
         var captureTask: Task<CapturedContext?, Never>?
         var captures: [CapturedContext] = []
-        var clipboardCaptures: [CapturedContext] = []
         var destinationOverrideID: UUID?
         var isFollowUp: Bool = false
 
@@ -48,7 +47,6 @@ final class RecordingCoordinator {
     private let mediaPlaybackController: MediaPlaybackController
     let recordingIndicator: RecordingIndicatorPanel
     private let selectionCapturer: SelectionCapturer
-    private let clipboardMonitor: ClipboardMonitor
     let overrides: ConversationOverrides
 
     @ObservationIgnored weak var delegate: RecordingCoordinatorDelegate?
@@ -74,7 +72,6 @@ final class RecordingCoordinator {
         mediaPlaybackController: MediaPlaybackController,
         recordingIndicator: RecordingIndicatorPanel,
         selectionCapturer: SelectionCapturer,
-        clipboardMonitor: ClipboardMonitor,
         overrides: ConversationOverrides
     ) {
         self.settings = settings
@@ -83,7 +80,6 @@ final class RecordingCoordinator {
         self.mediaPlaybackController = mediaPlaybackController
         self.recordingIndicator = recordingIndicator
         self.selectionCapturer = selectionCapturer
-        self.clipboardMonitor = clipboardMonitor
         self.overrides = overrides
     }
 
@@ -186,18 +182,6 @@ final class RecordingCoordinator {
         destinationHotkeyManager.isEnabled = true
         updateCancelHotkey()
 
-        // Start clipboard monitoring only after SelectionCapturer finishes.
-        // SelectionCapturer's Layer 2/3 manipulate the clipboard (copy → read → restore),
-        // which can bump changeCount. Taking the baseline AFTER capture completes
-        // eliminates the race where the grace period expires before the restore finishes.
-        let captureTask = recordingRun?.captureTask
-        Task {
-            _ = await captureTask?.value
-            let freshBaseline = NSPasteboard.general.changeCount
-            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] _ in
-                self?.delegate?.recordingCoordinatorDidCaptureClipboard()
-            }
-        }
     }
 
     func stopRecordingAndTranscribe() {
@@ -233,9 +217,6 @@ final class RecordingCoordinator {
         }
 
         processingTask = Task { @MainActor in
-            let midCaptures = await self.clipboardMonitor.stop()
-            let clipboardContexts = midCaptures.map { CapturedContext(text: $0, source: .clipboard) }
-            self.recordingRun?.clipboardCaptures = clipboardContexts
             await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration)
         }
     }
@@ -251,8 +232,6 @@ final class RecordingCoordinator {
         pendingDestinationOverride = nil
 
         guard state == .preparingToRecord || state == .recording || state == .transcribing else { return }
-
-        Task { await clipboardMonitor.stop() }
 
         let wasProcessing = state == .transcribing
         let wasPreparing = state == .preparingToRecord
