@@ -146,11 +146,7 @@ private struct ModeRowView: View {
                 HStack(spacing: 6) {
                     Text(mode.name)
                     if isActive {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 8, height: 8)
-                            .shadow(color: .green.opacity(0.8), radius: 4)
-                            .shadow(color: .green.opacity(0.4), radius: 8)
+                        ActiveModeIndicator()
                     }
                 }
                 Text(subtitle)

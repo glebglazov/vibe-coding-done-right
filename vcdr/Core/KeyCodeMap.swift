@@ -14,6 +14,21 @@ enum KeyCodeMap {
     static let cKeyCode: UInt16 = 8
     static let vKeyCode: UInt16 = 9
 
+    // MARK: - Navigation Key Codes
+
+    static let returnKeyCode: UInt16 = 36
+    static let escapeKeyCode: UInt16 = 53
+    static let leftArrowKeyCode: UInt16 = 123
+    static let rightArrowKeyCode: UInt16 = 124
+    static let downArrowKeyCode: UInt16 = 125
+    static let upArrowKeyCode: UInt16 = 126
+
+    // Vim-style navigation
+    static let hKeyCode: UInt16 = 4
+    static let jKeyCode: UInt16 = 38
+    static let kKeyCode: UInt16 = 40
+    static let lKeyCode: UInt16 = 37
+
     // MARK: - Code → Name
 
     static let codeToName: [CGKeyCode: String] = [

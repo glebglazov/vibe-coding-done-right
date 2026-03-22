@@ -5,8 +5,6 @@ import SwiftUI
 /// Reusable ephemeral pill with an SF Symbol icon and optional label text.
 /// Used for dismiss, cancel, success, and other brief informational indicators.
 struct InfoPillView: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
     private static let iconSize: CGFloat = 16
     private static let spacing: CGFloat = 4
 
@@ -25,11 +23,7 @@ struct InfoPillView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, Self.pillHPadding)
-        .frame(height: Self.pillHeight)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-        .shadow(radius: 2)
+        .pillShape()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
@@ -45,8 +39,6 @@ struct CancelledIndicatorView: View {
 // MARK: - Copied Indicator View
 
 struct CopiedIndicatorView: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
     private static let iconSize: CGFloat = 16
     private static let transitionDelay: Duration = .milliseconds(300)
 
@@ -67,11 +59,7 @@ struct CopiedIndicatorView: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, Self.pillHPadding)
-            .frame(height: Self.pillHeight)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-            .shadow(radius: 2)
+            .pillShape()
             .animation(.easeInOut(duration: 0.2), value: showCheckmark)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -85,8 +73,6 @@ struct CopiedIndicatorView: View {
 // MARK: - Copy Error Indicator View
 
 struct CopyErrorIndicatorView: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
     private static let iconSize: CGFloat = 16
     private static let errorPillHPadding: CGFloat = 8
     private static let errorPillVPadding: CGFloat = 3
@@ -103,11 +89,7 @@ struct CopyErrorIndicatorView: View {
                     .font(.system(size: Self.iconSize, weight: .semibold))
                     .foregroundStyle(.red)
             }
-            .padding(.horizontal, Self.pillHPadding)
-            .frame(height: Self.pillHeight)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-            .shadow(radius: 2)
+            .pillShape()
 
             Text(message)
                 .font(.system(size: Self.errorPillFontSize))
@@ -148,8 +130,6 @@ struct ShakeEffect: GeometryEffect {
 // MARK: - Recording Indicator View
 
 struct RecordingIndicatorView: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
     private static let pillSpacing: CGFloat = 6
     private static let iconSize: CGFloat = 16
     private static let phaseTransitionDuration: Double = 0.2
@@ -221,11 +201,7 @@ struct RecordingIndicatorView: View {
                         .transition(.opacity)
                 }
             }
-            .padding(.horizontal, Self.pillHPadding)
-            .frame(height: Self.pillHeight)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-            .shadow(radius: 2)
+            .pillShape()
 
             if let message = phaseState.errorMessage, phaseState.phase == .error {
                 Text(message)

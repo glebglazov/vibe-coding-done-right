@@ -88,10 +88,7 @@ private struct OutputDestinationRowView: View {
             Spacer()
 
             if destination.activationHotkey.isAssigned {
-                Text(GlobalHotkeyManager.shortcutDisplayString(
-                    keyCode: CGKeyCode(destination.activationHotkey.keyCode),
-                    modifiers: CGEventFlags(rawValue: destination.activationHotkey.modifiers)
-                ))
+                Text(destination.activationHotkey.displayString)
                     .font(.system(.caption, design: .monospaced))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)

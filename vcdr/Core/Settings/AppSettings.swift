@@ -37,6 +37,15 @@ struct HotkeyBinding: Codable, Equatable {
     var isAssigned: Bool {
         keyCode != 0 || modifiers != 0
     }
+
+    /// Human-readable shortcut string (e.g., "⌘⌥Space").
+    var displayString: String {
+        guard isAssigned else { return "" }
+        return GlobalHotkeyManager.shortcutDisplayString(
+            keyCode: CGKeyCode(keyCode),
+            modifiers: CGEventFlags(rawValue: modifiers)
+        )
+    }
 }
 
 @Observable

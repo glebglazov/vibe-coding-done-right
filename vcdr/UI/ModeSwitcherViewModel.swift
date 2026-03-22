@@ -8,21 +8,6 @@ enum NavigationLevel: Equatable {
     case options(modeIndex: Int, parameterIndex: Int)
 }
 
-// MARK: - Key Codes
-
-enum KeyCode {
-    static let returnKey: UInt16 = 36
-    static let escape: UInt16 = 53
-    static let leftArrow: UInt16 = 123
-    static let rightArrow: UInt16 = 124
-    static let downArrow: UInt16 = 125
-    static let upArrow: UInt16 = 126
-    static let h: UInt16 = 4
-    static let j: UInt16 = 38
-    static let k: UInt16 = 40
-    static let l: UInt16 = 37
-}
-
 // MARK: - Navigation State
 
 struct NavigationState {
@@ -117,7 +102,7 @@ final class ModeSwitcherViewModel {
         // Use `characters` (not `charactersIgnoringModifiers`) to detect "?" which is Shift+/
         let chars = event.characters ?? ""
 
-        if keyCode == KeyCode.escape {
+        if keyCode == KeyCodeMap.escapeKeyCode {
             onDismiss()
             return true
         }
@@ -141,16 +126,16 @@ final class ModeSwitcherViewModel {
         }
 
         switch keyCode {
-        case KeyCode.downArrow, KeyCode.j:
+        case KeyCodeMap.downArrowKeyCode, KeyCodeMap.jKeyCode:
             highlightedIndex = min(highlightedIndex + 1, modes.count - 1)
             return true
-        case KeyCode.upArrow, KeyCode.k:
+        case KeyCodeMap.upArrowKeyCode, KeyCodeMap.kKeyCode:
             highlightedIndex = max(highlightedIndex - 1, 0)
             return true
-        case KeyCode.leftArrow, KeyCode.h:
+        case KeyCodeMap.leftArrowKeyCode, KeyCodeMap.hKeyCode:
             onDismiss()
             return true
-        case KeyCode.rightArrow, KeyCode.l:
+        case KeyCodeMap.rightArrowKeyCode, KeyCodeMap.lKeyCode:
             let mode = modes[highlightedIndex]
             activateMode(mode.id)
             guard !mode.parameters.isEmpty else {
@@ -165,7 +150,7 @@ final class ModeSwitcherViewModel {
             navigation.showingDestinations = false
             onResize?()
             return true
-        case KeyCode.returnKey:
+        case KeyCodeMap.returnKeyCode:
             confirmMode(modes[highlightedIndex].id)
             return true
         default:
@@ -192,21 +177,21 @@ final class ModeSwitcherViewModel {
         let paramCount = mode.parameters.count
 
         switch keyCode {
-        case KeyCode.downArrow, KeyCode.j:
+        case KeyCodeMap.downArrowKeyCode, KeyCodeMap.jKeyCode:
             navigation.subHighlightedIndex = min(navigation.subHighlightedIndex + 1, paramCount - 1)
             return true
-        case KeyCode.upArrow, KeyCode.k:
+        case KeyCodeMap.upArrowKeyCode, KeyCodeMap.kKeyCode:
             navigation.subHighlightedIndex = max(navigation.subHighlightedIndex - 1, 0)
             return true
-        case KeyCode.returnKey:
+        case KeyCodeMap.returnKeyCode:
             confirmMode(mode.id)
             return true
-        case KeyCode.rightArrow, KeyCode.l:
+        case KeyCodeMap.rightArrowKeyCode, KeyCodeMap.lKeyCode:
             navigation.level = .options(modeIndex: modeIndex, parameterIndex: navigation.subHighlightedIndex)
             navigation.subHighlightedIndex = 0
             onResize?()
             return true
-        case KeyCode.leftArrow, KeyCode.h:
+        case KeyCodeMap.leftArrowKeyCode, KeyCodeMap.hKeyCode:
             navigation.level = .modes
             navigation.subHighlightedIndex = 0
             onResize?()
@@ -222,13 +207,13 @@ final class ModeSwitcherViewModel {
         let optionCount = parameter.options.count
 
         switch keyCode {
-        case KeyCode.downArrow, KeyCode.j:
+        case KeyCodeMap.downArrowKeyCode, KeyCodeMap.jKeyCode:
             navigation.subHighlightedIndex = min(navigation.subHighlightedIndex + 1, optionCount - 1)
             return true
-        case KeyCode.upArrow, KeyCode.k:
+        case KeyCodeMap.upArrowKeyCode, KeyCodeMap.kKeyCode:
             navigation.subHighlightedIndex = max(navigation.subHighlightedIndex - 1, 0)
             return true
-        case KeyCode.returnKey:
+        case KeyCodeMap.returnKeyCode:
             if navigation.subHighlightedIndex < optionCount {
                 let option = parameter.options[navigation.subHighlightedIndex]
                 parameterOverrides[parameter.id] = option.value
@@ -236,14 +221,14 @@ final class ModeSwitcherViewModel {
             }
             confirmMode(mode.id)
             return true
-        case KeyCode.rightArrow, KeyCode.l:
+        case KeyCodeMap.rightArrowKeyCode, KeyCodeMap.lKeyCode:
             guard navigation.subHighlightedIndex < optionCount else { return true }
             let option = parameter.options[navigation.subHighlightedIndex]
             parameterOverrides[parameter.id] = option.value
             onParameterOverride(parameter.id, option.value)
             goBackFromOptions(modeIndex: modeIndex)
             return true
-        case KeyCode.leftArrow, KeyCode.h:
+        case KeyCodeMap.leftArrowKeyCode, KeyCodeMap.hKeyCode:
             goBackFromOptions(modeIndex: modeIndex)
             return true
         default:

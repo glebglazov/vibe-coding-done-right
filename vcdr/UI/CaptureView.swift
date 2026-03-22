@@ -24,8 +24,6 @@ struct CaptureView: View {
 
     // MARK: - Constants (Pill)
 
-    private static let pillHeight: CGFloat = 32
-    private static let pillHPadding: CGFloat = 12
     private static let pillIconSize: CGFloat = 14
     private static let pillSpacing: CGFloat = 6
     private static let captureBadgeSize: CGFloat = 12
@@ -88,11 +86,7 @@ struct CaptureView: View {
                 .foregroundStyle(viewModel.phase == .error && viewModel.errorMessage != nil ? Color.red : Color.primary)
                 .lineLimit(1)
         }
-        .padding(.horizontal, Self.pillHPadding)
-        .frame(height: Self.pillHeight)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.secondary, lineWidth: 1))
-        .shadow(radius: 2)
+        .pillShape()
         .modifier(ShakeEffect(shakeCount: viewModel.rejectCount))
         .animation(.default, value: viewModel.rejectCount)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -279,13 +273,7 @@ struct CaptureView: View {
                 .foregroundStyle(.secondary)
 
             ForEach(viewModel.outputDestinations.filter { $0.activationHotkey.isAssigned }) { dest in
-                hintLabel(
-                    GlobalHotkeyManager.shortcutDisplayString(
-                        keyCode: CGKeyCode(dest.activationHotkey.keyCode),
-                        modifiers: CGEventFlags(rawValue: dest.activationHotkey.modifiers)
-                    ),
-                    dest.name.lowercased()
-                )
+                hintLabel(dest.activationHotkey.displayString, dest.name.lowercased())
             }
 
             Spacer()

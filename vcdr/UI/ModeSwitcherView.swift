@@ -78,11 +78,7 @@ struct ModeSwitcherView: View {
                 .lineLimit(1)
 
             if mode.id == viewModel.activeModeID {
-                Circle()
-                    .fill(.green)
-                    .frame(width: 8, height: 8)
-                    .shadow(color: .green.opacity(0.8), radius: 4)
-                    .shadow(color: .green.opacity(0.4), radius: 8)
+                ActiveModeIndicator()
             }
 
             Spacer()

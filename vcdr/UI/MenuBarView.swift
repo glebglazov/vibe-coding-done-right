@@ -82,12 +82,7 @@ struct MenuBarView: View {
 
     private var hotkeyDisplay: String {
         let binding = dependencies.settings.toggleRecordingHotkey
-        let kc = binding.keyCode
-        let mods = binding.modifiers
         guard binding.isAssigned else { return "Not set" }
-        return GlobalHotkeyManager.shortcutDisplayString(
-            keyCode: CGKeyCode(kc),
-            modifiers: CGEventFlags(rawValue: mods)
-        )
+        return binding.displayString
     }
 }

@@ -8,7 +8,6 @@ struct ErrorBannerView: View {
     private static let dismissIconSize: CGFloat = 9
     private static let hPadding: CGFloat = 8
     private static let vPadding: CGFloat = 4
-    private static let copiedFeedbackDuration: Duration = .seconds(1)
 
     let message: String
     let onDismiss: () -> Void
@@ -41,11 +40,7 @@ struct ErrorBannerView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             ClipboardHelper.writeString(message)
-            showCopied = true
-            Task {
-                try? await Task.sleep(for: Self.copiedFeedbackDuration)
-                showCopied = false
-            }
+            CopiedFeedback.trigger { showCopied = $0 }
         }
     }
 }
