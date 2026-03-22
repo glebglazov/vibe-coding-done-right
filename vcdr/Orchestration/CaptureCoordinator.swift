@@ -12,7 +12,6 @@ final class CaptureCoordinator {
     private let audioRecorder: AudioRecorder
     private let selectionCapturer: SelectionCapturer
     private let clipboardMonitor: ClipboardMonitor
-    private let escCancelManager: GlobalHotkeyManager
     let transcriptionHistory: TranscriptionHistory
     let overrides: ConversationOverrides
 
@@ -30,6 +29,9 @@ final class CaptureCoordinator {
     @ObservationIgnored var quickActionTask: Task<Void, Never>?
 
     @ObservationIgnored var onWillStartInput: (() -> Void)?
+
+    /// Signals RecordingCoordinator to enable/disable the cancel hotkey for pill state.
+    @ObservationIgnored var onCancelHotkeyEnabled: ((Bool) -> Void)?
 
     var isModeSwitcherHostVisible: Bool { panel.isVisible && !panel.isMinimized }
 
@@ -59,7 +61,6 @@ final class CaptureCoordinator {
     static let pillErrorDisplayDuration: Duration = .seconds(1.5)
     static let pillFlashDuration: Duration = .seconds(1)
     static let errorIndicatorDuration: Duration = .seconds(10)
-    private static let escapeKeyCode: CGKeyCode = 53
 
     init(
         settings: AppSettings,
@@ -68,7 +69,6 @@ final class CaptureCoordinator {
         audioRecorder: AudioRecorder,
         selectionCapturer: SelectionCapturer,
         clipboardMonitor: ClipboardMonitor,
-        escCancelManager: GlobalHotkeyManager,
         transcriptionHistory: TranscriptionHistory,
         overrides: ConversationOverrides
     ) {
@@ -78,7 +78,6 @@ final class CaptureCoordinator {
         self.audioRecorder = audioRecorder
         self.selectionCapturer = selectionCapturer
         self.clipboardMonitor = clipboardMonitor
-        self.escCancelManager = escCancelManager
         self.transcriptionHistory = transcriptionHistory
         self.overrides = overrides
     }
@@ -125,16 +124,6 @@ final class CaptureCoordinator {
         let modifiers = CGEventFlags(rawValue: binding.modifiers)
         _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
 
-        setupEscCancelForCollapsed()
-    }
-
-    private func setupEscCancelForCollapsed() {
-        escCancelManager.isEnabled = false
-        escCancelManager.onKeyDown = { [weak self] in
-            self?.dismissOverlay()
-        }
-        escCancelManager.onKeyUp = nil
-        _ = escCancelManager.register(keyCode: Self.escapeKeyCode, modifiers: [])
     }
 
     func rewirePanelCallbacks() {
@@ -150,7 +139,7 @@ final class CaptureCoordinator {
 
     private func clearSubmissionCallbacks() {
         Task { await clipboardMonitor.stop() }
-        escCancelManager.isEnabled = false
+        onCancelHotkeyEnabled?(false)
         panel.onFocusLost = nil
         panel.onPillClicked = nil
         originalCapture = nil
@@ -219,6 +208,7 @@ final class CaptureCoordinator {
         configurePanelAndShow()
         panel.setPhase(.idle)
         panel.minimize()
+        onCancelHotkeyEnabled?(true)
 
         // Capture selection in background — populates segments when ready
         let bundleID = frontmostApp?.bundleIdentifier
@@ -258,6 +248,7 @@ final class CaptureCoordinator {
 
     private func collapseOverlay() {
         panel.minimize()
+        onCancelHotkeyEnabled?(true)
         Task {
             await clipboardMonitor.start { [weak self] _ in
                 self?.panel.signalClipboardCapture()
@@ -279,13 +270,13 @@ final class CaptureCoordinator {
         }
 
         panel.expand()
-        escCancelManager.isEnabled = false
+        onCancelHotkeyEnabled?(false)
         Logger.app.info("Capture view: expanded from pill with \(newCaptures.count) clipboard captures")
     }
 
     func dismissOverlay() {
         Task { await clipboardMonitor.stop() }
-        escCancelManager.isEnabled = false
+        onCancelHotkeyEnabled?(false)
         expandTimerTask?.cancel()
         expandTimerTask = nil
         autoDismissTask?.cancel()

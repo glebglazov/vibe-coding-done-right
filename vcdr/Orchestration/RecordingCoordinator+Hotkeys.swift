@@ -21,18 +21,23 @@ extension RecordingCoordinator {
         )
     }
 
-    func setupEscCancel() {
+    func setupCancelHotkey() {
         let binding = settings.cancelRecordingHotkey
         guard binding.isAssigned else {
-            escCancelManager.isEnabled = false
+            cancelHotkeyManager.isEnabled = false
             return
         }
-        escCancelManager.isEnabled = false
-        escCancelManager.onKeyDown = { [weak self] in
-            self?.cancelRecording()
+        cancelHotkeyManager.isEnabled = false
+        cancelHotkeyManager.onKeyDown = { [weak self] in
+            guard let self else { return }
+            if self.state == .preparingToRecord || self.state == .recording || self.state == .transcribing {
+                self.cancelRecording()
+            } else {
+                self.onCancelFallback?()
+            }
         }
-        escCancelManager.onKeyUp = nil
-        _ = escCancelManager.register(
+        cancelHotkeyManager.onKeyUp = nil
+        _ = cancelHotkeyManager.register(
             keyCode: CGKeyCode(binding.keyCode),
             modifiers: CGEventFlags(rawValue: binding.modifiers)
         )
@@ -48,16 +53,17 @@ extension RecordingCoordinator {
         destinationHotkeyManager.register(bindings: bindings)
     }
 
-    func updateEscCancel() {
-        escCancelManager.isEnabled = (state == .preparingToRecord || state == .recording || state == .transcribing)
+    func updateCancelHotkey() {
+        let recordingActive = (state == .preparingToRecord || state == .recording || state == .transcribing)
+        cancelHotkeyManager.isEnabled = recordingActive || isPillCancelActive
     }
 
-    func suspendEscCancel() {
-        escCancelManager.isEnabled = false
+    func suspendCancelHotkey() {
+        cancelHotkeyManager.isEnabled = false
     }
 
-    func resumeEscCancel() {
-        updateEscCancel()
+    func resumeCancelHotkey() {
+        updateCancelHotkey()
     }
 
     // MARK: - Settings + Re-registration
@@ -74,11 +80,11 @@ extension RecordingCoordinator {
 
     func updateCancelRecordingKeyCode(_ code: UInt16) {
         settings.cancelRecordingHotkey.keyCode = code
-        setupEscCancel()
+        setupCancelHotkey()
     }
 
     func updateCancelRecordingModifiers(_ mods: UInt64) {
         settings.cancelRecordingHotkey.modifiers = mods
-        setupEscCancel()
+        setupCancelHotkey()
     }
 }

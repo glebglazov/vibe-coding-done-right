@@ -47,7 +47,7 @@ extension RecordingCoordinator {
             recordingRun = nil
 
             guard !text.isEmpty else {
-                escCancelManager.isEnabled = false
+                cancelHotkeyManager.isEnabled = false
                 delegate?.recordingCoordinatorDidFailTranscription(isFollowUp: isFollowUp)
                 processingTask = nil
                 state = .idle
@@ -63,7 +63,7 @@ extension RecordingCoordinator {
                 isFollowUp: isFollowUp
             )
 
-            escCancelManager.isEnabled = false
+            cancelHotkeyManager.isEnabled = false
             processingTask = nil
             state = .idle
             delegate?.recordingCoordinatorDidCompleteRecording(result: result)
@@ -73,7 +73,7 @@ extension RecordingCoordinator {
             processingTask = nil
             Logger.app.info("Processing task cancelled")
         } catch {
-            escCancelManager.isEnabled = false
+            cancelHotkeyManager.isEnabled = false
             processingTask = nil
             recordingRun = nil
             state = .error(error.localizedDescription)

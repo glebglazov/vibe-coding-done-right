@@ -55,7 +55,6 @@ final class AppDependencies {
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
         let capturePanel = CapturePanel()
         let pttClipboardMonitor = ClipboardMonitor()
-        let pttEscCancelManager = GlobalHotkeyManager()
         let captureCoordinator = CaptureCoordinator(
             settings: settings,
             panel: capturePanel,
@@ -63,7 +62,6 @@ final class AppDependencies {
             audioRecorder: audioRecorder,
             selectionCapturer: selectionCapturer,
             clipboardMonitor: pttClipboardMonitor,
-            escCancelManager: pttEscCancelManager,
             transcriptionHistory: history,
             overrides: overrides
         )
@@ -87,6 +85,15 @@ final class AppDependencies {
 
         // Wire RecordingCoordinator → CaptureCoordinator via delegate
         coordinator.delegate = captureCoordinator
+
+        // Wire cancel hotkey: single GlobalHotkeyManager in RecordingCoordinator
+        // handles both recording cancel and push-to-type pill cancel.
+        coordinator.onCancelFallback = { [weak captureCoordinator] in
+            captureCoordinator?.cancelCapture()
+        }
+        captureCoordinator.onCancelHotkeyEnabled = { [weak coordinator] enabled in
+            coordinator?.setPillCancelActive(enabled)
+        }
 
         // Dismiss mode switcher when recording or input starts
         captureCoordinator.onWillStartInput = { [weak self] in
@@ -122,7 +129,7 @@ final class AppDependencies {
         // so hotkeys pressed before the model is ready show an appropriate error.
         if hasAccessibilityPermission {
             coordinator.setupToggleRecordingHotkey()
-            coordinator.setupEscCancel()
+            coordinator.setupCancelHotkey()
             coordinator.setupDestinationHotkeys()
             modeSwitcherCoordinator.setupHotkey()
             captureCoordinator.setupHotkey()
@@ -180,7 +187,7 @@ final class AppDependencies {
             // Register hotkey as soon as accessibility is granted
             if !wasAccessible && self.hasAccessibilityPermission {
                 self.coordinator.setupToggleRecordingHotkey()
-                self.coordinator.setupEscCancel()
+                self.coordinator.setupCancelHotkey()
                 self.coordinator.setupDestinationHotkeys()
                 self.modeSwitcherCoordinator.setupHotkey()
                 self.captureCoordinator.setupHotkey()
@@ -218,7 +225,7 @@ extension AppDependencies: ModeSwitcherCoordinatorDelegate {
             // Panel is in pill state (recording/processing) — expand and show mode switcher
             let vm = modeSwitcherCoordinator.makeViewModel(onDismiss: { [weak self] in
                 self?.captureCoordinator.hideModeSwitcherAndMinimize()
-                self?.coordinator.resumeEscCancel()
+                self?.coordinator.resumeCancelHotkey()
             })
             captureCoordinator.showModeSwitcherOnPill(viewModel: vm)
             return true
@@ -226,7 +233,7 @@ extension AppDependencies: ModeSwitcherCoordinatorDelegate {
         if captureCoordinator.isModeSwitcherHostVisible {
             let vm = modeSwitcherCoordinator.makeViewModel(onDismiss: { [weak self] in
                 self?.captureCoordinator.hideModeSwitcher()
-                self?.coordinator.resumeEscCancel()
+                self?.coordinator.resumeCancelHotkey()
             })
             captureCoordinator.showModeSwitcher(viewModel: vm)
             return true
@@ -243,10 +250,10 @@ extension AppDependencies: ModeSwitcherCoordinatorDelegate {
     }
 
     func modeSwitcherDidShowContextual() {
-        coordinator.suspendEscCancel()
+        coordinator.suspendCancelHotkey()
     }
 
     func modeSwitcherDidHideContextual() {
-        coordinator.resumeEscCancel()
+        coordinator.resumeCancelHotkey()
     }
 }

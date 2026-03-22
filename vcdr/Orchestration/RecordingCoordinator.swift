@@ -43,7 +43,7 @@ final class RecordingCoordinator {
     let transcriptionProvider: any TranscriptionProvider
     private let audioRecorder: AudioRecorder
     let toggleRecordingHotkeyManager = GlobalHotkeyManager()
-    let escCancelManager = GlobalHotkeyManager()
+    let cancelHotkeyManager = GlobalHotkeyManager()
     let destinationHotkeyManager = DestinationHotkeyManager()
     private let mediaPlaybackController: MediaPlaybackController
     let recordingIndicator: RecordingIndicatorPanel
@@ -52,6 +52,13 @@ final class RecordingCoordinator {
     let overrides: ConversationOverrides
 
     @ObservationIgnored weak var delegate: RecordingCoordinatorDelegate?
+
+    /// Fallback handler for cancel hotkey when RecordingCoordinator is idle.
+    /// Wired by AppDependencies to CaptureCoordinator.cancelCapture().
+    @ObservationIgnored var onCancelFallback: (() -> Void)?
+
+    /// Whether the push-to-type pill is active and should keep the cancel hotkey enabled.
+    @ObservationIgnored private(set) var isPillCancelActive = false
 
     @ObservationIgnored var pendingDestinationOverride: UUID?
     @ObservationIgnored var recordingRun: RecordingRunState?
@@ -177,7 +184,7 @@ final class RecordingCoordinator {
         state = .recording
         recordingStartInstant = .now
         destinationHotkeyManager.isEnabled = true
-        updateEscCancel()
+        updateCancelHotkey()
 
         // Start clipboard monitoring only after SelectionCapturer finishes.
         // SelectionCapturer's Layer 2/3 manipulate the clipboard (copy → read → restore),
@@ -209,7 +216,7 @@ final class RecordingCoordinator {
 
         guard let audioURL = audioRecorder.stopRecording() else {
             Task { await mediaPlaybackController.resumeIfNeeded() }
-            escCancelManager.isEnabled = false
+            cancelHotkeyManager.isEnabled = false
             state = .error("No audio recorded")
             delegate?.recordingCoordinatorDidFailRecording(message: "No audio recorded")
             resetAfterDelay()
@@ -233,8 +240,13 @@ final class RecordingCoordinator {
         }
     }
 
+    func setPillCancelActive(_ active: Bool) {
+        isPillCancelActive = active
+        updateCancelHotkey()
+    }
+
     func cancelRecording() {
-        escCancelManager.isEnabled = false
+        cancelHotkeyManager.isEnabled = false
         destinationHotkeyManager.isEnabled = false
         pendingDestinationOverride = nil
 
