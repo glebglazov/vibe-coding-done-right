@@ -169,12 +169,11 @@ final class CapturePanel {
             resizePanelToExpanded()
         }
         if viewModel?.isRecording != true {
-            viewModel?.focusRequest += 1
             Task { @MainActor [weak self] in
-                // Wait for SwiftUI to lay out the expanded hosting view before
-                // making the panel key. Calling makeKey() immediately would fire
-                // becameKeyNotification before text views exist, wasting all
-                // focus retry attempts on a not-yet-ready view hierarchy.
+                // Wait for SwiftUI to lay out the expanded hosting view and
+                // the resize animation to complete before setting focus.
+                // The resize animation is 150ms; this 200ms delay ensures
+                // SegmentEditor NSTextViews exist and are in the window.
                 try? await Task.sleep(for: Self.expandFocusDelay)
                 guard let self,
                       self.isVisible,
@@ -182,7 +181,8 @@ final class CapturePanel {
                       let contentView = self.panel?.contentView,
                       let panel = self.panel else { return }
                 panel.makeKey()
-                self.focusActiveTextView(in: contentView, panel: panel)
+                let cursorPos = self.activeSegmentCursorPosition()
+                self.focusActiveTextView(in: contentView, panel: panel, cursorPosition: cursorPos)
             }
         } else {
             panel?.makeKey()
@@ -202,6 +202,20 @@ final class CapturePanel {
             viewModel.inputSegments.removeLast()
         }
         viewModel.activeSegmentIndex = min(viewModel.activeSegmentIndex, viewModel.inputSegments.count - 1)
+    }
+
+    // MARK: - Cursor Position
+
+    /// Resolves the cursor position for the active segment from saved state,
+    /// falling back to end-of-text. Used by `expand()` to pass cursor position
+    /// to the pure-AppKit `focusActiveTextView` path.
+    func activeSegmentCursorPosition() -> Int {
+        guard let viewModel else { return 0 }
+        let index = viewModel.activeSegmentIndex
+        guard viewModel.inputSegments.indices.contains(index) else { return 0 }
+        let segment = viewModel.inputSegments[index]
+        return viewModel.savedCursorPositions[segment.id]
+            ?? (segment.text as NSString).length
     }
 
     // MARK: - Panel Resize

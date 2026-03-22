@@ -53,7 +53,9 @@ extension CapturePanel {
 
     /// Focuses the NSTextView corresponding to `activeSegmentIndex`, falling back
     /// to the first text view if the target index is out of bounds.
-    func focusActiveTextView(in view: NSView, panel: NSPanel, cursorAtEnd: Bool = false) {
+    /// Pass `cursorPosition` to place the cursor at a specific character offset;
+    /// `nil` leaves the cursor wherever it currently sits.
+    func focusActiveTextView(in view: NSView, panel: NSPanel, cursorPosition: Int? = nil) {
         let targetIndex = viewModel?.activeSegmentIndex ?? 0
         Task { @MainActor in
             for _ in 0..<Self.focusMaxAttempts {
@@ -65,9 +67,9 @@ extension CapturePanel {
                     guard textView.window === panel else { continue }
                     panel.makeFirstResponder(textView)
                     if panel.firstResponder === textView {
-                        if cursorAtEnd {
+                        if let pos = cursorPosition {
                             let length = (textView.string as NSString).length
-                            textView.setSelectedRange(NSRange(location: length, length: 0))
+                            textView.setSelectedRange(NSRange(location: min(pos, length), length: 0))
                         }
                         // Force the insertion point (blinking cursor) to redraw and restart its
                         // blink timer. Without this, the cursor can be invisible when focus is set

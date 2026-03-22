@@ -87,6 +87,11 @@ struct SegmentEditor: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: loc, length: 0))
             if let window = nsView.window {
                 window.makeFirstResponder(textView)
+                if window.firstResponder === textView {
+                    // Force the insertion point to redraw — without this, the cursor
+                    // can be invisible when focus is set during a panel resize animation.
+                    textView.updateInsertionPointStateAndRestartTimer(true)
+                }
             } else {
                 // View not yet in a window (SwiftUI layout pending) — retry after a runloop cycle
                 context.coordinator.scheduleDeferredFocus(for: textView, cursorPosition: focusCursorPosition)
@@ -167,6 +172,7 @@ struct SegmentEditor: NSViewRepresentable {
                     let loc = min(cursorPosition, length)
                     textView.setSelectedRange(NSRange(location: loc, length: 0))
                     window.makeFirstResponder(textView)
+                    textView.updateInsertionPointStateAndRestartTimer(true)
                     return
                 }
             }

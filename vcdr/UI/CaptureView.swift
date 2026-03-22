@@ -123,17 +123,6 @@ struct CaptureView: View {
             hintBar
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius))
-    .onChange(of: viewModel.focusRequest, initial: true) { _, newValue in
-        guard newValue > 0 else { return }
-        let index = viewModel.activeSegmentIndex
-        guard index < viewModel.inputSegments.count else { return }
-        let segment = viewModel.inputSegments[index]
-        // Use saved cursor position if available (e.g., after dictation insertion),
-        // otherwise place cursor at end (e.g., first dictation, expand from pill).
-        focusCursorPosition[segment.id] = viewModel.savedCursorPositions[segment.id]
-            ?? (segment.text as NSString).length
-        focusTriggers[segment.id, default: 0] += 1
-    }
     }
 
     // MARK: - Header Bar
