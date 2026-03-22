@@ -239,11 +239,21 @@ extension CaptureCoordinator {
                 }
             }
 
+            // Hide panel before paste so the target app can receive focus.
+            // For outputPanel destinations the panel stays visible.
+            let shouldHideForAction = snapshot.destination.type != .outputPanel
+            if shouldHideForAction {
+                panel.orderOut()
+            }
+
             do {
                 try await SubmissionPipeline.executeAction(
                     context: snapshot.pipelineContext, processedText: result.processedText
                 )
             } catch {
+                if shouldHideForAction {
+                    panel.orderBack()
+                }
                 recoverFromActionError(
                     error, snapshot: snapshot, input: text, output: result.processedText,
                     hadExternalProcessing: result.hadExternalProcessing

@@ -101,6 +101,18 @@ final class CapturePanel {
         viewModel = nil
     }
 
+    /// Hides the panel window without tearing down state, so focus can
+    /// transfer to another app (e.g. before a paste action).
+    func orderOut() {
+        panel?.orderOut(nil)
+    }
+
+    /// Brings back a panel that was hidden via `orderOut()`.
+    func orderBack() {
+        panel?.orderFrontRegardless()
+        panel?.makeKey()
+    }
+
     var isVisible: Bool { panel != nil }
 
     var isMinimized: Bool { viewModel?.isMinimized ?? false }
