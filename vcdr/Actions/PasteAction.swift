@@ -31,7 +31,14 @@ struct PasteAction: PostTranscriptionAction {
             throw ActionError.accessibilityRequired
         }
 
-        let app = try await restoreFocus()
+        let app: NSRunningApplication?
+        if targetAppPID != nil {
+            // Paste to Initial App: restore focus to the captured PID
+            app = try await restoreFocus()
+        } else {
+            // Paste: use whatever app is currently frontmost
+            app = NSWorkspace.shared.frontmostApplication
+        }
 
         // Try AX streaming insertion first, fall back to clipboard paste
         if let app, try await insertViaAccessibility(text: text, targetApp: app) {
@@ -52,7 +59,15 @@ struct PasteAction: PostTranscriptionAction {
             return nil
         }
 
-        app.activate()
+        // Use NSWorkspace.openApplication to bring the target app to the front.
+        // NSRunningApplication.activate() and NSApp.yieldActivation(to:) are unreliable
+        // for activating a background app from a non-activating panel context.
+        if let bundleURL = app.bundleURL {
+            let config = NSWorkspace.OpenConfiguration()
+            config.activates = true
+            try? await NSWorkspace.shared.openApplication(at: bundleURL, configuration: config)
+        }
+
         // Poll until the target app is actually active, with timeout.
         // A fixed delay is unreliable — the app may be slow to activate
         // if the system is busy or another window holds focus.
@@ -61,7 +76,8 @@ struct PasteAction: PostTranscriptionAction {
             try await Task.sleep(for: Self.focusPollingInterval)
         }
         if !app.isActive {
-            Logger.actions.warning("Target app (pid \(pid)) did not gain focus within timeout, attempting paste anyway")
+            Logger.actions.warning("Target app (pid \(pid)) did not gain focus within timeout")
+            throw ActionError.executionFailed("Could not activate \(app.localizedName ?? "target app") — focus restoration failed")
         }
         return app
     }

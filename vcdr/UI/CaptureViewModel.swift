@@ -45,6 +45,8 @@ final class CaptureViewModel {
     let settings: AppSettings
     let overrides: ConversationOverrides
     let outputDestinations: [OutputDestination]
+    /// Name of the app that was frontmost when capture started, for display in "Paste to Initial App" labels.
+    var initialAppName: String?
 
     // MARK: - Callbacks
 
@@ -63,8 +65,24 @@ final class CaptureViewModel {
         return buildModeLabel(
             modeName: settings.activeMode.name,
             parameterLabels: overrides.resolvedParameterLabels(for: settings.activeMode),
-            destinationSymbol: destination.symbol
+            destinationSymbol: destinationDisplaySymbol(for: destination)
         )
+    }
+
+    /// Returns the destination symbol, enriched with the initial app name for `.pasteToInitialApp`.
+    private func destinationDisplaySymbol(for destination: OutputDestination) -> String {
+        if destination.type == .pasteToInitialApp, let appName = initialAppName {
+            return "\(destination.symbol) \(appName)"
+        }
+        return destination.symbol
+    }
+
+    /// Returns the display name for a destination, enriched for `.pasteToInitialApp`.
+    func destinationDisplayName(for destination: OutputDestination) -> String {
+        if destination.type == .pasteToInitialApp, let appName = initialAppName {
+            return "paste to \(appName)"
+        }
+        return destination.name.lowercased()
     }
 
     /// All captures across all inputSegments, preserving order.
@@ -222,14 +240,20 @@ final class CaptureViewModel {
 
     /// Checks if the event matches any output destination's activation hotkey.
     /// Uses superset modifier matching — extra modifiers are allowed.
+    /// When multiple destinations share the same keyCode, the most specific match
+    /// (most required modifier bits) wins, so Shift+Ctrl+P beats Ctrl+P.
     private func matchDestinationHotkey(_ event: NSEvent) -> UUID? {
         let eventFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
+        var bestMatch: (id: UUID, specificity: Int)?
         for destination in outputDestinations where destination.activationHotkey.isAssigned {
             let requiredFlags = UInt(destination.activationHotkey.modifiers)
             if event.keyCode == destination.activationHotkey.keyCode && (eventFlags & requiredFlags) == requiredFlags {
-                return destination.id
+                let specificity = requiredFlags.nonzeroBitCount
+                if bestMatch == nil || specificity > bestMatch!.specificity {
+                    bestMatch = (destination.id, specificity)
+                }
             }
         }
-        return nil
+        return bestMatch?.id
     }
 }

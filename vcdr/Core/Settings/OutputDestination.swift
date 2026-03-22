@@ -3,6 +3,7 @@ import CoreGraphics
 
 enum OutputDestinationType: String, Codable, CaseIterable {
     case paste
+    case pasteToInitialApp
     case bashScript
     case outputPanel
     case copy
@@ -15,6 +16,7 @@ enum OutputDestinationType: String, Codable, CaseIterable {
     var displayName: String {
         switch self {
         case .paste: "Paste (Cmd+V)"
+        case .pasteToInitialApp: "Paste to Initial App"
         case .bashScript: "Bash Script"
         case .outputPanel: "Output Panel"
         case .copy: "Copy to Clipboard"
@@ -30,7 +32,7 @@ struct OutputDestination: Identifiable, Equatable {
     var symbol: String
     var activationHotkey: HotkeyBinding
 
-    var isBuiltIn: Bool { type == .paste || type == .outputPanel || type == .copy }
+    var isBuiltIn: Bool { type == .paste || type == .pasteToInitialApp || type == .outputPanel || type == .copy }
 
     /// Derives a display character from the hotkey's keyCode (e.g. keyCode 8 → "C").
     /// Used in the mode switcher for bare-key matching and display.
@@ -89,6 +91,23 @@ struct OutputDestination: Identifiable, Equatable {
             activationHotkey: HotkeyBinding(
                 keyCode: 8, // C
                 modifiers: UInt64(CGEventFlags.maskControl.rawValue)
+            )
+        )
+    }
+
+    /// Well-known ID for the built-in Paste to Initial App destination.
+    static let builtInPasteToInitialAppID = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
+
+    static func makeDefaultPasteToInitialApp() -> OutputDestination {
+        OutputDestination(
+            id: builtInPasteToInitialAppID,
+            name: "Paste to Initial App",
+            type: .pasteToInitialApp,
+            bashCommand: "",
+            symbol: "📌",
+            activationHotkey: HotkeyBinding(
+                keyCode: 35, // P
+                modifiers: UInt64(CGEventFlags.maskControl.rawValue | CGEventFlags.maskShift.rawValue)
             )
         )
     }

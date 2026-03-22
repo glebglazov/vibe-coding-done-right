@@ -12,6 +12,8 @@ enum OutputActionFactory {
     ) -> (any PostTranscriptionAction)? {
         switch destination.type {
         case .paste:
+            return PasteAction(targetAppPID: nil, saveResultToClipboard: saveResultToClipboard)
+        case .pasteToInitialApp:
             return PasteAction(targetAppPID: targetAppPID, saveResultToClipboard: saveResultToClipboard)
         case .bashScript:
             return OutputBashAction(

@@ -78,13 +78,22 @@ final class DestinationHotkeyManager {
         let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
 
-        // Superset matching: event flags must contain all binding modifiers (extras are OK)
+        // Superset matching: event flags must contain all binding modifiers (extras are OK).
+        // When multiple bindings share the same keyCode, prefer the most specific match
+        // (most required modifier bits), so Shift+Ctrl+P beats Ctrl+P.
+        var bestMatch: (id: UUID, specificity: UInt32)?
         for binding in bindings {
             if keyCode == binding.keyCode && flags.intersection(binding.modifiers) == binding.modifiers {
-                Logger.hotkeys.debug("DestinationHotkeyManager: matched destination \(binding.id)")
-                onDestinationMatched?(binding.id)
-                return nil // Consume the event
+                let specificity = binding.modifiers.rawValue.nonzeroBitCount
+                if bestMatch == nil || specificity > bestMatch!.specificity {
+                    bestMatch = (binding.id, UInt32(specificity))
+                }
             }
+        }
+        if let match = bestMatch {
+            Logger.hotkeys.debug("DestinationHotkeyManager: matched destination \(match.id)")
+            onDestinationMatched?(match.id)
+            return nil // Consume the event
         }
 
         return Unmanaged.passUnretained(event)

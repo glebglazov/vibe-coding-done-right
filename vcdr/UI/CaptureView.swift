@@ -262,7 +262,7 @@ struct CaptureView: View {
                 .foregroundStyle(.secondary)
 
             ForEach(viewModel.outputDestinations.filter { $0.activationHotkey.isAssigned }) { dest in
-                hintLabel(dest.activationHotkey.displayString, dest.name.lowercased())
+                hintLabel(dest.activationHotkey.displayString, viewModel.destinationDisplayName(for: dest))
             }
 
             Spacer()

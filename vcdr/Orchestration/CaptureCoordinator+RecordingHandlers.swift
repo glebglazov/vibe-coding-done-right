@@ -129,6 +129,8 @@ extension CaptureCoordinator {
             session = PipelineSession()
             session?.previousActiveApp = result.previousActiveApp
         }
+        // Update the panel's initial app name now that previousActiveApp is known
+        panel.updateInitialAppName(session?.previousActiveApp?.localizedName)
         if session?.conversationID == nil {
             session?.conversationID = UUID()
         }

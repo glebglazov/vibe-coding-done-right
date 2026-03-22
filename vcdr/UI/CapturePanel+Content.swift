@@ -172,6 +172,10 @@ extension CapturePanel {
         }
     }
 
+    func updateInitialAppName(_ name: String?) {
+        viewModel?.initialAppName = name
+    }
+
     func signalClipboardCapture() {
         viewModel?.clipboardCaptureCount += 1
     }

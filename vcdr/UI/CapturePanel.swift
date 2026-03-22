@@ -36,6 +36,7 @@ final class CapturePanel {
         conversationTurns: [ConversationTurn] = [],
         inputSegments: [InputSegment] = [InputSegment()],
         outputDestinations: [OutputDestination] = [],
+        initialAppName: String? = nil,
         audioRecorder: AudioRecorder? = nil,
         minimized: Bool = false,
         onSubmit: @escaping (String) -> Void,
@@ -62,6 +63,7 @@ final class CapturePanel {
             },
             audioRecorder: audioRecorder
         )
+        viewModel.initialAppName = initialAppName
         viewModel.onCancelCapture = onCancelCapture
         viewModel.onContentHeightChanged = { [weak self] in
             self?.resizePanel()

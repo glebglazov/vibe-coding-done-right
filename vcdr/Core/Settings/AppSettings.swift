@@ -238,6 +238,9 @@ final class AppSettings {
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
             outputDestinations.append(OutputDestination.makeDefaultCopy())
         }
+        if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInPasteToInitialAppID }) {
+            outputDestinations.append(OutputDestination.makeDefaultPasteToInitialApp())
+        }
     }
 
     private func save() {

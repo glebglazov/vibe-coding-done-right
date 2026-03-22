@@ -174,6 +174,7 @@ final class CaptureCoordinator {
             conversationTurns: conversationTurns,
             inputSegments: resolvedSegments,
             outputDestinations: settings.outputDestinations,
+            initialAppName: session?.previousActiveApp?.localizedName,
             audioRecorder: audioRecorder,
             minimized: minimized,
             onSubmit: { [weak self] text in
