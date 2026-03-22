@@ -86,11 +86,9 @@ extension CaptureCoordinator {
         Task { await clipboardMonitor.stop() }
         accumulatedCaptures = []
         panel.unlockFollowUp()
-        guard panel.isVisible else { return }
-        flashPill(phase: .cancelled, shouldMinimize: true, duration: Self.pillFlashDuration)
-        if wasFreshPill {
-            scheduleAutoDismiss(after: Self.pillFlashDuration)
-        }
+        // Always cancel the entire capture — dismiss the panel immediately
+        // and show the grey cancel indicator. No intermediate pill flash.
+        cancelCapture()
     }
 
     func handleRecordingFailed(message: String) {
