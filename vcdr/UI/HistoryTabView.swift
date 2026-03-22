@@ -56,8 +56,7 @@ private struct ConversationRowView: View {
     let onDelete: () -> Void
 
     // MARK: - Constants
-    private static let previewLineLimit = 3
-    private static let selectionPreviewLineLimit = 2
+    private static let turnDividerVPadding: CGFloat = 4
 
     @State private var showCopied = false
 
@@ -65,7 +64,7 @@ private struct ConversationRowView: View {
         HStack(alignment: .top) {
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: 4) {
-                    // Turn count
+                    // Header: turn count + continue arrow
                     HStack(spacing: 6) {
                         if conversation.turns.count > 1 {
                             Text("\(conversation.turns.count) turns")
@@ -80,29 +79,22 @@ private struct ConversationRowView: View {
                         }
                     }
 
-                    // Preview text (first turn's input)
-                    Text(conversation.previewText)
-                        .lineLimit(Self.previewLineLimit)
+                    // Render all turns using shared ConversationTurnView
+                    let turns = conversationTurns
+                    let showLabels = shouldShowLabels(turns: turns)
+                    ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
+                        ConversationTurnView(
+                            turn: turn,
+                            showLabels: showLabels,
+                            modeName: conversation.hadExternalProcessing ? conversation.modeName : nil,
+                            isProcessing: false,
+                            showCopyButton: false
+                        )
 
-                    // Captured context preview (first turn's first capture only)
-                    if let firstCapture = conversation.turns.first?.captures.first {
-                        HStack(alignment: .top, spacing: 4) {
-                            Image(systemName: "text.quote")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                            Text(firstCapture.text)
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(Self.selectionPreviewLineLimit)
+                        if index < turns.count - 1 {
+                            Divider()
+                                .padding(.vertical, Self.turnDividerVPadding)
                         }
-                    }
-
-                    // If there are multiple turns, show last turn's output as secondary preview
-                    if conversation.turns.count > 1 {
-                        Text(conversation.latestOutput)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(Self.previewLineLimit)
                     }
 
                     // Timestamp
@@ -117,9 +109,9 @@ private struct ConversationRowView: View {
             }
             .buttonStyle(.plain)
 
-            // Copy latest output button — outside the row button to prevent press animation bleed
+            // Copy latest output (or input if no output) button
             Button {
-                copyToClipboard(conversation.latestOutput)
+                copyToClipboard(conversation.latestOutput ?? conversation.previewText)
             } label: {
                 Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
             }
@@ -139,7 +131,7 @@ private struct ConversationRowView: View {
             }
 
             Button("Copy Latest Output") {
-                copyToClipboard(conversation.latestOutput)
+                copyToClipboard(conversation.latestOutput ?? conversation.previewText)
             }
 
             Divider()
@@ -148,6 +140,20 @@ private struct ConversationRowView: View {
                 onDelete()
             }
         }
+    }
+
+    // MARK: - Helpers
+
+    private var conversationTurns: [ConversationTurn] {
+        conversation.turns
+    }
+
+    /// Same logic as CaptureViewModel.showConversationLabels
+    private func shouldShowLabels(turns: [ConversationTurn]) -> Bool {
+        if turns.count > 1 { return true }
+        guard let turn = turns.first else { return false }
+        if !turn.captures.isEmpty { return true }
+        return turn.output != nil
     }
 
     private func copyToClipboard(_ text: String) {

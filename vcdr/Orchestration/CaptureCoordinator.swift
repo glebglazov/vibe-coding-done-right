@@ -83,22 +83,35 @@ final class CaptureCoordinator {
     }
 
     func showFromHistory(conversation: Conversation, canContinue: Bool) {
-        let turns = conversation.turns.map { turn in
-            ConversationTurn(input: turn.input, output: turn.output, captures: turn.captures)
+        // Split turns: completed (with output) → conversation history,
+        // last unprocessed turn → editor segments (same as mid-capture state).
+        var completedTurns: [ConversationTurn] = []
+        var editorSegments: [InputSegment] = [InputSegment()]
+
+        for turn in conversation.turns where turn.output != nil {
+            completedTurns.append(turn)
+        }
+
+        // If the last turn has no output, restore its segments into the editor
+        if let lastTurn = conversation.turns.last, lastTurn.output == nil {
+            editorSegments = lastTurn.inputSegments.isEmpty ? [InputSegment()] : lastTurn.inputSegments
         }
 
         session = PipelineSession()
-        session?.conversationTurns = turns
+        session?.conversationTurns = completedTurns
+        // Use the SAME conversation ID — fork only happens on mutation
         session?.conversationID = conversation.id
-        if canContinue {
-            session?.followUpContext = conversation.latestOutput
+        // Always set historySourceConversationID so fork is triggered on first write
+        session?.historySourceConversationID = conversation.id
+        if let latestOutput = conversation.latestOutput {
+            session?.followUpContext = latestOutput
         }
 
-        configurePanelAndShow(conversationTurns: turns, segments: [InputSegment()])
+        configurePanelAndShow(conversationTurns: completedTurns, inputSegments: editorSegments)
         if conversation.hadExternalProcessing {
             panel.setProcessedByModeName(conversation.modeName)
         }
-        Logger.app.info("Capture view shown from history (canContinue=\(canContinue))")
+        Logger.app.info("Capture view shown from history")
     }
 
     func setupHotkey() {
@@ -148,18 +161,18 @@ final class CaptureCoordinator {
 
     func configurePanelAndShow(
         conversationTurns: [ConversationTurn] = [],
-        segments: [InputSegment]? = nil,
+        inputSegments: [InputSegment]? = nil,
         minimized: Bool = false
     ) {
         rewirePanelCallbacks()
 
-        let resolvedSegments = segments ?? [InputSegment()]
+        let resolvedSegments = inputSegments ?? [InputSegment()]
 
         panel.show(
             settings: settings,
             overrides: overrides,
             conversationTurns: conversationTurns,
-            segments: resolvedSegments,
+            inputSegments: resolvedSegments,
             outputDestinations: settings.outputDestinations,
             audioRecorder: audioRecorder,
             minimized: minimized,
@@ -191,6 +204,7 @@ final class CaptureCoordinator {
             overrides.clearIfCompletedPipeline()
             if session == nil {
                 session = PipelineSession()
+                session?.conversationID = UUID()
             }
             showPillForNewCapture()
             startExpandTimer()
@@ -284,7 +298,15 @@ final class CaptureCoordinator {
         Logger.app.info("Capture view: expanded from pill with \(newCaptures.count) clipboard captures")
     }
 
-    func dismissOverlay() {
+    func dismissOverlay(saveToHistory: Bool = true) {
+        // Persist any non-empty input to history before tearing down the session.
+        // For the recording flow a draft already exists (populateWithTranscription wrote it);
+        // this updates it with the latest panel text. For push-to-type this creates
+        // the initial history entry so dismissed captures are never lost.
+        if saveToHistory {
+            preserveCurrentInputToHistory()
+        }
+
         Task { await clipboardMonitor.stop() }
         onCancelHotkeyEnabled?(false)
         expandTimerTask?.cancel()
@@ -301,7 +323,7 @@ final class CaptureCoordinator {
         originalCapture = nil
         accumulatedCaptures = []
         overrides.clearAll()
-        Logger.app.info("Capture view dismissed (capture preserved in history)")
+        Logger.app.info("Capture view dismissed")
     }
 
     func dismissIfActive() {
@@ -315,9 +337,30 @@ final class CaptureCoordinator {
             transcriptionHistory.removeConversation(conversation)
             Logger.app.info("Capture cancelled and removed from history")
         }
-        // Use dismissOverlay's cleanup but override the pill with a cancel indicator
-        dismissOverlay()
+        // Use dismissOverlay's cleanup but override the pill with a cancel indicator.
+        // Pass saveToHistory: false — cancel explicitly removes from history above.
+        dismissOverlay(saveToHistory: false)
         recordingIndicator.showCancelled()
+    }
+
+    // MARK: - History Preservation
+
+    /// Saves the current panel content to history on dismiss so no input is lost.
+    private func preserveCurrentInputToHistory() {
+        guard let session, let conversationID = session.conversationID else { return }
+
+        // Viewing history without mutation — Escape discards, original stays intact
+        if session.historySourceConversationID != nil { return }
+
+        let segments = panel.viewModel?.inputSegments ?? []
+        let hasContent = segments.contains { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.capture != nil }
+        guard hasContent else { return }
+
+        recordOrUpdateHistory(
+            conversationID: conversationID,
+            inputSegments: segments, output: nil,
+            mode: settings.activeMode
+        )
     }
 
 }

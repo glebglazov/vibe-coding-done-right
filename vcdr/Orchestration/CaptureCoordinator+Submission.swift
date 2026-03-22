@@ -7,12 +7,13 @@ extension CaptureCoordinator {
     struct SubmissionSnapshot {
         let pipelineContext: SubmissionPipeline.Context
         let mode: Mode
-        let captures: [CapturedContext]
-        let hasUnsubmittedDraft: Bool
+        /// Raw input segments captured from the panel at submission time — stored in history as-is.
+        let inputSegments: [InputSegment]
         let conversationID: UUID
         let previousActiveApp: NSRunningApplication?
         let useStreaming: Bool
         let destination: OutputDestination
+        let historySourceConversationID: UUID?
     }
 
     func captureSubmissionSnapshot(text: String) -> SubmissionSnapshot {
@@ -31,10 +32,12 @@ extension CaptureCoordinator {
                 destination: destination, targetAppPID: ps.previousActiveApp?.processIdentifier,
                 saveResultToClipboard: mode.saveResultToClipboard
             ),
-            mode: mode, captures: ps.captures, hasUnsubmittedDraft: ps.hasUnsubmittedDraft,
+            mode: mode,
+            inputSegments: panel.viewModel?.inputSegments ?? [InputSegment()],
             conversationID: conversationID, previousActiveApp: ps.previousActiveApp,
             useStreaming: destination.type == .outputPanel && mode.processingType == .bashScript,
-            destination: destination
+            destination: destination,
+            historySourceConversationID: ps.historySourceConversationID
         )
     }
 
@@ -42,6 +45,7 @@ extension CaptureCoordinator {
         let conversationID = session?.conversationID ?? UUID()
         let destinationID = overrides.resolvedDestinationID(for: mode)
         let destination = settings.outputDestination(for: destinationID)
+        let quickSegments = Self.makeSegments(text: result.text, captures: result.captures)
         return SubmissionSnapshot(
             pipelineContext: .init(
                 text: result.text, mode: mode, captures: result.captures,
@@ -52,13 +56,31 @@ extension CaptureCoordinator {
                 destination: destination, targetAppPID: result.previousActiveApp?.processIdentifier,
                 saveResultToClipboard: mode.saveResultToClipboard
             ),
-            mode: mode, captures: result.captures, hasUnsubmittedDraft: false,
+            mode: mode,
+            inputSegments: quickSegments,
             conversationID: conversationID, previousActiveApp: result.previousActiveApp,
-            useStreaming: false, destination: destination
+            useStreaming: false, destination: destination,
+            historySourceConversationID: nil
         )
     }
 
+    /// Constructs segments from raw text + captures (for quick action / recording paths).
+    static func makeSegments(text: String, captures: [CapturedContext]) -> [InputSegment] {
+        guard let first = captures.first else {
+            return [InputSegment(text: text)]
+        }
+        var result = [InputSegment(text: text, capture: first)]
+        for capture in captures.dropFirst() {
+            result.append(InputSegment(capture: capture))
+        }
+        return result
+    }
+
     func submitText(_ text: String) {
+        // Ensure a history draft exists before submission. For recording sessions,
+        // populateWithTranscription already created the draft. For push-to-type sessions,
+        // this is the first write — it creates the capture record so Enter never adds a new one.
+        ensureDraftExists()
         let snapshot = captureSubmissionSnapshot(text: text)
         session = nil
         Logger.app.info("Capture view: executing pipeline")
@@ -76,7 +98,7 @@ extension CaptureCoordinator {
         _ error: Error, snapshot: SubmissionSnapshot,
         savedTurns: [ConversationTurn], savedSegments: [InputSegment]
     ) {
-        panel.restoreConversation(turns: savedTurns, segments: savedSegments, error: error.localizedDescription)
+        panel.restoreConversation(turns: savedTurns, inputSegments: savedSegments, error: error.localizedDescription)
         rebuildSessionAfterError(snapshot: snapshot, followUpContext: snapshot.pipelineContext.followUpContext)
         rewirePanelCallbacks()
         recordingIndicator.hide()
@@ -86,15 +108,15 @@ extension CaptureCoordinator {
     /// Recovers from an action failure — the turn is already visible, add error banner and record history.
     private func recoverFromActionError(
         _ error: Error, snapshot: SubmissionSnapshot,
-        input: String, output: String, hadExternalProcessing: Bool
+        output: String?
     ) {
         panel.setError(error.localizedDescription)
         panel.setSegments([InputSegment()])
         recordOrUpdateHistory(
-            hasUnsubmittedDraft: snapshot.hasUnsubmittedDraft,
             conversationID: snapshot.conversationID,
-            input: input, output: output, captures: snapshot.captures,
-            mode: snapshot.mode, hadExternalProcessing: hadExternalProcessing
+            inputSegments: snapshot.inputSegments, output: output,
+            mode: snapshot.mode,
+            historySourceConversationID: snapshot.historySourceConversationID
         )
         rebuildSessionAfterError(snapshot: snapshot)
         rewirePanelCallbacks()
@@ -108,7 +130,7 @@ extension CaptureCoordinator {
         let snapshot = captureQuickActionSnapshot(result: result, mode: mode)
 
         // Populate the panel with transcribed text so user can see it if they expand
-        panel.populateQuickActionText(inputText: result.text, captures: result.captures)
+        panel.populateQuickActionText(inputSegments: snapshot.inputSegments)
 
         quickActionTask = Task { @MainActor in
             let pipelineResult: SubmissionPipeline.Result
@@ -131,8 +153,7 @@ extension CaptureCoordinator {
             } catch {
                 guard !Task.isCancelled else { return }
                 recoverFromActionError(
-                    error, snapshot: snapshot, input: result.text, output: pipelineResult.processedText,
-                    hadExternalProcessing: pipelineResult.hadExternalProcessing
+                    error, snapshot: snapshot, output: pipelineResult.processedText
                 )
                 return
             }
@@ -150,7 +171,7 @@ extension CaptureCoordinator {
                 // Rebuild session for follow-up
                 session = PipelineSession()
                 session?.previousActiveApp = snapshot.previousActiveApp
-                session?.captures = snapshot.captures
+                session?.captures = snapshot.inputSegments.compactMap(\.capture)
                 session?.conversationID = snapshot.conversationID
                 session?.conversationTurns = panel.currentTurns
                 session?.followUpContext = pipelineResult.processedText
@@ -163,9 +184,8 @@ extension CaptureCoordinator {
 
             SubmissionPipeline.recordTurn(
                 history: transcriptionHistory, conversationID: snapshot.conversationID,
-                input: result.text, output: pipelineResult.processedText, captures: snapshot.captures,
-                modeID: snapshot.mode.id, modeName: snapshot.mode.name,
-                hadExternalProcessing: pipelineResult.hadExternalProcessing
+                inputSegments: snapshot.inputSegments, output: pipelineResult.processedText,
+                modeID: snapshot.mode.id, modeName: snapshot.mode.name
             )
             overrides.markPipelineCompleted()
             Logger.app.info("Quick action pipeline complete")
@@ -174,9 +194,9 @@ extension CaptureCoordinator {
 
     func executeStreamingSubmission(_ snapshot: SubmissionSnapshot, text: String) {
         let streamResult = SubmissionPipeline.runStreaming(context: snapshot.pipelineContext)
-        let savedSegments = panel.viewModel?.segments ?? [InputSegment()]
+        let savedSegments = panel.viewModel?.inputSegments ?? [InputSegment()]
         let savedTurns = panel.currentTurns
-        panel.startProcessing(inputText: text)
+        panel.startProcessing()
         recordingIndicator.hide()
 
         Task { @MainActor in
@@ -192,10 +212,10 @@ extension CaptureCoordinator {
                 }
                 panel.makeKeyIfVisible()
                 recordOrUpdateHistory(
-                    hasUnsubmittedDraft: snapshot.hasUnsubmittedDraft,
                     conversationID: snapshot.conversationID,
-                    input: text, output: accumulated, captures: snapshot.captures,
-                    mode: snapshot.mode, hadExternalProcessing: streamResult.hadExternalProcessing
+                    inputSegments: snapshot.inputSegments, output: accumulated,
+                    mode: snapshot.mode,
+                    historySourceConversationID: snapshot.historySourceConversationID
                 )
                 rebuildSessionForFollowUp(
                     conversationID: snapshot.conversationID,
@@ -214,10 +234,10 @@ extension CaptureCoordinator {
     }
 
     func executeNonStreamingSubmission(_ snapshot: SubmissionSnapshot, text: String) {
-        let savedSegments = panel.viewModel?.segments ?? [InputSegment()]
+        let savedSegments = panel.viewModel?.inputSegments ?? [InputSegment()]
         let savedTurns = panel.currentTurns
         if snapshot.mode.processingType == .bashScript {
-            panel.startProcessing(inputText: text)
+            panel.startProcessing()
         }
 
         Task { @MainActor in
@@ -255,8 +275,7 @@ extension CaptureCoordinator {
                     panel.orderBack()
                 }
                 recoverFromActionError(
-                    error, snapshot: snapshot, input: text, output: result.processedText,
-                    hadExternalProcessing: result.hadExternalProcessing
+                    error, snapshot: snapshot, output: result.processedText
                 )
                 return
             }
@@ -270,17 +289,32 @@ extension CaptureCoordinator {
                 recordingIndicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
             }
 
-            recordOrUpdateHistory(
-                hasUnsubmittedDraft: snapshot.hasUnsubmittedDraft,
-                conversationID: snapshot.conversationID,
-                input: text, output: result.processedText, captures: snapshot.captures,
-                mode: snapshot.mode, hadExternalProcessing: result.hadExternalProcessing
-            )
-            if panel.isVisible && result.hadExternalProcessing {
-                rebuildSessionForFollowUp(
+            if result.hadExternalProcessing {
+                // Processing produced output — update the turn with the result
+                recordOrUpdateHistory(
                     conversationID: snapshot.conversationID,
-                    followUpContext: result.processedText, previousActiveApp: snapshot.previousActiveApp
+                    inputSegments: snapshot.inputSegments, output: result.processedText,
+                    mode: snapshot.mode,
+                    historySourceConversationID: snapshot.historySourceConversationID
                 )
+            }
+            if panel.isVisible {
+                if result.hadExternalProcessing {
+                    // Processing: rebuild for follow-up (new turn on next Enter)
+                    rebuildSessionForFollowUp(
+                        conversationID: snapshot.conversationID,
+                        followUpContext: result.processedText,
+                        previousActiveApp: snapshot.previousActiveApp
+                    )
+                } else {
+                    // Non-processing: rebuild session but the draft turn in history
+                    // still has output == nil, so hasUnsubmittedDraft is naturally true —
+                    // subsequent Enters will update it, not create new turns.
+                    session = PipelineSession()
+                    session?.conversationID = snapshot.conversationID
+                    session?.conversationTurns = panel.currentTurns
+                    session?.previousActiveApp = snapshot.previousActiveApp
+                }
             }
             self.overrides.markPipelineCompleted()
             if panel.isVisible { self.rewirePanelCallbacks() }
@@ -291,27 +325,33 @@ extension CaptureCoordinator {
     // MARK: - Session & History Helpers
 
     func recordOrUpdateHistory(
-        hasUnsubmittedDraft: Bool, conversationID: UUID,
-        input: String, output: String, captures: [CapturedContext],
-        mode: Mode, hadExternalProcessing: Bool
+        conversationID: UUID,
+        inputSegments: [InputSegment], output: String?,
+        mode: Mode,
+        historySourceConversationID: UUID? = nil
     ) {
-        if hasUnsubmittedDraft {
+        // Fork: duplicate the source conversation under the new ID before the first write
+        if let sourceID = historySourceConversationID {
+            transcriptionHistory.duplicateConversation(originalID: sourceID, newID: conversationID)
+        }
+
+        if transcriptionHistory.hasUnsubmittedDraft(conversationID: conversationID) {
             SubmissionPipeline.updateLastTurn(
                 history: transcriptionHistory, conversationID: conversationID,
-                input: input, output: output, captures: captures,
-                modeID: mode.id, modeName: mode.name, hadExternalProcessing: hadExternalProcessing
+                inputSegments: inputSegments, output: output,
+                modeID: mode.id, modeName: mode.name
             )
         } else {
             SubmissionPipeline.recordTurn(
                 history: transcriptionHistory, conversationID: conversationID,
-                input: input, output: output, captures: captures,
-                modeID: mode.id, modeName: mode.name, hadExternalProcessing: hadExternalProcessing
+                inputSegments: inputSegments, output: output,
+                modeID: mode.id, modeName: mode.name
             )
         }
     }
 
     func rebuildSessionForFollowUp(
-        conversationID: UUID, followUpContext: String, previousActiveApp: NSRunningApplication?
+        conversationID: UUID, followUpContext: String?, previousActiveApp: NSRunningApplication?
     ) {
         session = PipelineSession()
         session?.conversationTurns = panel.currentTurns
@@ -329,5 +369,35 @@ extension CaptureCoordinator {
         session?.captures = panel.allCaptures
         session?.previousActiveApp = snapshot.previousActiveApp
         session?.followUpContext = followUpContext
+    }
+
+    /// Ensures a history record exists before any submission write.
+    /// - For history views: forks the conversation (new UUID, duplicate) on first mutation.
+    /// - For push-to-type sessions: creates the initial draft turn.
+    /// - For recording sessions: `populateWithTranscription` already created the draft — no-op.
+    private func ensureDraftExists() {
+        guard let session else { return }
+
+        // Fork from history view: duplicate the original conversation under a new UUID.
+        // Falls through to create a new draft turn if the last turn is completed.
+        if let sourceID = session.historySourceConversationID {
+            let newID = UUID()
+            transcriptionHistory.duplicateConversation(originalID: sourceID, newID: newID)
+            self.session?.conversationID = newID
+            self.session?.historySourceConversationID = nil
+        }
+
+        // Create the initial draft if one doesn't exist yet.
+        // After a fork with a completed last turn, this appends a new follow-up turn.
+        // If the last turn is already a draft, this is skipped — it will be updated.
+        guard let conversationID = self.session?.conversationID,
+              !transcriptionHistory.hasUnsubmittedDraft(conversationID: conversationID) else { return }
+
+        let segments = panel.viewModel?.inputSegments ?? [InputSegment()]
+        SubmissionPipeline.recordTurn(
+            history: transcriptionHistory, conversationID: conversationID,
+            inputSegments: segments, output: nil,
+            modeID: settings.activeMode.id, modeName: settings.activeMode.name
+        )
     }
 }

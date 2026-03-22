@@ -4,7 +4,7 @@ import SwiftUI
 final class CaptureViewModel {
     // MARK: - State
 
-    var segments: [InputSegment] = [InputSegment()]
+    var inputSegments: [InputSegment] = [InputSegment()]
     /// Index of the segment the cursor is currently in.
     /// Updated by SegmentEditor's onFocus callback when the user clicks into or types in an editor.
     /// Used by CaptureCoordinator to decide where to insert new captures.
@@ -70,34 +70,33 @@ final class CaptureViewModel {
         )
     }
 
-    /// All captures across all segments, preserving order.
+    /// All captures across all inputSegments, preserving order.
     var allCaptures: [CapturedContext] {
-        segments.compactMap(\.capture)
+        inputSegments.compactMap(\.capture)
     }
 
     /// Whether any segment has a capture.
     var hasCaptures: Bool {
-        segments.contains { $0.capture != nil }
+        inputSegments.contains { $0.capture != nil }
     }
 
-    /// Full text content across all segments (for checking emptiness, draft recording).
+    /// Full text content across all inputSegments (for checking emptiness, draft recording).
     var fullText: String {
-        segments.map(\.text).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        inputSegments.map(\.text).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Show "You:" / "Result:" labels when there are multiple turns,
-    /// or when the single turn's input was transformed by processing,
-    /// or when captured context is present.
+    /// when mode output is present, or when captured context is present.
     var showConversationLabels: Bool {
         if conversationTurns.count > 1 { return true }
         guard let turn = conversationTurns.first else { return false }
         if !turn.captures.isEmpty { return true }
-        return turn.input != turn.output
+        return turn.output != nil
     }
 
     /// Latest output text for copy/fire actions
     var latestText: String {
-        conversationTurns.last?.output ?? ""
+        conversationTurns.last(where: { $0.output != nil })?.output ?? ""
     }
 
     /// Mode label for the minimized pill: "Mode · params · dest symbol" + " ⚡" for quick action
@@ -113,7 +112,7 @@ final class CaptureViewModel {
         settings: AppSettings,
         overrides: ConversationOverrides,
         conversationTurns: [ConversationTurn] = [],
-        segments: [InputSegment] = [InputSegment()],
+        inputSegments: [InputSegment] = [InputSegment()],
         outputDestinations: [OutputDestination] = [],
         onSubmit: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void,
@@ -123,7 +122,7 @@ final class CaptureViewModel {
         self.settings = settings
         self.overrides = overrides
         self.conversationTurns = conversationTurns
-        self.segments = segments
+        self.inputSegments = inputSegments
         self.outputDestinations = outputDestinations
         self.onSubmit = onSubmit
         self.onDismiss = onDismiss
@@ -186,11 +185,11 @@ final class CaptureViewModel {
         }
     }
 
-    /// Builds interleaved submission text with `<capture-N>` tags from segments.
+    /// Builds interleaved submission text with `<capture-N>` tags from inputSegments.
     /// Falls back to first capture text for submit-without-typing.
     private func resolveSubmissionText() -> String {
-        // Trim trailing empty segments (no text, no capture) from submission
-        var effectiveSegments = segments
+        // Trim trailing empty inputSegments (no text, no capture) from submission
+        var effectiveSegments = inputSegments
         while effectiveSegments.count > 1,
               let last = effectiveSegments.last,
               last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

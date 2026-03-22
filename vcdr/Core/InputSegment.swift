@@ -1,6 +1,6 @@
 import Foundation
 
-struct InputSegment: Identifiable {
+struct InputSegment: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     var text: String
     var capture: CapturedContext?

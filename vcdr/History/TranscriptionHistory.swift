@@ -21,20 +21,12 @@ final class TranscriptionHistory {
     /// with the given ID doesn't exist yet; appends to existing otherwise.
     func recordTurn(
         conversationID: UUID,
-        input: String,
-        output: String,
-        captures: [CapturedContext],
+        inputSegments: [InputSegment],
+        output: String?,
         modeID: UUID,
-        modeName: String,
-        hadExternalProcessing: Bool = false
+        modeName: String
     ) {
-        let turn = Conversation.Turn(
-            id: UUID(),
-            input: input,
-            output: output,
-            captures: captures,
-            timestamp: .now
-        )
+        let turn = ConversationTurn(inputSegments: inputSegments, output: output)
 
         if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
             conversations[index].turns.append(turn)
@@ -48,8 +40,7 @@ final class TranscriptionHistory {
                 turns: [turn],
                 modeID: modeID,
                 modeName: modeName,
-                lastUpdated: .now,
-                hadExternalProcessing: hadExternalProcessing
+                lastUpdated: .now
             )
             conversations.insert(conversation, at: 0)
         }
@@ -64,31 +55,42 @@ final class TranscriptionHistory {
     /// Used for draft accumulation (follow-up dictations) and submission (updating output).
     func updateLastTurn(
         conversationID: UUID,
-        input: String,
-        output: String,
-        captures: [CapturedContext],
+        inputSegments: [InputSegment],
+        output: String?,
         modeID: UUID,
-        modeName: String,
-        hadExternalProcessing: Bool
+        modeName: String
     ) {
         guard let index = conversations.firstIndex(where: { $0.id == conversationID }),
               !conversations[index].turns.isEmpty else { return }
 
         let lastTurnIndex = conversations[index].turns.count - 1
         let existingTurn = conversations[index].turns[lastTurnIndex]
-        conversations[index].turns[lastTurnIndex] = Conversation.Turn(
+        conversations[index].turns[lastTurnIndex] = ConversationTurn(
             id: existingTurn.id,
-            input: input,
-            output: output,
-            captures: captures,
-            timestamp: .now
+            inputSegments: inputSegments,
+            output: output
         )
         conversations[index].lastUpdated = .now
-        conversations[index].hadExternalProcessing = hadExternalProcessing
 
         // Move to front (most recent)
         let conversation = conversations.remove(at: index)
         conversations.insert(conversation, at: 0)
+        save()
+    }
+
+    /// Duplicates a conversation under a new ID, preserving all turns.
+    /// Used when forking a historical conversation for follow-up.
+    func duplicateConversation(originalID: UUID, newID: UUID) {
+        guard let index = conversations.firstIndex(where: { $0.id == originalID }) else { return }
+        let original = conversations[index]
+        let duplicate = Conversation(
+            id: newID,
+            turns: original.turns,
+            modeID: original.modeID,
+            modeName: original.modeName,
+            lastUpdated: .now
+        )
+        conversations.insert(duplicate, at: 0)
         save()
     }
 
@@ -105,6 +107,14 @@ final class TranscriptionHistory {
     /// Latest conversation (newest first)
     var latestConversation: Conversation? {
         conversations.first
+    }
+
+    /// Whether the last turn of the given conversation has no output yet (is a draft).
+    func hasUnsubmittedDraft(conversationID: UUID) -> Bool {
+        guard let conversation = conversations.first(where: { $0.id == conversationID }) else {
+            return false
+        }
+        return conversation.turns.last?.output == nil
     }
 
     // MARK: - Persistence
@@ -136,20 +146,22 @@ final class TranscriptionHistory {
                 let captures: [CapturedContext] = record.capturedSelection.map {
                     [CapturedContext(text: $0, source: .selection)]
                 } ?? []
-                let turn = Conversation.Turn(
-                    id: UUID(),
-                    input: record.text,
-                    output: record.processedText ?? record.text,
-                    captures: captures,
-                    timestamp: record.timestamp
+                let legacyOutput: String? = (record.processedText != nil && record.processedText != record.text)
+                    ? record.processedText : nil
+                var segments = [InputSegment(text: record.text)]
+                if let capture = captures.first {
+                    segments[0] = InputSegment(text: record.text, capture: capture)
+                }
+                let turn = ConversationTurn(
+                    inputSegments: segments,
+                    output: legacyOutput
                 )
                 return Conversation(
                     id: UUID(),
                     turns: [turn],
                     modeID: UUID(), // Unknown — legacy records have no mode reference
                     modeName: "Unknown",
-                    lastUpdated: record.timestamp,
-                    hadExternalProcessing: record.processedText != nil && record.processedText != record.text
+                    lastUpdated: record.timestamp
                 )
             }
         }

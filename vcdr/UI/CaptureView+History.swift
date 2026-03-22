@@ -4,12 +4,6 @@ extension CaptureView {
     // MARK: - Constants
 
     private static let turnDividerVPadding: CGFloat = 4
-    private static let labelVPadding: CGFloat = 4
-    private static let copyButtonSize: CGFloat = 12
-    private static let blockquoteBorderWidth: CGFloat = 2
-    private static let blockquoteBorderSpacing: CGFloat = 6
-    private static let blockquoteBorderOpacity: Double = 0.4
-    private static let blockquoteLeadingPadding: CGFloat = 4
     private static let bottomAnchorID = "bottom"
 
     // MARK: - Conversation History
@@ -20,7 +14,13 @@ extension CaptureView {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(viewModel.conversationTurns.enumerated()), id: \.element.id) { index, turn in
                         let isProcessingTurn = viewModel.isProcessing && index == viewModel.conversationTurns.count - 1
-                        turnView(turn, showLabels: viewModel.showConversationLabels, isProcessingTurn: isProcessingTurn)
+                        ConversationTurnView(
+                            turn: turn,
+                            showLabels: viewModel.showConversationLabels,
+                            modeName: viewModel.processedByModeName,
+                            isProcessing: isProcessingTurn,
+                            showCopyButton: true
+                        )
 
                         if index < viewModel.conversationTurns.count - 1 {
                             Divider()
@@ -43,96 +43,9 @@ extension CaptureView {
         }
     }
 
-    @ViewBuilder
-    private func turnView(_ turn: ConversationTurn, showLabels: Bool, isProcessingTurn: Bool = false) -> some View {
-        if showLabels {
-            Text("You:")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, Self.labelVPadding)
-
-            turnInputView(turn)
-                .padding(.bottom, Self.labelVPadding)
-
-            HStack {
-                if !isProcessingTurn {
-                    copyButton(for: turn.output)
-                }
-                Text("Result:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let modeName = viewModel.processedByModeName {
-                    Text(modeName)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.15), in: Capsule())
-                        .foregroundStyle(Color.accentColor)
-                }
-                Spacer()
-            }
-            .padding(.bottom, Self.labelVPadding)
-        }
-
-        if isProcessingTurn && (turn.output.isEmpty || turn.output == "...") {
-            AnimatedDotsView()
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text(turn.output)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    // MARK: - Turn Input
-
-    /// Renders the turn's input text interleaved with capture blockquotes.
-    @ViewBuilder
-    private func turnInputView(_ turn: ConversationTurn) -> some View {
-        let parts = turn.parseInput()
-        ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
-            switch part {
-            case .text(let value):
-                Text(value)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            case .capture(let context):
-                captureBlockquote(context)
-            }
-        }
-    }
-
-    // MARK: - Capture Blockquote
+    // MARK: - Capture Blockquote (delegate to shared view)
 
     func captureBlockquote(_ capture: CapturedContext) -> some View {
-        HStack(alignment: .top, spacing: Self.blockquoteBorderSpacing) {
-            RoundedRectangle(cornerRadius: 1)
-                .fill(Color.secondary.opacity(Self.blockquoteBorderOpacity))
-                .frame(width: Self.blockquoteBorderWidth)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(capture.text)
-                    .font(.system(.callout))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(.leading, Self.blockquoteLeadingPadding)
-    }
-
-    // MARK: - Helpers
-
-    private func copyButton(for text: String) -> some View {
-        Button {
-            ClipboardHelper.writeString(text)
-        } label: {
-            Image(systemName: "doc.on.doc")
-                .font(.system(size: Self.copyButtonSize))
-                .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
+        CaptureBlockquoteView(capture: capture)
     }
 }

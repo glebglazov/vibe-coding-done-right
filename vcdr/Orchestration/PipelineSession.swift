@@ -22,6 +22,7 @@ struct PipelineSession {
     var followUpContext: String?
     var conversationTurns: [ConversationTurn] = []
     var conversationID: UUID?
-    /// Whether the current session has a draft Turn in history that hasn't been submitted yet.
-    var hasUnsubmittedDraft = false
+    /// When opened from history with canContinue, tracks the original conversation ID
+    /// so the first write can duplicate it under the new conversationID.
+    var historySourceConversationID: UUID?
 }

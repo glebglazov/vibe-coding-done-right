@@ -43,7 +43,7 @@ final class CopyLatestCaptureHandler {
             return
         }
 
-        let textToCopy = conversation.latestOutput
+        let textToCopy = conversation.latestOutput ?? conversation.previewText
         ClipboardHelper.writeString(textToCopy)
 
         recordingIndicator.showCopied()

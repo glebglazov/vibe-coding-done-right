@@ -83,42 +83,34 @@ enum SubmissionPipeline {
     static func recordTurn(
         history: TranscriptionHistory,
         conversationID: UUID,
-        input: String,
-        output: String,
-        captures: [CapturedContext],
+        inputSegments: [InputSegment],
+        output: String?,
         modeID: UUID,
-        modeName: String,
-        hadExternalProcessing: Bool
+        modeName: String
     ) {
         history.recordTurn(
             conversationID: conversationID,
-            input: input,
+            inputSegments: inputSegments,
             output: output,
-            captures: captures,
             modeID: modeID,
-            modeName: modeName,
-            hadExternalProcessing: hadExternalProcessing
+            modeName: modeName
         )
     }
 
     static func updateLastTurn(
         history: TranscriptionHistory,
         conversationID: UUID,
-        input: String,
-        output: String,
-        captures: [CapturedContext],
+        inputSegments: [InputSegment],
+        output: String?,
         modeID: UUID,
-        modeName: String,
-        hadExternalProcessing: Bool
+        modeName: String
     ) {
         history.updateLastTurn(
             conversationID: conversationID,
-            input: input,
+            inputSegments: inputSegments,
             output: output,
-            captures: captures,
             modeID: modeID,
-            modeName: modeName,
-            hadExternalProcessing: hadExternalProcessing
+            modeName: modeName
         )
     }
 }

@@ -132,8 +132,8 @@ struct CaptureView: View {
     .onChange(of: viewModel.focusRequest, initial: true) { _, newValue in
         guard newValue > 0 else { return }
         let index = viewModel.activeSegmentIndex
-        guard index < viewModel.segments.count else { return }
-        let segment = viewModel.segments[index]
+        guard index < viewModel.inputSegments.count else { return }
+        let segment = viewModel.inputSegments[index]
         // Use saved cursor position if available (e.g., after dictation insertion),
         // otherwise place cursor at end (e.g., first dictation, expand from pill).
         focusCursorPosition[segment.id] = viewModel.savedCursorPositions[segment.id]
@@ -194,7 +194,7 @@ struct CaptureView: View {
             }
 
             VStack(spacing: 0) {
-                ForEach(Array(viewModel.segments.enumerated()), id: \.element.id) { index, segment in
+                ForEach(Array(viewModel.inputSegments.enumerated()), id: \.element.id) { index, segment in
                     SegmentEditor(
                         text: segmentTextBinding(at: index),
                         isEditable: !viewModel.isProcessing,
@@ -206,22 +206,22 @@ struct CaptureView: View {
                             viewModel.savedCursorPositions[segment.id] = cursorPosition
                         },
                         onMoveUp: index > 0 ? {
-                            let target = viewModel.segments[index - 1]
+                            let target = viewModel.inputSegments[index - 1]
                             focusCursorPosition[target.id] = Int.max
                             focusTriggers[target.id, default: 0] += 1
                         } : nil,
                         onMoveDown: {
-                            if index < viewModel.segments.count - 1 {
+                            if index < viewModel.inputSegments.count - 1 {
                                 // Focus the next existing editor
-                                let target = viewModel.segments[index + 1]
+                                let target = viewModel.inputSegments[index + 1]
                                 focusCursorPosition[target.id] = 0
                                 focusTriggers[target.id, default: 0] += 1
                             } else if segment.capture != nil {
                                 // Last segment has a capture below — create a new
                                 // empty segment so the user can type after it.
                                 let newSegment = InputSegment()
-                                viewModel.segments.append(newSegment)
-                                viewModel.activeSegmentIndex = viewModel.segments.count - 1
+                                viewModel.inputSegments.append(newSegment)
+                                viewModel.activeSegmentIndex = viewModel.inputSegments.count - 1
                                 focusCursorPosition[newSegment.id] = 0
                                 // Defer focus request — the new SegmentEditor's NSTextView
                                 // must be in the window hierarchy before makeFirstResponder
@@ -254,10 +254,10 @@ struct CaptureView: View {
 
     private func segmentTextBinding(at index: Int) -> Binding<String> {
         Binding(
-            get: { viewModel.segments.indices.contains(index) ? viewModel.segments[index].text : "" },
+            get: { viewModel.inputSegments.indices.contains(index) ? viewModel.inputSegments[index].text : "" },
             set: { newValue in
-                guard viewModel.segments.indices.contains(index) else { return }
-                viewModel.segments[index].text = newValue
+                guard viewModel.inputSegments.indices.contains(index) else { return }
+                viewModel.inputSegments[index].text = newValue
             }
         )
     }

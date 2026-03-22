@@ -19,9 +19,9 @@ extension CapturePanel {
         return visibleHeight * panelMaxHeightFraction
     }
 
-    static func calculateHeight(for turns: [ConversationTurn], segments: [InputSegment] = [InputSegment()], segmentHeights: [UUID: CGFloat] = [:], hasError: Bool = false) -> CGFloat {
+    static func calculateHeight(for turns: [ConversationTurn], inputSegments: [InputSegment] = [InputSegment()], segmentHeights: [UUID: CGFloat] = [:], hasError: Bool = false) -> CGFloat {
         var segmentContentHeight: CGFloat = 0
-        for segment in segments {
+        for segment in inputSegments {
             // Use layout-reported height if available (accounts for soft wraps),
             // otherwise fall back to newline counting.
             if let reportedHeight = segmentHeights[segment.id], reportedHeight > 0 {
@@ -48,10 +48,12 @@ extension CapturePanel {
 
         var totalLines: CGFloat = 0
         for (index, turn) in turns.enumerated() {
-            totalLines += labelLineHeight / lineHeight
+            totalLines += labelLineHeight / lineHeight  // "You:" label
             totalLines += CGFloat(turn.input.components(separatedBy: .newlines).count)
-            totalLines += labelLineHeight / lineHeight
-            totalLines += CGFloat(turn.output.components(separatedBy: .newlines).count)
+            if let output = turn.output {
+                totalLines += labelLineHeight / lineHeight  // "Result:" label
+                totalLines += CGFloat(output.components(separatedBy: .newlines).count)
+            }
 
             for capture in turn.captures {
                 totalLines += labelLineHeight / lineHeight

@@ -113,10 +113,10 @@ enum TextProcessingPipeline {
             messages.append(["role": "system", "content": mode.systemPrompt])
         }
 
-        // Previous turns as user/assistant pairs
-        for turn in turns {
+        // Previous turns as user/assistant pairs (only include turns with mode output)
+        for turn in turns where turn.output != nil {
             messages.append(["role": "user", "content": userContent(input: turn.input, captures: turn.captures)])
-            messages.append(["role": "assistant", "content": turn.output])
+            messages.append(["role": "assistant", "content": turn.output!])
         }
 
         // Current input as the latest user message

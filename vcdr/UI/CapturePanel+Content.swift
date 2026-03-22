@@ -6,15 +6,15 @@ extension CapturePanel {
     func appendTextToActiveSegment(_ text: String) {
         guard let viewModel else { return }
         let index = viewModel.activeSegmentIndex
-        guard viewModel.segments.indices.contains(index) else { return }
+        guard viewModel.inputSegments.indices.contains(index) else { return }
 
-        let segment = viewModel.segments[index]
+        let segment = viewModel.inputSegments[index]
         let cursorPos = viewModel.savedCursorPositions[segment.id] ?? (segment.text as NSString).length
         let nsText = segment.text as NSString
         let clampedPos = min(cursorPos, nsText.length)
 
         // Insert at cursor position instead of appending to end
-        viewModel.segments[index].text = nsText.replacingCharacters(
+        viewModel.inputSegments[index].text = nsText.replacingCharacters(
             in: NSRange(location: clampedPos, length: 0),
             with: text
         )
@@ -26,40 +26,40 @@ extension CapturePanel {
 
     func appendSegment(_ segment: InputSegment) {
         guard let viewModel else { return }
-        viewModel.segments.append(segment)
-        viewModel.activeSegmentIndex = viewModel.segments.count - 1
+        viewModel.inputSegments.append(segment)
+        viewModel.activeSegmentIndex = viewModel.inputSegments.count - 1
         resizePanel()
     }
 
     func addClipboardCapture(_ capture: CapturedContext) {
         guard let viewModel else { return }
         let activeIndex = viewModel.activeSegmentIndex
-        if viewModel.segments[activeIndex].capture == nil {
+        if viewModel.inputSegments[activeIndex].capture == nil {
             // Active segment has no capture — attach to it
-            viewModel.segments[activeIndex].capture = capture
+            viewModel.inputSegments[activeIndex].capture = capture
         } else {
             // Active segment already has a capture — insert new segment after it
             let segment = InputSegment(capture: capture)
-            let insertIndex = min(activeIndex + 1, viewModel.segments.count)
-            viewModel.segments.insert(segment, at: insertIndex)
+            let insertIndex = min(activeIndex + 1, viewModel.inputSegments.count)
+            viewModel.inputSegments.insert(segment, at: insertIndex)
             viewModel.activeSegmentIndex = insertIndex
         }
         resizePanel()
     }
 
     func setCapture(_ capture: CapturedContext, onSegmentAt index: Int) {
-        guard let viewModel, viewModel.segments.indices.contains(index) else { return }
-        viewModel.segments[index].capture = capture
+        guard let viewModel, viewModel.inputSegments.indices.contains(index) else { return }
+        viewModel.inputSegments[index].capture = capture
         resizePanel()
     }
 
     func setSegments(_ segments: [InputSegment]) {
-        viewModel?.segments = segments
+        viewModel?.inputSegments = segments
         viewModel?.activeSegmentIndex = max(0, segments.count - 1)
         resizePanel()
     }
 
-    var segmentCount: Int { viewModel?.segments.count ?? 0 }
+    var segmentCount: Int { viewModel?.inputSegments.count ?? 0 }
     var allCaptures: [CapturedContext] { viewModel?.allCaptures ?? [] }
     var fullText: String { viewModel?.fullText ?? "" }
 
@@ -67,22 +67,22 @@ extension CapturePanel {
     /// Creates a pending conversation turn with "..." output so the history view
     /// shows "You: [text]" + "Result: [animated dots]" when expanded.
     /// Does NOT minimize — the panel is already minimized from recording start.
-    func populateQuickActionText(inputText: String, captures: [CapturedContext]) {
-        let pendingTurn = ConversationTurn(input: inputText, output: "...", captures: captures)
+    func populateQuickActionText(inputSegments: [InputSegment]) {
+        let pendingTurn = ConversationTurn(inputSegments: inputSegments, output: "...")
         viewModel?.conversationTurns.append(pendingTurn)
         viewModel?.errorMessage = nil
         // Phase is already .processing from handleTranscribing → setPhase(.processing)
-        viewModel?.segments = [InputSegment()]
+        viewModel?.inputSegments = [InputSegment()]
         viewModel?.scrollTrigger += 1
     }
 
-    func startProcessing(inputText: String) {
-        let captures = viewModel?.allCaptures ?? []
-        let pendingTurn = ConversationTurn(input: inputText, output: "...", captures: captures)
+    func startProcessing() {
+        let currentSegments = viewModel?.inputSegments ?? [InputSegment()]
+        let pendingTurn = ConversationTurn(inputSegments: currentSegments, output: "...")
         viewModel?.conversationTurns.append(pendingTurn)
         viewModel?.errorMessage = nil
         viewModel?.phase = .processing
-        viewModel?.segments = [InputSegment()]
+        viewModel?.inputSegments = [InputSegment()]
         viewModel?.scrollTrigger += 1
         minimize()
     }
@@ -91,7 +91,7 @@ extension CapturePanel {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
-        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText, captures: lastTurn.captures)
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, inputSegments: lastTurn.inputSegments, output: outputText)
         viewModel.phase = .idle
         viewModel.scrollTrigger += 1
         expand()
@@ -101,7 +101,7 @@ extension CapturePanel {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
-        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: text, captures: lastTurn.captures)
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, inputSegments: lastTurn.inputSegments, output: text)
         viewModel.scrollTrigger += 1
 
         if viewModel.isMinimized {
@@ -119,7 +119,7 @@ extension CapturePanel {
         guard let viewModel, !viewModel.conversationTurns.isEmpty else { return }
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
-        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, input: lastTurn.input, output: outputText, captures: lastTurn.captures)
+        viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, inputSegments: lastTurn.inputSegments, output: outputText)
         viewModel.phase = .idle
         viewModel.scrollTrigger += 1
         resizePanel()
@@ -146,11 +146,11 @@ extension CapturePanel {
     /// Restores the full conversation state from before submission and shows an error.
     /// Called when the pipeline or action fails so the user sees their original
     /// conversation + input and can fix the issue and retry.
-    func restoreConversation(turns: [ConversationTurn], segments: [InputSegment], error message: String) {
+    func restoreConversation(turns: [ConversationTurn], inputSegments: [InputSegment], error message: String) {
         guard let viewModel else { return }
         viewModel.conversationTurns = turns
-        viewModel.segments = segments
-        viewModel.activeSegmentIndex = max(0, segments.count - 1)
+        viewModel.inputSegments = inputSegments
+        viewModel.activeSegmentIndex = max(0, inputSegments.count - 1)
         viewModel.errorMessage = message
         viewModel.phase = .error
         if viewModel.isMinimized {
@@ -214,7 +214,7 @@ extension CapturePanel {
               !viewModel.conversationTurns.isEmpty else {
             return nil
         }
-        let latestText = viewModel.conversationTurns.last?.output ?? ""
+        let latestText = viewModel.conversationTurns.last(where: { $0.output != nil })?.output ?? viewModel.conversationTurns.last?.input ?? ""
         return FollowUpState(turns: viewModel.conversationTurns, text: latestText)
     }
 

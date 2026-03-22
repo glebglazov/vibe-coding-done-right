@@ -150,25 +150,25 @@ extension CaptureCoordinator {
         panel.expand()
         recordingIndicator.hide()
 
-        if session?.hasUnsubmittedDraft == true {
-            let fullText = panel.fullText
-            recordOrUpdateHistory(
-                hasUnsubmittedDraft: true,
-                conversationID: currentConversationID,
-                input: fullText, output: fullText,
-                captures: session?.captures ?? [],
-                mode: settings.activeMode, hadExternalProcessing: false
-            )
-        } else {
-            recordOrUpdateHistory(
-                hasUnsubmittedDraft: false,
-                conversationID: currentConversationID,
-                input: result.text, output: result.text,
-                captures: newCaptures,
-                mode: settings.activeMode, hadExternalProcessing: false
-            )
-            session?.hasUnsubmittedDraft = true
+        // Fork from history view if needed (recording = mutation)
+        if let sourceID = session?.historySourceConversationID {
+            let newID = UUID()
+            transcriptionHistory.duplicateConversation(originalID: sourceID, newID: newID)
+            session?.conversationID = newID
+            session?.historySourceConversationID = nil
         }
+
+        // Re-read conversationID after potential fork
+        guard let conversationID = session?.conversationID else { return }
+
+        // Store the panel's current segments as-is for a faithful history record.
+        // Drafts have no mode output yet — output is nil until submission.
+        let currentSegments = panel.viewModel?.inputSegments ?? [InputSegment()]
+        recordOrUpdateHistory(
+            conversationID: conversationID,
+            inputSegments: currentSegments, output: nil,
+            mode: settings.activeMode
+        )
 
         overrides.markPipelineCompleted()
         Logger.app.info("Pipeline: handed to capture view")
@@ -203,9 +203,9 @@ extension CaptureCoordinator {
         return InputSegment(text: text)
     }
 
-    func showPanelWithSegments(_ segments: [InputSegment]) {
+    func showPanelWithSegments(_ inputSegments: [InputSegment]) {
         let turns = session?.conversationTurns ?? []
-        configurePanelAndShow(conversationTurns: turns, segments: segments)
+        configurePanelAndShow(conversationTurns: turns, inputSegments: inputSegments)
     }
 
     func showPanelMinimized(phase: CaptureViewModel.CapturePhase) {
