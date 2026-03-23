@@ -31,19 +31,18 @@ struct PasteAction: PostTranscriptionAction {
             throw ActionError.accessibilityRequired
         }
 
-        let app: NSRunningApplication?
-        if targetAppPID != nil {
-            // Paste to Initial App: restore focus to the captured PID
-            app = try await restoreFocus()
+        if let targetAppPID {
+            // Paste to Initial App: restore focus, then try AX insertion
+            let app = try await restoreFocus()
+            if let app, try await insertViaAccessibility(text: text, targetApp: app) {
+                Logger.actions.info("Paste completed via AX streaming insertion")
+            } else {
+                try await clipboardPaste(text: text)
+            }
         } else {
-            // Paste: use whatever app is currently frontmost
-            app = NSWorkspace.shared.frontmostApplication
-        }
-
-        // Try AX streaming insertion first, fall back to clipboard paste
-        if let app, try await insertViaAccessibility(text: text, targetApp: app) {
-            Logger.actions.info("Paste completed via AX streaming insertion")
-        } else {
+            // Regular Paste: clipboard paste into whatever app is frontmost.
+            // AX insertion is skipped — after panel.orderOut(), the AX focused
+            // element may still be in our panel rather than the target app.
             try await clipboardPaste(text: text)
         }
 
