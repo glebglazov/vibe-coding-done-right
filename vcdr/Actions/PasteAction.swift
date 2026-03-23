@@ -17,9 +17,6 @@ struct PasteAction: PostTranscriptionAction {
     private static let focusRestorationTimeout: Duration = .milliseconds(500)
     /// Polling interval when waiting for the target app to become active
     private static let focusPollingInterval: Duration = .milliseconds(20)
-    /// Delay between word chunk insertions during AX streaming paste.
-    /// Allows the target app's run loop to render each chunk.
-    private static let streamingInterWordDelay: Duration = .milliseconds(10)
 
     init(targetAppPID: pid_t? = nil, saveResultToClipboard: Bool = false) {
         self.targetAppPID = targetAppPID
@@ -31,31 +28,26 @@ struct PasteAction: PostTranscriptionAction {
             throw ActionError.accessibilityRequired
         }
 
-        if let targetAppPID {
-            // Paste to Initial App: restore focus, then try AX insertion
-            let app = try await restoreFocus()
-            if let app, try await insertViaAccessibility(text: text, targetApp: app) {
-                Logger.actions.info("Paste completed via AX streaming insertion")
-            } else {
-                try await clipboardPaste(text: text)
-            }
-        } else {
-            // Regular Paste: clipboard paste into whatever app is frontmost.
-            // AX insertion is skipped — after panel.orderOut(), the AX focused
-            // element may still be in our panel rather than the target app.
-            try await clipboardPaste(text: text)
+        if targetAppPID != nil {
+            // Paste to Initial App: restore focus to the captured PID
+            try await restoreFocus()
         }
+
+        // Always use clipboard paste — AX insertion via kAXSelectedTextAttribute
+        // is unreliable (e.g. HTML inputs in browsers accept the attribute set
+        // but don't render the text). Clipboard + Cmd+V works universally.
+        try await clipboardPaste(text: text)
 
         return nil
     }
 
     // MARK: - Focus Restoration
 
-    private func restoreFocus() async throws -> NSRunningApplication? {
+    private func restoreFocus() async throws {
         guard let pid = targetAppPID,
               let app = NSRunningApplication(processIdentifier: pid),
               !app.isTerminated else {
-            return nil
+            return
         }
 
         // Use NSWorkspace.openApplication to bring the target app to the front.
@@ -78,67 +70,9 @@ struct PasteAction: PostTranscriptionAction {
             Logger.actions.warning("Target app (pid \(pid)) did not gain focus within timeout")
             throw ActionError.executionFailed("Could not activate \(app.localizedName ?? "target app") — focus restoration failed")
         }
-        return app
     }
 
-    // MARK: - AX Streaming Insertion
-
-    /// Inserts text word-by-word at the cursor via the Accessibility API.
-    /// Returns `true` if AX insertion was used (even partially), `false` if the
-    /// focused element doesn't support it — caller should fall back to clipboard.
-    private func insertViaAccessibility(text: String, targetApp: NSRunningApplication) async throws -> Bool {
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedRef
-        ) == .success, let focusedRef else {
-            return false
-        }
-
-        // CFTypeRef from kAXFocusedUIElementAttribute is always an AXUIElement
-        let element = unsafeBitCast(focusedRef, to: AXUIElement.self)
-
-        // Verify the focused element supports text insertion
-        var settable: DarwinBoolean = false
-        guard AXUIElementIsAttributeSettable(
-            element,
-            kAXSelectedTextAttribute as CFString,
-            &settable
-        ) == .success, settable.boolValue else {
-            return false
-        }
-
-        // Split into word + trailing whitespace chunks to stream progressively
-        let chunks = text.matches(of: #/\S+\s*/#).map { String($0.output) }
-        guard !chunks.isEmpty else { return false }
-
-        for chunk in chunks {
-            // Stop if the user switched away from the target app
-            guard targetApp.isActive else {
-                Logger.actions.info("Target app lost focus during streaming paste, stopped early")
-                break
-            }
-
-            let result = AXUIElementSetAttributeValue(
-                element,
-                kAXSelectedTextAttribute as CFString,
-                chunk as CFString
-            )
-            guard result == .success else {
-                Logger.actions.warning("AX text insertion failed with error \(result.rawValue)")
-                // Partial text may already be inserted — don't fall back to clipboard
-                return true
-            }
-
-            try await Task.sleep(for: Self.streamingInterWordDelay)
-        }
-
-        return true
-    }
-
-    // MARK: - Clipboard Paste Fallback
+    // MARK: - Clipboard Paste
 
     private func clipboardPaste(text: String) async throws {
         // When not saving result to clipboard, use concealed write + restore
