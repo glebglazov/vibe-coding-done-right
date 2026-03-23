@@ -182,10 +182,9 @@ extension CaptureCoordinator {
                 recordingIndicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
             }
 
-            SubmissionPipeline.recordTurn(
-                history: transcriptionHistory, conversationID: snapshot.conversationID,
-                inputSegments: snapshot.inputSegments, output: pipelineResult.processedText,
-                modeID: snapshot.mode.id, modeName: snapshot.mode.name
+            finalizeHistory(
+                snapshot: snapshot, processedText: pipelineResult.processedText,
+                hadExternalProcessing: pipelineResult.hadExternalProcessing
             )
             overrides.markPipelineCompleted()
             Logger.app.info("Quick action pipeline complete")
@@ -211,11 +210,9 @@ extension CaptureCoordinator {
                     panel.setProcessedByModeName(snapshot.mode.name)
                 }
                 panel.makeKeyIfVisible()
-                recordOrUpdateHistory(
-                    conversationID: snapshot.conversationID,
-                    inputSegments: snapshot.inputSegments, output: accumulated,
-                    mode: snapshot.mode,
-                    historySourceConversationID: snapshot.historySourceConversationID
+                finalizeHistory(
+                    snapshot: snapshot, processedText: accumulated,
+                    hadExternalProcessing: streamResult.hadExternalProcessing
                 )
                 rebuildSessionForFollowUp(
                     conversationID: snapshot.conversationID,
@@ -289,15 +286,10 @@ extension CaptureCoordinator {
                 recordingIndicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
             }
 
-            if result.hadExternalProcessing {
-                // Processing produced output — update the turn with the result
-                recordOrUpdateHistory(
-                    conversationID: snapshot.conversationID,
-                    inputSegments: snapshot.inputSegments, output: result.processedText,
-                    mode: snapshot.mode,
-                    historySourceConversationID: snapshot.historySourceConversationID
-                )
-            }
+            finalizeHistory(
+                snapshot: snapshot, processedText: result.processedText,
+                hadExternalProcessing: result.hadExternalProcessing
+            )
             if panel.isVisible {
                 if result.hadExternalProcessing {
                     // Processing: rebuild for follow-up (new turn on next Enter)
@@ -323,6 +315,18 @@ extension CaptureCoordinator {
     }
 
     // MARK: - Session & History Helpers
+
+    /// Single entry point for recording a completed submission to history.
+    /// Encapsulates the rule: output is only stored when external processing occurred.
+    func finalizeHistory(snapshot: SubmissionSnapshot, processedText: String, hadExternalProcessing: Bool) {
+        let output = hadExternalProcessing ? processedText : nil
+        recordOrUpdateHistory(
+            conversationID: snapshot.conversationID,
+            inputSegments: snapshot.inputSegments, output: output,
+            mode: snapshot.mode,
+            historySourceConversationID: snapshot.historySourceConversationID
+        )
+    }
 
     func recordOrUpdateHistory(
         conversationID: UUID,
