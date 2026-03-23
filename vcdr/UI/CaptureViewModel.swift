@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 @Observable
 final class CaptureViewModel {
@@ -244,6 +245,13 @@ final class CaptureViewModel {
     /// (most required modifier bits) wins, so Shift+Ctrl+P beats Ctrl+P.
     private func matchDestinationHotkey(_ event: NSEvent) -> UUID? {
         let eventFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
+        let hasControlModifier = event.modifierFlags.contains(.control)
+        if hasControlModifier {
+            Logger.hotkeys.debug("Destination hotkey check: keyCode=\(event.keyCode) eventFlags=0x\(String(eventFlags, radix: 16)) destinations=\(self.outputDestinations.count)")
+            for destination in outputDestinations where destination.activationHotkey.isAssigned {
+                Logger.hotkeys.debug("  dest '\(destination.name)': keyCode=\(destination.activationHotkey.keyCode) modifiers=0x\(String(destination.activationHotkey.modifiers, radix: 16))")
+            }
+        }
         var bestMatch: (id: UUID, specificity: Int)?
         for destination in outputDestinations where destination.activationHotkey.isAssigned {
             let requiredFlags = UInt(destination.activationHotkey.modifiers)
@@ -252,6 +260,14 @@ final class CaptureViewModel {
                 if bestMatch == nil || specificity > bestMatch!.specificity {
                     bestMatch = (destination.id, specificity)
                 }
+            }
+        }
+        if hasControlModifier {
+            if let match = bestMatch {
+                let dest = outputDestinations.first { $0.id == match.id }
+                Logger.hotkeys.debug("Destination hotkey matched: '\(dest?.name ?? "unknown")'")
+            } else {
+                Logger.hotkeys.debug("Destination hotkey: no match for keyCode=\(event.keyCode)")
             }
         }
         return bestMatch?.id

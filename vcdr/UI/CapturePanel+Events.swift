@@ -58,7 +58,7 @@ extension CapturePanel {
     func focusActiveTextView(in view: NSView, panel: NSPanel, cursorPosition: Int? = nil) {
         let targetIndex = viewModel?.activeSegmentIndex ?? 0
         Task { @MainActor in
-            for _ in 0..<Self.focusMaxAttempts {
+            for attempt in 0..<Self.focusMaxAttempts {
                 let textViews = Self.findAllTextViews(in: view)
                 let index = min(targetIndex, textViews.count - 1)
                 if index >= 0, index < textViews.count {
@@ -76,13 +76,14 @@ extension CapturePanel {
                         // during a panel resize animation — makeFirstResponder succeeds but the
                         // insertion point never draws at the final frame size.
                         textView.updateInsertionPointStateAndRestartTimer(true)
+                        Logger.ui.debug("Capture panel: focused text view at index \(index) on attempt \(attempt), panelIsKey=\(panel.isKeyWindow)")
                         return
                     }
                 }
                 try? await Task.sleep(for: Self.focusRetryDelay)
             }
             let textViewCount = Self.findAllTextViews(in: view).count
-            Logger.ui.warning("Capture panel: failed to focus text view at index \(targetIndex) after \(Self.focusMaxAttempts) attempts (found \(textViewCount) text views)")
+            Logger.ui.warning("Capture panel: failed to focus text view at index \(targetIndex) after \(Self.focusMaxAttempts) attempts (found \(textViewCount) text views, panelIsKey=\(panel.isKeyWindow))")
         }
     }
 

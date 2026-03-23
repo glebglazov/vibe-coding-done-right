@@ -141,7 +141,18 @@ struct SegmentEditor: NSViewRepresentable {
             parent.onFocus(textView.selectedRange().location)
         }
 
+        /// Selectors for Cocoa text editing keybindings that should be suppressed.
+        /// These are standard Ctrl+key shortcuts (e.g. Ctrl+T = transpose, Ctrl+O = insertNewlineIgnoringFieldEditor)
+        /// that conflict with destination hotkeys and have no useful purpose in the capture editor.
+        private static let suppressedSelectors: Set<Selector> = [
+            #selector(NSResponder.transpose(_:)),
+            #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)),
+        ]
+
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if Self.suppressedSelectors.contains(commandSelector) {
+                return true
+            }
             if commandSelector == #selector(NSResponder.moveUp(_:)) {
                 if isOnFirstLine(textView), let onMoveUp = parent.onMoveUp {
                     onMoveUp()
