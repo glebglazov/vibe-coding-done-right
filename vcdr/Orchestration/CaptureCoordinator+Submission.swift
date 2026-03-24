@@ -163,10 +163,13 @@ extension CaptureCoordinator {
 
             // Full success
             if snapshot.destination.type == .outputPanel {
-                // Update the pending turn with processed text and expand
-                panel.finishProcessing(outputText: pipelineResult.processedText)
                 if pipelineResult.hadExternalProcessing {
+                    // Show processed output as a conversation turn with labels
+                    panel.finishProcessing(outputText: pipelineResult.processedText)
                     panel.setProcessedByModeName(snapshot.mode.name)
+                } else {
+                    // No external processing — just expand, output stays nil (no labels)
+                    panel.finishProcessingWithoutOutput()
                 }
                 // Rebuild session for follow-up
                 session = PipelineSession()

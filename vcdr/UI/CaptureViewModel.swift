@@ -102,7 +102,7 @@ final class CaptureViewModel {
     }
 
     /// Show "You:" / "Result:" labels when there are multiple turns,
-    /// when mode output is present, or when captured context is present.
+    /// when a turn has actual processed output, or when captured context is present.
     var showConversationLabels: Bool {
         if conversationTurns.count > 1 { return true }
         guard let turn = conversationTurns.first else { return false }

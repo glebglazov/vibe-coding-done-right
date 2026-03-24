@@ -64,11 +64,11 @@ extension CapturePanel {
     var fullText: String { viewModel?.fullText ?? "" }
 
     /// Populates the panel with transcribed text during quick-action processing.
-    /// Creates a pending conversation turn with "..." output so the history view
-    /// shows "You: [text]" + "Result: [animated dots]" when expanded.
+    /// Creates a pending conversation turn with nil output. The animated dots are
+    /// driven by the `.processing` phase, not by a sentinel output value.
     /// Does NOT minimize — the panel is already minimized from recording start.
     func populateQuickActionText(inputSegments: [InputSegment]) {
-        let pendingTurn = ConversationTurn(inputSegments: inputSegments, output: "...")
+        let pendingTurn = ConversationTurn(inputSegments: inputSegments, output: nil)
         viewModel?.conversationTurns.append(pendingTurn)
         viewModel?.errorMessage = nil
         // Phase is already .processing from handleTranscribing → setPhase(.processing)
@@ -78,7 +78,7 @@ extension CapturePanel {
 
     func startProcessing() {
         let currentSegments = viewModel?.inputSegments ?? [InputSegment()]
-        let pendingTurn = ConversationTurn(inputSegments: currentSegments, output: "...")
+        let pendingTurn = ConversationTurn(inputSegments: currentSegments, output: nil)
         viewModel?.conversationTurns.append(pendingTurn)
         viewModel?.errorMessage = nil
         viewModel?.phase = .processing
@@ -92,6 +92,16 @@ extension CapturePanel {
         let lastIndex = viewModel.conversationTurns.count - 1
         let lastTurn = viewModel.conversationTurns[lastIndex]
         viewModel.conversationTurns[lastIndex] = ConversationTurn(id: lastTurn.id, inputSegments: lastTurn.inputSegments, output: outputText)
+        viewModel.phase = .idle
+        viewModel.scrollTrigger += 1
+        expand()
+    }
+
+    /// Completes processing without setting output on the turn.
+    /// Used when no external processing occurred — the turn keeps output == nil
+    /// so conversation labels are not shown.
+    func finishProcessingWithoutOutput() {
+        guard let viewModel else { return }
         viewModel.phase = .idle
         viewModel.scrollTrigger += 1
         expand()

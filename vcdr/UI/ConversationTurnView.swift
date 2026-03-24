@@ -59,7 +59,7 @@ struct ConversationTurnView: View {
 
     @ViewBuilder
     private var outputView: some View {
-        if isProcessing && (turn.output == nil || turn.output?.isEmpty == true || turn.output == "...") {
+        if isProcessing && (turn.output == nil || turn.output?.isEmpty == true) {
             AnimatedDotsView()
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if let output = turn.output {
