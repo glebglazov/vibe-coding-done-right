@@ -49,6 +49,9 @@ struct RecordingView: View {
                     .font(.body)
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                Text("Tap \u{2190} Back to return to your app")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 HStack(spacing: 16) {
                     Button {
                         UIPasteboard.general.string = text

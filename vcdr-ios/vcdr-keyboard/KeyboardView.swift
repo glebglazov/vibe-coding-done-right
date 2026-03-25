@@ -1,72 +1,180 @@
 import SwiftUI
 
 struct KeyboardView: View {
-    let onNextKeyboard: () -> Void
+    let onInsertText: (String) -> Void
     let onDeleteBackward: () -> Void
-    let onSpace: () -> Void
-    let onNewline: () -> Void
+    let onNextKeyboard: () -> Void
     let needsInputModeSwitchKey: Bool
     let hasFullAccess: Bool
 
+    @State private var isShifted = true
+    @State private var isCapsLock = false
+
+    // MARK: - Layout
+
+    private static let row1 = ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"]
+    private static let row2 = ["a", "s", "d", "f", "g", "h", "j", "k", "l"]
+    private static let row3 = ["z", "x", "c", "v", "b", "n", "m"]
+
     // MARK: - Constants
-    private static let keyboardHeight: CGFloat = 120
-    private static let micButtonSize: CGFloat = 64
-    private static let micIconSize: CGFloat = 32
-    private static let utilityButtonMinWidth: CGFloat = 56
-    private static let utilityButtonHeight: CGFloat = 44
-    private static let utilityCornerRadius: CGFloat = 8
+
+    private static let keyHeight: CGFloat = 42
+    private static let keySpacing: CGFloat = 6
+    private static let rowSpacing: CGFloat = 10
+    private static let keyCornerRadius: CGFloat = 5
+    private static let micBarHeight: CGFloat = 44
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             if !hasFullAccess {
-                Text("Enable Full Access in Settings to use voice dictation")
-                    .font(.caption)
+                Text("Enable Full Access in Settings for voice dictation")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .padding(.vertical, 4)
             }
 
-            HStack(spacing: 12) {
-                if needsInputModeSwitchKey {
-                    utilityButton(icon: "globe", action: onNextKeyboard)
-                }
+            // Mic bar on top
+            micBar
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
 
-                utilityButton(icon: "delete.left", action: onDeleteBackward)
-
-                utilityButton(icon: "space", action: onSpace)
-                    .frame(maxWidth: .infinity)
-
-                // SwiftUI Link is the only iOS 18-compatible way to open a URL
-                // from a keyboard extension
-                Link(destination: SharedConstants.recordDeepLinkURL) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: Self.micIconSize))
-                        .foregroundStyle(.white)
-                        .frame(width: Self.micButtonSize, height: Self.micButtonSize)
-                        .background(.blue, in: Circle())
-                }
-
-                utilityButton(icon: "return", action: onNewline)
-                    .frame(maxWidth: .infinity)
-
-                // Placeholder for symmetry with globe button
-                if needsInputModeSwitchKey {
-                    Color.clear
-                        .frame(width: Self.utilityButtonMinWidth, height: Self.utilityButtonHeight)
-                }
+            // Keyboard rows
+            VStack(spacing: Self.rowSpacing) {
+                letterRow(Self.row1)
+                letterRow(Self.row2)
+                shiftRow
+                bottomRow
             }
-            .frame(height: Self.keyboardHeight)
-            .padding(.horizontal)
+            .padding(.horizontal, 4)
+            .padding(.bottom, 4)
         }
     }
 
-    private func utilityButton(icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.title3)
-                .frame(minWidth: Self.utilityButtonMinWidth, minHeight: Self.utilityButtonHeight)
-                .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Self.utilityCornerRadius))
+    // MARK: - Mic Bar
+
+    private var micBar: some View {
+        Link(destination: SharedConstants.recordDeepLinkURL) {
+            HStack {
+                Image(systemName: "mic.fill")
+                    .font(.body)
+                Text("Dictate")
+                    .font(.body.weight(.medium))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.micBarHeight)
+            .background(.blue, in: RoundedRectangle(cornerRadius: Self.keyCornerRadius))
         }
-        .contentShape(Rectangle())
+    }
+
+    // MARK: - Letter Rows
+
+    private func letterRow(_ letters: [String]) -> some View {
+        HStack(spacing: Self.keySpacing) {
+            ForEach(letters, id: \.self) { letter in
+                keyButton(displayedAs: isShifted || isCapsLock ? letter.uppercased() : letter) {
+                    let char = isShifted || isCapsLock ? letter.uppercased() : letter
+                    onInsertText(char)
+                    if isShifted && !isCapsLock {
+                        isShifted = false
+                    }
+                }
+            }
+        }
+    }
+
+    private var shiftRow: some View {
+        HStack(spacing: Self.keySpacing) {
+            // Shift key
+            Button {
+                if isShifted && !isCapsLock {
+                    // Single tap while shifted → un-shift
+                    isShifted = false
+                } else if isCapsLock {
+                    isCapsLock = false
+                    isShifted = false
+                } else {
+                    isShifted = true
+                }
+            } label: {
+                Image(systemName: isCapsLock ? "capslock.fill" : (isShifted ? "shift.fill" : "shift"))
+                    .font(.body)
+                    .frame(maxWidth: .infinity, maxHeight: Self.keyHeight)
+                    .background(
+                        isShifted || isCapsLock ? Color(.systemBackground) : Color(.systemGray3),
+                        in: RoundedRectangle(cornerRadius: Self.keyCornerRadius)
+                    )
+            }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                    isCapsLock = true
+                    isShifted = true
+                }
+            )
+            .frame(maxWidth: .infinity)
+
+            // Letter keys
+            ForEach(Self.row3, id: \.self) { letter in
+                keyButton(displayedAs: isShifted || isCapsLock ? letter.uppercased() : letter) {
+                    let char = isShifted || isCapsLock ? letter.uppercased() : letter
+                    onInsertText(char)
+                    if isShifted && !isCapsLock {
+                        isShifted = false
+                    }
+                }
+            }
+
+            // Backspace key
+            Button(action: onDeleteBackward) {
+                Image(systemName: "delete.left")
+                    .font(.body)
+                    .frame(maxWidth: .infinity, maxHeight: Self.keyHeight)
+                    .background(Color(.systemGray3), in: RoundedRectangle(cornerRadius: Self.keyCornerRadius))
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var bottomRow: some View {
+        HStack(spacing: Self.keySpacing) {
+            if needsInputModeSwitchKey {
+                Button(action: onNextKeyboard) {
+                    Image(systemName: "globe")
+                        .font(.body)
+                        .frame(width: 44, height: Self.keyHeight)
+                        .background(Color(.systemGray3), in: RoundedRectangle(cornerRadius: Self.keyCornerRadius))
+                }
+            }
+
+            // Space bar
+            Button { onInsertText(" ") } label: {
+                Text("space")
+                    .font(.body)
+                    .frame(maxWidth: .infinity, maxHeight: Self.keyHeight)
+                    .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: Self.keyCornerRadius))
+            }
+
+            // Return key
+            Button {
+                onInsertText("\n")
+            } label: {
+                Image(systemName: "return")
+                    .font(.body)
+                    .frame(width: 88, height: Self.keyHeight)
+                    .background(Color(.systemGray3), in: RoundedRectangle(cornerRadius: Self.keyCornerRadius))
+            }
+        }
+    }
+
+    // MARK: - Key Button
+
+    private func keyButton(displayedAs label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 22, design: .default))
+                .frame(maxWidth: .infinity, maxHeight: Self.keyHeight)
+                .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: Self.keyCornerRadius))
+        }
+        .buttonStyle(.plain)
     }
 }
