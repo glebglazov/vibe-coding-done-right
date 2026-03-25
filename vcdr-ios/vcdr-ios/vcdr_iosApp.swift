@@ -1,17 +1,20 @@
-//
-//  vcdr_iosApp.swift
-//  vcdr-ios
-//
-//  Created by Gleb Glazov on 25/3/26.
-//
-
 import SwiftUI
 
 @main
-struct vcdr_iosApp: App {
+struct VCDRiOSApp: App {
+    @State private var coordinator = RecordingFlowCoordinator()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RecordingView(coordinator: coordinator)
+                .task {
+                    coordinator.cleanupStaleResults()
+                    await coordinator.initializeModel()
+                }
+                .onOpenURL { url in
+                    guard url.scheme == "vcdr-ios", url.host == "record" else { return }
+                    Task { await coordinator.handleRecordDeepLink() }
+                }
         }
     }
 }

@@ -6,7 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AA00000A2F74750000000001 /* vcdr-keyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000012F74750000000001 /* vcdr-keyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AA00000F2F74750000000002 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000E2F74750000000002 /* FluidAudio */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		AA0000072F74750000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E57289792F74745700E1C61C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000062F74750000000001;
+			remoteInfo = "vcdr-keyboard";
+		};
 		E572898F2F74745900E1C61C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = E57289792F74745700E1C61C /* Project object */;
@@ -23,15 +35,58 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		AA0000092F74750000000001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA00000A2F74750000000001 /* vcdr-keyboard.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		AA0000012F74750000000001 /* vcdr-keyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "vcdr-keyboard.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E57289812F74745800E1C61C /* vcdr-ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "vcdr-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E572898E2F74745900E1C61C /* vcdr-iosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "vcdr-iosTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E57289982F74745900E1C61C /* vcdr-iosUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "vcdr-iosUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BB0000012F74750000000001 /* Exceptions for "vcdr-ios" folder in "vcdr-ios" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E57289802F74745800E1C61C /* vcdr-ios */;
+		};
+		BB0000022F74750000000001 /* Exceptions for "vcdr-keyboard" folder in "vcdr-keyboard" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AA0000062F74750000000001 /* vcdr-keyboard */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		AA0000022F74750000000001 /* vcdr-keyboard */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB0000022F74750000000001 /* Exceptions for "vcdr-keyboard" folder in "vcdr-keyboard" target */,
+			);
+			path = "vcdr-keyboard";
+			sourceTree = "<group>";
+		};
 		E57289832F74745800E1C61C /* vcdr-ios */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB0000012F74750000000001 /* Exceptions for "vcdr-ios" folder in "vcdr-ios" target */,
+			);
 			path = "vcdr-ios";
 			sourceTree = "<group>";
 		};
@@ -48,10 +103,18 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AA0000042F74750000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E572897E2F74745800E1C61C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA00000F2F74750000000002 /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,6 +139,7 @@
 			isa = PBXGroup;
 			children = (
 				E57289832F74745800E1C61C /* vcdr-ios */,
+				AA0000022F74750000000001 /* vcdr-keyboard */,
 				E57289912F74745900E1C61C /* vcdr-iosTests */,
 				E572899B2F74745900E1C61C /* vcdr-iosUITests */,
 				E57289822F74745800E1C61C /* Products */,
@@ -86,6 +150,7 @@
 			isa = PBXGroup;
 			children = (
 				E57289812F74745800E1C61C /* vcdr-ios.app */,
+				AA0000012F74750000000001 /* vcdr-keyboard.appex */,
 				E572898E2F74745900E1C61C /* vcdr-iosTests.xctest */,
 				E57289982F74745900E1C61C /* vcdr-iosUITests.xctest */,
 			);
@@ -95,6 +160,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AA0000062F74750000000001 /* vcdr-keyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA00000D2F74750000000001 /* Build configuration list for PBXNativeTarget "vcdr-keyboard" */;
+			buildPhases = (
+				AA0000032F74750000000001 /* Sources */,
+				AA0000042F74750000000001 /* Frameworks */,
+				AA0000052F74750000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000022F74750000000001 /* vcdr-keyboard */,
+			);
+			name = "vcdr-keyboard";
+			packageProductDependencies = (
+			);
+			productName = "vcdr-keyboard";
+			productReference = AA0000012F74750000000001 /* vcdr-keyboard.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		E57289802F74745800E1C61C /* vcdr-ios */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E57289A22F74745900E1C61C /* Build configuration list for PBXNativeTarget "vcdr-ios" */;
@@ -102,16 +189,19 @@
 				E572897D2F74745800E1C61C /* Sources */,
 				E572897E2F74745800E1C61C /* Frameworks */,
 				E572897F2F74745800E1C61C /* Resources */,
+				AA0000092F74750000000001 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA0000082F74750000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				E57289832F74745800E1C61C /* vcdr-ios */,
 			);
 			name = "vcdr-ios";
 			packageProductDependencies = (
+				AA00000E2F74750000000002 /* FluidAudio */,
 			);
 			productName = "vcdr-ios";
 			productReference = E57289812F74745800E1C61C /* vcdr-ios.app */;
@@ -173,6 +263,9 @@
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					AA0000062F74750000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
 					E57289802F74745800E1C61C = {
 						CreatedOnToolsVersion = 26.0;
 					};
@@ -195,12 +288,16 @@
 			);
 			mainGroup = E57289782F74745700E1C61C;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AA00000D2F74750000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E57289822F74745800E1C61C /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				E57289802F74745800E1C61C /* vcdr-ios */,
+				AA0000062F74750000000001 /* vcdr-keyboard */,
 				E572898D2F74745900E1C61C /* vcdr-iosTests */,
 				E57289972F74745900E1C61C /* vcdr-iosUITests */,
 			);
@@ -208,6 +305,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		AA0000052F74750000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E572897F2F74745800E1C61C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -232,6 +336,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AA0000032F74750000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E572897D2F74745800E1C61C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -256,6 +367,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		AA0000082F74750000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000062F74750000000001 /* vcdr-keyboard */;
+			targetProxy = AA0000072F74750000000001 /* PBXContainerItemProxy */;
+		};
 		E57289902F74745900E1C61C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = E57289802F74745800E1C61C /* vcdr-ios */;
@@ -269,6 +385,64 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		AA00000B2F74750000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "vcdr-keyboard/vcdr-keyboard.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R9G7S83AGV;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "vcdr-keyboard/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "vcdr-keyboard";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "glebglazov.vcdr-ios.keyboard";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA00000C2F74750000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "vcdr-keyboard/vcdr-keyboard.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R9G7S83AGV;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "vcdr-keyboard/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "vcdr-keyboard";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "glebglazov.vcdr-ios.keyboard";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		E57289A02F74745900E1C61C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -391,12 +565,16 @@
 		E57289A32F74745900E1C61C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "vcdr-ios/vcdr-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R9G7S83AGV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "vcdr-ios/Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -422,12 +600,16 @@
 		E57289A42F74745900E1C61C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "vcdr-ios/vcdr-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = R9G7S83AGV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "vcdr-ios/Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -533,6 +715,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AA00000D2F74750000000001 /* Build configuration list for PBXNativeTarget "vcdr-keyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA00000B2F74750000000001 /* Debug */,
+				AA00000C2F74750000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		E572897C2F74745700E1C61C /* Build configuration list for PBXProject "vcdr-ios" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -570,6 +761,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA00000D2F74750000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.7.9;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA00000E2F74750000000002 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000D2F74750000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E57289792F74745700E1C61C /* Project object */;
 }
