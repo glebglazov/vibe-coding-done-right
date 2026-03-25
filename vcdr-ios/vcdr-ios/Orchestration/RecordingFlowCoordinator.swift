@@ -115,8 +115,11 @@ final class RecordingFlowCoordinator {
         state = .transcribing
 
         do {
-            let text = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
+            let rawText = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
             try? FileManager.default.removeItem(at: audioURL)
+
+            // Remove filler words and add terminator (period + space)
+            let text = TextPostProcessor.process(rawText)
 
             // Write result to App Group for keyboard extension
             SharedConstants.sharedDefaults.set(text, forKey: SharedConstants.transcriptionResultKey)
