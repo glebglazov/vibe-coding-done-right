@@ -8,6 +8,7 @@ final class AudioRecorder {
     private(set) var isRecording = false
     /// Rolling buffer of recent audio level samples (0.0–1.0), one per meter tick.
     private(set) var audioLevels: [Float] = Array(repeating: 0, count: levelSampleCount)
+    private(set) var isSessionActive = false
 
     private var audioRecorder: AVAudioRecorder?
     /// nonisolated(unsafe) allows deinit cleanup. Safe because deinit runs
@@ -32,24 +33,49 @@ final class AudioRecorder {
     /// 16-bit PCM depth for Parakeet compatibility
     private static let bitDepth = 16
 
+    // MARK: - Audio Session
+
+    /// Activates the audio session for background recording.
+    /// Must be called while the app is in the foreground.
+    /// The session stays alive when the app goes to background if UIBackgroundModes includes "audio".
+    func activateSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+        try session.setActive(true)
+        isSessionActive = true
+        Logger.recording.info("Audio session activated for background recording")
+    }
+
+    /// Deactivates the audio session. Call on idle timeout or app termination.
+    func deactivateSession() {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        isSessionActive = false
+        Logger.recording.info("Audio session deactivated")
+    }
+
+    // MARK: - Microphone Permission
+
     func requestMicrophonePermission() async -> Bool {
         await AVAudioApplication.requestRecordPermission()
     }
 
+    // MARK: - Recording
+
+    /// Starts recording. The audio session must already be activated via `activateSession()`.
     func startRecording() async -> Bool {
         guard await requestMicrophonePermission() else {
             Logger.recording.warning("Microphone permission denied")
             return false
         }
 
-        // Configure iOS audio session for recording
-        let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.record, mode: .default)
-            try session.setActive(true)
-        } catch {
-            Logger.recording.error("Failed to configure audio session: \(error)")
-            return false
+        // If session isn't active yet (e.g. recording from foreground), activate it
+        if !isSessionActive {
+            do {
+                try activateSession()
+            } catch {
+                Logger.recording.error("Failed to configure audio session: \(error)")
+                return false
+            }
         }
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -93,8 +119,9 @@ final class AudioRecorder {
         recorder.stop()
         stopLevelMonitoring()
 
-        // Deactivate audio session so other apps can resume audio
-        try? AVAudioSession.sharedInstance().setActive(false)
+        // Do NOT deactivate the audio session — it must persist for background recording.
+        // The session stays alive so subsequent recordings from the keyboard extension
+        // don't require the "flash" deep link to reactivate it.
 
         let wasShort = recordingStartTime.map {
             $0.duration(to: .now) < Self.minimumRecordingDuration
@@ -125,22 +152,18 @@ final class AudioRecorder {
             let silenceFrames = Self.minimumFrameCount - frameCount
             let format = inputFile.processingFormat
 
-            // Read original audio
             guard let originalBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
             try inputFile.read(into: originalBuffer)
 
-            // Create silence buffer (AVAudioPCMBuffer is zero-filled by default)
             guard let silenceBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: silenceFrames) else { return }
             silenceBuffer.frameLength = silenceFrames
 
-            // Write original + silence to same URL
             let outputFile = try AVAudioFile(forWriting: fileURL, settings: inputFile.fileFormat.settings)
             try outputFile.write(from: originalBuffer)
             try outputFile.write(from: silenceBuffer)
 
             Logger.recording.info("Padded short recording from \(frameCount) to \(Self.minimumFrameCount) frames")
         } catch {
-            // Non-fatal — let Parakeet attempt transcription on the original file
             Logger.recording.warning("Failed to pad short recording: \(error)")
         }
     }
@@ -153,11 +176,7 @@ final class AudioRecorder {
             recorder.updateMeters()
             let averagePower = recorder.averagePower(forChannel: 0)
             let linear = max(0.0, (averagePower + 60) / 60)
-            // Square root curve expands the speech range (~0.4–0.8 linear)
-            // into a wider visual range, making the waveform more responsive
             let curved = sqrt(linear)
-            // Fast attack, quick decay: jump to new level immediately when louder,
-            // but decay exponentially when quieter so bars drop fast after speech
             let previous = self.audioLevels.last ?? 0
             let smoothed = curved >= previous ? curved : previous * Self.levelDecayFactor + curved * (1 - Self.levelDecayFactor)
             self.audioLevels.removeFirst()

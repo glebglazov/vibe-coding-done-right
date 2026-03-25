@@ -7,8 +7,9 @@ class KeyboardViewController: KeyboardInputViewController {
         super.viewDidLoad()
         setup(for: .vcdr)
 
-        // Listen for transcription results via Darwin notification
-        DarwinNotificationCenter.observe(SharedConstants.darwinNotificationName)
+        // Observe Darwin notifications for state changes and transcription results
+        DarwinNotificationCenter.observe(SharedConstants.stateNotificationName, localName: .darwinStateChanged)
+        DarwinNotificationCenter.observe(SharedConstants.transcriptionNotificationName, localName: .darwinTranscriptionReady)
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(handleTranscriptionReady),
@@ -31,7 +32,7 @@ class KeyboardViewController: KeyboardInputViewController {
                 collapsedView: { $0.view },
                 emojiKeyboard: { $0.view },
                 toolbar: { params in
-                    // Autocomplete suggestions + mic icon on the right
+                    // Autocomplete suggestions + mic/stop icon on the right
                     HStack(spacing: 0) {
                         params.view
                         DictateBarView(hasFullAccess: fullAccess)
