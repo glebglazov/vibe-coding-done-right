@@ -394,7 +394,7 @@
 				DEVELOPMENT_TEAM = R9G7S83AGV;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "vcdr-keyboard/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "vcdr-keyboard";
+				INFOPLIST_KEY_CFBundleDisplayName = "VCDR Keyboard";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -423,7 +423,7 @@
 				DEVELOPMENT_TEAM = R9G7S83AGV;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "vcdr-keyboard/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "vcdr-keyboard";
+				INFOPLIST_KEY_CFBundleDisplayName = "VCDR Keyboard";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -569,6 +569,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "vcdr-ios/vcdr-ios.entitlements";
+				INFOPLIST_KEY_CFBundleDisplayName = VCDR;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R9G7S83AGV;
@@ -604,6 +605,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "vcdr-ios/vcdr-ios.entitlements";
+				INFOPLIST_KEY_CFBundleDisplayName = VCDR;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R9G7S83AGV;

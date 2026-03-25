@@ -2,6 +2,8 @@ import SwiftUI
 
 struct KeyboardView: View {
     let onNextKeyboard: () -> Void
+    let onDeleteBackward: () -> Void
+    let onNewline: () -> Void
     let needsInputModeSwitchKey: Bool
     let hasFullAccess: Bool
 
@@ -9,6 +11,7 @@ struct KeyboardView: View {
     private static let keyboardHeight: CGFloat = 120
     private static let micButtonSize: CGFloat = 64
     private static let micIconSize: CGFloat = 32
+    private static let utilityButtonSize: CGFloat = 44
 
     var body: some View {
         VStack(spacing: 8) {
@@ -20,16 +23,22 @@ struct KeyboardView: View {
                     .padding(.horizontal)
             }
 
-            HStack(spacing: 20) {
+            HStack(spacing: 16) {
                 if needsInputModeSwitchKey {
                     Button(action: onNextKeyboard) {
                         Image(systemName: "globe")
                             .font(.title2)
-                            .padding()
+                            .frame(width: Self.utilityButtonSize, height: Self.utilityButtonSize)
                     }
                 }
 
                 Spacer()
+
+                Button(action: onDeleteBackward) {
+                    Image(systemName: "delete.left")
+                        .font(.title2)
+                        .frame(width: Self.utilityButtonSize, height: Self.utilityButtonSize)
+                }
 
                 // SwiftUI Link is the only iOS 18-compatible way to open a URL
                 // from a keyboard extension
@@ -41,12 +50,18 @@ struct KeyboardView: View {
                         .background(.blue, in: Circle())
                 }
 
+                Button(action: onNewline) {
+                    Image(systemName: "return")
+                        .font(.title2)
+                        .frame(width: Self.utilityButtonSize, height: Self.utilityButtonSize)
+                }
+
                 Spacer()
 
-                // Placeholder for symmetry
+                // Placeholder for symmetry with globe button
                 if needsInputModeSwitchKey {
                     Color.clear
-                        .frame(width: 44, height: 44)
+                        .frame(width: Self.utilityButtonSize, height: Self.utilityButtonSize)
                 }
             }
             .frame(height: Self.keyboardHeight)

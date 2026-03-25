@@ -1,6 +1,5 @@
 import Foundation
 import OSLog
-import UIKit
 
 @MainActor
 @Observable
@@ -23,14 +22,10 @@ final class RecordingFlowCoordinator {
 
     /// When true, recording starts automatically once the model is ready
     private var pendingRecordRequest = false
-    /// Tracks whether the current session was initiated via deep link from the keyboard
-    private var launchedViaDeepLink = false
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
-    /// Delay after posting Darwin notification before suspending,
-    /// to ensure the notification is delivered to the keyboard extension
-    private static let suspendDelay: Duration = .milliseconds(300)
+
 
     var isRecording: Bool { audioRecorder.isRecording }
     var audioLevels: [Float] { audioRecorder.audioLevels }
@@ -74,7 +69,6 @@ final class RecordingFlowCoordinator {
 
     /// Called when a deep link arrives. If the model isn't ready yet, queues the request.
     func handleRecordDeepLink() async {
-        launchedViaDeepLink = true
         switch state {
         case .idle, .initializing:
             pendingRecordRequest = true
@@ -127,12 +121,9 @@ final class RecordingFlowCoordinator {
             state = .complete(text)
             Logger.app.info("Transcription complete: \(text.prefix(50))...")
 
-            // Only auto-suspend if launched from the keyboard deep link
-            if launchedViaDeepLink {
-                try? await Task.sleep(for: Self.suspendDelay)
-                suspendApp()
-                launchedViaDeepLink = false
-            }
+            // The user returns to their previous app via the iOS "Back to [App]"
+            // banner in the status bar. UIApplication.suspend sends to the home
+            // screen (not back to the previous app), so we don't use it.
         } catch {
             try? FileManager.default.removeItem(at: audioURL)
             state = .error("Transcription failed: \(error.localizedDescription)")
@@ -150,12 +141,4 @@ final class RecordingFlowCoordinator {
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
     }
 
-    // MARK: - Private
-
-    /// Move the app to the background so the user returns to their previous app.
-    /// The system "Back to [App]" banner is the supported mechanism for this.
-    /// The suspend selector is undocumented but widely used and not rejected by App Review.
-    private func suspendApp() {
-        UIApplication.shared.perform(#selector(NSXPCConnection.suspend))
-    }
 }

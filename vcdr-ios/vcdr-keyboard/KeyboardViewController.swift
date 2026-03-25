@@ -7,15 +7,7 @@ class KeyboardViewController: UIInputViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        let keyboardView = KeyboardView(
-            onNextKeyboard: { [weak self] in
-                self?.advanceToNextInputMode()
-            },
-            needsInputModeSwitchKey: needsInputModeSwitchKey,
-            hasFullAccess: hasFullAccess
-        )
-
-        let host = UIHostingController(rootView: keyboardView)
+        let host = UIHostingController(rootView: makeKeyboardView())
         host.view.translatesAutoresizingMaskIntoConstraints = false
         host.view.backgroundColor = .clear
 
@@ -45,7 +37,7 @@ class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
 
         // Update Full Access state each time keyboard appears
-        updateHostedView()
+        hostingController?.rootView = makeKeyboardView()
 
         // Check for pending transcription on every appearance
         // (fallback if Darwin notification was missed while suspended)
@@ -64,14 +56,19 @@ class KeyboardViewController: UIInputViewController {
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
     }
 
-    private func updateHostedView() {
-        let keyboardView = KeyboardView(
+    private func makeKeyboardView() -> KeyboardView {
+        KeyboardView(
             onNextKeyboard: { [weak self] in
                 self?.advanceToNextInputMode()
+            },
+            onDeleteBackward: { [weak self] in
+                self?.textDocumentProxy.deleteBackward()
+            },
+            onNewline: { [weak self] in
+                self?.textDocumentProxy.insertText("\n")
             },
             needsInputModeSwitchKey: needsInputModeSwitchKey,
             hasFullAccess: hasFullAccess
         )
-        hostingController?.rootView = keyboardView
     }
 }
