@@ -23,6 +23,8 @@ final class RecordingFlowCoordinator {
 
     /// When true, recording starts automatically once the model is ready
     private var pendingRecordRequest = false
+    /// Tracks whether the current session was initiated via deep link from the keyboard
+    private var launchedViaDeepLink = false
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
@@ -72,6 +74,7 @@ final class RecordingFlowCoordinator {
 
     /// Called when a deep link arrives. If the model isn't ready yet, queues the request.
     func handleRecordDeepLink() async {
+        launchedViaDeepLink = true
         switch state {
         case .idle, .initializing:
             pendingRecordRequest = true
@@ -124,9 +127,12 @@ final class RecordingFlowCoordinator {
             state = .complete(text)
             Logger.app.info("Transcription complete: \(text.prefix(50))...")
 
-            // Small delay to ensure the notification is delivered, then suspend
-            try? await Task.sleep(for: Self.suspendDelay)
-            suspendApp()
+            // Only auto-suspend if launched from the keyboard deep link
+            if launchedViaDeepLink {
+                try? await Task.sleep(for: Self.suspendDelay)
+                suspendApp()
+                launchedViaDeepLink = false
+            }
         } catch {
             try? FileManager.default.removeItem(at: audioURL)
             state = .error("Transcription failed: \(error.localizedDescription)")

@@ -45,9 +45,18 @@ struct RecordingView: View {
                     .font(.body)
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                Text("Return to your app — text will be inserted automatically")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+                HStack(spacing: 16) {
+                    Button {
+                        UIPasteboard.general.string = text
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered)
+                    Button("New Recording") {
+                        Task { await coordinator.startRecording() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
 
             case .error(let message):
                 Image(systemName: "exclamationmark.triangle.fill")
