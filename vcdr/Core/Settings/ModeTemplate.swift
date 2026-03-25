@@ -91,7 +91,7 @@ extension ModeTemplate {
                 ModeParameterOption(id: claudeCodeOpusOptionID, label: "Opus", value: "opus"),
             ]),
         ],
-        defaultOutputDestinationID: OutputDestination.builtInOutputPanelID,
+        defaultOutputDestinationID: OutputDestination.builtInPasteToInitialAppID,
         showPreview: false
     )
 
@@ -109,7 +109,7 @@ extension ModeTemplate {
                 ModeParameterOption(id: ollamaQwen35_4bOptionID, label: "Qwen3.5 - 4B", value: "qwen3.5:4b"),
             ]),
         ],
-        defaultOutputDestinationID: OutputDestination.builtInOutputPanelID,
+        defaultOutputDestinationID: OutputDestination.builtInPasteToInitialAppID,
         showPreview: false
     )
 

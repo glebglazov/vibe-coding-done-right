@@ -24,6 +24,10 @@ final class CaptureCoordinator {
 
     @ObservationIgnored var immediateActionTask: Task<Void, Never>?
 
+    /// Stored snapshot while waiting for preview confirmation (Return key or destination hotkey).
+    @ObservationIgnored var pendingPreviewSnapshot: SubmissionSnapshot?
+    @ObservationIgnored var pendingPreviewText: String?
+
     @ObservationIgnored var onWillStartInput: (() -> Void)?
 
     var isModeSwitcherHostVisible: Bool { panel.isVisible && !panel.isMinimized }
@@ -76,15 +80,8 @@ final class CaptureCoordinator {
     }
 
     func showFromHistory(conversation: Conversation) {
-        let editorSegments = conversation.inputSegments.isEmpty
-            ? [InputSegment()] : conversation.inputSegments
-
-        // Show the turn display if there's processed output
-        let displayTurn: ConversationTurn? = conversation.hadExternalProcessing
-            ? ConversationTurn(inputSegments: conversation.inputSegments, output: conversation.output)
-            : nil
-
-        configurePanelAndShow(displayedTurn: displayTurn, inputSegments: editorSegments)
+        let displayTurn = ConversationTurn(inputSegments: conversation.inputSegments, output: conversation.output)
+        configurePanelAndShow(displayedTurn: displayTurn)
         if conversation.hadExternalProcessing {
             panel.setProcessedByModeName(conversation.modeName)
         }
@@ -97,58 +94,113 @@ final class CaptureCoordinator {
         }
     }
 
-    private func clearSubmissionCallbacks() {
-        Task { await clipboardMonitor.stop() }
-        panel.onFocusLost = nil
-        accumulatedCaptures = []
-    }
-
     func configurePanelAndShow(
         displayedTurn: ConversationTurn? = nil,
-        inputSegments: [InputSegment]? = nil,
         minimized: Bool = false
     ) {
         rewirePanelCallbacks()
-
-        let resolvedSegments = inputSegments ?? [InputSegment()]
 
         panel.show(
             settings: settings,
             overrides: overrides,
             displayedTurn: displayedTurn,
-            inputSegments: resolvedSegments,
             outputDestinations: settings.outputDestinations,
             initialAppName: session?.previousActiveApp?.localizedName,
             audioRecorder: audioRecorder,
             minimized: minimized,
-            onSubmit: { [weak self] text in
-                self?.clearSubmissionCallbacks()
-                self?.submitText(text)
-            },
             onDismiss: { [weak self] in
                 self?.dismissOverlay()
             }
         )
 
-        panel.setDestinationSubmitHandler { [weak self] text, destinationID in
-            guard let self else { return }
-            self.clearSubmissionCallbacks()
-            self.overrides.destinationOverride = destinationID
-            self.submitText(text)
+        panel.viewModel?.onConfirm = { [weak self] in
+            self?.confirmPreview()
+        }
+        panel.setDestinationSubmitHandler { [weak self] destinationID in
+            self?.confirmPreviewWithDestination(destinationID)
         }
     }
 
-    func dismissOverlay(saveToHistory: Bool = true) {
-        // Persist any non-empty input to history before tearing down the session.
-        if saveToHistory {
-            preserveCurrentInputToHistory()
-        }
+    // MARK: - Preview Confirmation
 
+    /// Confirms the pending preview — executes the stored action with the default destination.
+    func confirmPreview() {
+        guard let snapshot = pendingPreviewSnapshot, let processedText = pendingPreviewText else { return }
+        let pipelineContext = snapshot.pipelineContext
+        clearPendingPreview()
+
+        executeConfirmedAction(snapshot: snapshot, processedText: processedText, pipelineContext: pipelineContext)
+    }
+
+    /// Confirms with a destination override — user pressed a destination hotkey during preview.
+    func confirmPreviewWithDestination(_ destinationID: UUID) {
+        guard let snapshot = pendingPreviewSnapshot, let processedText = pendingPreviewText else { return }
+
+        // Rebuild context with the overridden destination
+        overrides.destinationOverride = destinationID
+        let destination = settings.outputDestination(for: destinationID)
+        let overriddenContext = SubmissionPipeline.Context(
+            text: snapshot.pipelineContext.text,
+            mode: snapshot.mode,
+            captures: snapshot.pipelineContext.captures,
+            conversationID: snapshot.conversationID,
+            parameterValues: snapshot.pipelineContext.parameterValues,
+            destination: destination,
+            targetAppPID: snapshot.pipelineContext.targetAppPID,
+            saveResultToClipboard: snapshot.mode.saveResultToClipboard
+        )
+        let overriddenSnapshot = SubmissionSnapshot(
+            pipelineContext: overriddenContext,
+            mode: snapshot.mode,
+            inputSegments: snapshot.inputSegments,
+            conversationID: snapshot.conversationID,
+            previousActiveApp: snapshot.previousActiveApp,
+            destination: destination
+        )
+        clearPendingPreview()
+
+        executeConfirmedAction(snapshot: overriddenSnapshot, processedText: processedText, pipelineContext: overriddenContext)
+    }
+
+    private func executeConfirmedAction(snapshot: SubmissionSnapshot, processedText: String, pipelineContext: SubmissionPipeline.Context) {
+        panel.orderOut()
+
+        Task { @MainActor in
+            do {
+                try await SubmissionPipeline.executeAction(
+                    context: pipelineContext, processedText: processedText
+                )
+            } catch {
+                panel.orderBack()
+                panel.setError(error.localizedDescription)
+                Logger.app.error("Preview confirmation action failed: \(error)")
+                return
+            }
+
+            panel.dismiss()
+            recordingIndicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
+
+            finalizeHistory(
+                snapshot: snapshot, processedText: processedText,
+                hadExternalProcessing: true
+            )
+            overrides.markPipelineCompleted()
+            Logger.app.info("Preview confirmed and action executed")
+        }
+    }
+
+    private func clearPendingPreview() {
+        pendingPreviewSnapshot = nil
+        pendingPreviewText = nil
+    }
+
+    func dismissOverlay(saveToHistory: Bool = true) {
         Task { await clipboardMonitor.stop() }
         autoDismissTask?.cancel()
         autoDismissTask = nil
         immediateActionTask?.cancel()
         immediateActionTask = nil
+        clearPendingPreview()
         panel.onFocusLost = nil
         panel.dismiss()
         recordingIndicator.showDismissed()
@@ -174,22 +226,4 @@ final class CaptureCoordinator {
         dismissOverlay(saveToHistory: false)
         recordingIndicator.showCancelled()
     }
-
-    // MARK: - History Preservation
-
-    /// Saves the current panel content to history on dismiss so no input is lost.
-    private func preserveCurrentInputToHistory() {
-        guard let session, let conversationID = session.conversationID else { return }
-
-        let segments = panel.viewModel?.inputSegments ?? []
-        let hasContent = segments.contains { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.capture != nil }
-        guard hasContent else { return }
-
-        recordHistory(
-            conversationID: conversationID,
-            inputSegments: segments, output: nil,
-            mode: settings.activeMode
-        )
-    }
-
 }

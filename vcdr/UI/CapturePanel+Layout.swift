@@ -7,7 +7,6 @@ extension CapturePanel {
     static let conversationPadding: CGFloat = 24
     static let hintBarHeight: CGFloat = 30
     static let panelMinBaseHeight: CGFloat = 60
-    static let segmentSectionMinHeight: CGFloat = 28
     static let errorBannerHeight: CGFloat = 28
     /// Scaling factor for capture text line height (slightly tighter than normal text)
     private static let captureLineHeightScale: CGFloat = 0.9
@@ -18,28 +17,11 @@ extension CapturePanel {
         return visibleHeight * panelMaxHeightFraction
     }
 
-    static func calculateHeight(for turn: ConversationTurn?, inputSegments: [InputSegment] = [InputSegment()], segmentHeights: [UUID: CGFloat] = [:], hasError: Bool = false) -> CGFloat {
-        var segmentContentHeight: CGFloat = 0
-        for segment in inputSegments {
-            if let reportedHeight = segmentHeights[segment.id], reportedHeight > 0 {
-                segmentContentHeight += reportedHeight
-            } else {
-                let textLines = max(1, CGFloat(segment.text.components(separatedBy: .newlines).count))
-                segmentContentHeight += textLines * lineHeight
-            }
-
-            if let capture = segment.capture {
-                let captureLines = CGFloat(capture.text.components(separatedBy: .newlines).count)
-                segmentContentHeight += captureLines * lineHeight * captureLineHeightScale
-                segmentContentHeight += 8 // separator spacing
-            }
-        }
-        let extraHeight = max(segmentSectionMinHeight, segmentContentHeight)
-
+    static func calculateHeight(for turn: ConversationTurn?, hasError: Bool = false) -> CGFloat {
         let errorHeight: CGFloat = hasError ? errorBannerHeight : 0
 
         guard let turn else {
-            let total = panelMinBaseHeight + extraHeight + hintBarHeight + errorHeight
+            let total = panelMinBaseHeight + hintBarHeight + errorHeight
             return min(total, maxPanelHeight())
         }
 
@@ -58,7 +40,7 @@ extension CapturePanel {
         }
 
         let conversationHeight = totalLines * lineHeight + conversationPadding
-        let total = panelMinBaseHeight + conversationHeight + extraHeight + hintBarHeight + errorHeight
+        let total = panelMinBaseHeight + conversationHeight + hintBarHeight + errorHeight
         return min(total, maxPanelHeight())
     }
 

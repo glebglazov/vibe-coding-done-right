@@ -5,7 +5,6 @@ enum OutputDestinationType: String, Codable, CaseIterable {
     case paste
     case pasteToInitialApp
     case bashScript
-    case outputPanel
     case copy
 
     /// Types available for user-created destinations (excludes special built-in types)
@@ -18,7 +17,6 @@ enum OutputDestinationType: String, Codable, CaseIterable {
         case .paste: "Paste (Cmd+V)"
         case .pasteToInitialApp: "Paste to Initial App"
         case .bashScript: "Bash Script"
-        case .outputPanel: "Output Panel"
         case .copy: "Copy to Clipboard"
         }
     }
@@ -32,7 +30,7 @@ struct OutputDestination: Identifiable, Equatable {
     var symbol: String
     var activationHotkey: HotkeyBinding
 
-    var isBuiltIn: Bool { type == .paste || type == .pasteToInitialApp || type == .outputPanel || type == .copy }
+    var isBuiltIn: Bool { type == .paste || type == .pasteToInitialApp || type == .copy }
 
     /// Derives a display character from the hotkey's keyCode (e.g. keyCode 8 → "C").
     /// Used in the mode switcher for bare-key matching and display.
@@ -56,24 +54,7 @@ struct OutputDestination: Identifiable, Equatable {
             symbol: "📋",
             activationHotkey: HotkeyBinding(
                 keyCode: 35, // P
-                modifiers: UInt64(CGEventFlags.maskControl.rawValue)
-            )
-        )
-    }
-
-    /// Well-known ID for the built-in Output Panel destination.
-    static let builtInOutputPanelID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-
-    static func makeDefaultOutputPanel() -> OutputDestination {
-        OutputDestination(
-            id: builtInOutputPanelID,
-            name: "Output Panel",
-            type: .outputPanel,
-            bashCommand: "",
-            symbol: "👁",
-            activationHotkey: HotkeyBinding(
-                keyCode: 31, // O
-                modifiers: UInt64(CGEventFlags.maskControl.rawValue)
+                modifiers: UInt64(CGEventFlags.maskAlternate.rawValue)
             )
         )
     }
@@ -90,7 +71,7 @@ struct OutputDestination: Identifiable, Equatable {
             symbol: "📄",
             activationHotkey: HotkeyBinding(
                 keyCode: 8, // C
-                modifiers: UInt64(CGEventFlags.maskControl.rawValue)
+                modifiers: UInt64(CGEventFlags.maskAlternate.rawValue)
             )
         )
     }
@@ -107,7 +88,7 @@ struct OutputDestination: Identifiable, Equatable {
             symbol: "📌",
             activationHotkey: HotkeyBinding(
                 keyCode: 35, // P
-                modifiers: UInt64(CGEventFlags.maskControl.rawValue | CGEventFlags.maskShift.rawValue)
+                modifiers: UInt64(CGEventFlags.maskAlternate.rawValue | CGEventFlags.maskShift.rawValue)
             )
         )
     }
@@ -162,13 +143,13 @@ extension OutputDestination: Codable {
     }
 
     /// Converts a legacy single-character activation key to a HotkeyBinding.
-    /// Maps the character to a keyCode using KeyCodeMap, with Ctrl as default modifier.
+    /// Maps the character to a keyCode using KeyCodeMap, with Option as default modifier.
     private static func migrateActivationKey(_ key: String) -> HotkeyBinding {
         guard let char = key.lowercased().first else { return .unassigned }
         guard let keyCode = KeyCodeMap.keyCode(for: char) else { return .unassigned }
         return HotkeyBinding(
             keyCode: keyCode,
-            modifiers: UInt64(CGEventFlags.maskControl.rawValue)
+            modifiers: UInt64(CGEventFlags.maskAlternate.rawValue)
         )
     }
 }

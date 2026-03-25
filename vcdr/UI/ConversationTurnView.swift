@@ -26,9 +26,6 @@ struct ConversationTurnView: View {
             // "Result:" section — only when output exists or processing is in progress
             if turn.output != nil || isProcessing {
                 HStack {
-                    if showCopyButton, let output = turn.output, !isProcessing {
-                        copyButton(for: output)
-                    }
                     Text("Result:")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -41,6 +38,9 @@ struct ConversationTurnView: View {
                             .foregroundStyle(Color.accentColor)
                     }
                     Spacer()
+                    if showCopyButton, let output = turn.output, !isProcessing {
+                        copyButton(for: output)
+                    }
                 }
                 .padding(.bottom, Self.labelVPadding)
 

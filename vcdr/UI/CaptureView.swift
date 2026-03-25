@@ -17,9 +17,6 @@ struct CaptureView: View {
     private static let headerBottomPadding: CGFloat = 2
     private static let headerBackgroundOpacity: Double = 0.03
     private static let closeButtonSize: CGFloat = 12
-    private static let segmentTextMinHeight: CGFloat = 28
-    private static let minEditorHeight: CGFloat = 28
-    private static let textInputTopInset: CGFloat = 4
     private static let recordingDotSize: CGFloat = 8
 
     // MARK: - Constants (Pill)
@@ -81,13 +78,8 @@ struct CaptureView: View {
             if let msVM = viewModel.modeSwitcherViewModel {
                 ModeSwitcherView(viewModel: msVM)
                     .padding(Self.textPadding)
-            } else {
-                if viewModel.displayedTurn != nil {
-                    displayedTurnSection
-                    Divider()
-                }
-
-                segmentedInputSection
+            } else if viewModel.displayedTurn != nil {
+                displayedTurnSection
             }
 
             Divider()
@@ -126,57 +118,6 @@ struct CaptureView: View {
         .background(Color.primary.opacity(Self.headerBackgroundOpacity))
     }
 
-    // MARK: - Input Section
-
-    @ViewBuilder
-    private var segmentedInputSection: some View {
-        ZStack(alignment: .topLeading) {
-            // Show animated dots when processing and no displayed turn yet
-            if viewModel.fullText.isEmpty && viewModel.isProcessing
-                && viewModel.displayedTurn == nil {
-                AnimatedDotsView()
-                    .padding(.horizontal, Self.textPadding)
-                    .padding(.top, 8 + Self.textInputTopInset)
-            }
-
-            VStack(spacing: 0) {
-                ForEach(Array(viewModel.inputSegments.enumerated()), id: \.element.id) { index, segment in
-                    SegmentEditor(
-                        text: segmentTextBinding(at: index),
-                        isEditable: !viewModel.isProcessing,
-                        onFocus: {
-                            viewModel.activeSegmentIndex = index
-                        },
-                        onHeightChange: { height in
-                            viewModel.segmentHeights[segment.id] = height
-                            viewModel.onContentHeightChanged?()
-                        }
-                    )
-                    .frame(height: max(Self.minEditorHeight, viewModel.segmentHeights[segment.id] ?? Self.minEditorHeight))
-
-                    if let capture = segment.capture {
-                        captureBlockquote(capture)
-                            .padding(.horizontal, Self.textPadding)
-                            .padding(.vertical, 4)
-                    }
-                }
-            }
-        }
-        .frame(minHeight: Self.segmentTextMinHeight)
-    }
-
-    // MARK: - Segment Helpers
-
-    private func segmentTextBinding(at index: Int) -> Binding<String> {
-        Binding(
-            get: { viewModel.inputSegments.indices.contains(index) ? viewModel.inputSegments[index].text : "" },
-            set: { newValue in
-                guard viewModel.inputSegments.indices.contains(index) else { return }
-                viewModel.inputSegments[index].text = newValue
-            }
-        )
-    }
-
     private var recordingDot: some View {
         Circle()
             .fill(Color.red)
@@ -199,7 +140,7 @@ struct CaptureView: View {
 
             Spacer()
             if !viewModel.isRecording {
-                hintLabel("\u{21B5}", "submit")
+                hintLabel("\u{21B5}", viewModel.displayedTurn != nil ? "confirm" : "submit")
             }
             hintLabel("esc", "dismiss")
         }

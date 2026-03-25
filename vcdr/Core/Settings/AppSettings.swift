@@ -211,7 +211,7 @@ final class AppSettings {
            !decoded.isEmpty {
             self.outputDestinations = decoded
         } else {
-            self.outputDestinations = [OutputDestination.makeDefaultOutputPanel(), OutputDestination.makeDefaultPaste()]
+            self.outputDestinations = [OutputDestination.makeDefaultPasteToInitialApp(), OutputDestination.makeDefaultPaste(), OutputDestination.makeDefaultCopy()]
         }
 
         // Load audio settings (with legacy migration)
@@ -224,14 +224,18 @@ final class AppSettings {
         }
 
         // Ensure built-in destinations exist (migration for existing installs)
-        if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInOutputPanelID }) {
-            outputDestinations.append(OutputDestination.makeDefaultOutputPanel())
-        }
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
             outputDestinations.append(OutputDestination.makeDefaultCopy())
         }
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInPasteToInitialAppID }) {
             outputDestinations.append(OutputDestination.makeDefaultPasteToInitialApp())
+        }
+
+        // Migration: remove outputPanel destination and migrate modes that referenced it
+        let outputPanelID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+        outputDestinations.removeAll { $0.id == outputPanelID }
+        for i in modeConfig.modes.indices where modeConfig.modes[i].defaultOutputDestinationID == outputPanelID {
+            modeConfig.modes[i].defaultOutputDestinationID = OutputDestination.builtInPasteToInitialAppID
         }
     }
 

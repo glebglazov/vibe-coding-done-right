@@ -178,7 +178,7 @@ struct Mode: Identifiable, Codable, Equatable {
         processingCommand: String = "",
         systemPromptEnabled: Bool = false,
         systemPrompt: String = "",
-        defaultOutputDestinationID: UUID = OutputDestination.builtInOutputPanelID,
+        defaultOutputDestinationID: UUID = OutputDestination.builtInPasteToInitialAppID,
         parameters: [ModeParameter] = [],
         showPreview: Bool = false,
         saveResultToClipboard: Bool = false
@@ -239,7 +239,7 @@ struct Mode: Identifiable, Codable, Equatable {
         templateID = try container.decodeIfPresent(String.self, forKey: .templateID)
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
-        defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInOutputPanelID
+        defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteToInitialAppID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
         // New key takes precedence; fall back to inverted legacy quickAction
         if let preview = try container.decodeIfPresent(Bool.self, forKey: .showPreview) {

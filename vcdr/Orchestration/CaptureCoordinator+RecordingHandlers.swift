@@ -50,13 +50,9 @@ extension CaptureCoordinator {
         }
 
         let mode = settings.activeMode
-        let skipPreview = !mode.showPreview || mergedResult.hadDestinationOverride
-
-        if skipPreview {
-            executeImmediateAction(result: mergedResult, mode: mode)
-        } else {
-            populateWithTranscription(result: mergedResult)
-        }
+        // All paths now go through executeImmediateAction.
+        // Preview pause is wired in Phase 3.
+        executeImmediateAction(result: mergedResult, mode: mode)
     }
 
     func handleTranscriptionFailed() {
@@ -102,52 +98,6 @@ extension CaptureCoordinator {
             guard !Task.isCancelled else { return }
             self.cancelCapture()
         }
-    }
-
-    func populateWithTranscription(result: RecordingResult) {
-        if session == nil {
-            session = PipelineSession()
-            session?.previousActiveApp = result.previousActiveApp
-        }
-        // Update the panel's initial app name now that previousActiveApp is known
-        panel.updateInitialAppName(session?.previousActiveApp?.localizedName)
-        if session?.conversationID == nil {
-            session?.conversationID = UUID()
-        }
-        guard let activeSession = session, let currentConversationID = activeSession.conversationID else {
-            Logger.app.error("populateWithTranscription: session unexpectedly nil")
-            return
-        }
-
-        let newCaptures = result.captures
-        session?.captures = newCaptures
-        showPanelWithSegments([makeInitialSegment(text: result.text, capture: newCaptures.first)])
-
-        panel.expand()
-        recordingIndicator.hide()
-
-        // Store the panel's current segments as-is for a faithful history record.
-        // Drafts have no mode output yet — output is nil until submission.
-        let currentSegments = panel.viewModel?.inputSegments ?? [InputSegment()]
-        recordHistory(
-            conversationID: currentConversationID,
-            inputSegments: currentSegments, output: nil,
-            mode: settings.activeMode
-        )
-
-        overrides.markPipelineCompleted()
-        Logger.app.info("Pipeline: handed to capture view")
-    }
-
-    private func makeInitialSegment(text: String, capture: CapturedContext?) -> InputSegment {
-        if let capture {
-            return InputSegment(text: text, capture: capture)
-        }
-        return InputSegment(text: text)
-    }
-
-    func showPanelWithSegments(_ inputSegments: [InputSegment]) {
-        configurePanelAndShow(inputSegments: inputSegments)
     }
 
     func showPanelMinimized(phase: CaptureViewModel.CapturePhase) {

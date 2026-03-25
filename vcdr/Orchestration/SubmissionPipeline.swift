@@ -37,9 +37,8 @@ enum SubmissionPipeline {
         )
     }
 
-    /// Executes the output action (paste/copy/bash) for non-outputPanel destinations.
+    /// Executes the output action (paste/copy/bash).
     static func executeAction(context: Context, processedText: String) async throws {
-        guard context.destination.type != .outputPanel else { return }
         if let action = OutputActionFactory.makeAction(
             for: context.destination,
             targetAppPID: context.targetAppPID,
@@ -54,19 +53,6 @@ enum SubmissionPipeline {
         let result = try await process(context: context)
         try await executeAction(context: context, processedText: result.processedText)
         return result
-    }
-
-    // MARK: - Streaming Execution
-
-    /// Starts a streaming pipeline. Returns the stream and metadata.
-    /// Caller is responsible for consuming the stream and driving UI updates.
-    static func runStreaming(context: Context) -> StreamingPipelineResult {
-        TextProcessingPipeline.runStreaming(
-            mode: context.mode,
-            text: context.text,
-            captures: context.captures,
-            parameterValues: context.parameterValues
-        )
     }
 
     // MARK: - History Recording

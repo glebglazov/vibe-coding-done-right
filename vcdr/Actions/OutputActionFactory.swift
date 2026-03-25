@@ -3,7 +3,6 @@ import OSLog
 
 enum OutputActionFactory {
     /// Creates the appropriate PostTranscriptionAction for a given output destination.
-    /// Returns nil for `.outputPanel` destinations (handled separately by callers).
     static func makeAction(
         for destination: OutputDestination,
         targetAppPID: pid_t?,
@@ -19,8 +18,6 @@ enum OutputActionFactory {
                 name: destination.name,
                 commandTemplate: destination.bashCommand
             )
-        case .outputPanel:
-            return nil
         case .copy:
             return CopyAction()
         }

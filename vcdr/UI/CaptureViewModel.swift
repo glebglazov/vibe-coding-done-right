@@ -5,20 +5,11 @@ import OSLog
 final class CaptureViewModel {
     // MARK: - State
 
-    var inputSegments: [InputSegment] = [InputSegment()]
-    /// Index of the segment the cursor is currently in.
-    /// Updated by SegmentEditor's onFocus callback when the user clicks into or types in an editor.
-    /// Used by CaptureCoordinator to decide where to insert new captures.
-    var activeSegmentIndex: Int = 0
     var displayedTurn: ConversationTurn?
     var isMinimized: Bool = false
     var processedByModeName: String?
     var rejectCount: Int = 0
     var modeSwitcherViewModel: ModeSwitcherViewModel?
-    /// Actual content heights per segment, reported by SegmentEditor layout manager.
-    var segmentHeights: [UUID: CGFloat] = [:]
-    /// Called when segment content height changes, so the panel can resize.
-    var onContentHeightChanged: (() -> Void)?
 
     /// Unified phase for both the minimized pill and expanded view state
     enum CapturePhase {
@@ -46,10 +37,12 @@ final class CaptureViewModel {
 
     // MARK: - Callbacks
 
-    let onSubmit: (String) -> Void
     let onDismiss: () -> Void
     var onCancelCapture: (() -> Void)?
-    var onDestinationSubmit: ((String, UUID) -> Void)?
+    /// Called when the user presses Return to confirm the preview.
+    var onConfirm: (() -> Void)?
+    /// Called when a destination hotkey is pressed during preview, passing the destination ID.
+    var onDestinationSubmit: ((UUID) -> Void)?
     let onExpand: () -> Void
     let audioRecorder: AudioRecorder?
 
@@ -81,21 +74,6 @@ final class CaptureViewModel {
         return destination.name.lowercased()
     }
 
-    /// All captures across all inputSegments, preserving order.
-    var allCaptures: [CapturedContext] {
-        inputSegments.compactMap(\.capture)
-    }
-
-    /// Whether any segment has a capture.
-    var hasCaptures: Bool {
-        inputSegments.contains { $0.capture != nil }
-    }
-
-    /// Full text content across all inputSegments (for checking emptiness, draft recording).
-    var fullText: String {
-        inputSegments.map(\.text).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     /// Show "You:" / "Result:" labels when the displayed turn has processed output.
     var showLabels: Bool {
         guard let turn = displayedTurn else { return false }
@@ -121,9 +99,7 @@ final class CaptureViewModel {
         settings: AppSettings,
         overrides: ConversationOverrides,
         displayedTurn: ConversationTurn? = nil,
-        inputSegments: [InputSegment] = [InputSegment()],
         outputDestinations: [OutputDestination] = [],
-        onSubmit: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void,
         onExpand: @escaping () -> Void = {},
         audioRecorder: AudioRecorder? = nil
@@ -131,9 +107,7 @@ final class CaptureViewModel {
         self.settings = settings
         self.overrides = overrides
         self.displayedTurn = displayedTurn
-        self.inputSegments = inputSegments
         self.outputDestinations = outputDestinations
-        self.onSubmit = onSubmit
         self.onDismiss = onDismiss
         self.onExpand = onExpand
         self.audioRecorder = audioRecorder
@@ -142,7 +116,6 @@ final class CaptureViewModel {
     func clearError() {
         errorMessage = nil
         phase = .idle
-        onContentHeightChanged?()
     }
 
     // MARK: - Key Handling
@@ -154,7 +127,7 @@ final class CaptureViewModel {
             return msVM.handleKeyEvent(event)
         }
 
-        // During recording, only handle submit/dismiss — let typing pass through
+        // During recording, only handle dismiss — let other keys pass through
         if isRecording {
             if event.keyCode == KeyCodeMap.escapeKeyCode {
                 onDismiss()
@@ -165,9 +138,7 @@ final class CaptureViewModel {
 
         // Check destination hotkeys (Ctrl+P for paste, Ctrl+C for copy, etc.)
         if let matchedDestination = matchDestinationHotkey(event) {
-            let effectiveText = resolveSubmissionText()
-            guard !effectiveText.isEmpty else { return true }
-            onDestinationSubmit?(effectiveText, matchedDestination)
+            onDestinationSubmit?(matchedDestination)
             return true
         }
 
@@ -179,12 +150,8 @@ final class CaptureViewModel {
 
         switch event.keyCode {
         case KeyCodeMap.returnKeyCode:
-            // Shift+Return inserts newline (pass through to text editor)
-            if event.modifierFlags.contains(.shift) { return false }
             guard !isProcessing else { return true }
-            let effectiveText = resolveSubmissionText()
-            guard !effectiveText.isEmpty else { return true }
-            onSubmit(effectiveText)
+            onConfirm?()
             return true
         case KeyCodeMap.escapeKeyCode:
             onDismiss()
@@ -192,35 +159,6 @@ final class CaptureViewModel {
         default:
             return false
         }
-    }
-
-    /// Builds interleaved submission text with `<capture-N>` tags from inputSegments.
-    /// Falls back to first capture text for submit-without-typing.
-    private func resolveSubmissionText() -> String {
-        // Trim trailing empty inputSegments (no text, no capture) from submission
-        var effectiveSegments = inputSegments
-        while effectiveSegments.count > 1,
-              let last = effectiveSegments.last,
-              last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              last.capture == nil {
-            effectiveSegments.removeLast()
-        }
-
-        var parts: [String] = []
-        for (index, segment) in effectiveSegments.enumerated() {
-            let trimmed = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                parts.append(trimmed)
-            }
-            if let capture = segment.capture {
-                let captureNumber = effectiveSegments[0...index].compactMap(\.capture).count
-                parts.append("<capture-\(captureNumber)>\(capture.text)</capture-\(captureNumber)>")
-            }
-        }
-        let result = parts.joined(separator: "\n")
-        if !result.isEmpty { return result }
-        // Fallback: first capture text (for submit-without-typing)
-        return effectiveSegments.first?.capture?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     /// Checks if the event matches the configured cancel recording hotkey.
