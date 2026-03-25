@@ -5,7 +5,7 @@ import OSLog
 final class CaptureViewModel {
     // MARK: - State
 
-    var displayedTurn: ConversationTurn?
+    var displayedTurn: DisplayedTurn?
     var isMinimized: Bool = false
     var processedByModeName: String?
     var rejectCount: Int = 0
@@ -30,7 +30,7 @@ final class CaptureViewModel {
     // MARK: - Configuration
 
     let settings: AppSettings
-    let overrides: ConversationOverrides
+    let overrides: SessionOverrides
     let outputDestinations: [OutputDestination]
     /// Name of the app that was frontmost when capture started, for display in "Paste to Initial App" labels.
     var initialAppName: String?
@@ -97,8 +97,8 @@ final class CaptureViewModel {
 
     init(
         settings: AppSettings,
-        overrides: ConversationOverrides,
-        displayedTurn: ConversationTurn? = nil,
+        overrides: SessionOverrides,
+        displayedTurn: DisplayedTurn? = nil,
         outputDestinations: [OutputDestination] = [],
         onDismiss: @escaping () -> Void,
         onExpand: @escaping () -> Void = {},

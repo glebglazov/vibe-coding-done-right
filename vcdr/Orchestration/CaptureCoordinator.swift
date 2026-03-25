@@ -12,7 +12,7 @@ final class CaptureCoordinator {
     private let selectionCapturer: SelectionCapturer
     let clipboardMonitor: ClipboardMonitor
     let transcriptionHistory: TranscriptionHistory
-    let overrides: ConversationOverrides
+    let overrides: SessionOverrides
 
     @ObservationIgnored var session: PipelineSession?
 
@@ -67,7 +67,7 @@ final class CaptureCoordinator {
         selectionCapturer: SelectionCapturer,
         clipboardMonitor: ClipboardMonitor,
         transcriptionHistory: TranscriptionHistory,
-        overrides: ConversationOverrides
+        overrides: SessionOverrides
     ) {
         self.settings = settings
         self.panel = panel
@@ -80,7 +80,7 @@ final class CaptureCoordinator {
     }
 
     func showFromHistory(conversation: Conversation) {
-        let displayTurn = ConversationTurn(inputSegments: conversation.inputSegments, output: conversation.output)
+        let displayTurn = DisplayedTurn(inputSegments: conversation.inputSegments, output: conversation.output)
         configurePanelAndShow(displayedTurn: displayTurn)
         if conversation.hadExternalProcessing {
             panel.setProcessedByModeName(conversation.modeName)
@@ -95,7 +95,7 @@ final class CaptureCoordinator {
     }
 
     func configurePanelAndShow(
-        displayedTurn: ConversationTurn? = nil,
+        displayedTurn: DisplayedTurn? = nil,
         minimized: Bool = false
     ) {
         rewirePanelCallbacks()

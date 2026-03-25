@@ -63,7 +63,7 @@ final class RecordingIndicatorPanel {
     private let captureState = IndicatorCaptureState()
     private let modeSwitcherState = IndicatorModeSwitcherState()
     private let settings: AppSettings
-    private let overrides: ConversationOverrides
+    private let overrides: SessionOverrides
     private let audioRecorder: AudioRecorder
     /// Stored top offset for positioning below the output panel during follow-ups.
     /// Used by showCancelled() so the cancelled indicator appears in the same spot.
@@ -74,7 +74,7 @@ final class RecordingIndicatorPanel {
 
     var isVisible: Bool { panel != nil }
 
-    init(settings: AppSettings, overrides: ConversationOverrides, audioRecorder: AudioRecorder) {
+    init(settings: AppSettings, overrides: SessionOverrides, audioRecorder: AudioRecorder) {
         self.settings = settings
         self.overrides = overrides
         self.audioRecorder = audioRecorder

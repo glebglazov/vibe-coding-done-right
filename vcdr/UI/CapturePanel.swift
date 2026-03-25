@@ -25,8 +25,8 @@ final class CapturePanel {
 
     func show(
         settings: AppSettings,
-        overrides: ConversationOverrides,
-        displayedTurn: ConversationTurn? = nil,
+        overrides: SessionOverrides,
+        displayedTurn: DisplayedTurn? = nil,
         outputDestinations: [OutputDestination] = [],
         initialAppName: String? = nil,
         audioRecorder: AudioRecorder? = nil,
@@ -95,9 +95,9 @@ final class CapturePanel {
 
     var isMinimized: Bool { viewModel?.isMinimized ?? false }
 
-    var currentTurn: ConversationTurn? { viewModel?.displayedTurn }
+    var currentTurn: DisplayedTurn? { viewModel?.displayedTurn }
 
-    private func presentPanel(viewModel: CaptureViewModel, displayedTurn: ConversationTurn? = nil, skipFocus: Bool = false) {
+    private func presentPanel(viewModel: CaptureViewModel, displayedTurn: DisplayedTurn? = nil, skipFocus: Bool = false) {
         let view = CaptureView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
         let panelHeight = Self.calculateHeight(for: displayedTurn)

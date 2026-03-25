@@ -146,7 +146,7 @@ struct RecordingIndicatorView: View {
     let captureState: IndicatorCaptureState
     let modeSwitcherState: IndicatorModeSwitcherState
     let settings: AppSettings
-    let overrides: ConversationOverrides
+    let overrides: SessionOverrides
     let audioRecorder: AudioRecorder
 
     var body: some View {

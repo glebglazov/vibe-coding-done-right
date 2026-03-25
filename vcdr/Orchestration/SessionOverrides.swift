@@ -1,20 +1,17 @@
 import Foundation
 
-/// Manages parameter and destination overrides for the current conversation.
+/// Manages parameter and destination overrides for the current session.
 /// Shared between RecordingCoordinator and CaptureCoordinator so both
 /// participate in the same override lifecycle: set → consume → clear-on-next.
 @Observable
 @MainActor
-final class ConversationOverrides {
+final class SessionOverrides {
     /// Parameter value overrides keyed by parameter ID -> selected option value string.
     var parameterOverrides: [UUID: String] = [:]
 
     /// Output destination override; nil means use mode default.
     var destinationOverride: UUID?
 
-    /// Whether a pipeline has completed with active overrides.
-    /// Used to clear overrides on the next fresh input.
-    private var hasCompletedWithOverrides = false
 
     // MARK: - Resolution
 
@@ -53,30 +50,16 @@ final class ConversationOverrides {
 
     // MARK: - Lifecycle
 
-    /// Mark that a pipeline completed with active overrides.
-    /// The next fresh input will clear parameter overrides.
+    /// Mark that a pipeline completed.
     /// Destination override is cleared immediately — it's per-recording only,
     /// and leaving it set would show stale state in the mode switcher between recordings.
     func markPipelineCompleted() {
-        if !parameterOverrides.isEmpty || destinationOverride != nil {
-            hasCompletedWithOverrides = true
-        }
         destinationOverride = nil
-    }
-
-    /// Clear overrides if a previous pipeline completed with them active.
-    /// Called at the start of fresh input (recording or push-to-type).
-    func clearIfCompletedPipeline() {
-        guard hasCompletedWithOverrides else { return }
-        parameterOverrides = [:]
-        destinationOverride = nil
-        hasCompletedWithOverrides = false
     }
 
     /// Clear all overrides immediately (e.g. on cancel).
     func clearAll() {
         parameterOverrides = [:]
         destinationOverride = nil
-        hasCompletedWithOverrides = false
     }
 }

@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Shared view for rendering a single conversation turn with proper formatting.
-/// Used by both CaptureView (live conversation) and HistoryTabView (history display).
-struct ConversationTurnView: View {
-    let turn: ConversationTurn
+/// Shared view for rendering a single displayed turn with proper formatting.
+/// Used by both CaptureView (live capture) and HistoryTabView (history display).
+struct DisplayedTurnView: View {
+    let turn: DisplayedTurn
     let showLabels: Bool
     var modeName: String?
     var isProcessing: Bool = false

@@ -30,25 +30,27 @@ struct E2ETestEnvironment {
         var failedMessages: [String] = []
         var transcriptionFailedCount = 0
         var cancelledCount = 0
+        var rejectCount = 0
 
         func recordingCoordinatorWillStartRecording() {}
-        func recordingCoordinatorIsPanelVisible() -> Bool { false }
-        func recordingCoordinatorDidStartRecording(isFollowUp: Bool) {}
+        func recordingCoordinatorDidStartRecording() {}
         func recordingCoordinatorDidStartTranscribing() {}
         func recordingCoordinatorDidCompleteRecording(result: RecordingResult) {
             completed.append(result)
         }
-        func recordingCoordinatorDidFailTranscription(isFollowUp: Bool) {
+        func recordingCoordinatorDidFailTranscription() {
             transcriptionFailedCount += 1
         }
-        func recordingCoordinatorDidCancelRecording(wasFollowUp: Bool, wasFreshPill: Bool) {
+        func recordingCoordinatorDidCancelRecording() {
             cancelledCount += 1
         }
         func recordingCoordinatorDidFailRecording(message: String) {
             failedMessages.append(message)
         }
+        func recordingCoordinatorDidRejectInput() {
+            rejectCount += 1
+        }
         func recordingCoordinatorDidCaptureSelection() {}
-        func recordingCoordinatorDidCaptureClipboard() {}
     }
 
     init(
@@ -78,14 +80,13 @@ struct E2ETestEnvironment {
         #endif
         self.audioRecorder = audioRecorder
 
-        let overrides = ConversationOverrides()
+        let overrides = SessionOverrides()
         let recordingIndicator = RecordingIndicatorPanel(
             settings: settings,
             overrides: overrides,
             audioRecorder: audioRecorder
         )
         let selectionCapturer = SelectionCapturer()
-        let clipboardMonitor = ClipboardMonitor()
 
         self.coordinator = RecordingCoordinator(
             settings: settings,
@@ -94,7 +95,6 @@ struct E2ETestEnvironment {
             mediaPlaybackController: MediaPlaybackController(),
             recordingIndicator: recordingIndicator,
             selectionCapturer: selectionCapturer,
-            clipboardMonitor: clipboardMonitor,
             overrides: overrides
         )
 

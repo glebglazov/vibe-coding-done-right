@@ -9,7 +9,7 @@ extension CaptureView {
         if let turn = viewModel.displayedTurn {
             let isProcessingTurn = viewModel.isProcessing
             VStack(alignment: .leading, spacing: 0) {
-                ConversationTurnView(
+                DisplayedTurnView(
                     turn: turn,
                     showLabels: viewModel.showLabels,
                     modeName: viewModel.processedByModeName,

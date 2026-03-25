@@ -42,7 +42,7 @@ final class RecordingCoordinator {
     private let mediaPlaybackController: MediaPlaybackController
     let recordingIndicator: RecordingIndicatorPanel
     private let selectionCapturer: SelectionCapturer
-    let overrides: ConversationOverrides
+    let overrides: SessionOverrides
 
     @ObservationIgnored weak var delegate: RecordingCoordinatorDelegate?
 
@@ -60,7 +60,7 @@ final class RecordingCoordinator {
         mediaPlaybackController: MediaPlaybackController,
         recordingIndicator: RecordingIndicatorPanel,
         selectionCapturer: SelectionCapturer,
-        overrides: ConversationOverrides
+        overrides: SessionOverrides
     ) {
         self.settings = settings
         self.transcriptionProvider = transcriptionProvider
@@ -178,7 +178,6 @@ final class RecordingCoordinator {
             return
         }
 
-        let recordingDuration = recordingStartInstant.map { $0.duration(to: .now) }
         recordingStartInstant = nil
 
         guard let audioURL = audioRecorder.stopRecording() else {
@@ -200,7 +199,7 @@ final class RecordingCoordinator {
         }
 
         processingTask = Task { @MainActor in
-            await self.processTranscription(audioURL: audioURL, recordingDuration: recordingDuration)
+            await self.processTranscription(audioURL: audioURL)
         }
     }
 

@@ -9,7 +9,7 @@ extension RecordingCoordinator {
 
     // MARK: - Transcription Processing
 
-    func processTranscription(audioURL: URL, recordingDuration: Duration?) async {
+    func processTranscription(audioURL: URL) async {
         do {
             let transcriptionStart = ContinuousClock.now
             let rawText = try await transcriptionProvider.transcribe(audioFileURL: audioURL)

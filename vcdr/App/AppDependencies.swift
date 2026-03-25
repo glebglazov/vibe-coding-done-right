@@ -46,7 +46,7 @@ final class AppDependencies {
         #if DEBUG
         self.audioRecorder = audioRecorder
         #endif
-        let overrides = ConversationOverrides()
+        let overrides = SessionOverrides()
         let recordingIndicator = RecordingIndicatorPanel(settings: settings, overrides: overrides, audioRecorder: audioRecorder)
         let selectionCapturer = SelectionCapturer()
         let clipboardMonitor = ClipboardMonitor()

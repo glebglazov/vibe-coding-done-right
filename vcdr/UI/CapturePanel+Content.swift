@@ -8,7 +8,7 @@ extension CapturePanel {
     /// driven by the `.processing` phase, not by a sentinel output value.
     /// Does NOT minimize — the panel is already minimized from recording start.
     func populateImmediateActionText(inputSegments: [InputSegment]) {
-        viewModel?.displayedTurn = ConversationTurn(inputSegments: inputSegments, output: nil)
+        viewModel?.displayedTurn = DisplayedTurn(inputSegments: inputSegments, output: nil)
         viewModel?.errorMessage = nil
         // Phase is already .processing from handleTranscribing → setPhase(.processing)
     }
@@ -17,32 +17,12 @@ extension CapturePanel {
     /// Sets the displayed turn with output, transitions to idle phase, and expands.
     func showPreview(text: String, modeName: String?) {
         guard let viewModel, let turn = viewModel.displayedTurn else { return }
-        viewModel.displayedTurn = ConversationTurn(id: turn.id, inputSegments: turn.inputSegments, output: text)
+        viewModel.displayedTurn = DisplayedTurn(id: turn.id, inputSegments: turn.inputSegments, output: text)
         if let modeName {
             viewModel.processedByModeName = modeName
         }
         viewModel.phase = .idle
         expand()
-    }
-
-    func finishProcessing(outputText: String) {
-        guard let viewModel, let turn = viewModel.displayedTurn else { return }
-        viewModel.displayedTurn = ConversationTurn(id: turn.id, inputSegments: turn.inputSegments, output: outputText)
-        viewModel.phase = .idle
-        expand()
-    }
-
-    func showProcessingError(_ message: String) {
-        guard let viewModel else { return }
-        viewModel.displayedTurn = nil
-        viewModel.errorMessage = message
-        viewModel.phase = .error
-        if viewModel.isMinimized {
-            expand()
-        } else {
-            resizePanel()
-        }
-        Logger.actions.error("Capture panel processing failed: \(message)")
     }
 
     func setError(_ message: String) {

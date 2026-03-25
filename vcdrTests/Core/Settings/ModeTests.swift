@@ -14,7 +14,7 @@ private func makeMode(
     processingCommand: String = "",
     systemPromptEnabled: Bool = false,
     systemPrompt: String = "",
-    quickAction: Bool = false
+    showPreview: Bool = false
 ) -> Mode {
     Mode(
         id: id,
@@ -27,7 +27,7 @@ private func makeMode(
         systemPrompt: systemPrompt,
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         parameters: [],
-        quickAction: quickAction
+        showPreview: showPreview
     )
 }
 
@@ -121,13 +121,6 @@ struct ModeApplyPreProcessingTests {
         #expect(mode.applyPreProcessing("hello", captures: []) == "hello")
     }
 
-    @Test("Prepends follow-up context before new dictation")
-    @MainActor func followUpContext() {
-        let mode = makeMode()
-        let result = mode.applyPreProcessing("new text", captures: [], followUpContext: "previous")
-        #expect(result == "previous\n\nnew text")
-    }
-
     @Test("Prepends system prompt when bash processing and system prompt enabled")
     @MainActor func systemPromptWithBash() {
         let mode = makeMode(
@@ -176,7 +169,7 @@ struct ModeApplyPreProcessingTests {
             == "rewrite this\n\n<capture-1>selected text</capture-1>")
     }
 
-    @Test("Full pipeline: follow-up + system prompt + captures in correct order")
+    @Test("Full pipeline: system prompt + captures in correct order")
     @MainActor func fullPipeline() {
         let mode = makeMode(
             processingType: .bashScript,
@@ -184,13 +177,9 @@ struct ModeApplyPreProcessingTests {
             systemPrompt: "Prompt:"
         )
         let captures = [CapturedContext(text: "selection", source: .selection)]
-        let result = mode.applyPreProcessing(
-            "dictation",
-            captures: captures,
-            followUpContext: "context"
-        )
-        // Order: follow-up prepended → system prompt prepended → captures appended
-        #expect(result == "Prompt:\n\ncontext\n\ndictation\n\n<capture-1>selection</capture-1>")
+        let result = mode.applyPreProcessing("dictation", captures: captures)
+        // Order: system prompt prepended → captures appended
+        #expect(result == "Prompt:\n\ndictation\n\n<capture-1>selection</capture-1>")
     }
 }
 

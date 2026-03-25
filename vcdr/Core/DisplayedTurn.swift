@@ -2,7 +2,7 @@ import Foundation
 
 /// Lightweight display model for a single input + optional output.
 /// Used by the capture panel and turn view for rendering — not persisted.
-struct ConversationTurn: Identifiable, Equatable, Sendable {
+struct DisplayedTurn: Identifiable, Equatable, Sendable {
     let id: UUID
     let inputSegments: [InputSegment]
     let output: String?

@@ -8,11 +8,11 @@ final class ModeSwitcherCoordinator {
     private let settings: AppSettings
     private let hotkeyManager = GlobalHotkeyManager()
     private let panel = ModeSwitcherPanel()
-    private let overrides: ConversationOverrides
+    private let overrides: SessionOverrides
 
     @ObservationIgnored weak var delegate: ModeSwitcherCoordinatorDelegate?
 
-    init(settings: AppSettings, overrides: ConversationOverrides) {
+    init(settings: AppSettings, overrides: SessionOverrides) {
         self.settings = settings
         self.overrides = overrides
     }

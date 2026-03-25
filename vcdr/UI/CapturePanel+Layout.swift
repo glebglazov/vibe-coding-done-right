@@ -4,7 +4,7 @@ extension CapturePanel {
 
     static let lineHeight: CGFloat = 20
     static let labelLineHeight: CGFloat = 18
-    static let conversationPadding: CGFloat = 24
+    static let contentPadding: CGFloat = 24
     static let hintBarHeight: CGFloat = 30
     static let panelMinBaseHeight: CGFloat = 60
     static let errorBannerHeight: CGFloat = 28
@@ -17,7 +17,7 @@ extension CapturePanel {
         return visibleHeight * panelMaxHeightFraction
     }
 
-    static func calculateHeight(for turn: ConversationTurn?, hasError: Bool = false) -> CGFloat {
+    static func calculateHeight(for turn: DisplayedTurn?, hasError: Bool = false) -> CGFloat {
         let errorHeight: CGFloat = hasError ? errorBannerHeight : 0
 
         guard let turn else {
@@ -39,7 +39,7 @@ extension CapturePanel {
             totalLines += CGFloat(capture.text.components(separatedBy: .newlines).count) * captureLineHeightScale
         }
 
-        let conversationHeight = totalLines * lineHeight + conversationPadding
+        let conversationHeight = totalLines * lineHeight + contentPadding
         let total = panelMinBaseHeight + conversationHeight + hintBarHeight + errorHeight
         return min(total, maxPanelHeight())
     }

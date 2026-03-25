@@ -50,8 +50,6 @@ extension CaptureCoordinator {
         }
 
         let mode = settings.activeMode
-        // All paths now go through executeImmediateAction.
-        // Preview pause is wired in Phase 3.
         executeImmediateAction(result: mergedResult, mode: mode)
     }
 

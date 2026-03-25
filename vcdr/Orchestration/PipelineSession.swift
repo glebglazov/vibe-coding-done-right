@@ -16,6 +16,5 @@ struct RecordingResult {
 /// errors out, or is cancelled — replacing individual property resets.
 struct PipelineSession {
     var previousActiveApp: NSRunningApplication?
-    var captures: [CapturedContext] = []
     var conversationID: UUID?
 }

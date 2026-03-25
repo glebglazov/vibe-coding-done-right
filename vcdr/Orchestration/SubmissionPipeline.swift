@@ -48,13 +48,6 @@ enum SubmissionPipeline {
         }
     }
 
-    /// Convenience: runs processing + action in one call. Used by quick action path.
-    static func run(context: Context) async throws -> Result {
-        let result = try await process(context: context)
-        try await executeAction(context: context, processedText: result.processedText)
-        return result
-    }
-
     // MARK: - History Recording
 
     static func recordHistory(

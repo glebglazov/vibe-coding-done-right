@@ -56,14 +56,14 @@ private struct ConversationRowView: View {
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: 4) {
                     // Single turn display
-                    let turn = ConversationTurn(
+                    let turn = DisplayedTurn(
                         inputSegments: conversation.inputSegments,
                         output: conversation.output
                     )
                     let showLabels = conversation.hadExternalProcessing
                         || conversation.inputSegments.contains(where: { $0.capture != nil })
 
-                    ConversationTurnView(
+                    DisplayedTurnView(
                         turn: turn,
                         showLabels: showLabels,
                         modeName: conversation.hadExternalProcessing ? conversation.modeName : nil,
