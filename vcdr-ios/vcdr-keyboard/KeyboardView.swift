@@ -1,33 +1,20 @@
 import SwiftUI
 
-/// Dictation bar displayed above the KeyboardKit system keyboard.
+/// Small mic icon displayed on the right side of the autocomplete toolbar.
 struct DictateBarView: View {
     let hasFullAccess: Bool
 
     // MARK: - Constants
-    private static let barHeight: CGFloat = 44
+    private static let iconSize: CGFloat = 20
+    private static let tapTargetSize: CGFloat = 36
 
     var body: some View {
-        if !hasFullAccess {
-            Text("Enable Full Access in Settings for voice dictation")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
-        }
-
         Link(destination: SharedConstants.recordDeepLinkURL) {
-            HStack(spacing: 8) {
-                Image(systemName: "mic.fill")
-                    .font(.body)
-                Text("Dictate")
-                    .font(.body.weight(.medium))
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.barHeight)
-            .background(.blue, in: RoundedRectangle(cornerRadius: 8))
-            .padding(.horizontal, 4)
-            .padding(.bottom, 4)
+            Image(systemName: "mic.fill")
+                .font(.system(size: Self.iconSize))
+                .foregroundStyle(.blue)
+                .frame(width: Self.tapTargetSize, height: Self.tapTargetSize)
         }
+        .padding(.trailing, 4)
     }
 }

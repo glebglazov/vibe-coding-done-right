@@ -24,17 +24,20 @@ class KeyboardViewController: KeyboardInputViewController {
     override func viewWillSetupKeyboardView() {
         let fullAccess = hasFullAccess
         setupKeyboardView { controller in
-            VStack(spacing: 0) {
-                DictateBarView(hasFullAccess: fullAccess)
-                KeyboardView(
-                    services: controller.services,
-                    buttonContent: { $0.view },
-                    buttonView: { $0.view },
-                    collapsedView: { $0.view },
-                    emojiKeyboard: { $0.view },
-                    toolbar: { $0.view }
-                )
-            }
+            KeyboardView(
+                services: controller.services,
+                buttonContent: { $0.view },
+                buttonView: { $0.view },
+                collapsedView: { $0.view },
+                emojiKeyboard: { $0.view },
+                toolbar: { params in
+                    // Autocomplete suggestions + mic icon on the right
+                    HStack(spacing: 0) {
+                        params.view
+                        DictateBarView(hasFullAccess: fullAccess)
+                    }
+                }
+            )
         }
     }
 
