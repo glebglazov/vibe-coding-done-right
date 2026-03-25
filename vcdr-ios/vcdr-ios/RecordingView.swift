@@ -2,6 +2,10 @@ import SwiftUI
 
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
+    @State private var showCopiedConfirmation = false
+
+    // MARK: - Constants
+    private static let copiedConfirmationDuration: Duration = .seconds(3)
 
     var body: some View {
         VStack(spacing: 32) {
@@ -48,10 +52,18 @@ struct RecordingView: View {
                 HStack(spacing: 16) {
                     Button {
                         UIPasteboard.general.string = text
+                        showCopiedConfirmation = true
+                        Task {
+                            try? await Task.sleep(for: Self.copiedConfirmationDuration)
+                            showCopiedConfirmation = false
+                        }
                     } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
+                        Label(showCopiedConfirmation ? "Copied!" : "Copy",
+                              systemImage: showCopiedConfirmation ? "checkmark" : "doc.on.doc")
                     }
                     .buttonStyle(.bordered)
+                    .tint(showCopiedConfirmation ? .green : nil)
+                    .animation(.easeInOut, value: showCopiedConfirmation)
                     Button("New Recording") {
                         Task { await coordinator.startRecording() }
                     }
