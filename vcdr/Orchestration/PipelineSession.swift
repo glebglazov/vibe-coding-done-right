@@ -10,8 +10,6 @@ struct RecordingResult {
     let destinationOverrideID: UUID?
     /// Whether a destination hotkey was pressed during recording.
     let hadDestinationOverride: Bool
-    /// Whether the capture panel was visible when recording started.
-    let isFollowUp: Bool
 }
 
 /// Bundles all per-pipeline-run state. Cleared to nil after each run completes,
@@ -19,10 +17,5 @@ struct RecordingResult {
 struct PipelineSession {
     var previousActiveApp: NSRunningApplication?
     var captures: [CapturedContext] = []
-    var followUpContext: String?
-    var conversationTurns: [ConversationTurn] = []
     var conversationID: UUID?
-    /// When opened from history with canContinue, tracks the original conversation ID
-    /// so the first write can duplicate it under the new conversationID.
-    var historySourceConversationID: UUID?
 }

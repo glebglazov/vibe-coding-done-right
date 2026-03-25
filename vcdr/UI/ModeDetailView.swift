@@ -88,8 +88,8 @@ struct ModeDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Quick Action", isOn: $mode.quickAction)
-                    Text("When enabled, recording result is immediately processed and sent to the default output destination without showing the Capture View.")
+                    Toggle("Show Preview", isOn: $mode.showPreview)
+                    Text("When enabled, shows the transcription for editing before processing. When off, the result is immediately processed and sent to the output destination.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

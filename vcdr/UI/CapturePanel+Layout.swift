@@ -4,7 +4,6 @@ extension CapturePanel {
 
     static let lineHeight: CGFloat = 20
     static let labelLineHeight: CGFloat = 18
-    static let turnDividerHeight: CGFloat = 10
     static let conversationPadding: CGFloat = 24
     static let hintBarHeight: CGFloat = 30
     static let panelMinBaseHeight: CGFloat = 60
@@ -19,11 +18,9 @@ extension CapturePanel {
         return visibleHeight * panelMaxHeightFraction
     }
 
-    static func calculateHeight(for turns: [ConversationTurn], inputSegments: [InputSegment] = [InputSegment()], segmentHeights: [UUID: CGFloat] = [:], hasError: Bool = false) -> CGFloat {
+    static func calculateHeight(for turn: ConversationTurn?, inputSegments: [InputSegment] = [InputSegment()], segmentHeights: [UUID: CGFloat] = [:], hasError: Bool = false) -> CGFloat {
         var segmentContentHeight: CGFloat = 0
         for segment in inputSegments {
-            // Use layout-reported height if available (accounts for soft wraps),
-            // otherwise fall back to newline counting.
             if let reportedHeight = segmentHeights[segment.id], reportedHeight > 0 {
                 segmentContentHeight += reportedHeight
             } else {
@@ -41,28 +38,23 @@ extension CapturePanel {
 
         let errorHeight: CGFloat = hasError ? errorBannerHeight : 0
 
-        guard !turns.isEmpty else {
+        guard let turn else {
             let total = panelMinBaseHeight + extraHeight + hintBarHeight + errorHeight
             return min(total, maxPanelHeight())
         }
 
+        // Single displayed turn height
         var totalLines: CGFloat = 0
-        for (index, turn) in turns.enumerated() {
-            totalLines += labelLineHeight / lineHeight  // "You:" label
-            totalLines += CGFloat(turn.input.components(separatedBy: .newlines).count)
-            if let output = turn.output {
-                totalLines += labelLineHeight / lineHeight  // "Result:" label
-                totalLines += CGFloat(output.components(separatedBy: .newlines).count)
-            }
+        totalLines += labelLineHeight / lineHeight  // "You:" label
+        totalLines += CGFloat(turn.input.components(separatedBy: .newlines).count)
+        if let output = turn.output {
+            totalLines += labelLineHeight / lineHeight  // "Result:" label
+            totalLines += CGFloat(output.components(separatedBy: .newlines).count)
+        }
 
-            for capture in turn.captures {
-                totalLines += labelLineHeight / lineHeight
-                totalLines += CGFloat(capture.text.components(separatedBy: .newlines).count) * captureLineHeightScale
-            }
-
-            if index < turns.count - 1 {
-                totalLines += turnDividerHeight / lineHeight
-            }
+        for capture in turn.captures {
+            totalLines += labelLineHeight / lineHeight
+            totalLines += CGFloat(capture.text.components(separatedBy: .newlines).count) * captureLineHeightScale
         }
 
         let conversationHeight = totalLines * lineHeight + conversationPadding

@@ -11,7 +11,7 @@ struct ModeTemplate {
     let systemPrompt: String
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
-    let quickAction: Bool
+    let showPreview: Bool
 
     func makeMode() -> Mode {
         Mode(
@@ -25,7 +25,7 @@ struct ModeTemplate {
             systemPrompt: systemPrompt,
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
-            quickAction: quickAction
+            showPreview: showPreview
         )
     }
 
@@ -38,7 +38,7 @@ struct ModeTemplate {
         mode.systemPrompt = systemPrompt
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.parameters = parameters
-        mode.quickAction = quickAction
+        mode.showPreview = showPreview
     }
 
     /// Finds the template definition for a given template ID.
@@ -73,7 +73,7 @@ extension ModeTemplate {
         systemPrompt: "",
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
-        quickAction: false
+        showPreview: false
     )
 
     static let claudeCode = ModeTemplate(
@@ -81,9 +81,9 @@ extension ModeTemplate {
         defaultName: "Claude Code",
         availabilityCommand: "claude",
         processingType: .bashScript,
-        processingCommand: "zsh -ic 'set -o pipefail; cd /tmp && (\n  claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages --resume $VCDR_CONV_ID \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\" ||\n  claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages --session-id $VCDR_CONV_ID \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"\n)'",
+        processingCommand: "zsh -ic 'set -o pipefail; cd /tmp && claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"'",
         systemPromptEnabled: true,
-        systemPrompt: "Act immediately on the user's request without follow-up questions. Input is voice-dictated and may contain minor transcription errors — interpret the intent. Be concise.",
+        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. Input is voice-dictated and may contain minor transcription errors — interpret the intent.",
         parameters: [
             ModeParameter(id: claudeCodeModelParamID, name: "Model", options: [
                 ModeParameterOption(id: claudeCodeHaikuOptionID, label: "Haiku", value: "haiku"),
@@ -92,7 +92,7 @@ extension ModeTemplate {
             ]),
         ],
         defaultOutputDestinationID: OutputDestination.builtInOutputPanelID,
-        quickAction: false
+        showPreview: false
     )
 
     static let ollama = ModeTemplate(
@@ -100,9 +100,9 @@ extension ModeTemplate {
         defaultName: "Ollama",
         availabilityCommand: "ollama",
         processingType: .bashScript,
-        processingCommand: "zsh -ic 'TERM=dumb ollama run --hidethinking --nowordwrap $VCDR_PARAM_MODEL \"$VCDR_CONVERSATION\" 2>/dev/null'",
+        processingCommand: "zsh -ic 'TERM=dumb ollama run --hidethinking --nowordwrap $VCDR_PARAM_MODEL \"$VCDR_TEXT\" 2>/dev/null'",
         systemPromptEnabled: true,
-        systemPrompt: "Be concise and direct. Input is voice-dictated and may contain minor transcription errors — interpret the intent.",
+        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. Input is voice-dictated and may contain minor transcription errors — interpret the intent.",
         parameters: [
             ModeParameter(id: ollamaModelParamID, name: "Model", options: [
                 ModeParameterOption(id: ollamaQwen35_08bOptionID, label: "Qwen3.5 - 0.8B", value: "qwen3.5:0.8b"),
@@ -110,7 +110,7 @@ extension ModeTemplate {
             ]),
         ],
         defaultOutputDestinationID: OutputDestination.builtInOutputPanelID,
-        quickAction: false
+        showPreview: false
     )
 
     static let all: [ModeTemplate] = [.plain, .claudeCode, .ollama]

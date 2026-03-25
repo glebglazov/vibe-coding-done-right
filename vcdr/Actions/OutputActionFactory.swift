@@ -7,7 +7,6 @@ enum OutputActionFactory {
     static func makeAction(
         for destination: OutputDestination,
         targetAppPID: pid_t?,
-        conversationID: UUID,
         saveResultToClipboard: Bool
     ) -> (any PostTranscriptionAction)? {
         switch destination.type {
@@ -18,8 +17,7 @@ enum OutputActionFactory {
         case .bashScript:
             return OutputBashAction(
                 name: destination.name,
-                commandTemplate: destination.bashCommand,
-                conversationID: conversationID.uuidString
+                commandTemplate: destination.bashCommand
             )
         case .outputPanel:
             return nil

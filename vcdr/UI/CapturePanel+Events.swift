@@ -21,11 +21,8 @@ extension CapturePanel {
             queue: .main
         ) { [weak self, weak hostingView, weak panel] _ in
             guard let self else { return }
-            if self.viewModel?.isMinimized == true {
-                guard self.viewModel?.isRecording != true else { return }
-                self.onPillClicked?()
-                return
-            }
+            // Ignore clicks on the minimized pill during recording/processing
+            guard self.viewModel?.isMinimized != true else { return }
             guard let hostingView, let panel else { return }
             if self.viewModel?.isRecording != true {
                 self.focusActiveTextView(in: hostingView, panel: panel)
@@ -37,14 +34,15 @@ extension CapturePanel {
             object: panel,
             queue: .main
         ) { [weak self] _ in
-            guard let self, !self.isLockedForFollowUp else { return }
+            guard let self else { return }
             guard self.viewModel?.modeSwitcherViewModel == nil else { return }
             guard self.viewModel?.isMinimized != true else { return }
             self.onFocusLost?()
         }
 
-        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self, !self.isLockedForFollowUp else { return }
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ 
+            in
+            guard let self else { return }
             guard self.viewModel?.modeSwitcherViewModel == nil else { return }
             guard self.viewModel?.isMinimized != true else { return }
             self.onFocusLost?()
@@ -52,7 +50,9 @@ extension CapturePanel {
     }
 
     /// Focuses the NSTextView corresponding to `activeSegmentIndex`, falling back
-    /// to the first text view if the target index is out of bounds.
+    /// to the first text view if th
+    /// 
+    /// e target index is out of bounds.
     /// Pass `cursorPosition` to place the cursor at a specific character offset;
     /// `nil` leaves the cursor wherever it currently sits.
     func focusActiveTextView(in view: NSView, panel: NSPanel, cursorPosition: Int? = nil) {

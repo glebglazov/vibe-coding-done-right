@@ -26,16 +26,6 @@ struct CaptureView: View {
 
     private static let pillIconSize: CGFloat = 14
     private static let pillSpacing: CGFloat = 6
-    private static let captureBadgeSize: CGFloat = 12
-    private static let captureCountFontSize: CGFloat = 9
-
-    /// Per-segment focus trigger counters. Bumped to shift focus to a specific editor
-    /// when the user arrows past the boundary of the current editor.
-    @State private var focusTriggers: [UUID: Int] = [:]
-    /// Exact character offset for cursor placement when focus is requested.
-    /// Arrow-up from below uses Int.max (clamped to end), arrow-down from above uses 0.
-    @State private var focusCursorPosition: [UUID: Int] = [:]
-
     var body: some View {
         if viewModel.isMinimized {
             minimizedPillView
@@ -48,23 +38,9 @@ struct CaptureView: View {
 
     private var minimizedPillView: some View {
         HStack(spacing: Self.pillSpacing) {
-            if viewModel.clipboardCaptureCount > 0 {
-                HStack(spacing: 1) {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: Self.captureBadgeSize, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    if viewModel.clipboardCaptureCount > 1 {
-                        Text("\u{00D7}\(viewModel.clipboardCaptureCount)")
-                            .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .transition(.opacity)
-            }
-
             switch viewModel.phase {
             case .idle:
-                Image(systemName: viewModel.conversationTurns.isEmpty ? "text.cursor" : "text.bubble")
+                Image(systemName: "text.cursor")
                     .font(.system(size: Self.pillIconSize))
                     .foregroundStyle(.secondary)
             case .recording:
@@ -94,7 +70,6 @@ struct CaptureView: View {
             if viewModel.phase == .error, let msg = viewModel.errorMessage { ClipboardHelper.writeString(msg) }
             viewModel.onExpand()
         }
-        .animation(.easeInOut(duration: 0.2), value: viewModel.clipboardCaptureCount)
     }
 
     // MARK: - Expanded View
@@ -107,11 +82,8 @@ struct CaptureView: View {
                 ModeSwitcherView(viewModel: msVM)
                     .padding(Self.textPadding)
             } else {
-                if !viewModel.conversationTurns.isEmpty {
-                    conversationHistorySection
-                }
-
-                if !viewModel.conversationTurns.isEmpty {
+                if viewModel.displayedTurn != nil {
+                    displayedTurnSection
                     Divider()
                 }
 
@@ -159,18 +131,9 @@ struct CaptureView: View {
     @ViewBuilder
     private var segmentedInputSection: some View {
         ZStack(alignment: .topLeading) {
-            // Placeholder overlay
-            if viewModel.fullText.isEmpty && !viewModel.isRecording && !viewModel.isProcessing
-                && !viewModel.conversationTurns.isEmpty {
-                Text("Type a follow-up...")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, Self.textPadding)
-                    .padding(.top, 8 + Self.textInputTopInset)
-                    .allowsHitTesting(false)
-            }
+            // Show animated dots when processing and no displayed turn yet
             if viewModel.fullText.isEmpty && viewModel.isProcessing
-                && viewModel.conversationTurns.isEmpty {
+                && viewModel.displayedTurn == nil {
                 AnimatedDotsView()
                     .padding(.horizontal, Self.textPadding)
                     .padding(.top, 8 + Self.textInputTopInset)
@@ -181,39 +144,8 @@ struct CaptureView: View {
                     SegmentEditor(
                         text: segmentTextBinding(at: index),
                         isEditable: !viewModel.isProcessing,
-                        focusTrigger: focusTriggers[segment.id, default: 0],
-                        focusCursorPosition: focusCursorPosition[segment.id, default: 0],
-                        initialCursorPosition: viewModel.savedCursorPositions[segment.id],
-                        onFocus: { cursorPosition in
+                        onFocus: {
                             viewModel.activeSegmentIndex = index
-                            viewModel.savedCursorPositions[segment.id] = cursorPosition
-                        },
-                        onMoveUp: index > 0 ? {
-                            let target = viewModel.inputSegments[index - 1]
-                            focusCursorPosition[target.id] = Int.max
-                            focusTriggers[target.id, default: 0] += 1
-                        } : nil,
-                        onMoveDown: {
-                            if index < viewModel.inputSegments.count - 1 {
-                                // Focus the next existing editor
-                                let target = viewModel.inputSegments[index + 1]
-                                focusCursorPosition[target.id] = 0
-                                focusTriggers[target.id, default: 0] += 1
-                            } else if segment.capture != nil {
-                                // Last segment has a capture below — create a new
-                                // empty segment so the user can type after it.
-                                let newSegment = InputSegment()
-                                viewModel.inputSegments.append(newSegment)
-                                viewModel.activeSegmentIndex = viewModel.inputSegments.count - 1
-                                focusCursorPosition[newSegment.id] = 0
-                                // Defer focus request — the new SegmentEditor's NSTextView
-                                // must be in the window hierarchy before makeFirstResponder
-                                // works. Bumping the trigger in a Task lets SwiftUI complete
-                                // the layout pass first.
-                                Task { @MainActor in
-                                    focusTriggers[newSegment.id, default: 0] += 1
-                                }
-                            }
                         },
                         onHeightChange: { height in
                             viewModel.segmentHeights[segment.id] = height

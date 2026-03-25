@@ -23,16 +23,6 @@ extension AppSettings {
         set { hotkeySettings.modeSwitcherHotkey = newValue }
     }
 
-    var pushToTypeHotkey: HotkeyBinding {
-        get { hotkeySettings.pushToTypeHotkey }
-        set { hotkeySettings.pushToTypeHotkey = newValue }
-    }
-
-    var pushToTypeExpandDelay: Int {
-        get { hotkeySettings.pushToTypeExpandDelay }
-        set { hotkeySettings.pushToTypeExpandDelay = newValue }
-    }
-
     var toggleRecordingHotkey: HotkeyBinding {
         get { hotkeySettings.toggleRecordingHotkey }
         set { hotkeySettings.toggleRecordingHotkey = newValue }

@@ -110,40 +110,6 @@ struct HomeTabView: View {
                     )
                 )
                 ShortcutRecorderRow(
-                    label: "Push-to-Type",
-                    keyCode: Binding(
-                        get: { settings.pushToTypeHotkey.keyCode },
-                        set: { captureCoordinator.updatePushToTypeKeyCode($0) }
-                    ),
-                    modifiers: Binding(
-                        get: { settings.pushToTypeHotkey.modifiers },
-                        set: { captureCoordinator.updatePushToTypeModifiers($0) }
-                    )
-                )
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Push-to-Type expand delay")
-                        Spacer()
-                        TextField(
-                            "",
-                            value: Binding(
-                                get: { settings.pushToTypeExpandDelay },
-                                set: { settings.pushToTypeExpandDelay = max(0, $0) }
-                            ),
-                            format: .number
-                        )
-                        .frame(width: 60)
-                        .textFieldStyle(.roundedBorder)
-                        Text("ms")
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(settings.pushToTypeExpandDelay == 0
-                         ? "Capture panel expands immediately on key press"
-                         : "Capture panel expands after holding the key for this duration")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                ShortcutRecorderRow(
                     label: "Mode Switcher",
                     keyCode: Binding(
                         get: { settings.modeSwitcherHotkey.keyCode },

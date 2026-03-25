@@ -4,24 +4,17 @@ import OSLog
 
 extension CaptureCoordinator {
 
-    func handleRecordingStarted(isFollowUp: Bool) {
-        if isFollowUp && !panel.isVisible {
-            Logger.consistency.warning("handleRecordingStarted(isFollowUp=true) but panel is not visible — RC/CC disagree on follow-up status")
-        }
-        quickActionTask?.cancel()
-        quickActionTask = nil
+    func handleRecordingStarted() {
+        immediateActionTask?.cancel()
+        immediateActionTask = nil
         pillResetTask?.cancel()
         autoDismissTask?.cancel()
         recordingIndicator.cancelPendingDismiss()
         // Dismiss any ephemeral indicator (dismissed/cancelled/success pill) so it
         // doesn't overlap with the new capture panel or recording indicator.
         recordingIndicator.hide()
-        if isFollowUp && panel.isVisible {
-            panel.lockForFollowUp()
-            panel.setPhase(.recording)
-        } else if !isFollowUp {
-            showPanelMinimized(phase: .recording)
-        }
+        // Every recording is fresh — always show a new minimized pill
+        showPanelMinimized(phase: .recording)
     }
 
     func handleTranscribing() {
@@ -37,11 +30,6 @@ extension CaptureCoordinator {
     }
 
     func handleRecordingComplete(result: RecordingResult) {
-        if result.isFollowUp && !panel.isVisible {
-            Logger.consistency.warning("handleRecordingComplete(isFollowUp=true) but panel is not visible")
-        }
-        panel.unlockFollowUp()
-
         // Merge clipboard captures accumulated during recording into the result
         let mergedResult: RecordingResult
         if accumulatedCaptures.isEmpty {
@@ -52,8 +40,7 @@ extension CaptureCoordinator {
                 captures: result.captures + accumulatedCaptures,
                 previousActiveApp: result.previousActiveApp,
                 destinationOverrideID: result.destinationOverrideID,
-                hadDestinationOverride: result.hadDestinationOverride,
-                isFollowUp: result.isFollowUp
+                hadDestinationOverride: result.hadDestinationOverride
             )
             accumulatedCaptures = []
         }
@@ -63,38 +50,31 @@ extension CaptureCoordinator {
         }
 
         let mode = settings.activeMode
-        let isQuickAction = !mergedResult.isFollowUp && (mode.quickAction || mergedResult.hadDestinationOverride)
+        let skipPreview = !mode.showPreview || mergedResult.hadDestinationOverride
 
-        if isQuickAction {
-            executeQuickAction(result: mergedResult, mode: mode)
+        if skipPreview {
+            executeImmediateAction(result: mergedResult, mode: mode)
         } else {
             populateWithTranscription(result: mergedResult)
         }
     }
 
-    func handleTranscriptionFailed(isFollowUp: Bool) {
-        panel.unlockFollowUp()
-        quickActionTask?.cancel()
-        quickActionTask = nil
+    func handleTranscriptionFailed() {
+        immediateActionTask?.cancel()
+        immediateActionTask = nil
         flashPill(phase: .error, duration: Self.pillErrorDisplayDuration)
-        if !isFollowUp {
-            scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
-        }
+        scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
     }
 
-    func handleRecordingCancelled(wasFollowUp: Bool, wasFreshPill: Bool) {
+    func handleRecordingCancelled() {
         Task { await clipboardMonitor.stop() }
         accumulatedCaptures = []
-        panel.unlockFollowUp()
-        // Always cancel the entire capture — dismiss the panel immediately
-        // and show the grey cancel indicator. No intermediate pill flash.
         cancelCapture()
     }
 
     func handleRecordingFailed(message: String) {
-        panel.unlockFollowUp()
-        quickActionTask?.cancel()
-        quickActionTask = nil
+        immediateActionTask?.cancel()
+        immediateActionTask = nil
         panel.setError(message)
         scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
     }
@@ -140,60 +120,23 @@ extension CaptureCoordinator {
         }
 
         let newCaptures = result.captures
-
-        if panel.isVisible {
-            updateVisiblePanel(text: result.text, newCaptures: newCaptures)
-        } else {
-            showNewPanel(text: result.text, newCaptures: newCaptures)
-        }
+        session?.captures = newCaptures
+        showPanelWithSegments([makeInitialSegment(text: result.text, capture: newCaptures.first)])
 
         panel.expand()
         recordingIndicator.hide()
 
-        // Fork from history view if needed (recording = mutation)
-        if let sourceID = session?.historySourceConversationID {
-            let newID = UUID()
-            transcriptionHistory.duplicateConversation(originalID: sourceID, newID: newID)
-            session?.conversationID = newID
-            session?.historySourceConversationID = nil
-        }
-
-        // Re-read conversationID after potential fork
-        guard let conversationID = session?.conversationID else { return }
-
         // Store the panel's current segments as-is for a faithful history record.
         // Drafts have no mode output yet — output is nil until submission.
         let currentSegments = panel.viewModel?.inputSegments ?? [InputSegment()]
-        recordOrUpdateHistory(
-            conversationID: conversationID,
+        recordHistory(
+            conversationID: currentConversationID,
             inputSegments: currentSegments, output: nil,
             mode: settings.activeMode
         )
 
         overrides.markPipelineCompleted()
         Logger.app.info("Pipeline: handed to capture view")
-    }
-
-    private func updateVisiblePanel(text: String, newCaptures: [CapturedContext]) {
-        panel.setPhase(.idle)
-
-        let hasOnlyEmptySegment = panel.segmentCount == 1
-            && panel.fullText.isEmpty && panel.allCaptures.isEmpty
-
-        if hasOnlyEmptySegment {
-            panel.setSegments([makeInitialSegment(text: text, capture: newCaptures.first)])
-        } else if let capture = newCaptures.first {
-            panel.appendSegment(InputSegment(text: text, capture: capture))
-        } else {
-            panel.appendTextToActiveSegment(text)
-        }
-
-        session?.captures.append(contentsOf: newCaptures)
-    }
-
-    private func showNewPanel(text: String, newCaptures: [CapturedContext]) {
-        session?.captures = newCaptures
-        showPanelWithSegments([makeInitialSegment(text: text, capture: newCaptures.first)])
     }
 
     private func makeInitialSegment(text: String, capture: CapturedContext?) -> InputSegment {
@@ -204,8 +147,7 @@ extension CaptureCoordinator {
     }
 
     func showPanelWithSegments(_ inputSegments: [InputSegment]) {
-        let turns = session?.conversationTurns ?? []
-        configurePanelAndShow(conversationTurns: turns, inputSegments: inputSegments)
+        configurePanelAndShow(inputSegments: inputSegments)
     }
 
     func showPanelMinimized(phase: CaptureViewModel.CapturePhase) {
@@ -214,17 +156,6 @@ extension CaptureCoordinator {
         panel.minimize()
     }
 
-    // MARK: - Settings + Re-registration
-
-    func updatePushToTypeKeyCode(_ code: UInt16) {
-        settings.pushToTypeHotkey.keyCode = code
-        setupHotkey()
-    }
-
-    func updatePushToTypeModifiers(_ mods: UInt64) {
-        settings.pushToTypeHotkey.modifiers = mods
-        setupHotkey()
-    }
 }
 
 // MARK: - RecordingCoordinatorDelegate
@@ -235,16 +166,8 @@ extension CaptureCoordinator: RecordingCoordinatorDelegate {
         onWillStartInput?()
     }
 
-    func recordingCoordinatorIsPanelVisible() -> Bool {
-        // A panel showing only because of a pending quick action or scheduled
-        // auto-dismiss is a transient leftover from the previous recording cycle
-        // and should not cause the new recording to be treated as a follow-up.
-        if quickActionTask != nil || autoDismissTask != nil { return false }
-        return isPanelVisible
-    }
-
-    func recordingCoordinatorDidStartRecording(isFollowUp: Bool) {
-        handleRecordingStarted(isFollowUp: isFollowUp)
+    func recordingCoordinatorDidStartRecording() {
+        handleRecordingStarted()
     }
 
     func recordingCoordinatorDidStartTranscribing() {
@@ -255,12 +178,12 @@ extension CaptureCoordinator: RecordingCoordinatorDelegate {
         handleRecordingComplete(result: result)
     }
 
-    func recordingCoordinatorDidFailTranscription(isFollowUp: Bool) {
-        handleTranscriptionFailed(isFollowUp: isFollowUp)
+    func recordingCoordinatorDidFailTranscription() {
+        handleTranscriptionFailed()
     }
 
-    func recordingCoordinatorDidCancelRecording(wasFollowUp: Bool, wasFreshPill: Bool) {
-        handleRecordingCancelled(wasFollowUp: wasFollowUp, wasFreshPill: wasFreshPill)
+    func recordingCoordinatorDidCancelRecording() {
+        handleRecordingCancelled()
     }
 
     func recordingCoordinatorDidFailRecording(message: String) {
@@ -272,15 +195,12 @@ extension CaptureCoordinator: RecordingCoordinatorDelegate {
     }
 
     func recordingCoordinatorDidCaptureSelection() {
-        panel.signalClipboardCapture()
-        // Start clipboard monitoring after SelectionCapturer finishes — same pattern
-        // as push-to-type. Take a fresh baseline to avoid false positives from
+        // Start clipboard monitoring after SelectionCapturer finishes.
+        // Take a fresh baseline to avoid false positives from
         // SelectionCapturer's clipboard manipulation.
         let freshBaseline = NSPasteboard.general.changeCount
         Task {
-            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] _ in
-                self?.panel.signalClipboardCapture()
-            }
+            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { _ in }
         }
     }
 }

@@ -91,16 +91,12 @@ final class AppSettings {
         outputDestinations.first(where: { $0.id == id }) ?? outputDestinations.first ?? OutputDestination.makeDefaultPaste()
     }
 
-    static let defaultPushToTypeExpandDelay = 500
-
     private let userDefaults: UserDefaults
 
     // MARK: - UserDefaults Keys
 
     private enum Keys {
         static let modeSwitcherHotkey = "modeSwitcherHotkey"
-        static let pushToTypeHotkey = "pushToTypeHotkey"
-        static let pushToTypeExpandDelay = "pushToTypeExpandDelay"
         static let toggleRecordingHotkey = "toggleRecordingHotkey"
         static let copyLatestCaptureHotkey = "copyLatestCaptureHotkey"
         static let cancelRecordingHotkey = "cancelRecordingHotkey"
@@ -146,10 +142,6 @@ final class AppSettings {
         // Load hotkey settings from individual keys (supports legacy migration)
         var hotkeys = HotkeySettings.default
         hotkeys.modeSwitcherHotkey = Self.decodeSetting(from: userDefaults, forKey: Keys.modeSwitcherHotkey, default: .unassigned)
-        hotkeys.pushToTypeHotkey = Self.decodeSetting(from: userDefaults, forKey: Keys.pushToTypeHotkey, default: .unassigned)
-        if userDefaults.object(forKey: Keys.pushToTypeExpandDelay) != nil {
-            hotkeys.pushToTypeExpandDelay = userDefaults.integer(forKey: Keys.pushToTypeExpandDelay)
-        }
         // Toggle recording hotkey with 3-level migration
         if let data = userDefaults.data(forKey: Keys.toggleRecordingHotkey),
            let decoded = try? JSONDecoder().decode(HotkeyBinding.self, from: data) {
@@ -245,8 +237,6 @@ final class AppSettings {
 
     private func save() {
         encode(hotkeySettings.modeSwitcherHotkey, forKey: Keys.modeSwitcherHotkey)
-        encode(hotkeySettings.pushToTypeHotkey, forKey: Keys.pushToTypeHotkey)
-        userDefaults.set(hotkeySettings.pushToTypeExpandDelay, forKey: Keys.pushToTypeExpandDelay)
         encode(hotkeySettings.toggleRecordingHotkey, forKey: Keys.toggleRecordingHotkey)
         encode(hotkeySettings.copyLatestCaptureHotkey, forKey: Keys.copyLatestCaptureHotkey)
         encode(hotkeySettings.cancelRecordingHotkey, forKey: Keys.cancelRecordingHotkey)

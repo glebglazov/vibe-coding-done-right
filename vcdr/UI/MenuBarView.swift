@@ -20,7 +20,7 @@ struct MenuBarView: View {
                 Divider()
 
                 Button {
-                    ClipboardHelper.writeString(latest.latestOutput ?? latest.previewText)
+                    ClipboardHelper.writeString(latest.copyableText)
                     CopiedFeedback.trigger { showCopied = $0 }
                 } label: {
                     VStack(alignment: .leading) {

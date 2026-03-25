@@ -11,8 +11,6 @@ enum BashRunner {
     private static let textPlaceholder = "{}"
     private static let textEnvironmentVariable = "VCDR_TEXT"
     private static let dictationEnvironmentVariable = "VCDR_DICTATION"
-    private static let conversationEnvironmentVariable = "VCDR_CONVERSATION"
-    private static let conversationIDEnvironmentVariable = "VCDR_CONV_ID"
     private static let shellPath = "/bin/bash"
 
     // MARK: - Private Helpers
@@ -23,19 +21,11 @@ enum BashRunner {
 
     private static func buildEnvironment(
         text: String,
-        conversationMessages: String?,
-        conversationID: String?,
         extraEnvironment: [String: String]
     ) -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         env[textEnvironmentVariable] = text
         env[dictationEnvironmentVariable] = text
-        if let conversationMessages {
-            env[conversationEnvironmentVariable] = conversationMessages
-        }
-        if let conversationID {
-            env[conversationIDEnvironmentVariable] = conversationID
-        }
         for (key, value) in extraEnvironment {
             env[key] = value
         }
@@ -45,19 +35,15 @@ enum BashRunner {
     /// Runs a bash command with the given text passed as $VCDR_TEXT environment variable.
     /// The `{}` placeholder in the command is replaced with `$VCDR_TEXT`.
     ///
-    /// Optional environment variables:
-    /// - `$VCDR_DICTATION`: Alias for `$VCDR_TEXT` (preferred going forward)
-    /// - `$VCDR_CONVERSATION`: JSON array of messages in OpenAI chat format
-    ///   (`[{"role":"system","content":"..."},{"role":"user","content":"..."},...]`)
-    /// - `$VCDR_CONV_ID`: Conversation UUID for stateful scripts
+    /// Environment variables:
+    /// - `$VCDR_TEXT`: The input text
+    /// - `$VCDR_DICTATION`: Alias for `$VCDR_TEXT`
     ///
     /// Returns the command's stdout as a String.
     @discardableResult
     static func run(
         command: String,
         text: String,
-        conversationMessages: String? = nil,
-        conversationID: String? = nil,
         extraEnvironment: [String: String] = [:]
     ) async throws -> String {
         let resolvedCommand = resolveCommand(command)
@@ -72,8 +58,7 @@ enum BashRunner {
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = ["-c", resolvedCommand]
         process.environment = buildEnvironment(
-            text: text, conversationMessages: conversationMessages,
-            conversationID: conversationID, extraEnvironment: extraEnvironment
+            text: text, extraEnvironment: extraEnvironment
         )
 
         let pipe = Pipe()
@@ -115,8 +100,6 @@ enum BashRunner {
     static func runStreaming(
         command: String,
         text: String,
-        conversationMessages: String? = nil,
-        conversationID: String? = nil,
         extraEnvironment: [String: String] = [:]
     ) -> (stream: AsyncThrowingStream<String, Error>, cancel: @Sendable () -> Void) {
         let resolvedCommand = resolveCommand(command)
@@ -127,8 +110,7 @@ enum BashRunner {
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = ["-c", resolvedCommand]
         process.environment = buildEnvironment(
-            text: text, conversationMessages: conversationMessages,
-            conversationID: conversationID, extraEnvironment: extraEnvironment
+            text: text, extraEnvironment: extraEnvironment
         )
 
         let stdoutPipe = Pipe()

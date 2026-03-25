@@ -18,11 +18,6 @@ final class RecordingCoordinator {
         var captureTask: Task<CapturedContext?, Never>?
         var captures: [CapturedContext] = []
         var destinationOverrideID: UUID?
-        var isFollowUp: Bool = false
-
-        init(isFollowUp: Bool = false) {
-            self.isFollowUp = isFollowUp
-        }
     }
 
     // MARK: - Constants
@@ -50,13 +45,6 @@ final class RecordingCoordinator {
     let overrides: ConversationOverrides
 
     @ObservationIgnored weak var delegate: RecordingCoordinatorDelegate?
-
-    /// Fallback handler for cancel hotkey when RecordingCoordinator is idle.
-    /// Wired by AppDependencies to CaptureCoordinator.cancelCapture().
-    @ObservationIgnored var onCancelFallback: (() -> Void)?
-
-    /// Whether the push-to-type pill is active and should keep the cancel hotkey enabled.
-    @ObservationIgnored private(set) var isPillCancelActive = false
 
     @ObservationIgnored var pendingDestinationOverride: UUID?
     @ObservationIgnored var recordingRun: RecordingRunState?
@@ -120,8 +108,7 @@ final class RecordingCoordinator {
             }
         }
 
-        let isFollowUp = delegate?.recordingCoordinatorIsPanelVisible() ?? false
-        recordingRun = RecordingRunState(isFollowUp: isFollowUp)
+        recordingRun = RecordingRunState()
 
         guard await transcriptionProvider.isReady else {
             Logger.app.warning("Hotkey pressed but transcription model not loaded yet")
@@ -135,11 +122,7 @@ final class RecordingCoordinator {
             return
         }
 
-        if !isFollowUp, delegate?.recordingCoordinatorIsPanelVisible() == true {
-            Logger.consistency.warning("onRecordingStarted(isFollowUp=false) but panel is already visible — potential stale panel from previous cycle")
-        }
-
-        delegate?.recordingCoordinatorDidStartRecording(isFollowUp: isFollowUp)
+        delegate?.recordingCoordinatorDidStartRecording()
 
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         recordingRun?.previousActiveApp = frontmostApp
@@ -221,11 +204,6 @@ final class RecordingCoordinator {
         }
     }
 
-    func setPillCancelActive(_ active: Bool) {
-        isPillCancelActive = active
-        updateCancelHotkey()
-    }
-
     func cancelRecording() {
         cancelHotkeyManager.isEnabled = false
         destinationHotkeyManager.isEnabled = false
@@ -248,12 +226,11 @@ final class RecordingCoordinator {
 
         Task { await mediaPlaybackController.resumeIfNeeded() }
 
-        let wasFollowUp = recordingRun?.isFollowUp ?? false
         recordingRun = nil
         recordingStartInstant = nil
         overrides.clearAll()
 
-        delegate?.recordingCoordinatorDidCancelRecording(wasFollowUp: wasFollowUp, wasFreshPill: !wasFollowUp)
+        delegate?.recordingCoordinatorDidCancelRecording()
 
         if wasProcessing {
             Logger.app.info("Processing cancelled via Esc")

@@ -84,28 +84,13 @@ final class AppDependencies {
         // Wire RecordingCoordinator → CaptureCoordinator via delegate
         coordinator.delegate = captureCoordinator
 
-        // Wire cancel hotkey: single GlobalHotkeyManager in RecordingCoordinator
-        // handles both recording cancel and push-to-type pill cancel.
-        coordinator.onCancelFallback = { [weak captureCoordinator] in
-            captureCoordinator?.cancelCapture()
-        }
-        captureCoordinator.onCancelHotkeyEnabled = { [weak coordinator] enabled in
-            coordinator?.setPillCancelActive(enabled)
-        }
-
-        // Dismiss mode switcher when recording or input starts
+        // Dismiss mode switcher when recording starts
         captureCoordinator.onWillStartInput = { [weak self] in
             self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
         }
 
         // Wire ModeSwitcherCoordinator → AppDependencies via delegate
         modeSwitcherCoordinator.delegate = self
-
-        // Wire Escape-to-cancel: when the capture panel is locked for follow-up
-        // (recording/processing in progress), Escape cancels the recording.
-        captureCoordinator.panel.onCancelRecording = { [weak self] in
-            self?.coordinator.cancelRecording()
-        }
 
         // Wire cancel capture hotkey: cancels the capture (removes from history) and dismisses
         captureCoordinator.panel.onCancelCapture = { [weak captureCoordinator] in
@@ -130,7 +115,7 @@ final class AppDependencies {
             coordinator.setupCancelHotkey()
             coordinator.setupDestinationHotkeys()
             modeSwitcherCoordinator.setupHotkey()
-            captureCoordinator.setupHotkey()
+
             copyLatestCaptureHandler.setupHotkey()
         }
 
@@ -188,7 +173,6 @@ final class AppDependencies {
                 self.coordinator.setupCancelHotkey()
                 self.coordinator.setupDestinationHotkeys()
                 self.modeSwitcherCoordinator.setupHotkey()
-                self.captureCoordinator.setupHotkey()
                 self.copyLatestCaptureHandler.setupHotkey()
                 Logger.app.info("Accessibility granted, hotkeys registered")
             }
@@ -202,11 +186,7 @@ final class AppDependencies {
     }
 
     func openConversationFromHistory(_ conversation: Conversation) {
-        let canContinue = conversation.canContinue(modes: settings.modes)
-        if canContinue {
-            settings.activeModeID = conversation.modeID
-        }
-        captureCoordinator.showFromHistory(conversation: conversation, canContinue: canContinue)
+        captureCoordinator.showFromHistory(conversation: conversation)
     }
 
     deinit {

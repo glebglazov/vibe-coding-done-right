@@ -1,45 +1,23 @@
 import SwiftUI
 
 extension CaptureView {
-    // MARK: - Constants
 
-    private static let turnDividerVPadding: CGFloat = 4
-    private static let bottomAnchorID = "bottom"
+    // MARK: - Displayed Turn
 
-    // MARK: - Conversation History
-
-    var conversationHistorySection: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(viewModel.conversationTurns.enumerated()), id: \.element.id) { index, turn in
-                        let isProcessingTurn = viewModel.isProcessing && index == viewModel.conversationTurns.count - 1
-                        ConversationTurnView(
-                            turn: turn,
-                            showLabels: viewModel.showConversationLabels,
-                            modeName: viewModel.processedByModeName,
-                            isProcessing: isProcessingTurn,
-                            showCopyButton: true
-                        )
-
-                        if index < viewModel.conversationTurns.count - 1 {
-                            Divider()
-                                .padding(.vertical, Self.turnDividerVPadding)
-                        }
-                    }
-
-                    Color.clear
-                        .frame(height: 1)
-                        .id(Self.bottomAnchorID)
-                }
-                .padding(Self.textPadding)
+    @ViewBuilder
+    var displayedTurnSection: some View {
+        if let turn = viewModel.displayedTurn {
+            let isProcessingTurn = viewModel.isProcessing
+            VStack(alignment: .leading, spacing: 0) {
+                ConversationTurnView(
+                    turn: turn,
+                    showLabels: viewModel.showLabels,
+                    modeName: viewModel.processedByModeName,
+                    isProcessing: isProcessingTurn,
+                    showCopyButton: true
+                )
             }
-            .onAppear {
-                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
-            }
-            .onChange(of: viewModel.scrollTrigger) {
-                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
-            }
+            .padding(Self.textPadding)
         }
     }
 

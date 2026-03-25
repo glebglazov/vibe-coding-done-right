@@ -8,18 +8,11 @@ import OSLog
 struct OutputBashAction: PostTranscriptionAction {
     let name: String
     let commandTemplate: String
-    let conversationID: String?
-
-    init(name: String, commandTemplate: String, conversationID: String? = nil) {
-        self.name = name
-        self.commandTemplate = commandTemplate
-        self.conversationID = conversationID
-    }
 
     func execute(text: String) async throws -> String? {
         // Run the output script — stdout is intentionally discarded.
         // The script handles its own output (API calls, file writes, etc.)
-        try await BashRunner.run(command: commandTemplate, text: text, conversationID: conversationID)
+        try await BashRunner.run(command: commandTemplate, text: text)
         Logger.actions.info("Output bash script executed: \(name)")
         return nil
     }

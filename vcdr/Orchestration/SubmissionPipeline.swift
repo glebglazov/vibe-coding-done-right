@@ -9,8 +9,6 @@ enum SubmissionPipeline {
         let text: String
         let mode: Mode
         let captures: [CapturedContext]
-        let followUpContext: String?
-        let conversationTurns: [ConversationTurn]
         let conversationID: UUID
         let parameterValues: [String: String]
         let destination: OutputDestination
@@ -31,9 +29,6 @@ enum SubmissionPipeline {
             mode: context.mode,
             text: context.text,
             captures: context.captures,
-            followUpContext: context.followUpContext,
-            conversationTurns: context.conversationTurns,
-            conversationID: context.conversationID,
             parameterValues: context.parameterValues
         )
         return Result(
@@ -48,7 +43,6 @@ enum SubmissionPipeline {
         if let action = OutputActionFactory.makeAction(
             for: context.destination,
             targetAppPID: context.targetAppPID,
-            conversationID: context.conversationID,
             saveResultToClipboard: context.saveResultToClipboard
         ) {
             try await action.execute(text: processedText)
@@ -71,16 +65,13 @@ enum SubmissionPipeline {
             mode: context.mode,
             text: context.text,
             captures: context.captures,
-            followUpContext: context.followUpContext,
-            conversationTurns: context.conversationTurns,
-            conversationID: context.conversationID,
             parameterValues: context.parameterValues
         )
     }
 
     // MARK: - History Recording
 
-    static func recordTurn(
+    static func recordHistory(
         history: TranscriptionHistory,
         conversationID: UUID,
         inputSegments: [InputSegment],
@@ -88,24 +79,7 @@ enum SubmissionPipeline {
         modeID: UUID,
         modeName: String
     ) {
-        history.recordTurn(
-            conversationID: conversationID,
-            inputSegments: inputSegments,
-            output: output,
-            modeID: modeID,
-            modeName: modeName
-        )
-    }
-
-    static func updateLastTurn(
-        history: TranscriptionHistory,
-        conversationID: UUID,
-        inputSegments: [InputSegment],
-        output: String?,
-        modeID: UUID,
-        modeName: String
-    ) {
-        history.updateLastTurn(
+        history.record(
             conversationID: conversationID,
             inputSegments: inputSegments,
             output: output,

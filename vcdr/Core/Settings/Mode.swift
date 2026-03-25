@@ -63,7 +63,9 @@ struct Mode: Identifiable, Codable, Equatable {
     var defaultOutputDestinationID: UUID
 
     // Behavior
-    var quickAction: Bool
+    /// When true, shows the transcription in the panel for editing before submission.
+    /// When false (default), executes the action immediately after transcription.
+    var showPreview: Bool
     var saveResultToClipboard: Bool
 
     /// Joined labels from the first option of each parameter (the defaults, without overrides).
@@ -83,16 +85,11 @@ struct Mode: Identifiable, Codable, Equatable {
 
     // MARK: - Text Pipeline
 
-    /// Pre-processes text by prepending follow-up context (previous capture),
-    /// system prompt (bash processing only), and appending any captured context items.
+    /// Pre-processes text by prepending system prompt (bash processing only)
+    /// and appending any captured context items.
     /// This is step 1 of the pipeline — before the optional processing script.
-    func applyPreProcessing(_ text: String, captures: [CapturedContext], followUpContext: String? = nil) -> String {
+    func applyPreProcessing(_ text: String, captures: [CapturedContext]) -> String {
         var result = text
-
-        // Prepend follow-up context (previous capture result) before new dictation
-        if let context = followUpContext {
-            result = context + "\n\n" + result
-        }
 
         if processingType == .bashScript && systemPromptEnabled && !systemPrompt.isEmpty {
             result = systemPrompt + "\n\n" + result
@@ -183,7 +180,7 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt: String = "",
         defaultOutputDestinationID: UUID = OutputDestination.builtInOutputPanelID,
         parameters: [ModeParameter] = [],
-        quickAction: Bool = false,
+        showPreview: Bool = false,
         saveResultToClipboard: Bool = false
     ) {
         self.id = id
@@ -196,7 +193,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.systemPrompt = systemPrompt
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.parameters = parameters
-        self.quickAction = quickAction
+        self.showPreview = showPreview
         self.saveResultToClipboard = saveResultToClipboard
     }
 
@@ -208,8 +205,10 @@ struct Mode: Identifiable, Codable, Equatable {
         case systemPromptEnabled, systemPrompt
         case defaultOutputDestinationID
         case parameters
-        case quickAction
+        case showPreview
         case saveResultToClipboard
+        // Legacy key for migration (quickAction was inverted: true = skip preview)
+        case quickAction
         // Legacy keys (read-only, for migration)
         case actionType, bashCommand, pasteScriptOutput
     }
@@ -226,7 +225,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
-        try container.encode(quickAction, forKey: .quickAction)
+        try container.encode(showPreview, forKey: .showPreview)
         try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
         // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
         // Once saved in new format, old keys are gone (one-way migration).
@@ -242,7 +241,15 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInOutputPanelID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
-        quickAction = try container.decodeIfPresent(Bool.self, forKey: .quickAction) ?? false
+        // New key takes precedence; fall back to inverted legacy quickAction
+        if let preview = try container.decodeIfPresent(Bool.self, forKey: .showPreview) {
+            showPreview = preview
+        } else if let legacy = try container.decodeIfPresent(Bool.self, forKey: .quickAction) {
+            // quickAction true meant "skip preview" → showPreview false
+            showPreview = !legacy
+        } else {
+            showPreview = false
+        }
         saveResultToClipboard = try container.decodeIfPresent(Bool.self, forKey: .saveResultToClipboard) ?? false
 
         // New fields

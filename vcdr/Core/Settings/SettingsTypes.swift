@@ -2,8 +2,6 @@ import Foundation
 
 struct HotkeySettings: Codable, Equatable {
     var modeSwitcherHotkey: HotkeyBinding
-    var pushToTypeHotkey: HotkeyBinding
-    var pushToTypeExpandDelay: Int
     var toggleRecordingHotkey: HotkeyBinding
     var copyLatestCaptureHotkey: HotkeyBinding
     var cancelRecordingHotkey: HotkeyBinding
@@ -11,8 +9,6 @@ struct HotkeySettings: Codable, Equatable {
 
     static let `default` = HotkeySettings(
         modeSwitcherHotkey: .unassigned,
-        pushToTypeHotkey: .unassigned,
-        pushToTypeExpandDelay: AppSettings.defaultPushToTypeExpandDelay,
         toggleRecordingHotkey: .defaultToggleRecording,
         copyLatestCaptureHotkey: .unassigned,
         cancelRecordingHotkey: .defaultCancelRecording,

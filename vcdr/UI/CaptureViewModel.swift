@@ -10,13 +10,8 @@ final class CaptureViewModel {
     /// Updated by SegmentEditor's onFocus callback when the user clicks into or types in an editor.
     /// Used by CaptureCoordinator to decide where to insert new captures.
     var activeSegmentIndex: Int = 0
-    /// Saved cursor positions per segment ID, used to restore cursor on expand after collapse.
-    /// Populated by CapturePanel.minimize(), consumed by SegmentEditor.makeNSView().
-    var savedCursorPositions: [UUID: Int] = [:]
-    var conversationTurns: [ConversationTurn] = []
+    var displayedTurn: ConversationTurn?
     var isMinimized: Bool = false
-    var scrollTrigger: Int = 0
-    var clipboardCaptureCount: Int = 0
     var processedByModeName: String?
     var rejectCount: Int = 0
     var modeSwitcherViewModel: ModeSwitcherViewModel?
@@ -101,25 +96,23 @@ final class CaptureViewModel {
         inputSegments.map(\.text).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Show "You:" / "Result:" labels when there are multiple turns,
-    /// when a turn has actual processed output, or when captured context is present.
-    var showConversationLabels: Bool {
-        if conversationTurns.count > 1 { return true }
-        guard let turn = conversationTurns.first else { return false }
+    /// Show "You:" / "Result:" labels when the displayed turn has processed output.
+    var showLabels: Bool {
+        guard let turn = displayedTurn else { return false }
         if !turn.captures.isEmpty { return true }
         return turn.output != nil
     }
 
-    /// Latest output text for copy/fire actions
-    var latestText: String {
-        conversationTurns.last(where: { $0.output != nil })?.output ?? ""
+    /// Output text from the displayed turn for copy actions.
+    var outputText: String? {
+        displayedTurn?.output
     }
 
     /// Mode label for the minimized pill: "Mode · params · dest symbol" + " ⚡" for quick action
     var pillModeLabel: String {
         var label = modeLabel
-        if settings.activeMode.quickAction {
-            label += " \u{26A1}"
+        if settings.activeMode.showPreview {
+            label += " \u{1F441}"  // 👁 — preview enabled
         }
         return label
     }
@@ -127,7 +120,7 @@ final class CaptureViewModel {
     init(
         settings: AppSettings,
         overrides: ConversationOverrides,
-        conversationTurns: [ConversationTurn] = [],
+        displayedTurn: ConversationTurn? = nil,
         inputSegments: [InputSegment] = [InputSegment()],
         outputDestinations: [OutputDestination] = [],
         onSubmit: @escaping (String) -> Void,
@@ -137,7 +130,7 @@ final class CaptureViewModel {
     ) {
         self.settings = settings
         self.overrides = overrides
-        self.conversationTurns = conversationTurns
+        self.displayedTurn = displayedTurn
         self.inputSegments = inputSegments
         self.outputDestinations = outputDestinations
         self.onSubmit = onSubmit

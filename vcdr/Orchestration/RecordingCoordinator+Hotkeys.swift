@@ -32,8 +32,6 @@ extension RecordingCoordinator {
             guard let self else { return }
             if self.state == .preparingToRecord || self.state == .recording || self.state == .transcribing {
                 self.cancelRecording()
-            } else {
-                self.onCancelFallback?()
             }
         }
         cancelHotkeyManager.onKeyUp = nil
@@ -55,7 +53,7 @@ extension RecordingCoordinator {
 
     func updateCancelHotkey() {
         let recordingActive = (state == .preparingToRecord || state == .recording || state == .transcribing)
-        cancelHotkeyManager.isEnabled = recordingActive || isPillCancelActive
+        cancelHotkeyManager.isEnabled = recordingActive
     }
 
     func suspendCancelHotkey() {

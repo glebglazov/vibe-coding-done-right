@@ -6,7 +6,6 @@ import OSLog
 @MainActor
 final class CaptureCoordinator {
     let settings: AppSettings
-    private let hotkeyManager = GlobalHotkeyManager()
     let panel: CapturePanel
     let recordingIndicator: RecordingIndicatorPanel
     private let audioRecorder: AudioRecorder
@@ -17,21 +16,15 @@ final class CaptureCoordinator {
 
     @ObservationIgnored var session: PipelineSession?
 
-    @ObservationIgnored private var originalCapture: CapturedContext?
     @ObservationIgnored var accumulatedCaptures: [CapturedContext] = []
 
     @ObservationIgnored var pillResetTask: Task<Void, Never>?
 
     @ObservationIgnored var autoDismissTask: Task<Void, Never>?
 
-    @ObservationIgnored private var expandTimerTask: Task<Void, Never>?
-
-    @ObservationIgnored var quickActionTask: Task<Void, Never>?
+    @ObservationIgnored var immediateActionTask: Task<Void, Never>?
 
     @ObservationIgnored var onWillStartInput: (() -> Void)?
-
-    /// Signals RecordingCoordinator to enable/disable the cancel hotkey for pill state.
-    @ObservationIgnored var onCancelHotkeyEnabled: ((Bool) -> Void)?
 
     var isModeSwitcherHostVisible: Bool { panel.isVisible && !panel.isMinimized }
 
@@ -82,85 +75,36 @@ final class CaptureCoordinator {
         self.overrides = overrides
     }
 
-    func showFromHistory(conversation: Conversation, canContinue: Bool) {
-        // Split turns: completed (with output) → conversation history,
-        // last unprocessed turn → editor segments (same as mid-capture state).
-        var completedTurns: [ConversationTurn] = []
-        var editorSegments: [InputSegment] = [InputSegment()]
+    func showFromHistory(conversation: Conversation) {
+        let editorSegments = conversation.inputSegments.isEmpty
+            ? [InputSegment()] : conversation.inputSegments
 
-        for turn in conversation.turns where turn.output != nil {
-            completedTurns.append(turn)
-        }
+        // Show the turn display if there's processed output
+        let displayTurn: ConversationTurn? = conversation.hadExternalProcessing
+            ? ConversationTurn(inputSegments: conversation.inputSegments, output: conversation.output)
+            : nil
 
-        // If the last turn has no output, restore its segments into the editor
-        if let lastTurn = conversation.turns.last, lastTurn.output == nil {
-            editorSegments = lastTurn.inputSegments.isEmpty ? [InputSegment()] : lastTurn.inputSegments
-        }
-
-        session = PipelineSession()
-        session?.conversationTurns = completedTurns
-        // Use the SAME conversation ID — fork only happens on mutation
-        session?.conversationID = conversation.id
-        // Always set historySourceConversationID so fork is triggered on first write
-        session?.historySourceConversationID = conversation.id
-        if let latestOutput = conversation.latestOutput {
-            session?.followUpContext = latestOutput
-        }
-
-        configurePanelAndShow(conversationTurns: completedTurns, inputSegments: editorSegments)
+        configurePanelAndShow(displayedTurn: displayTurn, inputSegments: editorSegments)
         if conversation.hadExternalProcessing {
             panel.setProcessedByModeName(conversation.modeName)
         }
         Logger.app.info("Capture view shown from history")
     }
 
-    func setupHotkey() {
-        let binding = settings.pushToTypeHotkey
-        guard binding.isAssigned else {
-            hotkeyManager.unregister()
-            Logger.hotkeys.info("Push-to-type hotkey unassigned, unregistered")
-            return
-        }
-
-        hotkeyManager.onKeyDown = { [weak self] in
-            Task { @MainActor in
-                self?.handlePushToTypeKeyDown()
-            }
-        }
-        hotkeyManager.onKeyUp = { [weak self] in
-            Task { @MainActor in
-                self?.handlePushToTypeKeyUp()
-            }
-        }
-
-        let keyCode = CGKeyCode(binding.keyCode)
-        let modifiers = CGEventFlags(rawValue: binding.modifiers)
-        _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
-
-    }
-
     func rewirePanelCallbacks() {
         panel.onFocusLost = { [weak self] in
-            self?.collapseOverlay()
-        }
-        panel.onPillClicked = { [weak self] in
-            Task { @MainActor in
-                await self?.expandFromCollapsed()
-            }
+            self?.dismissOverlay()
         }
     }
 
     private func clearSubmissionCallbacks() {
         Task { await clipboardMonitor.stop() }
-        onCancelHotkeyEnabled?(false)
         panel.onFocusLost = nil
-        panel.onPillClicked = nil
-        originalCapture = nil
         accumulatedCaptures = []
     }
 
     func configurePanelAndShow(
-        conversationTurns: [ConversationTurn] = [],
+        displayedTurn: ConversationTurn? = nil,
         inputSegments: [InputSegment]? = nil,
         minimized: Bool = false
     ) {
@@ -171,7 +115,7 @@ final class CaptureCoordinator {
         panel.show(
             settings: settings,
             overrides: overrides,
-            conversationTurns: conversationTurns,
+            displayedTurn: displayedTurn,
             inputSegments: resolvedSegments,
             outputDestinations: settings.outputDestinations,
             initialAppName: session?.previousActiveApp?.localizedName,
@@ -194,134 +138,21 @@ final class CaptureCoordinator {
         }
     }
 
-    private func handlePushToTypeKeyDown() {
-        if panel.isVisible && !panel.isMinimized {
-            collapseOverlay()
-        } else if panel.isVisible && panel.isMinimized {
-            Task { await expandFromCollapsed() }
-        } else {
-            onWillStartInput?()
-            recordingIndicator.hide()
-            overrides.clearIfCompletedPipeline()
-            if session == nil {
-                session = PipelineSession()
-                session?.conversationID = UUID()
-            }
-            showPillForNewCapture()
-            startExpandTimer()
-        }
-    }
-
-    private func handlePushToTypeKeyUp() {
-        expandTimerTask?.cancel()
-        expandTimerTask = nil
-    }
-
-    private func showPillForNewCapture() {
-        let frontmostApp = NSWorkspace.shared.frontmostApplication
-        session?.previousActiveApp = frontmostApp
-
-        // Show pill immediately with empty content
-        configurePanelAndShow(minimized: true)
-        panel.setPhase(.idle)
-        panel.minimize()
-        onCancelHotkeyEnabled?(true)
-
-        // Capture selection in background — populates segments when ready.
-        // Start clipboard monitoring after capture completes (same pattern as
-        // toggle-recording) so copies during the pill state register immediately.
-        let bundleID = frontmostApp?.bundleIdentifier
-        let pid = frontmostApp?.processIdentifier
-        Task {
-            let capturedText = await selectionCapturer.capture(bundleIdentifier: bundleID, pid: pid)
-            if let capturedText {
-                Logger.app.info("Push-to-type: storing captured selection (\(capturedText.count) chars): \"\(capturedText.prefix(80))\"")
-                let context = CapturedContext(text: capturedText, source: .selection)
-                session?.captures = [context]
-                originalCapture = context
-                panel.setSegments([InputSegment(capture: context)])
-                panel.signalClipboardCapture()
-            }
-
-            // Take baseline after SelectionCapturer finishes — its clipboard
-            // copy/read/restore can bump changeCount and cause false positives.
-            let freshBaseline = NSPasteboard.general.changeCount
-            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] _ in
-                self?.panel.signalClipboardCapture()
-            }
-        }
-
-        Logger.app.info("Capture view: pill shown for new capture")
-    }
-
-    private func startExpandTimer() {
-        expandTimerTask?.cancel()
-        let delayMs = settings.pushToTypeExpandDelay
-        if delayMs <= 0 {
-            // Expand immediately — no pill state
-            guard panel.isVisible, panel.isMinimized else { return }
-            panel.expand()
-            return
-        }
-        expandTimerTask = Task {
-            try? await Task.sleep(for: .milliseconds(delayMs))
-            guard !Task.isCancelled else { return }
-            guard panel.isVisible, panel.isMinimized else { return }
-            panel.expand()
-        }
-    }
-
-    private func collapseOverlay() {
-        panel.minimize()
-        onCancelHotkeyEnabled?(true)
-        Task {
-            await clipboardMonitor.start { [weak self] _ in
-                self?.panel.signalClipboardCapture()
-            }
-        }
-        Logger.app.info("Capture view: collapsed to pill")
-    }
-
-    private func expandFromCollapsed() async {
-        let newCaptures = await clipboardMonitor.stop()
-
-        if !newCaptures.isEmpty {
-            for capturedText in newCaptures {
-                let context = CapturedContext(text: capturedText, source: .clipboard)
-                accumulatedCaptures.append(context)
-                panel.addClipboardCapture(context)
-            }
-            session?.captures = panel.allCaptures
-        }
-
-        panel.expand()
-        onCancelHotkeyEnabled?(false)
-        Logger.app.info("Capture view: expanded from pill with \(newCaptures.count) clipboard captures")
-    }
-
     func dismissOverlay(saveToHistory: Bool = true) {
         // Persist any non-empty input to history before tearing down the session.
-        // For the recording flow a draft already exists (populateWithTranscription wrote it);
-        // this updates it with the latest panel text. For push-to-type this creates
-        // the initial history entry so dismissed captures are never lost.
         if saveToHistory {
             preserveCurrentInputToHistory()
         }
 
         Task { await clipboardMonitor.stop() }
-        onCancelHotkeyEnabled?(false)
-        expandTimerTask?.cancel()
-        expandTimerTask = nil
         autoDismissTask?.cancel()
         autoDismissTask = nil
-        quickActionTask?.cancel()
-        quickActionTask = nil
+        immediateActionTask?.cancel()
+        immediateActionTask = nil
         panel.onFocusLost = nil
-        panel.onPillClicked = nil
         panel.dismiss()
         recordingIndicator.showDismissed()
         session = nil
-        originalCapture = nil
         accumulatedCaptures = []
         overrides.clearAll()
         Logger.app.info("Capture view dismissed")
@@ -350,14 +181,11 @@ final class CaptureCoordinator {
     private func preserveCurrentInputToHistory() {
         guard let session, let conversationID = session.conversationID else { return }
 
-        // Viewing history without mutation — Escape discards, original stays intact
-        if session.historySourceConversationID != nil { return }
-
         let segments = panel.viewModel?.inputSegments ?? []
         let hasContent = segments.contains { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.capture != nil }
         guard hasContent else { return }
 
-        recordOrUpdateHistory(
+        recordHistory(
             conversationID: conversationID,
             inputSegments: segments, output: nil,
             mode: settings.activeMode

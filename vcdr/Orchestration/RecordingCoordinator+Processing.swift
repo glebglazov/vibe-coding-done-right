@@ -41,12 +41,11 @@ extension RecordingCoordinator {
                 hadDestinationOverride = false
             }
 
-            let isFollowUp = run.isFollowUp
             recordingRun = nil
 
             guard !text.isEmpty else {
                 cancelHotkeyManager.isEnabled = false
-                delegate?.recordingCoordinatorDidFailTranscription(isFollowUp: isFollowUp)
+                delegate?.recordingCoordinatorDidFailTranscription()
                 processingTask = nil
                 state = .idle
                 return
@@ -57,8 +56,7 @@ extension RecordingCoordinator {
                 captures: run.captures,
                 previousActiveApp: run.previousActiveApp,
                 destinationOverrideID: run.destinationOverrideID,
-                hadDestinationOverride: hadDestinationOverride,
-                isFollowUp: isFollowUp
+                hadDestinationOverride: hadDestinationOverride
             )
 
             cancelHotkeyManager.isEnabled = false

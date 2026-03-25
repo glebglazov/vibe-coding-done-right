@@ -13,13 +13,7 @@ final class CapturePanel {
 
     var onFocusLost: (() -> Void)?
 
-    var onPillClicked: (() -> Void)?
-
-    var onCancelRecording: (() -> Void)?
-
     var onCancelCapture: (() -> Void)?
-
-    var isLockedForFollowUp = false
 
     // MARK: - Constants
 
@@ -33,7 +27,7 @@ final class CapturePanel {
     func show(
         settings: AppSettings,
         overrides: ConversationOverrides,
-        conversationTurns: [ConversationTurn] = [],
+        displayedTurn: ConversationTurn? = nil,
         inputSegments: [InputSegment] = [InputSegment()],
         outputDestinations: [OutputDestination] = [],
         initialAppName: String? = nil,
@@ -49,7 +43,7 @@ final class CapturePanel {
         let viewModel = CaptureViewModel(
             settings: settings,
             overrides: overrides,
-            conversationTurns: conversationTurns,
+            displayedTurn: displayedTurn,
             inputSegments: inputSegments,
             outputDestinations: filteredDestinations,
             onSubmit: { text in
@@ -70,14 +64,10 @@ final class CapturePanel {
         }
         self.viewModel = viewModel
 
-        presentPanel(viewModel: viewModel, turns: conversationTurns, inputSegments: inputSegments, skipFocus: minimized)
+        presentPanel(viewModel: viewModel, displayedTurn: displayedTurn, inputSegments: inputSegments, skipFocus: minimized)
     }
 
     func hide() {
-        if isLockedForFollowUp {
-            onCancelRecording?()
-            return
-        }
         tearDown()
     }
 
@@ -86,7 +76,6 @@ final class CapturePanel {
     }
 
     private func tearDown() {
-        isLockedForFollowUp = false
         removeTrailingEmptySegments()
         removeEventMonitor(&globalEventMonitor)
         removeEventMonitor(&localEventMonitor)
@@ -121,12 +110,12 @@ final class CapturePanel {
 
     var currentText: String? { viewModel?.fullText }
 
-    var currentTurns: [ConversationTurn] { viewModel?.conversationTurns ?? [] }
+    var currentTurn: ConversationTurn? { viewModel?.displayedTurn }
 
-    private func presentPanel(viewModel: CaptureViewModel, turns: [ConversationTurn], inputSegments: [InputSegment] = [InputSegment()], skipFocus: Bool = false) {
+    private func presentPanel(viewModel: CaptureViewModel, displayedTurn: ConversationTurn? = nil, inputSegments: [InputSegment] = [InputSegment()], skipFocus: Bool = false) {
         let view = CaptureView(viewModel: viewModel)
         let hostingView = NSHostingView(rootView: view)
-        let panelHeight = Self.calculateHeight(for: turns, inputSegments: inputSegments, segmentHeights: viewModel.segmentHeights)
+        let panelHeight = Self.calculateHeight(for: displayedTurn, inputSegments: inputSegments, segmentHeights: viewModel.segmentHeights)
         hostingView.frame = NSRect(x: 0, y: 0, width: Self.panelWidth, height: panelHeight)
 
         let panel = KeyablePanel(
@@ -183,8 +172,7 @@ final class CapturePanel {
                       let contentView = self.panel?.contentView,
                       let panel = self.panel else { return }
                 panel.makeKey()
-                let cursorPos = self.activeSegmentCursorPosition()
-                self.focusActiveTextView(in: contentView, panel: panel, cursorPosition: cursorPos)
+                self.focusActiveTextView(in: contentView, panel: panel)
             }
         } else {
             panel?.makeKey()
@@ -206,20 +194,6 @@ final class CapturePanel {
         viewModel.activeSegmentIndex = min(viewModel.activeSegmentIndex, viewModel.inputSegments.count - 1)
     }
 
-    // MARK: - Cursor Position
-
-    /// Resolves the cursor position for the active segment from saved state,
-    /// falling back to end-of-text. Used by `expand()` to pass cursor position
-    /// to the pure-AppKit `focusActiveTextView` path.
-    func activeSegmentCursorPosition() -> Int {
-        guard let viewModel else { return 0 }
-        let index = viewModel.activeSegmentIndex
-        guard viewModel.inputSegments.indices.contains(index) else { return 0 }
-        let segment = viewModel.inputSegments[index]
-        return viewModel.savedCursorPositions[segment.id]
-            ?? (segment.text as NSString).length
-    }
-
     // MARK: - Panel Resize
 
     private func resizePanelToMinimized() {
@@ -231,9 +205,7 @@ final class CapturePanel {
 
     func resizePanelToExpanded() {
         guard let panel, let viewModel else { return }
-        let turns = viewModel.conversationTurns
-        let segs = viewModel.inputSegments
-        let newHeight = Self.calculateHeight(for: turns, inputSegments: segs, segmentHeights: viewModel.segmentHeights, hasError: viewModel.errorMessage != nil)
+        let newHeight = Self.calculateHeight(for: viewModel.displayedTurn, inputSegments: viewModel.inputSegments, segmentHeights: viewModel.segmentHeights, hasError: viewModel.errorMessage != nil)
         guard let origin = Self.panelOrigin(width: Self.panelWidth, height: newHeight) else { return }
         let newFrame = NSRect(origin: origin, size: NSSize(width: Self.panelWidth, height: newHeight))
         panel.animateResize(to: newFrame)
@@ -241,9 +213,7 @@ final class CapturePanel {
 
     func resizePanel() {
         guard let panel, let viewModel else { return }
-        let turns = viewModel.conversationTurns
-        let segs = viewModel.inputSegments
-        let newHeight = Self.calculateHeight(for: turns, inputSegments: segs, segmentHeights: viewModel.segmentHeights, hasError: viewModel.errorMessage != nil)
+        let newHeight = Self.calculateHeight(for: viewModel.displayedTurn, inputSegments: viewModel.inputSegments, segmentHeights: viewModel.segmentHeights, hasError: viewModel.errorMessage != nil)
         // Use explicit target width instead of panel.frame.width — the animator proxy
         // may return intermediate values during resize animations, causing the panel
         // to get stuck at the wrong width (e.g. 200pt minimized width after expanding).
