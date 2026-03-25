@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import UIKit
 
 @MainActor
 @Observable
@@ -22,9 +23,13 @@ final class RecordingFlowCoordinator {
 
     /// When true, recording starts automatically once the model is ready
     private var pendingRecordRequest = false
+    /// Tracks whether the current session was initiated via deep link
+    private var launchedViaDeepLink = false
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
+    /// Delay after posting Darwin notification before suspending
+    private static let suspendDelay: Duration = .milliseconds(500)
 
 
     var isRecording: Bool { audioRecorder.isRecording }
@@ -69,6 +74,7 @@ final class RecordingFlowCoordinator {
 
     /// Called when a deep link arrives. If the model isn't ready yet, queues the request.
     func handleRecordDeepLink() async {
+        launchedViaDeepLink = true
         switch state {
         case .idle, .initializing:
             pendingRecordRequest = true
@@ -121,9 +127,14 @@ final class RecordingFlowCoordinator {
             state = .complete(text)
             Logger.app.info("Transcription complete: \(text.prefix(50))...")
 
-            // The user returns to their previous app via the iOS "Back to [App]"
-            // banner in the status bar. UIApplication.suspend sends to the home
-            // screen (not back to the previous app), so we don't use it.
+            // When launched from keyboard deep link, auto-suspend so the user
+            // returns to their previous app. Goes to home screen, but the text
+            // is already written to App Group for the keyboard extension to pick up.
+            if launchedViaDeepLink {
+                launchedViaDeepLink = false
+                try? await Task.sleep(for: Self.suspendDelay)
+                UIApplication.shared.perform(#selector(NSXPCConnection.suspend))
+            }
         } catch {
             try? FileManager.default.removeItem(at: audioURL)
             state = .error("Transcription failed: \(error.localizedDescription)")

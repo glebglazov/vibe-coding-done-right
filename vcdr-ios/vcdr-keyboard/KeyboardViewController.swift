@@ -64,6 +64,9 @@ class KeyboardViewController: UIInputViewController {
             onDeleteBackward: { [weak self] in
                 self?.textDocumentProxy.deleteBackward()
             },
+            onSpace: { [weak self] in
+                self?.textDocumentProxy.insertText(" ")
+            },
             onNewline: { [weak self] in
                 self?.textDocumentProxy.insertText("\n")
             },

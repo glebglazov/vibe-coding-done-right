@@ -3,6 +3,7 @@ import SwiftUI
 struct KeyboardView: View {
     let onNextKeyboard: () -> Void
     let onDeleteBackward: () -> Void
+    let onSpace: () -> Void
     let onNewline: () -> Void
     let needsInputModeSwitchKey: Bool
     let hasFullAccess: Bool
@@ -11,7 +12,9 @@ struct KeyboardView: View {
     private static let keyboardHeight: CGFloat = 120
     private static let micButtonSize: CGFloat = 64
     private static let micIconSize: CGFloat = 32
-    private static let utilityButtonSize: CGFloat = 44
+    private static let utilityButtonMinWidth: CGFloat = 56
+    private static let utilityButtonHeight: CGFloat = 44
+    private static let utilityCornerRadius: CGFloat = 8
 
     var body: some View {
         VStack(spacing: 8) {
@@ -23,22 +26,15 @@ struct KeyboardView: View {
                     .padding(.horizontal)
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 if needsInputModeSwitchKey {
-                    Button(action: onNextKeyboard) {
-                        Image(systemName: "globe")
-                            .font(.title2)
-                            .frame(width: Self.utilityButtonSize, height: Self.utilityButtonSize)
-                    }
+                    utilityButton(icon: "globe", action: onNextKeyboard)
                 }
 
-                Spacer()
+                utilityButton(icon: "delete.left", action: onDeleteBackward)
 
-                Button(action: onDeleteBackward) {
-                    Image(systemName: "delete.left")
-                        .font(.title2)
-                        .frame(width: Self.utilityButtonSize, height: Self.utilityButtonSize)
-                }
+                utilityButton(icon: "space", action: onSpace)
+                    .frame(maxWidth: .infinity)
 
                 // SwiftUI Link is the only iOS 18-compatible way to open a URL
                 // from a keyboard extension
@@ -50,22 +46,27 @@ struct KeyboardView: View {
                         .background(.blue, in: Circle())
                 }
 
-                Button(action: onNewline) {
-                    Image(systemName: "return")
-                        .font(.title2)
-                        .frame(width: Self.utilityButtonSize, height: Self.utilityButtonSize)
-                }
-
-                Spacer()
+                utilityButton(icon: "return", action: onNewline)
+                    .frame(maxWidth: .infinity)
 
                 // Placeholder for symmetry with globe button
                 if needsInputModeSwitchKey {
                     Color.clear
-                        .frame(width: Self.utilityButtonSize, height: Self.utilityButtonSize)
+                        .frame(width: Self.utilityButtonMinWidth, height: Self.utilityButtonHeight)
                 }
             }
             .frame(height: Self.keyboardHeight)
             .padding(.horizontal)
         }
+    }
+
+    private func utilityButton(icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.title3)
+                .frame(minWidth: Self.utilityButtonMinWidth, minHeight: Self.utilityButtonHeight)
+                .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: Self.utilityCornerRadius))
+        }
+        .contentShape(Rectangle())
     }
 }
