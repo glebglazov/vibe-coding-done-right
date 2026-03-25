@@ -1,30 +1,13 @@
-import UIKit
+import KeyboardKit
 import SwiftUI
 
-class KeyboardViewController: UIInputViewController {
-    private var hostingController: UIHostingController<KeyboardView>?
+class KeyboardViewController: KeyboardInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        setup(for: .vcdr)
 
-        let host = UIHostingController(rootView: makeKeyboardView())
-        host.view.translatesAutoresizingMaskIntoConstraints = false
-        host.view.backgroundColor = .clear
-
-        addChild(host)
-        view.addSubview(host.view)
-        host.didMove(toParent: self)
-
-        NSLayoutConstraint.activate([
-            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            host.view.topAnchor.constraint(equalTo: view.topAnchor),
-            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
-
-        hostingController = host
-
-        // Start listening for transcription results via Darwin notification
+        // Listen for transcription results via Darwin notification
         DarwinNotificationCenter.observe(SharedConstants.darwinNotificationName)
 
         NotificationCenter.default.addObserver(
@@ -35,8 +18,24 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        hostingController?.rootView = makeKeyboardView()
         checkPendingTranscription()
+    }
+
+    override func viewWillSetupKeyboardView() {
+        let fullAccess = hasFullAccess
+        setupKeyboardView { controller in
+            VStack(spacing: 0) {
+                DictateBarView(hasFullAccess: fullAccess)
+                KeyboardView(
+                    services: controller.services,
+                    buttonContent: { $0.view },
+                    buttonView: { $0.view },
+                    collapsedView: { $0.view },
+                    emojiKeyboard: { $0.view },
+                    toolbar: { $0.view }
+                )
+            }
+        }
     }
 
     @objc private func handleTranscriptionReady() {
@@ -49,21 +48,5 @@ class KeyboardViewController: UIInputViewController {
 
         textDocumentProxy.insertText(text)
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
-    }
-
-    private func makeKeyboardView() -> KeyboardView {
-        KeyboardView(
-            onInsertText: { [weak self] text in
-                self?.textDocumentProxy.insertText(text)
-            },
-            onDeleteBackward: { [weak self] in
-                self?.textDocumentProxy.deleteBackward()
-            },
-            onNextKeyboard: { [weak self] in
-                self?.advanceToNextInputMode()
-            },
-            needsInputModeSwitchKey: needsInputModeSwitchKey,
-            hasFullAccess: hasFullAccess
-        )
     }
 }

@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		AA00000A2F74750000000001 /* vcdr-keyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000012F74750000000001 /* vcdr-keyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA00000F2F74750000000002 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000E2F74750000000002 /* FluidAudio */; };
+		CC0000042F74750000000001 /* KeyboardKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000022F74750000000001 /* KeyboardKit */; };
+		CC0000052F74750000000001 /* KeyboardKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000032F74750000000001 /* KeyboardKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -107,6 +109,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CC0000052F74750000000001 /* KeyboardKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,6 +118,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000F2F74750000000002 /* FluidAudio in Frameworks */,
+				CC0000042F74750000000001 /* KeyboardKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -177,6 +181,7 @@
 			);
 			name = "vcdr-keyboard";
 			packageProductDependencies = (
+				CC0000032F74750000000001 /* KeyboardKit */,
 			);
 			productName = "vcdr-keyboard";
 			productReference = AA0000012F74750000000001 /* vcdr-keyboard.appex */;
@@ -202,6 +207,7 @@
 			name = "vcdr-ios";
 			packageProductDependencies = (
 				AA00000E2F74750000000002 /* FluidAudio */,
+				CC0000022F74750000000001 /* KeyboardKit */,
 			);
 			productName = "vcdr-ios";
 			productReference = E57289812F74745800E1C61C /* vcdr-ios.app */;
@@ -290,6 +296,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AA00000D2F74750000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				CC0000012F74750000000001 /* XCRemoteSwiftPackageReference "KeyboardKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E57289822F74745800E1C61C /* Products */;
@@ -773,6 +780,14 @@
 				minimumVersion = 0.7.9;
 			};
 		};
+		CC0000012F74750000000001 /* XCRemoteSwiftPackageReference "KeyboardKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/KeyboardKit/KeyboardKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 10.3.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -780,6 +795,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA00000D2F74750000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		CC0000022F74750000000001 /* KeyboardKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC0000012F74750000000001 /* XCRemoteSwiftPackageReference "KeyboardKit" */;
+			productName = KeyboardKit;
+		};
+		CC0000032F74750000000001 /* KeyboardKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC0000012F74750000000001 /* XCRemoteSwiftPackageReference "KeyboardKit" */;
+			productName = KeyboardKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
