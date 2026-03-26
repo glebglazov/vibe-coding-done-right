@@ -75,7 +75,6 @@ struct DictateBarView: View {
         kbLogger.info("[DictateBar] sendCommand(\(command.rawValue))")
         SharedConstants.sharedDefaults.set(command.rawValue, forKey: SharedConstants.commandKey)
         DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
-        kbLogger.info("[DictateBar] Command written and Darwin notification posted")
     }
 
     private func refreshState() {
