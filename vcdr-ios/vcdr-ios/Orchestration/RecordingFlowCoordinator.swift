@@ -109,7 +109,10 @@ final class RecordingFlowCoordinator {
             Logger.app.info("[Coordinator] Bouncing back to \(bundleID) via \(scheme)")
             await UIApplication.shared.open(url)
         } else {
-            Logger.app.info("[Coordinator] No known URL scheme for sourceApp=\(sourceApp ?? "nil") — user must tap Back")
+            // Fallback: suspend to home screen. Not ideal but gets the user out of VCDR.
+            // The audio session stays alive in the background.
+            Logger.app.info("[Coordinator] No known URL scheme for sourceApp=\(sourceApp ?? "nil") — suspending to home screen")
+            UIApplication.shared.perform(#selector(NSXPCConnection.suspend))
         }
     }
 
