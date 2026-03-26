@@ -101,10 +101,7 @@ struct MainWindowView: View {
                     case .history:
                         HistoryTabView(
                             history: dependencies.transcriptionHistory,
-                            settings: dependencies.settings,
-                            onOpenConversation: { conversation in
-                                dependencies.openConversationFromHistory(conversation)
-                            }
+                            settings: dependencies.settings
                         )
                     #if DEBUG
                     case .debug:

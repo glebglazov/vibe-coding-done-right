@@ -185,10 +185,6 @@ final class AppDependencies {
         }
     }
 
-    func openConversationFromHistory(_ conversation: Conversation) {
-        captureCoordinator.showFromHistory(conversation: conversation)
-    }
-
     deinit {
         permissionTimer?.invalidate()
     }

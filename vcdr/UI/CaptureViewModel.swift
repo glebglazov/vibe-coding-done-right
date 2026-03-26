@@ -74,13 +74,6 @@ final class CaptureViewModel {
         return destination.name.lowercased()
     }
 
-    /// Show "You:" / "Result:" labels when the displayed turn has processed output.
-    var showLabels: Bool {
-        guard let turn = displayedTurn else { return false }
-        if !turn.captures.isEmpty { return true }
-        return turn.output != nil
-    }
-
     /// Output text from the displayed turn for copy actions.
     var outputText: String? {
         displayedTurn?.output

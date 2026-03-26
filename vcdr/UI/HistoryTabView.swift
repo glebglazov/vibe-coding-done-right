@@ -3,7 +3,6 @@ import SwiftUI
 struct HistoryTabView: View {
     let history: TranscriptionHistory
     let settings: AppSettings
-    let onOpenConversation: (Conversation) -> Void
 
     var body: some View {
         Group {
@@ -18,7 +17,6 @@ struct HistoryTabView: View {
                     ForEach(history.conversations) { conversation in
                         ConversationRowView(
                             conversation: conversation,
-                            onOpen: { onOpenConversation(conversation) },
                             onDelete: { history.removeConversation(conversation) }
                         )
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -46,42 +44,36 @@ struct HistoryTabView: View {
 
 private struct ConversationRowView: View {
     let conversation: Conversation
-    let onOpen: () -> Void
     let onDelete: () -> Void
 
     @State private var showCopied = false
 
     var body: some View {
         HStack(alignment: .top) {
-            Button(action: onOpen) {
-                VStack(alignment: .leading, spacing: 4) {
-                    // Single turn display
-                    let turn = DisplayedTurn(
-                        inputSegments: conversation.inputSegments,
-                        output: conversation.output
-                    )
-                    let showLabels = conversation.hadExternalProcessing
-                        || conversation.inputSegments.contains(where: { $0.capture != nil })
+            VStack(alignment: .leading, spacing: 4) {
+                let turn = DisplayedTurn(
+                    inputSegments: conversation.inputSegments,
+                    output: conversation.output
+                )
+                let showLabels = conversation.hadExternalProcessing
+                    || conversation.inputSegments.contains(where: { $0.capture != nil })
 
-                    DisplayedTurnView(
-                        turn: turn,
-                        showLabels: showLabels,
-                        modeName: conversation.hadExternalProcessing ? conversation.modeName : nil,
-                        isProcessing: false,
-                        showCopyButton: false
-                    )
+                DisplayedTurnView(
+                    turn: turn,
+                    showLabels: showLabels,
+                    modeName: conversation.hadExternalProcessing ? conversation.modeName : nil,
+                    isProcessing: false,
+                    showCopyButton: false
+                )
 
-                    // Timestamp
-                    Text(conversation.lastUpdated.formatted(
-                        .dateTime.month(.abbreviated).day().hour().minute()
-                    ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                // Timestamp
+                Text(conversation.lastUpdated.formatted(
+                    .dateTime.month(.abbreviated).day().hour().minute()
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Copy button
             Button {
@@ -94,10 +86,6 @@ private struct ConversationRowView: View {
         }
         .padding(.vertical, 2)
         .contextMenu {
-            Button("View") {
-                onOpen()
-            }
-
             Button("Copy") {
                 copyToClipboard(conversation.copyableText)
             }

@@ -79,15 +79,6 @@ final class CaptureCoordinator {
         self.overrides = overrides
     }
 
-    func showFromHistory(conversation: Conversation) {
-        let displayTurn = DisplayedTurn(inputSegments: conversation.inputSegments, output: conversation.output)
-        configurePanelAndShow(displayedTurn: displayTurn)
-        if conversation.hadExternalProcessing {
-            panel.setProcessedByModeName(conversation.modeName)
-        }
-        Logger.app.info("Capture view shown from history")
-    }
-
     func rewirePanelCallbacks() {
         panel.onFocusLost = { [weak self] in
             self?.dismissOverlay()

@@ -3,13 +3,10 @@ import AppKit
 extension CapturePanel {
 
     static let lineHeight: CGFloat = 20
-    static let labelLineHeight: CGFloat = 18
     static let contentPadding: CGFloat = 24
     static let hintBarHeight: CGFloat = 30
     static let panelMinBaseHeight: CGFloat = 60
     static let errorBannerHeight: CGFloat = 28
-    /// Scaling factor for capture text line height (slightly tighter than normal text)
-    private static let captureLineHeightScale: CGFloat = 0.9
 
     static func maxPanelHeight() -> CGFloat {
         let screen = NSScreen.main ?? NSScreen.screens.first
@@ -25,22 +22,11 @@ extension CapturePanel {
             return min(total, maxPanelHeight())
         }
 
-        // Single displayed turn height
-        var totalLines: CGFloat = 0
-        totalLines += labelLineHeight / lineHeight  // "You:" label
-        totalLines += CGFloat(turn.input.components(separatedBy: .newlines).count)
-        if let output = turn.output {
-            totalLines += labelLineHeight / lineHeight  // "Result:" label
-            totalLines += CGFloat(output.components(separatedBy: .newlines).count)
-        }
-
-        for capture in turn.captures {
-            totalLines += labelLineHeight / lineHeight
-            totalLines += CGFloat(capture.text.components(separatedBy: .newlines).count) * captureLineHeightScale
-        }
-
-        let conversationHeight = totalLines * lineHeight + contentPadding
-        let total = panelMinBaseHeight + conversationHeight + hintBarHeight + errorHeight
+        // Panel shows a single text: processed output or raw transcription
+        let displayText = turn.output ?? turn.input
+        let totalLines = CGFloat(displayText.components(separatedBy: .newlines).count)
+        let contentHeight = totalLines * lineHeight + contentPadding
+        let total = panelMinBaseHeight + contentHeight + hintBarHeight + errorHeight
         return min(total, maxPanelHeight())
     }
 
