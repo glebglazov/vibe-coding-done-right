@@ -14,8 +14,8 @@ struct DictateBarView: View {
     @State private var isSessionActive = false
 
     // MARK: - Constants
-    private static let iconSize: CGFloat = 20
-    private static let tapTargetSize: CGFloat = 36
+    private static let iconSize: CGFloat = 18
+    private static let circleSize: CGFloat = 34
 
     var body: some View {
         Group {
@@ -47,7 +47,7 @@ struct DictateBarView: View {
                 }
             }
         }
-        .padding(.trailing, 4)
+        .padding(.trailing, 8)
         .onAppear {
             refreshState()
             kbLogger.info("[DictateBar] onAppear — isSessionActive=\(isSessionActive), isRecording=\(isRecording), hasFullAccess=\(hasFullAccess)")
@@ -65,8 +65,10 @@ struct DictateBarView: View {
     private func iconView(name: String, color: Color) -> some View {
         Image(systemName: name)
             .font(.system(size: Self.iconSize))
-            .foregroundStyle(color)
-            .frame(width: Self.tapTargetSize, height: Self.tapTargetSize)
+            .foregroundStyle(.white)
+            .frame(width: Self.circleSize, height: Self.circleSize)
+            .background(color, in: Circle())
+            .contentShape(Circle())
     }
 
     private func sendCommand(_ command: RecordingCommand) {
