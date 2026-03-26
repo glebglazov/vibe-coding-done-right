@@ -9,6 +9,7 @@ struct VCDRiOSApp: App {
             RecordingView(coordinator: coordinator)
                 .task {
                     coordinator.cleanupStaleResults()
+                    coordinator.setupCommandListener()
                     await coordinator.initializeModel()
                 }
                 .onOpenURL { url in

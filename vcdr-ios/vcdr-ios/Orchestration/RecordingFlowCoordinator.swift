@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import UIKit
 
 @MainActor
 @Observable
@@ -22,9 +23,13 @@ final class RecordingFlowCoordinator {
 
     /// When true, recording starts automatically once the model is ready
     private var pendingRecordRequest = false
+
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
-
+    /// Delay before bouncing back to host app — allows audio session to fully activate
+    private static let bounceBackDelay: Duration = .milliseconds(300)
+    /// Delay after posting transcription result before returning to host app
+    private static let returnToHostDelay: Duration = .milliseconds(500)
 
     var isRecording: Bool { audioRecorder.isRecording }
     var audioLevels: [Float] { audioRecorder.audioLevels }
@@ -33,7 +38,6 @@ final class RecordingFlowCoordinator {
         state = .initializing
         initProgress = "Downloading model..."
 
-        // Poll init phase for UI updates
         let pollTask = Task {
             while !Task.isCancelled {
                 let phase = await transcriptionProvider.initPhase
@@ -54,10 +58,9 @@ final class RecordingFlowCoordinator {
             initProgress = "Ready"
             Logger.app.info("Parakeet model initialized")
 
-            // If a deep link arrived while model was loading, start recording now
             if pendingRecordRequest {
                 pendingRecordRequest = false
-                await startRecording()
+                await startRecordingAndBounceBack()
             }
         } catch {
             pollTask.cancel()
@@ -66,25 +69,21 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    /// Called when a deep link arrives. If the model isn't ready yet, queues the request.
+    /// Called when a deep link arrives. Starts recording and bounces back to host app.
     func handleRecordDeepLink() async {
         switch state {
         case .idle, .initializing:
             pendingRecordRequest = true
             Logger.app.info("Record request queued — model still initializing")
-        case .ready:
-            await startRecording()
-        case .recording:
-            // Already recording, ignore duplicate deep link
+        case .ready, .complete, .error:
+            await startRecordingAndBounceBack()
+        case .recording, .transcribing:
+            // Already busy, ignore
             break
-        case .transcribing:
-            // Busy transcribing, ignore
-            break
-        case .complete, .error:
-            await startRecording()
         }
     }
 
+    /// Starts recording in the foreground (manual use from the app UI).
     func startRecording() async {
         guard await transcriptionProvider.isReady else {
             state = .error("Model not ready")
@@ -94,50 +93,155 @@ final class RecordingFlowCoordinator {
         let started = await audioRecorder.startRecording()
         if started {
             state = .recording
+            writeState(.recording)
         } else {
             state = .error("Failed to start recording — check microphone permission")
         }
     }
 
+    /// Starts recording and immediately bounces back to the host app.
+    /// Recording continues in the background via UIBackgroundModes:audio.
+    /// Sets the audioSessionActive flag so subsequent recordings skip the flash.
+    private func startRecordingAndBounceBack() async {
+        guard await transcriptionProvider.isReady else {
+            state = .error("Model not ready")
+            return
+        }
+
+        let started = await audioRecorder.startRecording()
+        if started {
+            state = .recording
+            writeState(.recording)
+
+            // Mark audio session as active — keyboard will send commands instead of deep-linking
+            SharedConstants.sharedDefaults.set(true, forKey: SharedConstants.audioSessionActiveKey)
+
+            // Brief delay to ensure audio session is fully active before backgrounding
+            try? await Task.sleep(for: Self.bounceBackDelay)
+
+            await returnToHostApp()
+        } else {
+            state = .error("Failed to start recording — check microphone permission")
+        }
+    }
+
+    /// Stops recording and transcribes. Called from background via command listener.
     func stopAndTranscribe() async {
         guard let audioURL = audioRecorder.stopRecording() else {
             state = .error("No recording to process")
+            writeState(.idle)
             return
         }
 
         state = .transcribing
+        writeState(.transcribing)
 
         do {
             let rawText = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
             try? FileManager.default.removeItem(at: audioURL)
 
-            // Remove filler words and add terminator (period + space)
             let text = TextPostProcessor.process(rawText)
 
             // Write result to App Group for keyboard extension
             SharedConstants.sharedDefaults.set(text, forKey: SharedConstants.transcriptionResultKey)
 
-            // Signal keyboard extension via Darwin notification
-            DarwinNotificationCenter.post(SharedConstants.darwinNotificationName)
+            // Signal keyboard extension
+            DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
 
             state = .complete(text)
+            writeState(.idle)
             Logger.app.info("Transcription complete: \(text.prefix(50))...")
-            // User returns via the iOS "Back to [App]" link in the top-left status bar
+
+            // Return to host app after transcription (works for both background and foreground flows)
+            try? await Task.sleep(for: Self.returnToHostDelay)
+            await returnToHostApp()
         } catch {
             try? FileManager.default.removeItem(at: audioURL)
             state = .error("Transcription failed: \(error.localizedDescription)")
+            writeState(.idle)
             Logger.app.error("Transcription failed: \(error)")
         }
     }
 
     func reset() {
         state = .ready
+        writeState(.idle)
     }
 
-    /// Clear any stale transcription results left from a previous session.
-    /// Prevents ghost insertions when the keyboard extension reads old data.
     func cleanupStaleResults() {
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
+        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
+        // Audio session doesn't survive app kill — clear the flag so keyboard knows
+        // to deep-link (flash) on next recording to re-activate it
+        SharedConstants.sharedDefaults.set(false, forKey: SharedConstants.audioSessionActiveKey)
+        writeState(.idle)
     }
 
+    // MARK: - Background Command Listener
+
+    /// Listens for commands from the keyboard extension via Darwin notifications.
+    func setupCommandListener() {
+        DarwinNotificationCenter.observe(
+            SharedConstants.commandNotificationName,
+            localName: .darwinCommand
+        )
+        NotificationCenter.default.addObserver(
+            forName: .darwinCommand,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.handleCommand()
+            }
+        }
+    }
+
+    private func handleCommand() async {
+        guard let rawCommand = SharedConstants.sharedDefaults.string(
+            forKey: SharedConstants.commandKey),
+              let command = RecordingCommand(rawValue: rawCommand)
+        else { return }
+
+        // Clear command so it's not re-processed
+        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
+
+        switch command {
+        case .startRecording:
+            Logger.app.info("Received start command from keyboard (session already active)")
+            await startRecording()
+        case .stopRecording:
+            Logger.app.info("Received stop command from keyboard")
+            await stopAndTranscribe()
+        }
+    }
+
+    // MARK: - State Publishing
+
+    /// Writes recording state to App Group so the keyboard extension can read it.
+    private func writeState(_ recordingState: RecordingState) {
+        SharedConstants.sharedDefaults.set(recordingState.rawValue, forKey: SharedConstants.stateKey)
+        DarwinNotificationCenter.post(SharedConstants.stateNotificationName)
+    }
+
+    // MARK: - Host App Return
+
+    /// Returns to the host app using the URL scheme looked up from the bundle ID
+    /// that the keyboard extension wrote to App Group.
+    private func returnToHostApp() async {
+        guard let hostBundleID = SharedConstants.sharedDefaults.string(
+            forKey: SharedConstants.hostBundleIDKey)
+        else {
+            Logger.app.info("No host bundle ID — user must return manually")
+            return
+        }
+
+        guard let url = AppURLSchemes.url(forBundleID: hostBundleID) else {
+            Logger.app.info("No URL scheme mapping for \(hostBundleID)")
+            return
+        }
+
+        Logger.app.info("Returning to \(hostBundleID) via \(url.absoluteString)")
+        await UIApplication.shared.open(url)
+    }
 }

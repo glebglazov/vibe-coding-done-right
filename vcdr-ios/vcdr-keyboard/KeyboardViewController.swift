@@ -1,15 +1,32 @@
 import KeyboardKit
+import OSLog
 import SwiftUI
 
 class KeyboardViewController: KeyboardInputViewController {
+
+    /// Whether the main app is currently recording in the background.
+    /// Updated via Darwin notifications from the main app.
+    var isAppRecording = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
         setup(for: .vcdr)
 
-        // Listen for transcription results via Darwin notification
-        DarwinNotificationCenter.observe(SharedConstants.darwinNotificationName)
+        // Listen for state changes from the main app
+        DarwinNotificationCenter.observe(
+            SharedConstants.stateNotificationName,
+            localName: .darwinStateChanged
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleStateChanged),
+            name: .darwinStateChanged, object: nil
+        )
 
+        // Listen for transcription results
+        DarwinNotificationCenter.observe(
+            SharedConstants.transcriptionNotificationName,
+            localName: .darwinTranscriptionReady
+        )
         NotificationCenter.default.addObserver(
             self, selector: #selector(handleTranscriptionReady),
             name: .darwinTranscriptionReady, object: nil
@@ -18,12 +35,59 @@ class KeyboardViewController: KeyboardInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        writeHostBundleID()
+        refreshRecordingState()
         checkPendingTranscription()
     }
 
+    // MARK: - Host App Detection
+
+    private func writeHostBundleID() {
+        if let bundleID = hostApplicationBundleId {
+            SharedConstants.sharedDefaults.set(bundleID, forKey: SharedConstants.hostBundleIDKey)
+        }
+    }
+
+    // MARK: - Recording State
+
+    @objc private func handleStateChanged() {
+        refreshRecordingState()
+    }
+
+    private func refreshRecordingState() {
+        if let rawState = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey),
+           let state = RecordingState(rawValue: rawState) {
+            isAppRecording = (state == .recording)
+        } else {
+            isAppRecording = false
+        }
+    }
+
+    /// Sends a start command to the main app (session already active, no flash needed)
+    func sendStartCommand() {
+        SharedConstants.sharedDefaults.set(
+            RecordingCommand.startRecording.rawValue,
+            forKey: SharedConstants.commandKey
+        )
+        DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
+        isAppRecording = true
+    }
+
+    /// Sends a stop command to the main app via App Group + Darwin notification
+    func sendStopCommand() {
+        SharedConstants.sharedDefaults.set(
+            RecordingCommand.stopRecording.rawValue,
+            forKey: SharedConstants.commandKey
+        )
+        DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
+        isAppRecording = false
+    }
+
+    // MARK: - Keyboard View Setup
+
     override func viewWillSetupKeyboardView() {
         let fullAccess = hasFullAccess
-        setupKeyboardView { controller in
+        setupKeyboardView { [weak self] controller in
             KeyboardView(
                 services: controller.services,
                 buttonContent: { $0.view },
@@ -31,15 +95,19 @@ class KeyboardViewController: KeyboardInputViewController {
                 collapsedView: { $0.view },
                 emojiKeyboard: { $0.view },
                 toolbar: { params in
-                    // Autocomplete suggestions + mic icon on the right
                     HStack(spacing: 0) {
                         params.view
-                        DictateBarView(hasFullAccess: fullAccess)
+                        DictateBarView(
+                            hasFullAccess: fullAccess,
+                            keyboardController: self
+                        )
                     }
                 }
             )
         }
     }
+
+    // MARK: - Transcription Handling
 
     @objc private func handleTranscriptionReady() {
         checkPendingTranscription()

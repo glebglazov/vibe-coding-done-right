@@ -8,6 +8,37 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>VCDR needs microphone access to record your voice for transcription.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>mobilenotes</string>
+		<string>messages</string>
+		<string>message</string>
+		<string>x-web-search</string>
+		<string>x-apple-reminderkit</string>
+		<string>maps</string>
+		<string>App-prefs</string>
+		<string>pages</string>
+		<string>numbers</string>
+		<string>keynote</string>
+		<string>claude</string>
+		<string>obsidian</string>
+		<string>tg</string>
+		<string>whatsapp</string>
+		<string>sgnl</string>
+		<string>slack</string>
+		<string>twitter</string>
+		<string>instagram</string>
+		<string>fb-messenger</string>
+		<string>spotify</string>
+		<string>googlechrome</string>
+		<string>ms-word</string>
+		<string>ms-outlook</string>
+		<string>todoist</string>
+		<string>things</string>
+		<string>notion</string>
+		<string>discord</string>
+		<string>linear</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

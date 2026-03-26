@@ -42,10 +42,12 @@ final class AudioRecorder {
             return false
         }
 
-        // Configure iOS audio session for recording
+        // Configure iOS audio session for recording.
+        // Uses .playAndRecord so UIBackgroundModes:audio keeps the session alive
+        // when the app goes to background during the flash-and-bounce flow.
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.record, mode: .default)
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
             try session.setActive(true)
         } catch {
             Logger.recording.error("Failed to configure audio session: \(error)")
@@ -93,8 +95,8 @@ final class AudioRecorder {
         recorder.stop()
         stopLevelMonitoring()
 
-        // Deactivate audio session so other apps can resume audio
-        try? AVAudioSession.sharedInstance().setActive(false)
+        // Don't deactivate audio session — keep it alive for background recording.
+        // The session persists when the app goes to background via UIBackgroundModes:audio.
 
         let wasShort = recordingStartTime.map {
             $0.duration(to: .now) < Self.minimumRecordingDuration
