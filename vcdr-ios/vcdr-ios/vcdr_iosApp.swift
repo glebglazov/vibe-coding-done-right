@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     var onOpenURLWithSource: ((URL, String?) -> Void)?
@@ -6,7 +7,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ app: UIApplication, open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         let sourceApp = options[.sourceApplication] as? String
+        Logger.app.info("[AppDelegate] application(_:open:options:) called — url=\(url.absoluteString), sourceApp=\(sourceApp ?? "nil")")
         onOpenURLWithSource?(url, sourceApp)
+        return true
+    }
+
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        Logger.app.info("[AppDelegate] didFinishLaunchingWithOptions")
         return true
     }
 }
