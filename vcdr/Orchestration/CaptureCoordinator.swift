@@ -173,7 +173,7 @@ final class CaptureCoordinator {
 
             finalizeHistory(
                 snapshot: snapshot, processedText: processedText,
-                hadExternalProcessing: true
+                hadExternalProcessing: snapshot.mode.processingType != .none
             )
             overrides.markPipelineCompleted()
             Logger.app.info("Preview confirmed and action executed")
