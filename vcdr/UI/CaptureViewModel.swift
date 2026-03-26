@@ -9,7 +9,9 @@ final class CaptureViewModel {
     var isMinimized: Bool = false
     var processedByModeName: String?
     var rejectCount: Int = 0
-    var modeSwitcherViewModel: ModeSwitcherViewModel?
+    /// Set to true when the mode switcher is shown as a standalone panel — prevents
+    /// the CapturePanel from auto-dismissing when it loses focus to the mode switcher.
+    var isSuspendedForModeSwitcher: Bool = false
 
     /// Unified phase for both the minimized pill and expanded view state
     enum CapturePhase {
@@ -115,11 +117,6 @@ final class CaptureViewModel {
 
     /// Returns true if the event was handled (consumed)
     func handleKeyEvent(_ event: NSEvent) -> Bool {
-        // Delegate to mode switcher when it's showing
-        if let msVM = modeSwitcherViewModel {
-            return msVM.handleKeyEvent(event)
-        }
-
         // During recording, only handle dismiss — let other keys pass through
         if isRecording {
             if event.keyCode == KeyCodeMap.escapeKeyCode {

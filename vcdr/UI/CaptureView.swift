@@ -75,10 +75,7 @@ struct CaptureView: View {
         VStack(spacing: 0) {
             headerBar
 
-            if let msVM = viewModel.modeSwitcherViewModel {
-                ModeSwitcherView(viewModel: msVM)
-                    .padding(Self.textPadding)
-            } else if viewModel.displayedTurn != nil {
+            if viewModel.displayedTurn != nil {
                 displayedTurnSection
             }
 

@@ -7,8 +7,8 @@ struct ModeSwitcherView: View {
 
     private static let cornerRadius: CGFloat = 10
     private static let rowCornerRadius: CGFloat = 6
-    private static let horizontalPadding: CGFloat = 6
-    private static let verticalPadding: CGFloat = 6
+    private static let horizontalPadding: CGFloat = 10
+    private static let verticalPadding: CGFloat = 10
 
     var body: some View {
         VStack(spacing: 2) {
@@ -78,7 +78,7 @@ struct ModeSwitcherView: View {
                 .lineLimit(1)
 
             if mode.id == viewModel.activeModeID {
-                ActiveModeIndicator()
+                ActiveModeIndicator(color: viewModel.isRecording ? .red : .green)
             }
 
             Spacer()

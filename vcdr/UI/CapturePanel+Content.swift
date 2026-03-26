@@ -44,18 +44,6 @@ extension CapturePanel {
         viewModel?.rejectCount += 1
     }
 
-    func showModeSwitcher(viewModel: ModeSwitcherViewModel) {
-        self.viewModel?.modeSwitcherViewModel = viewModel
-    }
-
-    func hideModeSwitcher() {
-        self.viewModel?.modeSwitcherViewModel = nil
-    }
-
-    var isModeSwitcherVisible: Bool {
-        viewModel?.modeSwitcherViewModel != nil
-    }
-
     func setProcessedByModeName(_ name: String?) {
         viewModel?.processedByModeName = name
     }

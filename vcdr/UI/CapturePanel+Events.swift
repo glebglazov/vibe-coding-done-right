@@ -28,7 +28,7 @@ extension CapturePanel {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            guard self.viewModel?.modeSwitcherViewModel == nil else { return }
+            guard self.viewModel?.isSuspendedForModeSwitcher != true else { return }
             guard self.viewModel?.isMinimized != true else { return }
             self.onFocusLost?()
         }
@@ -36,7 +36,7 @@ extension CapturePanel {
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _
             in
             guard let self else { return }
-            guard self.viewModel?.modeSwitcherViewModel == nil else { return }
+            guard self.viewModel?.isSuspendedForModeSwitcher != true else { return }
             guard self.viewModel?.isMinimized != true else { return }
             self.onFocusLost?()
         }

@@ -30,29 +30,7 @@ final class CaptureCoordinator {
 
     @ObservationIgnored var onWillStartInput: (() -> Void)?
 
-    var isModeSwitcherHostVisible: Bool { panel.isVisible && !panel.isMinimized }
-
-    var isModeSwitcherVisible: Bool { panel.isModeSwitcherVisible }
-
     var isPanelVisible: Bool { panel.isVisible }
-
-    func showModeSwitcher(viewModel: ModeSwitcherViewModel) {
-        panel.showModeSwitcher(viewModel: viewModel)
-    }
-
-    func showModeSwitcherOnPill(viewModel: ModeSwitcherViewModel) {
-        panel.showModeSwitcher(viewModel: viewModel)
-        panel.expand()
-    }
-
-    func hideModeSwitcher() {
-        panel.hideModeSwitcher()
-    }
-
-    func hideModeSwitcherAndMinimize() {
-        panel.hideModeSwitcher()
-        panel.minimize()
-    }
 
     static let successIndicatorDuration: Duration = .seconds(2)
     static let pillErrorDisplayDuration: Duration = .seconds(1.5)

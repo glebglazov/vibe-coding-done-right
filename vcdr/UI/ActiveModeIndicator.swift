@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Green glowing dot indicating the currently active mode.
+/// Glowing dot indicating the currently active mode.
+/// Green by default, red when recording is in progress.
 struct ActiveModeIndicator: View {
     // MARK: - Constants
 
@@ -10,11 +11,13 @@ struct ActiveModeIndicator: View {
     private static let outerGlowOpacity: Double = 0.4
     private static let outerGlowRadius: CGFloat = 8
 
+    var color: Color = .green
+
     var body: some View {
         Circle()
-            .fill(.green)
+            .fill(color)
             .frame(width: Self.size, height: Self.size)
-            .shadow(color: .green.opacity(Self.innerGlowOpacity), radius: Self.innerGlowRadius)
-            .shadow(color: .green.opacity(Self.outerGlowOpacity), radius: Self.outerGlowRadius)
+            .shadow(color: color.opacity(Self.innerGlowOpacity), radius: Self.innerGlowRadius)
+            .shadow(color: color.opacity(Self.outerGlowOpacity), radius: Self.outerGlowRadius)
     }
 }

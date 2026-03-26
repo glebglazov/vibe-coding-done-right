@@ -93,49 +93,37 @@ final class ModeSwitcherCoordinator {
         let modes = settings.visibleModes
         guard !modes.isEmpty else { return }
 
+        delegate?.modeSwitcherWillShow()
+
         let vm = makeViewModel(onDismiss: { [weak self] in
             self?.panel.hide()
+            self?.delegate?.modeSwitcherDidHide()
         })
+        vm.isRecording = delegate?.isRecordingActive ?? false
         panel.show(viewModel: vm)
     }
 
     func hideSwitcher() {
         panel.hide()
+        delegate?.modeSwitcherDidHide()
     }
 
     /// Confirms the currently highlighted mode and hides the switcher.
-    /// Acts as if the user pressed Enter. Works for both standalone and contextual.
+    /// Acts as if the user pressed Enter. confirmAndHide triggers onSelect → onDismiss → delegate.modeSwitcherDidHide().
     func confirmAndHideSwitcher() {
-        if panel.isVisible {
-            panel.confirmAndHide()
-            return
-        }
-        // Try contextual dismiss (confirm is handled via the VM's onSelect callback)
-        if delegate?.modeSwitcherShouldDismissContextual() == true {
-            delegate?.modeSwitcherDidHideContextual()
-        }
+        guard panel.isVisible else { return }
+        panel.confirmAndHide()
     }
 
     private func toggleSwitcher() {
-        // 1. If contextual mode list is showing, dismiss it
-        if delegate?.modeSwitcherShouldDismissContextual() == true {
-            delegate?.modeSwitcherDidHideContextual()
-            return
-        }
-
-        // 2. If standalone panel is showing, hide it
+        // 1. If standalone panel is showing, hide it
         if panel.isVisible {
             panel.hide()
+            delegate?.modeSwitcherDidHide()
             return
         }
 
-        // 3. Try contextual host first
-        if delegate?.modeSwitcherShouldShowContextual() == true {
-            delegate?.modeSwitcherDidShowContextual()
-            return
-        }
-
-        // 4. Standalone panel (existing behavior)
+        // 2. Show standalone panel
         showSwitcher()
     }
 

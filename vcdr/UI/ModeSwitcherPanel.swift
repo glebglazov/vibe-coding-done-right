@@ -11,7 +11,7 @@ final class ModeSwitcherPanel {
 
     static let panelWidth: CGFloat = 220
     static let rowHeight: CGFloat = 32
-    static let verticalPadding: CGFloat = 8
+    static let verticalPadding: CGFloat = 10
     private static let panelOffsetBelowMenuBar: CGFloat = 8
     static let separatorHeight: CGFloat = 17
     static let hintRowHeight: CGFloat = 24
@@ -85,9 +85,10 @@ final class ModeSwitcherPanel {
             return event
         }
 
-        // Dismiss if the user clicks outside the panel
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.hide()
+        // Dismiss if the user clicks outside the panel — go through onDismiss
+        // so the coordinator delegate lifecycle (modeSwitcherDidHide) is invoked.
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak viewModel] _ in
+            viewModel?.onDismiss()
         }
     }
 
@@ -100,34 +101,33 @@ final class ModeSwitcherPanel {
         showingDestinations: Bool,
         showHint: Bool
     ) -> CGFloat {
-        switch navigationLevel {
+        let contentHeight: CGFloat = switch navigationLevel {
         case .modes:
-            let modeRowsHeight = rowHeight * CGFloat(min(modes.count, maxModesInSwitcher))
-            let hasDestinations = destinationCount > 0
+            {
+                let modeRowsHeight = rowHeight * CGFloat(min(modes.count, maxModesInSwitcher))
+                let hasDestinations = destinationCount > 0
 
-            if !hasDestinations {
+                if !hasDestinations {
+                    return verticalPadding * 2 + modeRowsHeight
+                }
+                if showingDestinations {
+                    let destinationRowsHeight = rowHeight * CGFloat(destinationCount)
+                    return verticalPadding * 2 + modeRowsHeight + separatorHeight + destinationRowsHeight
+                }
+                if showHint {
+                    return verticalPadding * 2 + modeRowsHeight + separatorHeight + hintRowHeight
+                }
                 return verticalPadding * 2 + modeRowsHeight
-            }
-
-            if showingDestinations {
-                let destinationRowsHeight = rowHeight * CGFloat(destinationCount)
-                return verticalPadding * 2 + modeRowsHeight + separatorHeight + destinationRowsHeight
-            }
-
-            if showHint {
-                return verticalPadding * 2 + modeRowsHeight + separatorHeight + hintRowHeight
-            }
-
-            return verticalPadding * 2 + modeRowsHeight
+            }()
 
         case .parameters(let modeIndex):
-            let paramCount = modes[modeIndex].parameters.count
-            return verticalPadding * 2 + headerHeight + rowHeight * CGFloat(paramCount)
+            verticalPadding * 2 + headerHeight + rowHeight * CGFloat(modes[modeIndex].parameters.count)
 
         case .options(let modeIndex, let parameterIndex):
-            let optionCount = modes[modeIndex].parameters[parameterIndex].options.count
-            return verticalPadding * 2 + headerHeight + rowHeight * CGFloat(optionCount)
+            verticalPadding * 2 + headerHeight + rowHeight * CGFloat(modes[modeIndex].parameters[parameterIndex].options.count)
         }
+
+        return contentHeight
     }
 
     /// Confirms the currently highlighted mode (applying any pending destination override) and hides.

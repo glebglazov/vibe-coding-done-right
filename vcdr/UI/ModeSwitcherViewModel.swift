@@ -45,6 +45,9 @@ final class ModeSwitcherViewModel {
     /// Shown on all mode rows (not just highlighted) since it's already in effect.
     var activeDestinationOverrideID: UUID?
 
+    /// Whether audio recording is in progress — drives the red recording dot in the view.
+    var isRecording: Bool = false
+
     init(
         modes: [Mode],
         highlightedIndex: Int,

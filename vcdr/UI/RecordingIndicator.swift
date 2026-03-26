@@ -29,15 +29,6 @@ final class IndicatorCaptureState {
     var captureCount: Int = 0
 }
 
-// MARK: - Indicator Mode Switcher State
-
-/// Separate observable for mode switcher state, to avoid exceeding IndicatorPhaseState's 5-property limit.
-@Observable
-@MainActor
-final class IndicatorModeSwitcherState {
-    var viewModel: ModeSwitcherViewModel?
-}
-
 // MARK: - Panel
 
 @MainActor
@@ -50,8 +41,6 @@ final class RecordingIndicatorPanel {
     private static let panelHeight: CGFloat = 120
     /// Gap between bottom of menu bar and top of indicator panel
     private static let menuBarGap: CGFloat = 8
-    /// Gap between pill and mode switcher list
-    private static let modeSwitcherGap: CGFloat = 4
     private static let cancelledDisplayDuration: Duration = .seconds(1)
     private static let dismissedDisplayDuration: Duration = .seconds(1)
     private static let successDisplayDuration: Duration = .seconds(1.5)
@@ -61,15 +50,12 @@ final class RecordingIndicatorPanel {
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
     private let captureState = IndicatorCaptureState()
-    private let modeSwitcherState = IndicatorModeSwitcherState()
     private let settings: AppSettings
     private let overrides: SessionOverrides
     private let audioRecorder: AudioRecorder
     /// Stored top offset for positioning below the output panel during follow-ups.
     /// Used by showCancelled() so the cancelled indicator appears in the same spot.
     private var currentTopOffset: CGFloat = 0
-    private var localEventMonitor: Any?
-    private var globalClickMonitor: Any?
     private var dismissTask: Task<Void, Never>?
 
     var isVisible: Bool { panel != nil }
@@ -93,7 +79,6 @@ final class RecordingIndicatorPanel {
         let hostingView = NSHostingView(rootView: RecordingIndicatorView(
             phaseState: phaseState,
             captureState: captureState,
-            modeSwitcherState: modeSwitcherState,
             settings: settings,
             overrides: overrides,
             audioRecorder: audioRecorder
@@ -141,7 +126,6 @@ final class RecordingIndicatorPanel {
     func hide() {
         dismissTask?.cancel()
         dismissTask = nil
-        hideModeSwitcherCleanup()
         panel?.close()
         panel = nil
     }
@@ -164,79 +148,6 @@ final class RecordingIndicatorPanel {
     func cancelPendingDismiss() {
         dismissTask?.cancel()
         dismissTask = nil
-    }
-
-    // MARK: - Contextual Mode Switcher
-
-    func showModeSwitcher(viewModel: ModeSwitcherViewModel) {
-        modeSwitcherState.viewModel = viewModel
-        panel?.ignoresMouseEvents = false
-        panel?.makeKey()
-
-        // Resize panel to fit the mode list below the pill
-        resizeForModeSwitcher(viewModel: viewModel)
-
-        // Wire resize callback so parameter/destination drilling updates panel height
-        viewModel.onResize = { [weak self, weak viewModel] in
-            guard let self, let viewModel else { return }
-            self.resizeForModeSwitcher(viewModel: viewModel)
-        }
-
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
-            guard let viewModel else { return event }
-            return viewModel.handleKeyEvent(event) ? nil : event
-        }
-
-        // Dismiss via the VM's onDismiss callback so the coordinator is notified
-        // (e.g. to resume the Escape cancel tap)
-        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak viewModel] _ in
-            viewModel?.onDismiss()
-        }
-    }
-
-    func hideModeSwitcher() {
-        hideModeSwitcherCleanup()
-        resizeToNormal()
-    }
-
-    var isModeSwitcherVisible: Bool {
-        modeSwitcherState.viewModel != nil
-    }
-
-    private func hideModeSwitcherCleanup() {
-        modeSwitcherState.viewModel = nil
-        panel?.ignoresMouseEvents = true
-        removeEventMonitor(&localEventMonitor)
-        removeEventMonitor(&globalClickMonitor)
-    }
-
-    private func resizeForModeSwitcher(viewModel: ModeSwitcherViewModel) {
-        guard let panel else { return }
-        let modeSwitcherHeight = ModeSwitcherPanel.calculateHeight(
-            navigationLevel: viewModel.navigation.level,
-            modes: viewModel.modes,
-            destinationCount: viewModel.outputDestinations.count,
-            showingDestinations: viewModel.navigation.showingDestinations,
-            showHint: viewModel.showHint
-        )
-        let totalHeight = Self.panelHeight + Self.modeSwitcherGap + modeSwitcherHeight
-        // Use mode switcher width since it's wider than the pill
-        let width = max(Self.panelWidth, ModeSwitcherPanel.panelWidth)
-        let currentFrame = panel.frame
-        // Keep top edge pinned, grow downward
-        let newY = currentFrame.maxY - totalHeight
-        let newX = currentFrame.midX - width / 2
-        let newFrame = NSRect(x: newX, y: newY, width: width, height: totalHeight)
-        panel.animateResize(to: newFrame)
-    }
-
-    private func resizeToNormal() {
-        guard let panel else { return }
-        let currentFrame = panel.frame
-        let newY = currentFrame.maxY - Self.panelHeight
-        let newX = currentFrame.midX - Self.panelWidth / 2
-        let newFrame = NSRect(x: newX, y: newY, width: Self.panelWidth, height: Self.panelHeight)
-        panel.animateResize(to: newFrame)
     }
 
     // MARK: - Ephemeral Indicators

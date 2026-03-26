@@ -144,7 +144,6 @@ struct RecordingIndicatorView: View {
 
     let phaseState: IndicatorPhaseState
     let captureState: IndicatorCaptureState
-    let modeSwitcherState: IndicatorModeSwitcherState
     let settings: AppSettings
     let overrides: SessionOverrides
     let audioRecorder: AudioRecorder
@@ -218,11 +217,6 @@ struct RecordingIndicatorView: View {
                     .onTapGesture { ClipboardHelper.writeString(message) }
             }
 
-            if let vm = modeSwitcherState.viewModel {
-                ModeSwitcherView(viewModel: vm)
-                    .frame(width: ModeSwitcherPanel.panelWidth)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .modifier(ShakeEffect(shakeCount: phaseState.rejectCount))

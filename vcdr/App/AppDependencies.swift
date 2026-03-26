@@ -194,40 +194,23 @@ final class AppDependencies {
 
 extension AppDependencies: ModeSwitcherCoordinatorDelegate {
 
-    func modeSwitcherShouldShowContextual() -> Bool {
-        if captureCoordinator.isPanelVisible && captureCoordinator.panel.isMinimized {
-            // Panel is in pill state (recording/processing) — expand and show mode switcher
-            let vm = modeSwitcherCoordinator.makeViewModel(onDismiss: { [weak self] in
-                self?.captureCoordinator.hideModeSwitcherAndMinimize()
-                self?.coordinator.resumeCancelHotkey()
-            })
-            captureCoordinator.showModeSwitcherOnPill(viewModel: vm)
-            return true
-        }
-        if captureCoordinator.isModeSwitcherHostVisible {
-            let vm = modeSwitcherCoordinator.makeViewModel(onDismiss: { [weak self] in
-                self?.captureCoordinator.hideModeSwitcher()
-                self?.coordinator.resumeCancelHotkey()
-            })
-            captureCoordinator.showModeSwitcher(viewModel: vm)
-            return true
-        }
-        return false
+    var isRecordingActive: Bool {
+        coordinator.state == .recording
     }
 
-    func modeSwitcherShouldDismissContextual() -> Bool {
-        if captureCoordinator.isModeSwitcherVisible {
-            captureCoordinator.hideModeSwitcher()
-            return true
-        }
-        return false
-    }
-
-    func modeSwitcherDidShowContextual() {
+    func modeSwitcherWillShow() {
         coordinator.suspendCancelHotkey()
+        if captureCoordinator.isPanelVisible {
+            captureCoordinator.panel.viewModel?.isSuspendedForModeSwitcher = true
+            captureCoordinator.panel.orderOut()
+        }
     }
 
-    func modeSwitcherDidHideContextual() {
+    func modeSwitcherDidHide() {
         coordinator.resumeCancelHotkey()
+        if captureCoordinator.isPanelVisible {
+            captureCoordinator.panel.orderBack()
+            captureCoordinator.panel.viewModel?.isSuspendedForModeSwitcher = false
+        }
     }
 }
