@@ -18,7 +18,7 @@ final class AudioRecorder {
     // MARK: - Constants
 
     /// Number of audio level samples kept for the waveform display
-    static let levelSampleCount = 5
+    static let levelSampleCount = 20
     /// How fast the displayed level drops when audio quiets down (0 = instant, 1 = no decay)
     private static let levelDecayFactor: Float = 0.3
     /// Parakeet's native sample rate — all recordings use this to avoid resampling
