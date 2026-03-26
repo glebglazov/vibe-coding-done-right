@@ -11,7 +11,8 @@ struct DictateBarView: View {
 
     // MARK: - Constants
     private static let iconSize: CGFloat = 20
-    private static let tapTargetSize: CGFloat = 36
+    private static let tapTargetSize: CGFloat = 44
+    private static let circleSize: CGFloat = 40
 
     var body: some View {
         Group {
@@ -23,16 +24,22 @@ struct DictateBarView: View {
                 } label: {
                     Image(systemName: "stop.fill")
                         .font(.system(size: Self.iconSize))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.white)
+                        .frame(width: Self.circleSize, height: Self.circleSize)
+                        .background(Circle().fill(.red))
                         .frame(width: Self.tapTargetSize, height: Self.tapTargetSize)
+                        .contentShape(Circle())
                 }
             } else {
                 // Idle — tap to start via deep link (brief flash to activate session + record)
                 Link(destination: SharedConstants.recordDeepLinkURL) {
                     Image(systemName: "mic.fill")
                         .font(.system(size: Self.iconSize))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.white)
+                        .frame(width: Self.circleSize, height: Self.circleSize)
+                        .background(Circle().fill(.blue))
                         .frame(width: Self.tapTargetSize, height: Self.tapTargetSize)
+                        .contentShape(Circle())
                 }
             }
         }
