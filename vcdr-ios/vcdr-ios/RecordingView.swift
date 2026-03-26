@@ -3,6 +3,7 @@ import SwiftUI
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
     @State private var showCopiedConfirmation = false
+    @State private var isPulsing = false
 
     // MARK: - Constants
     private static let copiedConfirmationDuration: Duration = .seconds(3)
@@ -49,9 +50,16 @@ struct RecordingView: View {
                     .font(.body)
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                Text("Tap \u{2190} Back to return to your app")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Label("Tap \u{2190} Back to return to your app", systemImage: "arrow.uturn.backward")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.blue, in: Capsule())
+                    .scaleEffect(isPulsing ? 1.05 : 1.0)
+                    .opacity(isPulsing ? 1.0 : 0.85)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
+                    .onAppear { isPulsing = true }
                 HStack(spacing: 16) {
                     Button {
                         UIPasteboard.general.string = text
