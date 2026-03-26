@@ -34,7 +34,7 @@ enum AppURLSchemes {
         "notion.id": "notion://",
         "com.hammerandchisel.discord": "discord://",
         "com.linear": "linear://",
-        "com.google.translate": "googletranslate://",
+        "com.google.Translate": "googletranslate://",
     ]
 
     /// Returns the URL scheme for a known bundle ID, or nil if unknown.
