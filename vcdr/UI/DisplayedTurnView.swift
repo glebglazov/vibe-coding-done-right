@@ -48,10 +48,15 @@ struct DisplayedTurnView: View {
             }
         } else {
             // No labels — single unprocessed turn. Just show the input.
-            Text(turn.input)
-                .font(.system(.body, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top) {
+                Text(turn.input)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if showCopyButton {
+                    copyButton(for: turn.input)
+                }
+            }
         }
     }
 

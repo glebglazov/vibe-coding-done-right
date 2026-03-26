@@ -46,48 +46,35 @@ private struct ConversationRowView: View {
     let conversation: Conversation
     let onDelete: () -> Void
 
-    @State private var showCopied = false
-
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                let turn = DisplayedTurn(
-                    inputSegments: conversation.inputSegments,
-                    output: conversation.output
-                )
-                let showLabels = conversation.hadExternalProcessing
-                    || conversation.inputSegments.contains(where: { $0.capture != nil })
+        VStack(alignment: .leading, spacing: 4) {
+            let turn = DisplayedTurn(
+                inputSegments: conversation.inputSegments,
+                output: conversation.output
+            )
+            let showLabels = conversation.hadExternalProcessing
+                || conversation.inputSegments.contains(where: { $0.capture != nil })
 
-                DisplayedTurnView(
-                    turn: turn,
-                    showLabels: showLabels,
-                    modeName: conversation.hadExternalProcessing ? conversation.modeName : nil,
-                    isProcessing: false,
-                    showCopyButton: false
-                )
+            DisplayedTurnView(
+                turn: turn,
+                showLabels: showLabels,
+                modeName: conversation.hadExternalProcessing ? conversation.modeName : nil,
+                isProcessing: false,
+                showCopyButton: true
+            )
 
-                // Timestamp
-                Text(conversation.lastUpdated.formatted(
-                    .dateTime.month(.abbreviated).day().hour().minute()
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Copy button
-            Button {
-                copyToClipboard(conversation.copyableText)
-            } label: {
-                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-            }
-            .buttonStyle(.borderless)
-            .tint(showCopied ? .green : .secondary)
+            // Timestamp
+            Text(conversation.lastUpdated.formatted(
+                .dateTime.month(.abbreviated).day().hour().minute()
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
         .contextMenu {
             Button("Copy") {
-                copyToClipboard(conversation.copyableText)
+                ClipboardHelper.writeString(conversation.copyableText)
             }
 
             Divider()
@@ -96,10 +83,5 @@ private struct ConversationRowView: View {
                 onDelete()
             }
         }
-    }
-
-    private func copyToClipboard(_ text: String) {
-        ClipboardHelper.writeString(text)
-        CopiedFeedback.trigger { showCopied = $0 }
     }
 }
