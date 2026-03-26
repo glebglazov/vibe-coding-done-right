@@ -24,6 +24,9 @@ final class RecordingFlowCoordinator {
     /// When true, recording starts automatically once the model is ready
     private var pendingRecordRequest = false
 
+    /// When true, the current recording was started via deep link and should auto-return to host app
+    private var launchedViaDeepLink = false
+
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
     /// Delay before bouncing back to host app — allows audio session to fully activate
@@ -90,6 +93,7 @@ final class RecordingFlowCoordinator {
             return
         }
 
+        launchedViaDeepLink = false
         let started = await audioRecorder.startRecording()
         if started {
             state = .recording
@@ -108,6 +112,7 @@ final class RecordingFlowCoordinator {
             return
         }
 
+        launchedViaDeepLink = true
         let started = await audioRecorder.startRecording()
         if started {
             state = .recording
@@ -142,19 +147,21 @@ final class RecordingFlowCoordinator {
 
             let text = TextPostProcessor.process(rawText)
 
-            // Write result to App Group for keyboard extension
-            SharedConstants.sharedDefaults.set(text, forKey: SharedConstants.transcriptionResultKey)
-
-            // Signal keyboard extension
-            DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
+            // Only send result to keyboard extension when recording was initiated via deep link
+            if launchedViaDeepLink {
+                SharedConstants.sharedDefaults.set(text, forKey: SharedConstants.transcriptionResultKey)
+                DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
+            }
 
             state = .complete(text)
             writeState(.idle)
             Logger.app.info("Transcription complete: \(text.prefix(50))...")
 
-            // Return to host app after transcription (works for both background and foreground flows)
-            try? await Task.sleep(for: Self.returnToHostDelay)
-            await returnToHostApp()
+            // Only auto-return when recording was initiated via deep link from keyboard
+            if launchedViaDeepLink {
+                try? await Task.sleep(for: Self.returnToHostDelay)
+                await returnToHostApp()
+            }
         } catch {
             try? FileManager.default.removeItem(at: audioURL)
             state = .error("Transcription failed: \(error.localizedDescription)")
