@@ -12,20 +12,18 @@ struct RecordingView: View {
         VStack(spacing: 0) {
             // Pulsating hint pinned to top, right below the iOS "< Back to [App]" link
             if case .complete = coordinator.state {
-                HStack {
-                    Label("Tap above to return", systemImage: "arrow.up")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.blue, in: Capsule())
-                        .scaleEffect(isPulsing ? 1.05 : 1.0)
-                        .opacity(isPulsing ? 1.0 : 0.85)
-                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
-                        .onAppear { isPulsing = true }
-                    Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up")
+                        .font(.caption)
+                    Text("Tap above to return to your app")
+                        .font(.caption)
                 }
-                .padding(.leading, 4)
+                .foregroundStyle(.secondary)
+                .opacity(isPulsing ? 1.0 : 0.4)
+                .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: isPulsing)
+                .onAppear { isPulsing = true }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 8)
                 .padding(.top, 4)
             }
 
