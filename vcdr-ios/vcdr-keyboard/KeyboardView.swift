@@ -3,8 +3,7 @@ import OSLog
 
 private let kbLogger = Logger(subsystem: "glebglazov.vcdr-ios.keyboard", category: "dictate")
 
-/// Dictation bar displayed above the KeyboardKit keyboard.
-/// Shows mic (blue) to start, stop (red) during recording.
+/// Small mic/stop circle icon displayed above the keyboard, right-aligned.
 struct DictateBarView: View {
     let hasFullAccess: Bool
     let openURL: (URL) -> Void
@@ -13,55 +12,51 @@ struct DictateBarView: View {
     @State private var isSessionActive = false
 
     // MARK: - Constants
-    private static let barHeight: CGFloat = 40
+    private static let iconSize: CGFloat = 18
+    private static let circleSize: CGFloat = 34
 
     var body: some View {
-        if !hasFullAccess {
-            Text("Enable Full Access in Settings for voice dictation")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
-        }
-
-        Button {
-            kbLogger.info("[DictateBar] Button tapped — isSessionActive=\(isSessionActive), isRecording=\(isRecording)")
-            if !isSessionActive {
-                kbLogger.info("[DictateBar] Opening activate URL via extensionContext")
-                openURL(SharedConstants.activateDeepLinkURL)
-            } else if isRecording {
-                kbLogger.info("[DictateBar] Sending stopRecording")
-                sendCommand(.stopRecording)
-                isRecording = false
-            } else {
-                kbLogger.info("[DictateBar] Sending startRecording")
-                sendCommand(.startRecording)
-                isRecording = true
+        HStack {
+            if !hasFullAccess {
+                Text("Enable Full Access for dictation")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
-        } label: {
-            HStack(spacing: 8) {
+            Spacer()
+            Button {
+                kbLogger.info("[DictateBar] Button tapped — isSessionActive=\(isSessionActive), isRecording=\(isRecording)")
+                if !isSessionActive {
+                    kbLogger.info("[DictateBar] Opening activate URL via extensionContext")
+                    openURL(SharedConstants.activateDeepLinkURL)
+                } else if isRecording {
+                    kbLogger.info("[DictateBar] Sending stopRecording")
+                    sendCommand(.stopRecording)
+                    isRecording = false
+                } else {
+                    kbLogger.info("[DictateBar] Sending startRecording")
+                    sendCommand(.startRecording)
+                    isRecording = true
+                }
+            } label: {
                 Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                    .font(.body)
-                Text(isRecording ? "Stop" : "Dictate")
-                    .font(.body.weight(.medium))
+                    .font(.system(size: Self.iconSize))
+                    .foregroundStyle(.white)
+                    .frame(width: Self.circleSize, height: Self.circleSize)
+                    .background(isRecording ? .red : .blue, in: Circle())
+                    .contentShape(Circle())
             }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.barHeight)
-            .background(isRecording ? .red : .blue, in: RoundedRectangle(cornerRadius: 8))
-            .padding(.horizontal, 4)
-            .padding(.vertical, 4)
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .onAppear {
             refreshState()
             kbLogger.info("[DictateBar] onAppear — isSessionActive=\(isSessionActive), isRecording=\(isRecording)")
         }
         .onReceive(NotificationCenter.default.publisher(for: .darwinStateChanged)) { _ in
-            kbLogger.info("[DictateBar] Received darwinStateChanged")
             refreshState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .darwinTranscriptionReady)) { _ in
-            kbLogger.info("[DictateBar] Received darwinTranscriptionReady")
             isRecording = false
         }
     }
