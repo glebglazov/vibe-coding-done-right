@@ -9,15 +9,6 @@ struct RecordingView: View {
 
     var body: some View {
         VStack(spacing: 32) {
-            if coordinator.showBackHint {
-                Label("Tap \u{2190} Back to return to your app", systemImage: "arrow.uturn.backward")
-                    .font(.callout)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.blue, in: Capsule())
-            }
-
             switch coordinator.state {
             case .idle, .initializing:
                 ProgressView()
@@ -58,6 +49,9 @@ struct RecordingView: View {
                     .font(.body)
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                Text("Tap \u{2190} Back to return to your app")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 HStack(spacing: 16) {
                     Button {
                         UIPasteboard.general.string = text

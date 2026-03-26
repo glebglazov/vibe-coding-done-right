@@ -1,6 +1,5 @@
 import Foundation
 import OSLog
-import UIKit
 
 @MainActor
 @Observable
@@ -17,104 +16,24 @@ final class RecordingFlowCoordinator {
 
     private(set) var state: State = .idle
     private(set) var initProgress: String = ""
-    /// True when the app was opened via deep link and has a "Back to [App]" link available
-    private(set) var showBackHint = false
 
-    let audioRecorder = AudioRecorder()
+    private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
 
     /// When true, recording starts automatically once the model is ready
     private var pendingRecordRequest = false
-
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
+
 
     var isRecording: Bool { audioRecorder.isRecording }
     var audioLevels: [Float] { audioRecorder.audioLevels }
 
-    // MARK: - Background Command Listener
-
-    func setupBackgroundCommandListener() {
-        Logger.app.info("[Coordinator] Setting up background command listener")
-        DarwinNotificationCenter.observe(
-            SharedConstants.commandNotificationName,
-            localName: .darwinCommand
-        )
-        NotificationCenter.default.addObserver(
-            forName: .darwinCommand,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Logger.app.info("[Coordinator] Darwin command notification received")
-            guard let self else {
-                Logger.app.warning("[Coordinator] Self is nil in command handler")
-                return
-            }
-            Task { @MainActor in
-                await self.handleCommand()
-            }
-        }
-    }
-
-    private func handleCommand() async {
-        let rawCommand = SharedConstants.sharedDefaults.string(forKey: SharedConstants.commandKey)
-        Logger.app.info("[Coordinator] handleCommand — rawCommand=\(rawCommand ?? "nil")")
-
-        guard let rawCommand,
-              let command = RecordingCommand(rawValue: rawCommand) else {
-            Logger.app.warning("[Coordinator] handleCommand — no valid command found, skipping")
-            return
-        }
-
-        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
-        Logger.app.info("[Coordinator] Processing command: \(rawCommand), current state: \(String(describing: self.state))")
-
-        switch command {
-        case .startRecording:
-            await startRecording()
-        case .stopRecording:
-            await stopAndTranscribe()
-        }
-    }
-
-    // MARK: - Activate + Bounce Back
-
-    func activateAndBounceBack() async {
-        Logger.app.info("[Coordinator] activateAndBounceBack — current state=\(String(describing: self.state))")
-
-        // Initialize model if not ready (first launch)
-        let isReady = await transcriptionProvider.isReady
-        Logger.app.info("[Coordinator] Model isReady=\(isReady)")
-        if !isReady {
-            Logger.app.info("[Coordinator] Model not ready, initializing...")
-            await initializeModel()
-        }
-
-        do {
-            try audioRecorder.activateSession()
-            SharedConstants.sharedDefaults.set(true, forKey: SharedConstants.audioSessionActiveKey)
-            writeState(.idle)
-            Logger.app.info("[Coordinator] Audio session activated successfully")
-        } catch {
-            Logger.app.error("[Coordinator] Failed to activate audio session: \(error)")
-            return
-        }
-
-        // Show hint to user that they can tap "Back" to return
-        showBackHint = true
-
-        // Start recording immediately — the keyboard deep-linked to activate + record
-        Logger.app.info("[Coordinator] Starting recording after session activation...")
-        await startRecording()
-    }
-
-    // MARK: - Model Initialization
-
     func initializeModel() async {
-        Logger.app.info("[Coordinator] initializeModel starting")
         state = .initializing
         initProgress = "Downloading model..."
 
+        // Poll init phase for UI updates
         let pollTask = Task {
             while !Task.isCancelled {
                 let phase = await transcriptionProvider.initPhase
@@ -133,35 +52,33 @@ final class RecordingFlowCoordinator {
             pollTask.cancel()
             state = .ready
             initProgress = "Ready"
-            Logger.app.info("[Coordinator] Model initialized successfully")
+            Logger.app.info("Parakeet model initialized")
 
+            // If a deep link arrived while model was loading, start recording now
             if pendingRecordRequest {
                 pendingRecordRequest = false
-                Logger.app.info("[Coordinator] Processing pending record request")
                 await startRecording()
             }
         } catch {
             pollTask.cancel()
             state = .error("Model initialization failed: \(error.localizedDescription)")
-            Logger.app.error("[Coordinator] Model init failed: \(error)")
+            Logger.app.error("Model init failed: \(error)")
         }
     }
 
-    // MARK: - Recording
-
+    /// Called when a deep link arrives. If the model isn't ready yet, queues the request.
     func handleRecordDeepLink() async {
-        Logger.app.info("[Coordinator] handleRecordDeepLink — state=\(String(describing: self.state))")
         switch state {
         case .idle, .initializing:
             pendingRecordRequest = true
-            Logger.app.info("[Coordinator] Record request queued — model still initializing")
+            Logger.app.info("Record request queued — model still initializing")
         case .ready:
             await startRecording()
         case .recording:
-            Logger.app.info("[Coordinator] Already recording, ignoring")
+            // Already recording, ignore duplicate deep link
             break
         case .transcribing:
-            Logger.app.info("[Coordinator] Busy transcribing, ignoring")
+            // Busy transcribing, ignore
             break
         case .complete, .error:
             await startRecording()
@@ -169,85 +86,58 @@ final class RecordingFlowCoordinator {
     }
 
     func startRecording() async {
-        Logger.app.info("[Coordinator] startRecording — sessionActive=\(self.audioRecorder.isSessionActive)")
-
-        let modelReady = await transcriptionProvider.isReady
-        Logger.app.info("[Coordinator] startRecording — modelReady=\(modelReady)")
-        guard modelReady else {
+        guard await transcriptionProvider.isReady else {
             state = .error("Model not ready")
-            writeState(.idle)
-            Logger.app.error("[Coordinator] startRecording failed — model not ready")
             return
         }
 
-        Logger.app.info("[Coordinator] Calling audioRecorder.startRecording()...")
         let started = await audioRecorder.startRecording()
-        Logger.app.info("[Coordinator] audioRecorder.startRecording() returned \(started)")
-
         if started {
             state = .recording
-            writeState(.recording)
-            Logger.app.info("[Coordinator] Recording started successfully")
         } else {
             state = .error("Failed to start recording — check microphone permission")
-            writeState(.idle)
-            Logger.app.error("[Coordinator] Recording failed to start")
         }
     }
 
     func stopAndTranscribe() async {
-        Logger.app.info("[Coordinator] stopAndTranscribe")
         guard let audioURL = audioRecorder.stopRecording() else {
             state = .error("No recording to process")
-            writeState(.idle)
-            Logger.app.error("[Coordinator] stopRecording returned nil")
             return
         }
 
         state = .transcribing
-        writeState(.transcribing)
-        Logger.app.info("[Coordinator] Transcribing \(audioURL.lastPathComponent)...")
 
         do {
             let rawText = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
             try? FileManager.default.removeItem(at: audioURL)
 
+            // Remove filler words and add terminator (period + space)
             let text = TextPostProcessor.process(rawText)
-            Logger.app.info("[Coordinator] Transcription result: \(text.prefix(80))...")
 
+            // Write result to App Group for keyboard extension
             SharedConstants.sharedDefaults.set(text, forKey: SharedConstants.transcriptionResultKey)
-            DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
+
+            // Signal keyboard extension via Darwin notification
+            DarwinNotificationCenter.post(SharedConstants.darwinNotificationName)
 
             state = .complete(text)
-            writeState(.idle)
+            Logger.app.info("Transcription complete: \(text.prefix(50))...")
+            // User returns via the iOS "Back to [App]" link in the top-left status bar
         } catch {
             try? FileManager.default.removeItem(at: audioURL)
             state = .error("Transcription failed: \(error.localizedDescription)")
-            writeState(.idle)
-            Logger.app.error("[Coordinator] Transcription failed: \(error)")
+            Logger.app.error("Transcription failed: \(error)")
         }
     }
 
     func reset() {
         state = .ready
-        writeState(.idle)
     }
 
+    /// Clear any stale transcription results left from a previous session.
+    /// Prevents ghost insertions when the keyboard extension reads old data.
     func cleanupStaleResults() {
-        Logger.app.info("[Coordinator] Cleaning up stale results and session state")
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
-        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
-        // Audio session doesn't survive app kill — clear the flag so the keyboard
-        // shows the deep link button instead of sending commands to a dead session
-        SharedConstants.sharedDefaults.set(false, forKey: SharedConstants.audioSessionActiveKey)
-        writeState(.idle)
     }
 
-    // MARK: - State Broadcast
-
-    private func writeState(_ recordingState: RecordingState) {
-        Logger.app.info("[Coordinator] writeState(\(recordingState.rawValue))")
-        SharedConstants.sharedDefaults.set(recordingState.rawValue, forKey: SharedConstants.stateKey)
-        DarwinNotificationCenter.post(SharedConstants.stateNotificationName)
-    }
 }
