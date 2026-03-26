@@ -79,8 +79,8 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Activate + Bounce Back
 
-    func activateAndBounceBack(sourceApp: String?) async {
-        Logger.app.info("[Coordinator] activateAndBounceBack — sourceApp=\(sourceApp ?? "nil"), current state=\(String(describing: self.state))")
+    func activateAndBounceBack() async {
+        Logger.app.info("[Coordinator] activateAndBounceBack — current state=\(String(describing: self.state))")
 
         // Initialize model if not ready (first launch)
         let isReady = await transcriptionProvider.isReady
@@ -106,17 +106,6 @@ final class RecordingFlowCoordinator {
 
         // Show hint to user that they can tap "Back" to return
         showBackHint = true
-
-        // Look up the originating app's URL scheme and bounce back
-        if let bundleID = sourceApp,
-           let scheme = AppURLSchemes.urlScheme(forBundleID: bundleID),
-           let url = URL(string: scheme) {
-            Logger.app.info("[Coordinator] Bouncing back to \(bundleID) via \(scheme)")
-            await UIApplication.shared.open(url)
-        } else {
-            // User taps the iOS "Back to [App]" link in the top-left status bar
-            Logger.app.info("[Coordinator] No known URL scheme for sourceApp=\(sourceApp ?? "nil") — user taps Back to return")
-        }
     }
 
     // MARK: - Model Initialization
