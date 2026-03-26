@@ -234,9 +234,13 @@ final class RecordingFlowCoordinator {
     }
 
     func cleanupStaleResults() {
-        Logger.app.info("[Coordinator] Cleaning up stale results")
+        Logger.app.info("[Coordinator] Cleaning up stale results and session state")
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
+        // Audio session doesn't survive app kill — clear the flag so the keyboard
+        // shows the deep link button instead of sending commands to a dead session
+        SharedConstants.sharedDefaults.set(false, forKey: SharedConstants.audioSessionActiveKey)
+        writeState(.idle)
     }
 
     // MARK: - State Broadcast
