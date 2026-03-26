@@ -9,8 +9,26 @@ struct RecordingView: View {
     private static let copiedConfirmationDuration: Duration = .seconds(3)
 
     var body: some View {
-        VStack(spacing: 32) {
-            switch coordinator.state {
+        VStack(spacing: 0) {
+            // Pulsating hint pinned to top, right below the iOS "< Back to [App]" link
+            if case .complete = coordinator.state {
+                Label("Tap the button above to return", systemImage: "arrow.up")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.blue, in: Capsule())
+                    .scaleEffect(isPulsing ? 1.05 : 1.0)
+                    .opacity(isPulsing ? 1.0 : 0.85)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
+                    .onAppear { isPulsing = true }
+                    .padding(.top, 8)
+            }
+
+            Spacer()
+
+            VStack(spacing: 32) {
+                switch coordinator.state {
             case .idle, .initializing:
                 ProgressView()
                 Text(coordinator.initProgress)
@@ -50,16 +68,6 @@ struct RecordingView: View {
                     .font(.body)
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                Label("Tap \u{2190} Back to return to your app", systemImage: "arrow.uturn.backward")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.blue, in: Capsule())
-                    .scaleEffect(isPulsing ? 1.05 : 1.0)
-                    .opacity(isPulsing ? 1.0 : 0.85)
-                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
-                    .onAppear { isPulsing = true }
                 HStack(spacing: 16) {
                     Button {
                         UIPasteboard.general.string = text
@@ -90,7 +98,10 @@ struct RecordingView: View {
                 Button("Try Again") { coordinator.reset() }
                     .buttonStyle(.bordered)
             }
+            }
+            .padding()
+
+            Spacer()
         }
-        .padding()
     }
 }
