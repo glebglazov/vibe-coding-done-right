@@ -14,9 +14,9 @@ struct RecordingView: View {
             if case .complete = coordinator.state {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.up")
-                        .font(.caption)
+                        .font(.body)
                     Text("Tap above to return to your app")
-                        .font(.caption)
+                        .font(.body)
                 }
                 .foregroundStyle(.secondary)
                 .opacity(isPulsing ? 1.0 : 0.4)
