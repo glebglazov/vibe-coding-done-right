@@ -13,7 +13,6 @@ enum NavigationLevel: Equatable {
 struct NavigationState {
     var level: NavigationLevel = .modes
     var subHighlightedIndex: Int = 0
-    var showingDestinations = false
 }
 
 // MARK: - View Model
@@ -23,27 +22,20 @@ final class ModeSwitcherViewModel {
     let modes: [Mode]
     var highlightedIndex: Int
     var activeModeID: UUID?
-    let outputDestinations: [OutputDestination]
-    let showHint: Bool
     let onSelect: (UUID) -> Void
     /// Activates a mode without dismissing the switcher
     let onActivate: (UUID) -> Void
-    let onOutputDestinationSelect: (UUID?) -> Void
     @ObservationIgnored var onParameterOverride: (UUID, String) -> Void
     let onDismiss: () -> Void
 
-    /// Navigation state: level, sub-highlighted index, and destination visibility
+    /// Navigation state: level and sub-highlighted index
     var navigation = NavigationState()
     /// Parameter value overrides, keyed by parameter ID -> option value.
     /// @ObservationIgnored because changes always coincide with navigation state changes.
     @ObservationIgnored var parameterOverrides: [UUID: String]
 
-    /// Callback to notify panel when content height changes (e.g. destinations toggled)
+    /// Callback to notify panel when content height changes
     @ObservationIgnored var onResize: (() -> Void)?
-
-    /// Active destination override, applied immediately when toggled.
-    /// Shown on all mode rows (not just highlighted) since it's already in effect.
-    var activeDestinationOverrideID: UUID?
 
     /// Whether audio recording is in progress — drives the red recording dot in the view.
     var isRecording: Bool = false
@@ -52,26 +44,18 @@ final class ModeSwitcherViewModel {
         modes: [Mode],
         highlightedIndex: Int,
         activeModeID: UUID? = nil,
-        outputDestinations: [OutputDestination],
-        showHint: Bool,
         parameterOverrides: [UUID: String],
-        activeDestinationOverrideID: UUID? = nil,
         onSelect: @escaping (UUID) -> Void,
         onActivate: @escaping (UUID) -> Void = { _ in },
-        onOutputDestinationSelect: @escaping (UUID?) -> Void,
         onParameterOverride: @escaping (UUID, String) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.modes = modes
         self.highlightedIndex = highlightedIndex
         self.activeModeID = activeModeID
-        self.outputDestinations = outputDestinations
-        self.showHint = showHint
         self.parameterOverrides = parameterOverrides
-        self.activeDestinationOverrideID = activeDestinationOverrideID
         self.onSelect = onSelect
         self.onActivate = onActivate
-        self.onOutputDestinationSelect = onOutputDestinationSelect
         self.onParameterOverride = onParameterOverride
         self.onDismiss = onDismiss
     }
@@ -87,23 +71,10 @@ final class ModeSwitcherViewModel {
         onActivate(id)
     }
 
-    /// Toggles a destination override immediately. Pressing the same key twice clears it.
-    func toggleDestinationOverride(_ id: UUID) {
-        if activeDestinationOverrideID == id {
-            activeDestinationOverrideID = nil
-            onOutputDestinationSelect(nil)
-        } else {
-            activeDestinationOverrideID = id
-            onOutputDestinationSelect(id)
-        }
-    }
-
     /// Returns true if the event was handled
     func handleKeyEvent(_ event: NSEvent) -> Bool {
         let keyCode = event.keyCode
         let charsIgnoringModifiers = event.charactersIgnoringModifiers ?? ""
-        // Use `characters` (not `charactersIgnoringModifiers`) to detect "?" which is Shift+/
-        let chars = event.characters ?? ""
 
         if keyCode == KeyCodeMap.escapeKeyCode {
             onDismiss()
@@ -112,7 +83,7 @@ final class ModeSwitcherViewModel {
 
         switch navigation.level {
         case .modes:
-            return handleModesKeyEvent(keyCode: keyCode, chars: chars, charsIgnoringModifiers: charsIgnoringModifiers)
+            return handleModesKeyEvent(keyCode: keyCode, charsIgnoringModifiers: charsIgnoringModifiers)
         case .parameters(let modeIndex):
             return handleParametersKeyEvent(keyCode: keyCode, modeIndex: modeIndex)
         case .options(let modeIndex, let parameterIndex):
@@ -120,14 +91,7 @@ final class ModeSwitcherViewModel {
         }
     }
 
-    private func handleModesKeyEvent(keyCode: UInt16, chars: String, charsIgnoringModifiers: String) -> Bool {
-        // Toggle destination list with "?" key
-        if chars == "?" && !outputDestinations.isEmpty {
-            navigation.showingDestinations.toggle()
-            onResize?()
-            return true
-        }
-
+    private func handleModesKeyEvent(keyCode: UInt16, charsIgnoringModifiers: String) -> Bool {
         switch keyCode {
         case KeyCodeMap.downArrowKeyCode, KeyCodeMap.jKeyCode:
             highlightedIndex = min(highlightedIndex + 1, modes.count - 1)
@@ -150,7 +114,6 @@ final class ModeSwitcherViewModel {
                 navigation.level = .parameters(modeIndex: highlightedIndex)
             }
             navigation.subHighlightedIndex = 0
-            navigation.showingDestinations = false
             onResize?()
             return true
         case KeyCodeMap.returnKeyCode:
@@ -162,14 +125,6 @@ final class ModeSwitcherViewModel {
                number >= 1, number <= modes.count {
                 confirmMode(modes[number - 1].id)
                 return true
-            }
-            // Output destination activation keys (bare key matching via keyCode-derived character)
-            if let char = charsIgnoringModifiers.first {
-                let key = String(char).uppercased()
-                if let destination = outputDestinations.first(where: { $0.activationKeyCharacter.uppercased() == key }) {
-                    toggleDestinationOverride(destination.id)
-                    return true
-                }
             }
             return false
         }

@@ -13,8 +13,6 @@ final class ModeSwitcherPanel {
     static let rowHeight: CGFloat = 32
     static let verticalPadding: CGFloat = 10
     private static let panelOffsetBelowMenuBar: CGFloat = 8
-    static let separatorHeight: CGFloat = 17
-    static let hintRowHeight: CGFloat = 24
     static let headerHeight: CGFloat = 24
     /// Maximum number of modes shown in the quick switcher (keys 1-9)
     static let maxModesInSwitcher = 9
@@ -27,10 +25,7 @@ final class ModeSwitcherPanel {
 
         let panelHeight = Self.calculateHeight(
             navigationLevel: viewModel.navigation.level,
-            modes: viewModel.modes,
-            destinationCount: viewModel.outputDestinations.count,
-            showingDestinations: viewModel.navigation.showingDestinations,
-            showHint: viewModel.showHint
+            modes: viewModel.modes
         )
 
         let view = ModeSwitcherView(viewModel: viewModel)
@@ -60,15 +55,12 @@ final class ModeSwitcherPanel {
         self.panel = panel
         self.viewModel = viewModel
 
-        // Wire resize callback — recalculate height when destinations are toggled
+        // Wire resize callback — recalculate height when navigation level changes
         viewModel.onResize = { [weak self, weak viewModel] in
             guard let self, let viewModel, let panel = self.panel else { return }
             let newHeight = Self.calculateHeight(
                 navigationLevel: viewModel.navigation.level,
-                modes: viewModel.modes,
-                destinationCount: viewModel.outputDestinations.count,
-                showingDestinations: viewModel.navigation.showingDestinations,
-                showHint: viewModel.showHint
+                modes: viewModel.modes
             )
             let x = self.screenFrame.midX - Self.panelWidth / 2
             let y = self.screenFrame.maxY - self.menuBarHeight - newHeight - Self.panelOffsetBelowMenuBar
@@ -96,41 +88,22 @@ final class ModeSwitcherPanel {
 
     static func calculateHeight(
         navigationLevel: NavigationLevel,
-        modes: [Mode],
-        destinationCount: Int,
-        showingDestinations: Bool,
-        showHint: Bool
+        modes: [Mode]
     ) -> CGFloat {
-        let contentHeight: CGFloat = switch navigationLevel {
+        switch navigationLevel {
         case .modes:
-            {
-                let modeRowsHeight = rowHeight * CGFloat(min(modes.count, maxModesInSwitcher))
-                let hasDestinations = destinationCount > 0
-
-                if !hasDestinations {
-                    return verticalPadding * 2 + modeRowsHeight
-                }
-                if showingDestinations {
-                    let destinationRowsHeight = rowHeight * CGFloat(destinationCount)
-                    return verticalPadding * 2 + modeRowsHeight + separatorHeight + destinationRowsHeight
-                }
-                if showHint {
-                    return verticalPadding * 2 + modeRowsHeight + separatorHeight + hintRowHeight
-                }
-                return verticalPadding * 2 + modeRowsHeight
-            }()
+            let modeRowsHeight = rowHeight * CGFloat(min(modes.count, maxModesInSwitcher))
+            return verticalPadding * 2 + modeRowsHeight
 
         case .parameters(let modeIndex):
-            verticalPadding * 2 + headerHeight + rowHeight * CGFloat(modes[modeIndex].parameters.count)
+            return verticalPadding * 2 + headerHeight + rowHeight * CGFloat(modes[modeIndex].parameters.count)
 
         case .options(let modeIndex, let parameterIndex):
-            verticalPadding * 2 + headerHeight + rowHeight * CGFloat(modes[modeIndex].parameters[parameterIndex].options.count)
+            return verticalPadding * 2 + headerHeight + rowHeight * CGFloat(modes[modeIndex].parameters[parameterIndex].options.count)
         }
-
-        return contentHeight
     }
 
-    /// Confirms the currently highlighted mode (applying any pending destination override) and hides.
+    /// Confirms the currently highlighted mode and hides.
     /// If browsing parameters/options, applies the highlighted option first.
     func confirmAndHide() {
         if let viewModel {

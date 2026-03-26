@@ -5,14 +5,12 @@ struct HotkeySettings: Codable, Equatable {
     var toggleRecordingHotkey: HotkeyBinding
     var copyLatestCaptureHotkey: HotkeyBinding
     var cancelRecordingHotkey: HotkeyBinding
-    var showModeSwitcherHint: Bool
 
     static let `default` = HotkeySettings(
         modeSwitcherHotkey: .unassigned,
         toggleRecordingHotkey: .defaultToggleRecording,
         copyLatestCaptureHotkey: .unassigned,
-        cancelRecordingHotkey: .defaultCancelRecording,
-        showModeSwitcherHint: true
+        cancelRecordingHotkey: .defaultCancelRecording
     )
 }
 

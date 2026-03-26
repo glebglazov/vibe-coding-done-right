@@ -35,38 +35,10 @@ struct ModeSwitcherView: View {
                 }
                 .onTapGesture { viewModel.confirmMode(mode.id) }
         }
-
-        if !viewModel.outputDestinations.isEmpty {
-            if viewModel.navigation.showingDestinations {
-                Divider()
-                    .padding(.vertical, 4)
-
-                ForEach(viewModel.outputDestinations) { destination in
-                    destinationRow(destination: destination)
-                        .onTapGesture {
-                            viewModel.toggleDestinationOverride(destination.id)
-                        }
-                }
-            } else if viewModel.showHint {
-                Divider()
-                    .padding(.vertical, 4)
-
-                Text("Press ? for output options")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity)
-            }
-        }
     }
 
     private func modeRow(index: Int, mode: Mode) -> some View {
         let isHighlighted = index == viewModel.highlightedIndex
-        let defaultDestination = viewModel.outputDestinations.first(where: { $0.id == mode.defaultOutputDestinationID })
-        // Show active override on all rows since it's already applied
-        let overrideDestination = viewModel.activeDestinationOverrideID.flatMap { overrideID in
-            viewModel.outputDestinations.first(where: { $0.id == overrideID })
-        }
-        let displayedDestination = overrideDestination ?? defaultDestination
 
         return HStack(spacing: 8) {
             Text("\(index + 1)")
@@ -86,49 +58,12 @@ struct ModeSwitcherView: View {
             if !mode.parameters.isEmpty {
                 parameterIndicator(for: mode)
             }
-
-            Text(displayedDestination?.symbol ?? "")
-                .font(.caption)
-                .foregroundStyle(overrideDestination != nil ? .white : .primary)
-                .padding(.horizontal, overrideDestination != nil ? 4 : 0)
-                .padding(.vertical, overrideDestination != nil ? 2 : 0)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(overrideDestination != nil ? Color.accentColor : .clear)
-                )
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: Self.rowCornerRadius)
                 .fill(isHighlighted ? Color.accentColor.opacity(0.3) : Color.clear)
-        )
-        .contentShape(Rectangle())
-    }
-
-    private func destinationRow(destination: OutputDestination) -> some View {
-        let isSelected = viewModel.activeDestinationOverrideID == destination.id
-        let keyChar = destination.activationKeyCharacter
-
-        return HStack(spacing: 8) {
-            Text(keyChar.isEmpty ? " " : keyChar)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-
-            Text(destination.symbol)
-
-            Text(destination.name)
-                .lineLimit(1)
-                .foregroundStyle(isSelected ? .primary : .secondary)
-
-            Spacer()
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: Self.rowCornerRadius)
-                .fill(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
         )
         .contentShape(Rectangle())
     }

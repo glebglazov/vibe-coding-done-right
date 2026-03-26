@@ -50,10 +50,7 @@ final class ModeSwitcherCoordinator {
             modes: modes,
             highlightedIndex: activeIndex,
             activeModeID: settings.activeModeID,
-            outputDestinations: settings.outputDestinations,
-            showHint: settings.showModeSwitcherHint,
             parameterOverrides: overrides.parameterOverrides,
-            activeDestinationOverrideID: overrides.destinationOverride,
             onSelect: { [weak self] id in
                 guard let self else { return }
                 self.settings.activeModeID = id
@@ -64,11 +61,6 @@ final class ModeSwitcherCoordinator {
                 guard let self else { return }
                 self.settings.activeModeID = id
                 Logger.settings.info("Mode activated (no dismiss): \(id)")
-            },
-            onOutputDestinationSelect: { [weak self] destinationID in
-                guard let self else { return }
-                self.overrides.destinationOverride = destinationID
-                Logger.settings.info("Output destination override set to \(String(describing: destinationID))")
             },
             onParameterOverride: { _ , _ in },
             onDismiss: onDismiss

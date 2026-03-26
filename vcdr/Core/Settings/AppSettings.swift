@@ -104,7 +104,7 @@ final class AppSettings {
         static let activeModeID = "activeModeID"
         static let outputDestinations = "outputDestinations"
         static let audioSettings = "audioSettings"
-        static let showModeSwitcherHint = "showModeSwitcherHint"
+
         static let removeFillerWords = "removeFillerWords"
         static let terminatorTemplateEnabled = "terminatorTemplateEnabled"
         static let terminatorTemplate = "terminatorTemplate"
@@ -165,7 +165,6 @@ final class AppSettings {
         hotkeys.cancelRecordingHotkey = Self.decodeSetting(
             from: userDefaults, forKey: Keys.cancelRecordingHotkey, default: .defaultCancelRecording
         )
-        hotkeys.showModeSwitcherHint = Self.boolSetting(from: userDefaults, forKey: Keys.showModeSwitcherHint, default: true)
         self.hotkeySettings = hotkeys
 
         // Load transcription settings
@@ -244,7 +243,6 @@ final class AppSettings {
         encode(hotkeySettings.toggleRecordingHotkey, forKey: Keys.toggleRecordingHotkey)
         encode(hotkeySettings.copyLatestCaptureHotkey, forKey: Keys.copyLatestCaptureHotkey)
         encode(hotkeySettings.cancelRecordingHotkey, forKey: Keys.cancelRecordingHotkey)
-        userDefaults.set(hotkeySettings.showModeSwitcherHint, forKey: Keys.showModeSwitcherHint)
         userDefaults.set(modeConfig.activeModeID.uuidString, forKey: Keys.activeModeID)
         encode(modeConfig.modes, forKey: Keys.modes)
         encode(outputDestinations, forKey: Keys.outputDestinations)

@@ -38,11 +38,6 @@ extension AppSettings {
         set { hotkeySettings.cancelRecordingHotkey = newValue }
     }
 
-    var showModeSwitcherHint: Bool {
-        get { hotkeySettings.showModeSwitcherHint }
-        set { hotkeySettings.showModeSwitcherHint = newValue }
-    }
-
     var removeFillerWords: Bool {
         get { transcriptionSettings.removeFillerWords }
         set { transcriptionSettings.removeFillerWords = newValue }
