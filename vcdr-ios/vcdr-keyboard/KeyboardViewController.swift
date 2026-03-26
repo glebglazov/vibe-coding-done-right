@@ -36,19 +36,17 @@ class KeyboardViewController: KeyboardInputViewController {
         }
 
         setupKeyboardView { controller in
-            KeyboardView(
-                services: controller.services,
-                buttonContent: { $0.view },
-                buttonView: { $0.view },
-                collapsedView: { $0.view },
-                emojiKeyboard: { $0.view },
-                toolbar: { params in
-                    HStack(spacing: 0) {
-                        params.view
-                        DictateBarView(hasFullAccess: fullAccess, openURL: openURL)
-                    }
-                }
-            )
+            VStack(spacing: 0) {
+                DictateBarView(hasFullAccess: fullAccess, openURL: openURL)
+                KeyboardView(
+                    services: controller.services,
+                    buttonContent: { $0.view },
+                    buttonView: { $0.view },
+                    collapsedView: { $0.view },
+                    emojiKeyboard: { $0.view },
+                    toolbar: { $0.view }
+                )
+            }
         }
     }
 

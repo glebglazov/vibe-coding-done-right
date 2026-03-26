@@ -3,44 +3,55 @@ import OSLog
 
 private let kbLogger = Logger(subsystem: "glebglazov.vcdr-ios.keyboard", category: "dictate")
 
-/// Small mic/stop icon displayed on the right side of the autocomplete toolbar.
+/// Dictation bar displayed above the KeyboardKit keyboard.
+/// Shows mic (blue) to start, stop (red) during recording.
 struct DictateBarView: View {
     let hasFullAccess: Bool
-    /// Opens a URL via extensionContext — provided by KeyboardViewController
     let openURL: (URL) -> Void
 
     @State private var isRecording = false
     @State private var isSessionActive = false
 
     // MARK: - Constants
-    private static let iconSize: CGFloat = 18
-    private static let circleSize: CGFloat = 34
+    private static let barHeight: CGFloat = 40
 
     var body: some View {
+        if !hasFullAccess {
+            Text("Enable Full Access in Settings for voice dictation")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 4)
+        }
+
         Button {
+            kbLogger.info("[DictateBar] Button tapped — isSessionActive=\(isSessionActive), isRecording=\(isRecording)")
             if !isSessionActive {
-                // No active audio session — open main app to activate
-                kbLogger.info("[DictateBar] Tapped mic (session NOT active) — opening activate URL")
+                kbLogger.info("[DictateBar] Opening activate URL via extensionContext")
                 openURL(SharedConstants.activateDeepLinkURL)
             } else if isRecording {
-                // Stop recording
-                kbLogger.info("[DictateBar] Tapped stop — sending stopRecording")
+                kbLogger.info("[DictateBar] Sending stopRecording")
                 sendCommand(.stopRecording)
                 isRecording = false
             } else {
-                // Start recording (session already active)
-                kbLogger.info("[DictateBar] Tapped mic (session active) — sending startRecording")
+                kbLogger.info("[DictateBar] Sending startRecording")
                 sendCommand(.startRecording)
                 isRecording = true
             }
         } label: {
-            if isRecording {
-                iconView(name: "stop.fill", color: .red)
-            } else {
-                iconView(name: "mic.fill", color: .blue)
+            HStack(spacing: 8) {
+                Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                    .font(.body)
+                Text(isRecording ? "Stop" : "Dictate")
+                    .font(.body.weight(.medium))
             }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.barHeight)
+            .background(isRecording ? .red : .blue, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
         }
-        .padding(.trailing, 8)
+        .buttonStyle(.plain)
         .onAppear {
             refreshState()
             kbLogger.info("[DictateBar] onAppear — isSessionActive=\(isSessionActive), isRecording=\(isRecording)")
@@ -55,17 +66,7 @@ struct DictateBarView: View {
         }
     }
 
-    private func iconView(name: String, color: Color) -> some View {
-        Image(systemName: name)
-            .font(.system(size: Self.iconSize))
-            .foregroundStyle(.white)
-            .frame(width: Self.circleSize, height: Self.circleSize)
-            .background(color, in: Circle())
-            .contentShape(Circle())
-    }
-
     private func sendCommand(_ command: RecordingCommand) {
-        kbLogger.info("[DictateBar] sendCommand(\(command.rawValue))")
         SharedConstants.sharedDefaults.set(command.rawValue, forKey: SharedConstants.commandKey)
         DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
     }
@@ -76,6 +77,5 @@ struct DictateBarView: View {
            let state = RecordingState(rawValue: rawState) {
             isRecording = (state == .recording)
         }
-        kbLogger.info("[DictateBar] refreshState — isSessionActive=\(isSessionActive), isRecording=\(isRecording)")
     }
 }
