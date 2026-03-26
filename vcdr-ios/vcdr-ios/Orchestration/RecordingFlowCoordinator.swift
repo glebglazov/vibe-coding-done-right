@@ -17,6 +17,8 @@ final class RecordingFlowCoordinator {
 
     private(set) var state: State = .idle
     private(set) var initProgress: String = ""
+    /// True when the app was opened via deep link and has a "Back to [App]" link available
+    private(set) var showBackHint = false
 
     let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
@@ -101,6 +103,9 @@ final class RecordingFlowCoordinator {
         // Process any pending command that the keyboard sent alongside the deep link.
         Logger.app.info("[Coordinator] Checking for pending command after session activation...")
         await handleCommand()
+
+        // Show hint to user that they can tap "Back" to return
+        showBackHint = true
 
         // Look up the originating app's URL scheme and bounce back
         if let bundleID = sourceApp,
