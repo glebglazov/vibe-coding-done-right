@@ -84,10 +84,16 @@ final class RecordingFlowCoordinator {
             try audioRecorder.activateSession()
             SharedConstants.sharedDefaults.set(true, forKey: SharedConstants.audioSessionActiveKey)
             writeState(.idle)
+            Logger.app.info("Audio session activated, ready for background recording")
         } catch {
             Logger.app.error("Failed to activate audio session: \(error)")
             return
         }
+
+        // Process any pending command that the keyboard sent alongside the deep link.
+        // The Darwin notification may have arrived before the session was active,
+        // so we handle it here after activation to avoid a race condition.
+        await handleCommand()
 
         // Look up the originating app's URL scheme and bounce back
         if let bundleID = sourceApp,
