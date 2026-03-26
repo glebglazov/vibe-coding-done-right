@@ -100,12 +100,12 @@ final class RecordingFlowCoordinator {
             return
         }
 
-        // Process any pending command that the keyboard sent alongside the deep link.
-        Logger.app.info("[Coordinator] Checking for pending command after session activation...")
-        await handleCommand()
-
         // Show hint to user that they can tap "Back" to return
         showBackHint = true
+
+        // Start recording immediately — the keyboard deep-linked to activate + record
+        Logger.app.info("[Coordinator] Starting recording after session activation...")
+        await startRecording()
     }
 
     // MARK: - Model Initialization

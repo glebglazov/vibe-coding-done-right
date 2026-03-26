@@ -20,15 +20,12 @@ struct DictateBarView: View {
     var body: some View {
         Group {
             if !isSessionActive {
-                // No active audio session — deep-link to activate, also send start command
+                // No active audio session — deep-link to activate.
+                // The main app will activate the session AND start recording.
+                // No simultaneousGesture — it conflicts with Link in KeyboardKit.
                 Link(destination: SharedConstants.activateDeepLinkURL) {
                     iconView(name: "mic.fill", color: .blue)
                 }
-                .simultaneousGesture(TapGesture().onEnded {
-                    kbLogger.info("[DictateBar] Tapped mic (session NOT active) — sending startRecording + deep-linking to activate")
-                    sendCommand(.startRecording)
-                    isRecording = true
-                })
             } else if isRecording {
                 Button {
                     kbLogger.info("[DictateBar] Tapped stop — sending stopRecording")
