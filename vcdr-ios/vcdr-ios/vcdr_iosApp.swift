@@ -1,5 +1,6 @@
 import SwiftUI
 import OSLog
+import UIKit
 
 @main
 struct VCDRiOSApp: App {

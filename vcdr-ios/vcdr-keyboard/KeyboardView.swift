@@ -4,11 +4,10 @@ import OSLog
 private let kbLogger = Logger(subsystem: "glebglazov.vcdr-ios.keyboard", category: "dictate")
 
 /// Small mic/stop icon displayed on the right side of the autocomplete toolbar.
-/// Toggles between mic (start dictation) and stop (stop recording) based on state.
-/// On first tap, deep-links to the main app to activate the audio session.
-/// Subsequent taps send commands directly via App Group + Darwin notifications.
 struct DictateBarView: View {
     let hasFullAccess: Bool
+    /// Opens a URL via extensionContext — provided by KeyboardViewController
+    let openURL: (URL) -> Void
 
     @State private var isRecording = false
     @State private var isSessionActive = false
@@ -18,36 +17,33 @@ struct DictateBarView: View {
     private static let circleSize: CGFloat = 34
 
     var body: some View {
-        Group {
+        Button {
             if !isSessionActive {
-                // No active audio session — deep-link to activate.
-                // The main app will activate the session AND start recording.
-                // No simultaneousGesture — it conflicts with Link in KeyboardKit.
-                Link(destination: SharedConstants.activateDeepLinkURL) {
-                    iconView(name: "mic.fill", color: .blue)
-                }
+                // No active audio session — open main app to activate
+                kbLogger.info("[DictateBar] Tapped mic (session NOT active) — opening activate URL")
+                openURL(SharedConstants.activateDeepLinkURL)
             } else if isRecording {
-                Button {
-                    kbLogger.info("[DictateBar] Tapped stop — sending stopRecording")
-                    sendCommand(.stopRecording)
-                    isRecording = false
-                } label: {
-                    iconView(name: "stop.fill", color: .red)
-                }
+                // Stop recording
+                kbLogger.info("[DictateBar] Tapped stop — sending stopRecording")
+                sendCommand(.stopRecording)
+                isRecording = false
             } else {
-                Button {
-                    kbLogger.info("[DictateBar] Tapped mic (session active) — sending startRecording")
-                    sendCommand(.startRecording)
-                    isRecording = true
-                } label: {
-                    iconView(name: "mic.fill", color: .blue)
-                }
+                // Start recording (session already active)
+                kbLogger.info("[DictateBar] Tapped mic (session active) — sending startRecording")
+                sendCommand(.startRecording)
+                isRecording = true
+            }
+        } label: {
+            if isRecording {
+                iconView(name: "stop.fill", color: .red)
+            } else {
+                iconView(name: "mic.fill", color: .blue)
             }
         }
         .padding(.trailing, 8)
         .onAppear {
             refreshState()
-            kbLogger.info("[DictateBar] onAppear — isSessionActive=\(isSessionActive), isRecording=\(isRecording), hasFullAccess=\(hasFullAccess)")
+            kbLogger.info("[DictateBar] onAppear — isSessionActive=\(isSessionActive), isRecording=\(isRecording)")
         }
         .onReceive(NotificationCenter.default.publisher(for: .darwinStateChanged)) { _ in
             kbLogger.info("[DictateBar] Received darwinStateChanged")

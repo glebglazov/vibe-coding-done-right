@@ -1,5 +1,8 @@
 import KeyboardKit
 import SwiftUI
+import OSLog
+
+private let kbLogger = Logger(subsystem: "glebglazov.vcdr-ios.keyboard", category: "controller")
 
 class KeyboardViewController: KeyboardInputViewController {
 
@@ -24,6 +27,14 @@ class KeyboardViewController: KeyboardInputViewController {
 
     override func viewWillSetupKeyboardView() {
         let fullAccess = hasFullAccess
+        // Capture a weak ref to self for the openURL callback
+        let openURL: (URL) -> Void = { [weak self] url in
+            kbLogger.info("[Controller] Opening URL via extensionContext: \(url.absoluteString)")
+            self?.extensionContext?.open(url) { success in
+                kbLogger.info("[Controller] extensionContext.open completed — success=\(success)")
+            }
+        }
+
         setupKeyboardView { controller in
             KeyboardView(
                 services: controller.services,
@@ -32,10 +43,9 @@ class KeyboardViewController: KeyboardInputViewController {
                 collapsedView: { $0.view },
                 emojiKeyboard: { $0.view },
                 toolbar: { params in
-                    // Autocomplete suggestions + mic/stop icon on the right
                     HStack(spacing: 0) {
                         params.view
-                        DictateBarView(hasFullAccess: fullAccess)
+                        DictateBarView(hasFullAccess: fullAccess, openURL: openURL)
                     }
                 }
             )
@@ -50,6 +60,7 @@ class KeyboardViewController: KeyboardInputViewController {
         guard let text = SharedConstants.sharedDefaults.string(forKey: SharedConstants.transcriptionResultKey),
               !text.isEmpty else { return }
 
+        kbLogger.info("[Controller] Inserting transcription: \(text.prefix(50))...")
         textDocumentProxy.insertText(text)
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
     }
