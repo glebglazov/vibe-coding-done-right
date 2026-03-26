@@ -38,6 +38,7 @@
 		<string>notion</string>
 		<string>discord</string>
 		<string>linear</string>
+		<string>googletranslate</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
