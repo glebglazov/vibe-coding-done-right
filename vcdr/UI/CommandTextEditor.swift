@@ -3,10 +3,17 @@ import AppKit
 
 /// A monospaced text editor for shell commands with smart quotes and
 /// automatic text substitution disabled. Highlights `$VARIABLE` references:
-/// green for defined variables, red for undefined.
+/// green for defined variables, red for undefined. Auto-sizes to fit content.
 struct CommandTextEditor: NSViewRepresentable {
     @Binding var text: String
     var definedVariableNames: Set<String> = []
+
+    // MARK: - Constants
+
+    private static let minHeight: CGFloat = 40
+    private static let maxHeight: CGFloat = 300
+    /// Vertical padding inside the scroll view (border + text container inset).
+    private static let verticalPadding: CGFloat = 10
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -34,12 +41,23 @@ struct CommandTextEditor: NSViewRepresentable {
         textView.isRichText = true
         textView.isAutomaticTextCompletionEnabled = false
 
+        // Watch for layout changes to recalculate height
+        textView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.frameDidChange(_:)),
+            name: NSView.frameDidChangeNotification,
+            object: textView
+        )
+
         let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .bezelBorder
 
+        context.coordinator.scrollView = scrollView
         context.coordinator.applyHighlighting(textView)
+        context.coordinator.recalculateHeight(textView)
         return scrollView
     }
 
@@ -50,10 +68,19 @@ struct CommandTextEditor: NSViewRepresentable {
             textView.string = text
         }
         context.coordinator.applyHighlighting(textView)
+        context.coordinator.recalculateHeight(textView)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView scrollView: NSScrollView, context: Context) -> CGSize? {
+        let width = proposal.width ?? scrollView.frame.width
+        let height = max(Self.minHeight, min(context.coordinator.contentHeight + Self.verticalPadding, Self.maxHeight))
+        return CGSize(width: width, height: height)
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CommandTextEditor
+        weak var scrollView: NSScrollView?
+        var contentHeight: CGFloat = 0
 
         // MARK: - Constants
 
@@ -76,6 +103,24 @@ struct CommandTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
             applyHighlighting(textView)
+            recalculateHeight(textView)
+        }
+
+        @objc func frameDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            recalculateHeight(textView)
+        }
+
+        func recalculateHeight(_ textView: NSTextView) {
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer else { return }
+            layoutManager.ensureLayout(for: textContainer)
+            let usedRect = layoutManager.usedRect(for: textContainer)
+            let newHeight = usedRect.height
+            if abs(newHeight - contentHeight) > 1 {
+                contentHeight = newHeight
+                scrollView?.invalidateIntrinsicContentSize()
+            }
         }
 
         func applyHighlighting(_ textView: NSTextView) {

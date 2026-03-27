@@ -155,7 +155,6 @@ struct OutputDestinationDetailView: View {
                         Text("Command")
                             .foregroundStyle(.secondary)
                         CommandTextEditor(text: $destination.bashCommand, definedVariableNames: definedVariableNames)
-                            .frame(minHeight: 80)
                             .help("The script receives text via $VCDR_TEXT. Use {} as placeholder.")
                     }
                 }

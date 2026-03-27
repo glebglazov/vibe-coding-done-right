@@ -69,7 +69,6 @@ struct ModeDetailView: View {
                         Text("Command")
                             .foregroundStyle(.secondary)
                         CommandTextEditor(text: $mode.processingCommand, definedVariableNames: definedVariableNames)
-                            .frame(minHeight: 80)
                             .help("Use {} as placeholder for transcribed text. Text also available as $VCDR_TEXT.")
                     }
 
