@@ -23,6 +23,8 @@ struct CaptureView: View {
 
     private static let pillIconSize: CGFloat = 14
     private static let pillSpacing: CGFloat = 6
+    private static let captureBadgeSize: CGFloat = 12
+    private static let captureCountFontSize: CGFloat = 9
     var body: some View {
         if viewModel.isMinimized {
             minimizedPillView
@@ -41,6 +43,19 @@ struct CaptureView: View {
                     .font(.system(size: Self.pillIconSize))
                     .foregroundStyle(.secondary)
             case .recording:
+                if viewModel.clipboardCaptureCount > 0 {
+                    HStack(spacing: 1) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: Self.captureBadgeSize, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        if viewModel.clipboardCaptureCount > 1 {
+                            Text("×\(viewModel.clipboardCaptureCount)")
+                                .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .transition(.opacity)
+                }
                 AudioWaveformView(audioLevels: viewModel.audioRecorder?.audioLevels ?? [])
             case .processing:
                 AnimatedDotsView()
@@ -62,6 +77,7 @@ struct CaptureView: View {
         .pillShape()
         .modifier(ShakeEffect(shakeCount: viewModel.rejectCount))
         .animation(.default, value: viewModel.rejectCount)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.clipboardCaptureCount)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onTapGesture {
             if viewModel.phase == .error, let msg = viewModel.errorMessage { ClipboardHelper.writeString(msg) }

@@ -141,9 +141,8 @@ final class RecordingCoordinator {
         }
 
         Task { @MainActor [weak self] in
-            guard let captured = await self?.recordingRun?.captureTask?.value,
-                  captured != nil else { return }
-            self?.delegate?.recordingCoordinatorDidCaptureSelection()
+            let captured = await self?.recordingRun?.captureTask?.value
+            self?.delegate?.recordingCoordinatorSelectionCaptureFinished(didCapture: captured != nil)
         }
 
         if settings.audioSettings.pauseMediaDuringRecording {

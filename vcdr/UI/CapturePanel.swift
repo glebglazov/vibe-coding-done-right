@@ -147,6 +147,10 @@ final class CapturePanel {
         viewModel?.phase = phase
     }
 
+    func signalClipboardCapture() {
+        viewModel?.clipboardCaptureCount += 1
+    }
+
     // MARK: - Panel Resize
 
     private func resizePanelToMinimized() {

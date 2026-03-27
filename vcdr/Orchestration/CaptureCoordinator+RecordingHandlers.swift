@@ -142,13 +142,18 @@ extension CaptureCoordinator: RecordingCoordinatorDelegate {
         panel.buzz()
     }
 
-    func recordingCoordinatorDidCaptureSelection() {
+    func recordingCoordinatorSelectionCaptureFinished(didCapture: Bool) {
+        if didCapture {
+            panel.signalClipboardCapture()
+        }
         // Start clipboard monitoring after SelectionCapturer finishes.
         // Take a fresh baseline to avoid false positives from
         // SelectionCapturer's clipboard manipulation.
         let freshBaseline = NSPasteboard.general.changeCount
         Task {
-            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { _ in }
+            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] _ in
+                self?.panel.signalClipboardCapture()
+            }
         }
     }
 }

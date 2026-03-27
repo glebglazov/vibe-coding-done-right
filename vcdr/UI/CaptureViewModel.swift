@@ -8,6 +8,7 @@ final class CaptureViewModel {
     var displayedTurn: DisplayedTurn?
     var isMinimized: Bool = false
     var processedByModeName: String?
+    var clipboardCaptureCount: Int = 0
     var rejectCount: Int = 0
     /// Set to true when the mode switcher is shown as a standalone panel — prevents
     /// the CapturePanel from auto-dismissing when it loses focus to the mode switcher.
