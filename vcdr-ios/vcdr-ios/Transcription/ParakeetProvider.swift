@@ -7,6 +7,8 @@ actor ParakeetProvider: TranscriptionProvider {
 
     private var asr: AsrManager?
     private(set) var isReady = false
+    /// Loaded models — shared with StreamingAsrManager to avoid duplicate CoreML compilation
+    private(set) var loadedModels: AsrModels?
 
     enum InitPhase: Sendable {
         case notStarted
@@ -52,6 +54,7 @@ actor ParakeetProvider: TranscriptionProvider {
             Logger.transcription.info("ASR manager initialized in \(self.elapsedMs(since: initStart))")
 
             self.asr = manager
+            self.loadedModels = models
             self.isReady = true
             initPhase = .ready
             Logger.transcription.info("Parakeet v3 ready (total: \(self.elapsedMs(since: totalStart)))")

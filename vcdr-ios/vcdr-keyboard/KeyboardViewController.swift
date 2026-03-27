@@ -12,17 +12,7 @@ class KeyboardViewController: KeyboardInputViewController {
         super.viewDidLoad()
         setup(for: .vcdr)
 
-        // Listen for state changes from the main app
-        DarwinNotificationCenter.observe(
-            SharedConstants.stateNotificationName,
-            localName: .darwinStateChanged
-        )
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(handleStateChanged),
-            name: .darwinStateChanged, object: nil
-        )
-
-        // Listen for transcription results
+        // Listen for transcription results from the main app
         DarwinNotificationCenter.observe(
             SharedConstants.transcriptionNotificationName,
             localName: .darwinTranscriptionReady
@@ -35,8 +25,8 @@ class KeyboardViewController: KeyboardInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        writeHostBundleID()
-        refreshRecordingState()
+        // writeHostBundleID() — disabled: no longer using private hostApplicationBundleId API
+        // refreshRecordingState() — disabled: no background recording state to track
         checkPendingTranscription()
     }
 
@@ -86,8 +76,7 @@ class KeyboardViewController: KeyboardInputViewController {
     // MARK: - Keyboard View Setup
 
     override func viewWillSetupKeyboardView() {
-        let fullAccess = hasFullAccess
-        setupKeyboardView { [weak self] controller in
+        setupKeyboardView { controller in
             KeyboardView(
                 services: controller.services,
                 buttonContent: { $0.view },
@@ -97,10 +86,7 @@ class KeyboardViewController: KeyboardInputViewController {
                 toolbar: { params in
                     HStack(spacing: 0) {
                         params.view
-                        DictateBarView(
-                            hasFullAccess: fullAccess,
-                            keyboardController: self
-                        )
+                        DictateBarView()
                     }
                 }
             )

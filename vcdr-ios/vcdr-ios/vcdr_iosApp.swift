@@ -9,7 +9,7 @@ struct VCDRiOSApp: App {
             RecordingView(coordinator: coordinator)
                 .task {
                     coordinator.cleanupStaleResults()
-                    coordinator.setupCommandListener()
+                    // coordinator.setupCommandListener() — disabled: no background recording commands
                     await coordinator.initializeModel()
                 }
                 .onOpenURL { url in
