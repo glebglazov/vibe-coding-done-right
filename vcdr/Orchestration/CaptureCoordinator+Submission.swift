@@ -24,6 +24,7 @@ extension CaptureCoordinator {
                 text: result.text, mode: mode, captures: result.captures,
                 conversationID: conversationID,
                 parameterValues: overrides.resolvedParameterValues(for: mode),
+                variableEnvironment: settings.variableEnvironment,
                 destination: destination, targetAppPID: result.previousActiveApp?.processIdentifier,
                 saveResultToClipboard: mode.saveResultToClipboard
             ),

@@ -16,7 +16,8 @@ enum TextProcessingPipeline {
         mode: Mode,
         text: String,
         captures: [CapturedContext],
-        parameterValues: [String: String] = [:]
+        parameterValues: [String: String] = [:],
+        variableEnvironment: [String: String] = [:]
     ) async throws -> PipelineResult {
         let preprocessedText = mode.applyPreProcessing(text, captures: captures)
 
@@ -27,10 +28,13 @@ enum TextProcessingPipeline {
             let paramEnv = Dictionary(
                 uniqueKeysWithValues: parameterValues.map { ("VCDR_PARAM_\($0.key)", $0.value) }
             )
+            // User variables first, then parameter env vars take precedence
+            var combinedEnv = variableEnvironment
+            combinedEnv.merge(paramEnv) { _, param in param }
             let processedText = try await BashRunner.run(
                 command: mode.processingCommand,
                 text: preprocessedText,
-                extraEnvironment: paramEnv
+                extraEnvironment: combinedEnv
             )
             return PipelineResult(text: processedText, hadExternalProcessing: true)
         }

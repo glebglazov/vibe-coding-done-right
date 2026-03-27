@@ -6,7 +6,8 @@ enum OutputActionFactory {
     static func makeAction(
         for destination: OutputDestination,
         targetAppPID: pid_t?,
-        saveResultToClipboard: Bool
+        saveResultToClipboard: Bool,
+        variableEnvironment: [String: String] = [:]
     ) -> (any PostTranscriptionAction)? {
         switch destination.type {
         case .paste:
@@ -16,7 +17,8 @@ enum OutputActionFactory {
         case .bashScript:
             return OutputBashAction(
                 name: destination.name,
-                commandTemplate: destination.bashCommand
+                commandTemplate: destination.bashCommand,
+                variableEnvironment: variableEnvironment
             )
         case .copy:
             return CopyAction()

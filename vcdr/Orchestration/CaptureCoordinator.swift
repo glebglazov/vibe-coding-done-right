@@ -114,6 +114,7 @@ final class CaptureCoordinator {
             captures: snapshot.pipelineContext.captures,
             conversationID: snapshot.conversationID,
             parameterValues: snapshot.pipelineContext.parameterValues,
+            variableEnvironment: snapshot.pipelineContext.variableEnvironment,
             destination: destination,
             targetAppPID: snapshot.pipelineContext.targetAppPID,
             saveResultToClipboard: snapshot.mode.saveResultToClipboard

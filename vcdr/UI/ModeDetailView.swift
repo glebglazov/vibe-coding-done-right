@@ -5,6 +5,7 @@ import SwiftUI
 struct ModeDetailView: View {
     @Binding var mode: Mode
     let outputDestinations: [OutputDestination]
+    let definedVariableNames: Set<String>
     @FocusState private var isNameFieldFocused: Bool
 
     var body: some View {
@@ -54,12 +55,20 @@ struct ModeDetailView: View {
                 .pickerStyle(.radioGroup)
 
                 if mode.processingType == .bashScript {
+                    Menu("Load Preset") {
+                        ForEach(BashScriptPreset.all) { preset in
+                            Button(preset.name) {
+                                preset.apply(to: &mode)
+                            }
+                        }
+                    }
+
                     parametersSections
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Command")
                             .foregroundStyle(.secondary)
-                        CommandTextEditor(text: $mode.processingCommand)
+                        CommandTextEditor(text: $mode.processingCommand, definedVariableNames: definedVariableNames)
                             .frame(minHeight: 80)
                             .help("Use {} as placeholder for transcribed text. Text also available as $VCDR_TEXT.")
                     }

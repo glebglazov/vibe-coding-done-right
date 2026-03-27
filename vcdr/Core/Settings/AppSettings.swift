@@ -65,6 +65,9 @@ final class AppSettings {
     var audioSettings: AudioSettings {
         didSet { save() }
     }
+    var variables: [Variable] {
+        didSet { save() }
+    }
 
     /// Modes visible in the mode switcher and default settings list.
     /// Excludes disabled modes and template modes whose tools are unavailable.
@@ -105,6 +108,7 @@ final class AppSettings {
         static let outputDestinations = "outputDestinations"
         static let audioSettings = "audioSettings"
 
+        static let variables = "variables"
         static let removeFillerWords = "removeFillerWords"
         static let terminatorTemplateEnabled = "terminatorTemplateEnabled"
         static let terminatorTemplate = "terminatorTemplate"
@@ -222,6 +226,9 @@ final class AppSettings {
             self.audioSettings = AudioSettings(preferredInputDeviceID: legacyDeviceID, pauseMediaDuringRecording: true)
         }
 
+        // Load variables
+        self.variables = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
+
         // Ensure built-in destinations exist (migration for existing installs)
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
             outputDestinations.append(OutputDestination.makeDefaultCopy())
@@ -247,6 +254,7 @@ final class AppSettings {
         encode(modeConfig.modes, forKey: Keys.modes)
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
+        encode(variables, forKey: Keys.variables)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
         userDefaults.set(transcriptionSettings.terminatorTemplateEnabled, forKey: Keys.terminatorTemplateEnabled)
         userDefaults.set(transcriptionSettings.terminatorTemplate, forKey: Keys.terminatorTemplate)

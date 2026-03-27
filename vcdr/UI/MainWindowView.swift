@@ -13,6 +13,7 @@ struct MainWindowView: View {
         case home
         case audio
         case modes
+        case variables
         case outputDestinations
         case transcription
         case history
@@ -25,6 +26,7 @@ struct MainWindowView: View {
             case .home: "Home"
             case .audio: "Audio"
             case .modes: "Modes"
+            case .variables: "Variables"
             case .outputDestinations: "Output"
             case .transcription: "Transcription"
             case .history: "History"
@@ -39,6 +41,7 @@ struct MainWindowView: View {
             case .home: "house"
             case .audio: "speaker.wave.2"
             case .modes: "list.bullet"
+            case .variables: "key"
             case .outputDestinations: "arrow.right.square"
             case .transcription: "waveform"
             case .history: "clock.arrow.circlepath"
@@ -90,6 +93,8 @@ struct MainWindowView: View {
                         )
                     case .modes:
                         ModesListView(settings: dependencies.settings, path: $path)
+                    case .variables:
+                        VariablesTabView(settings: dependencies.settings)
                     case .outputDestinations:
                         OutputDestinationsListView(settings: dependencies.settings, path: $path)
                     case .transcription:
@@ -123,7 +128,8 @@ struct MainWindowView: View {
                                 get: { dependencies.settings.modes[index] },
                                 set: { dependencies.settings.modes[index] = $0 }
                             ),
-                            outputDestinations: dependencies.settings.outputDestinations
+                            outputDestinations: dependencies.settings.outputDestinations,
+                            definedVariableNames: dependencies.settings.definedVariableNames
                         )
                     }
                 }
@@ -133,7 +139,8 @@ struct MainWindowView: View {
                             destination: Binding(
                                 get: { dependencies.settings.outputDestinations[index] },
                                 set: { dependencies.settings.outputDestinations[index] = $0 }
-                            )
+                            ),
+                            definedVariableNames: dependencies.settings.definedVariableNames
                         )
                     }
                 }

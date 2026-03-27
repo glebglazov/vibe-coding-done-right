@@ -112,6 +112,7 @@ private struct OutputDestinationRowView: View {
 
 struct OutputDestinationDetailView: View {
     @Binding var destination: OutputDestination
+    let definedVariableNames: Set<String>
     @FocusState private var isNameFieldFocused: Bool
 
     var body: some View {
@@ -153,7 +154,7 @@ struct OutputDestinationDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Command")
                             .foregroundStyle(.secondary)
-                        CommandTextEditor(text: $destination.bashCommand)
+                        CommandTextEditor(text: $destination.bashCommand, definedVariableNames: definedVariableNames)
                             .frame(minHeight: 80)
                             .help("The script receives text via $VCDR_TEXT. Use {} as placeholder.")
                     }

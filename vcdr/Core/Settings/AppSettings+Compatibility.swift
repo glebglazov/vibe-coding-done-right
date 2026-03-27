@@ -88,4 +88,16 @@ extension AppSettings {
         guard !destination.isBuiltIn, !isDestinationInUse(destination) else { return }
         outputDestinations.removeAll { $0.id == destination.id }
     }
+
+    // MARK: - Variables
+
+    /// Builds a dictionary of user-defined variables for injection into bash scripts.
+    var variableEnvironment: [String: String] {
+        Dictionary(uniqueKeysWithValues: variables.filter { !$0.name.isEmpty }.map { ($0.name, $0.value) })
+    }
+
+    /// Set of all defined variable names (for highlighting in command editors).
+    var definedVariableNames: Set<String> {
+        Set(variables.map(\.name).filter { !$0.isEmpty })
+    }
 }
