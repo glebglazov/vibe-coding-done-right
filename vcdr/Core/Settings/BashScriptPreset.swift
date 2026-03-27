@@ -36,7 +36,7 @@ extension BashScriptPreset {
               }')" | jq -r '.content[0].text'
             """,
         systemPromptEnabled: true,
-        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. Input is voice-dictated and may contain minor transcription errors — interpret the intent.",
+        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. Input is voice-dictated: fix grammar, punctuation, and capitalization errors while preserving the original meaning and tone. If no explicit task is given, treat the input as text to clean up and return corrected.",
         parameters: []
     )
 
