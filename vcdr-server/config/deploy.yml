@@ -1,0 +1,23 @@
+service: vcdr-server
+image: vcdr_server
+
+servers:
+  web:
+    - 46.224.236.113
+
+proxy:
+  ssl: true
+  host: vcdr-server.glebglazov.me
+
+registry:
+  server: localhost:5555
+
+env:
+  clear:
+    PORT: 8080
+  secret:
+    - ANTHROPIC_API_KEY
+    - VCDR_API_KEY
+
+builder:
+  arch: amd64
