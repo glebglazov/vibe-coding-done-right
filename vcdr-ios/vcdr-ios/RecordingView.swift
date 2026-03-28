@@ -3,9 +3,11 @@ import SwiftUI
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.theme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
+    private var theme: Theme { Theme.current(for: colorScheme) }
     @AppStorage("appearance") private var appearance: Appearance = .system
     @State private var showCopiedConfirmation = false
+    @State private var showSettings = false
     @State private var recordingStart: Date?
 
     // MARK: - Constants
@@ -50,6 +52,8 @@ struct RecordingView: View {
                 Task { await coordinator.stopAndTranscribe() }
             }
         }
+        // Propagate theme to child views (WaveformView) via environment
+        .environment(\.theme, theme)
     }
 
     // MARK: - Top Bar
@@ -61,33 +65,27 @@ struct RecordingView: View {
         } else {
             HStack {
                 Spacer()
-                appearanceToggle
+                settingsButton
                     .padding(.trailing, 20)
                     .padding(.top, 12)
             }
         }
     }
 
-    private var appearanceToggle: some View {
+    private var settingsButton: some View {
         Button {
-            let allCases = Appearance.allCases
-            let currentIndex = allCases.firstIndex(of: appearance) ?? 0
-            let nextIndex = (currentIndex + 1) % allCases.count
-            appearance = allCases[nextIndex]
+            showSettings = true
         } label: {
-            Image(systemName: appearanceIcon)
+            Image(systemName: "gearshape")
                 .font(.system(size: 18))
                 .foregroundStyle(theme.onSurfaceVariant)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
-    }
-
-    private var appearanceIcon: String {
-        switch appearance {
-        case .dark: "moon.fill"
-        case .light: "sun.max.fill"
-        case .system: "circle.lefthalf.filled"
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .preferredColorScheme(appearance.colorScheme)
+                .environment(\.theme, theme)
         }
     }
 
@@ -140,6 +138,7 @@ struct RecordingView: View {
     private var readyContent: some View {
         VStack(spacing: 40) {
             heroTitle("READY")
+            companionSessionToggle
             actionCircle(
                 icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
                 label: "RECORD"
@@ -272,6 +271,8 @@ struct RecordingView: View {
             .frame(maxHeight: 140)
             .padding(.horizontal, 32)
 
+            companionStatusView
+
             HStack(spacing: 16) {
                 brutalistButton(showCopiedConfirmation ? "COPIED" : "COPY") {
                     UIPasteboard.general.string = text
@@ -284,6 +285,72 @@ struct RecordingView: View {
                 brutalistButton("NEW") {
                     Task { await coordinator.startRecording() }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var companionStatusView: some View {
+        switch coordinator.companionStatus {
+        case .idle:
+            EmptyView()
+        case .processing:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .tint(theme.onSurfaceVariant)
+                    .scaleEffect(0.8)
+                Text("SERVER PROCESSING")
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(2)
+                    .foregroundStyle(theme.onSurfaceVariant)
+            }
+        case .timedOut:
+            VStack(spacing: 8) {
+                Text("SERVER UNAVAILABLE")
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(2)
+                    .foregroundStyle(theme.onSurfaceVariant)
+                brutalistButton("RETRY") {
+                    coordinator.retryCompanion()
+                }
+            }
+        case .completed:
+            Text("ENHANCED BY SERVER")
+                .font(.system(size: 11, weight: .bold))
+                .tracking(2)
+                .foregroundStyle(theme.primary)
+        case .error(let message):
+            VStack(spacing: 8) {
+                Text(message.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(theme.onSurfaceVariant)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                brutalistButton("RETRY") {
+                    coordinator.retryCompanion()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var companionSessionToggle: some View {
+        if CompanionSettings.isConfigured {
+            Button {
+                coordinator.companionActiveThisSession.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: coordinator.companionActiveThisSession ? "server.rack" : "server.rack")
+                        .font(.system(size: 12))
+                    Text(coordinator.companionActiveThisSession ? "SERVER ON" : "SERVER OFF")
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(2)
+                }
+                .foregroundStyle(coordinator.companionActiveThisSession ? theme.primary : theme.onSurfaceVariant)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(theme.surfaceHigh)
             }
         }
     }

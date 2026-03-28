@@ -9,18 +9,26 @@ struct VCDRiOSApp: App {
         WindowGroup {
             RecordingView(coordinator: coordinator)
                 .preferredColorScheme(appearance.colorScheme)
-                .themeFromColorScheme()
                 .task {
                     coordinator.cleanupStaleResults()
                     // coordinator.setupCommandListener() — disabled: no background recording commands
                     await coordinator.initializeModel()
                 }
                 .onOpenURL { url in
-                    guard url.scheme == "vcdr-ios", url.host == "record" else { return }
-                    // Set recording state synchronously so the first rendered frame
-                    // shows "LISTENING" — eliminates the flash of the previous state.
-                    coordinator.prepareForDeepLinkRecording()
-                    Task { await coordinator.handleRecordDeepLink() }
+                    if url.scheme == "vcdr-ios", url.host == "record" {
+                        // Set recording state synchronously so the first rendered frame
+                        // shows "LISTENING" — eliminates the flash of the previous state.
+                        coordinator.prepareForDeepLinkRecording()
+                        Task { await coordinator.handleRecordDeepLink() }
+                    } else if url.host == "connect" {
+                        // QR pairing: vcdr://connect?host=...&key=...
+                        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                        let host = components?.queryItems?.first(where: { $0.name == "host" })?.value
+                        let key = components?.queryItems?.first(where: { $0.name == "key" })?.value
+                        if let host, let key {
+                            CompanionSettings.configureFromDeepLink(host: host, apiKey: key)
+                        }
+                    }
                 }
         }
     }
@@ -49,19 +57,3 @@ enum Appearance: String, CaseIterable {
     }
 }
 
-// MARK: - Theme Resolver
-
-/// Reads the effective color scheme and injects the matching Theme into the environment.
-private struct ThemeResolverModifier: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
-    func body(content: Content) -> some View {
-        content.environment(\.theme, Theme.current(for: colorScheme))
-    }
-}
-
-extension View {
-    func themeFromColorScheme() -> some View {
-        modifier(ThemeResolverModifier())
-    }
-}

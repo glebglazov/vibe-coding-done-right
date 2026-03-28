@@ -16,6 +16,14 @@ final class RecordingFlowCoordinator {
         case error(String)
     }
 
+    enum CompanionStatus: Equatable {
+        case idle
+        case processing
+        case timedOut
+        case completed
+        case error(String)
+    }
+
     private(set) var state: State = .idle
     private(set) var initProgress: String = ""
     /// Live transcription text updated in real-time during recording
@@ -25,6 +33,11 @@ final class RecordingFlowCoordinator {
     /// When true, the current recording was started via deep link from keyboard.
     /// Exposed for the view to show/hide the back button.
     private(set) var launchedViaDeepLink = false
+    /// Status of the companion server post-processing request
+    private(set) var companionStatus: CompanionStatus = .idle
+    /// Per-session override — allows disabling companion without changing global settings.
+    /// Initialized from `CompanionSettings.activeInDictation` at session start.
+    var companionActiveThisSession: Bool = CompanionSettings.activeInDictation
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
@@ -35,6 +48,10 @@ final class RecordingFlowCoordinator {
     /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
     /// until this task completes and the recognition task begins consuming them.
     private var streamingSetupTask: Task<Void, Error>?
+    /// Background task for companion server post-processing
+    private var companionTask: Task<Void, Never>?
+    /// Text sent to companion server — needed for retry
+    private var companionInputText: String = ""
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
@@ -42,6 +59,8 @@ final class RecordingFlowCoordinator {
     private static let bounceBackDelay: Duration = .milliseconds(300)
     /// Delay after posting transcription result before returning to host app
     private static let returnToHostDelay: Duration = .milliseconds(500)
+    /// Time to wait before showing "server unavailable" notice
+    private static let companionTimeout: Duration = .seconds(5)
 
     var isRecording: Bool { audioRecorder.isRecording }
     var audioLevels: [Float] { audioRecorder.audioLevels }
@@ -202,15 +221,24 @@ final class RecordingFlowCoordinator {
             let rawText = try await streaming.finish()
             let finalText = TextPostProcessor.process(rawText)
 
-            // Send result to keyboard extension when recording was initiated via deep link
-            if launchedViaDeepLink {
-                SharedConstants.sharedDefaults.set(finalText, forKey: SharedConstants.transcriptionResultKey)
-                DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
-            }
-
             state = .complete(finalText)
             writeState(.idle)
             Logger.app.info("Streaming transcription complete: \(finalText.prefix(50))...")
+
+            if launchedViaDeepLink {
+                // Wait up to 5s for companion server before pasting to keyboard
+                let textToPaste: String
+                if companionActiveThisSession && CompanionSettings.isConfigured {
+                    textToPaste = await waitForCompanion(localText: finalText)
+                } else {
+                    textToPaste = finalText
+                }
+                SharedConstants.sharedDefaults.set(textToPaste, forKey: SharedConstants.transcriptionResultKey)
+                DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
+            } else {
+                // In-app use: fire companion in background, update UI when done
+                startCompanionProcessing(text: finalText)
+            }
         } catch {
             // If finish() fails but we already have immediate text, keep it
             if immediateText.isEmpty {
@@ -228,10 +256,124 @@ final class RecordingFlowCoordinator {
         writeState(.idle)
         liveTranscript = ""
         launchedViaDeepLink = false
+        companionStatus = .idle
+        companionActiveThisSession = CompanionSettings.activeInDictation
+        companionTask?.cancel()
+        companionTask = nil
+        companionInputText = ""
         updateTask?.cancel()
         streamingSetupTask?.cancel()
         streamingSetupTask = nil
         streamingManager = nil
+    }
+
+    // MARK: - Companion Processing
+
+    /// Starts companion server post-processing if the companion is configured.
+    private func startCompanionProcessing(text: String) {
+        guard companionActiveThisSession && CompanionSettings.isConfigured else { return }
+
+        companionInputText = text
+        companionStatus = .processing
+        let host = CompanionSettings.host
+        let apiKey = CompanionSettings.apiKey
+
+        companionTask = Task {
+            let startTime = ContinuousClock.now
+
+            // Race the server request against the timeout
+            let serverTask = Task {
+                try await CompanionClient.process(text: text, host: host, apiKey: apiKey)
+            }
+
+            // Wait for timeout, then mark as timed out if still processing
+            let timeoutTask = Task {
+                try await Task.sleep(for: Self.companionTimeout)
+                if companionStatus == .processing {
+                    companionStatus = .timedOut
+                    Logger.app.warning("Companion server timed out after \(Self.companionTimeout)")
+                }
+            }
+
+            do {
+                let result = try await serverTask.value
+                let elapsed = ContinuousClock.now - startTime
+                timeoutTask.cancel()
+                guard !Task.isCancelled else { return }
+                state = .complete(result)
+                companionStatus = .completed
+                Logger.app.info("Companion processing completed in \(elapsed)")
+            } catch is CancellationError {
+                // Task was cancelled (user tapped NEW or reset)
+            } catch {
+                let elapsed = ContinuousClock.now - startTime
+                timeoutTask.cancel()
+                guard !Task.isCancelled else { return }
+                companionStatus = .error(error.localizedDescription)
+                Logger.app.error("Companion processing failed after \(elapsed): \(error)")
+            }
+        }
+    }
+
+    /// Waits up to 5 seconds for the companion server to process text.
+    /// Returns server-enhanced text if available within the timeout, otherwise the local text.
+    /// Used in the deep-link flow to paste the best available result to the keyboard.
+    private func waitForCompanion(localText: String) async -> String {
+        companionInputText = localText
+        companionStatus = .processing
+        let host = CompanionSettings.host
+        let apiKey = CompanionSettings.apiKey
+        let timeout = Self.companionTimeout
+        let startTime = ContinuousClock.now
+
+        enum RaceResult: Sendable {
+            case server(String)
+            case serverError(String)
+            case timeout
+        }
+
+        let result: RaceResult = await withTaskGroup(of: RaceResult.self) { group in
+            group.addTask {
+                do {
+                    let text = try await CompanionClient.process(
+                        text: localText, host: host, apiKey: apiKey
+                    )
+                    return .server(text)
+                } catch {
+                    return .serverError(error.localizedDescription)
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return .timeout
+            }
+            return await group.next()!
+        }
+
+        let elapsed = ContinuousClock.now - startTime
+
+        switch result {
+        case .server(let text):
+            companionStatus = .completed
+            state = .complete(text)
+            Logger.app.info("Companion processing completed in \(elapsed)")
+            return text
+        case .serverError(let message):
+            companionStatus = .error(message)
+            Logger.app.error("Companion processing failed after \(elapsed): \(message)")
+            return localText
+        case .timeout:
+            companionStatus = .timedOut
+            Logger.app.warning("Companion server timed out after \(elapsed)")
+            return localText
+        }
+    }
+
+    /// Retries the companion server request with the previously sent text.
+    func retryCompanion() {
+        companionTask?.cancel()
+        companionTask = nil
+        startCompanionProcessing(text: companionInputText)
     }
 
     func cleanupStaleResults() {

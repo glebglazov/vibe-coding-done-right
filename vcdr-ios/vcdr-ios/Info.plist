@@ -46,6 +46,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>vcdr-ios</string>
+				<string>vcdr</string>
 			</array>
 		</dict>
 	</array>
