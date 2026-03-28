@@ -11,10 +11,11 @@ import (
 )
 
 const (
-	defaultPort    = "8080"
+	defaultPort     = "8080"
 	envAnthropicKey = "ANTHROPIC_API_KEY"
 	envVCDRAPIKey   = "VCDR_API_KEY"
 	envPort         = "PORT"
+	envPublicHost   = "VCDR_PUBLIC_HOST"
 )
 
 func main() {
@@ -44,16 +45,21 @@ func main() {
 	addr := ":" + port
 	log.Printf("VCDR Server starting on %s", addr)
 
-	printConnectionInfo(port, vcdrKey)
+	publicHost := os.Getenv(envPublicHost)
+	printConnectionInfo(port, vcdrKey, publicHost)
 
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
 
-func printConnectionInfo(port, apiKey string) {
-	ip := getLocalIP()
-	host := fmt.Sprintf("%s:%s", ip, port)
+func printConnectionInfo(port, apiKey, publicHost string) {
+	var host string
+	if publicHost != "" {
+		host = publicHost
+	} else {
+		host = fmt.Sprintf("%s:%s", getLocalIP(), port)
+	}
 	deeplink := fmt.Sprintf("vcdr://connect?host=%s&key=%s", host, apiKey)
 
 	fmt.Println()

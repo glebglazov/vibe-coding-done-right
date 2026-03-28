@@ -17,6 +17,7 @@ registry:
 env:
   clear:
     PORT: 8080
+    VCDR_PUBLIC_HOST: vcdr-server.glebglazov.me
   secret:
     - ANTHROPIC_API_KEY
     - VCDR_API_KEY
