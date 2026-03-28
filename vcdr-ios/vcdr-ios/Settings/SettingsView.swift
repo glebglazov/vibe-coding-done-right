@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage(CompanionSettings.hostKey) private var companionHost = ""
     @AppStorage(CompanionSettings.apiKeyKey) private var companionApiKey = ""
     @AppStorage(CompanionSettings.activeInDictationKey) private var companionActiveInDictation = false
+    @State private var isEditingApiKey = false
 
     var body: some View {
         NavigationStack {
@@ -84,14 +85,47 @@ struct SettingsView: View {
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
 
-            settingsField("API Key", text: $companionApiKey, placeholder: "Your API key")
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+            maskedApiKeyField
 
             Text("The companion server enhances transcriptions using AI. Scan the server's QR code to configure automatically.")
                 .font(.system(size: 12))
                 .foregroundStyle(theme.onSurfaceVariant)
         }
+    }
+
+    private var maskedApiKeyField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("API Key")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(theme.onSurfaceVariant)
+            if isEditingApiKey {
+                TextField("Your API key", text: $companionApiKey)
+                    .font(.system(size: 14))
+                    .foregroundStyle(theme.onSurface)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(12)
+                    .background(theme.surfaceContainer)
+                    .onSubmit { isEditingApiKey = false }
+            } else {
+                Text(maskedApiKey)
+                    .font(.system(size: 14))
+                    .foregroundStyle(companionApiKey.isEmpty ? theme.onSurfaceVariant : theme.onSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(theme.surfaceContainer)
+                    .onTapGesture { isEditingApiKey = true }
+            }
+        }
+    }
+
+    private var maskedApiKey: String {
+        guard companionApiKey.count > 6 else {
+            return companionApiKey.isEmpty ? "Your API key" : String(repeating: "•", count: companionApiKey.count)
+        }
+        let prefix = companionApiKey.prefix(3)
+        let suffix = companionApiKey.suffix(3)
+        return "\(prefix)•••\(suffix)"
     }
 
     // MARK: - Components
