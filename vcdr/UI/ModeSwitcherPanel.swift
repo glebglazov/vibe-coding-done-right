@@ -4,7 +4,7 @@ import SwiftUI
 final class ModeSwitcherPanel {
     private var panel: NSPanel?
     private var eventMonitor: Any?
-    private var localEventMonitor: Any?
+    private let keyboardTap = EventTapManager()
     private var viewModel: ModeSwitcherViewModel?
 
     // MARK: - Constants
@@ -50,8 +50,9 @@ final class ModeSwitcherPanel {
             panel.setFrameOrigin(origin)
         }
 
+        // Don't call makeKey() — that would steal focus from the foreground app during recording.
+        // Keyboard events are captured via a CGEvent tap instead of a local event monitor.
         panel.orderFrontRegardless()
-        panel.makeKey()
         self.panel = panel
         self.viewModel = viewModel
 
@@ -68,14 +69,29 @@ final class ModeSwitcherPanel {
             panel.animateResize(to: newFrame)
         }
 
-        // Handle keyboard events via local monitor (works even with nonactivatingPanel + canBecomeKey)
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
-            guard let viewModel else { return event }
-            if viewModel.handleKeyEvent(event) {
-                return nil
-            }
-            return event
-        }
+        // Intercept keyboard events via CGEvent tap — avoids stealing focus from foreground app.
+        // The tap runs on the main thread's run loop, so MainActor.assumeIsolated is safe.
+        let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        _ = keyboardTap.install(
+            eventMask: eventMask,
+            callback: { _, type, event, refcon -> Unmanaged<CGEvent>? in
+                guard let refcon else { return Unmanaged.passUnretained(event) }
+                let panel = Unmanaged<ModeSwitcherPanel>.fromOpaque(refcon).takeUnretainedValue()
+                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                    panel.keyboardTap.reEnableTap()
+                    return Unmanaged.passUnretained(event)
+                }
+                return MainActor.assumeIsolated {
+                    guard let viewModel = panel.viewModel else { return Unmanaged.passUnretained(event) }
+                    guard let nsEvent = NSEvent(cgEvent: event) else { return Unmanaged.passUnretained(event) }
+                    if viewModel.handleKeyEvent(nsEvent) {
+                        return nil // consumed
+                    }
+                    return Unmanaged.passUnretained(event)
+                }
+            },
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        )
 
         // Dismiss if the user clicks outside the panel — go through onDismiss
         // so the coordinator delegate lifecycle (modeSwitcherDidHide) is invoked.
@@ -130,7 +146,7 @@ final class ModeSwitcherPanel {
 
     func hide() {
         removeEventMonitor(&eventMonitor)
-        removeEventMonitor(&localEventMonitor)
+        keyboardTap.uninstall()
         panel?.close()
         panel = nil
         viewModel = nil
@@ -140,6 +156,6 @@ final class ModeSwitcherPanel {
 
     deinit {
         removeEventMonitor(&eventMonitor)
-        removeEventMonitor(&localEventMonitor)
+        keyboardTap.uninstall()
     }
 }

@@ -86,9 +86,13 @@ final class CapturePanel {
     }
 
     /// Brings back a panel that was hidden via `orderOut()`.
+    /// Only restores key status when expanded — minimized panels don't need keyboard input
+    /// and making them key would steal focus from the foreground app during recording.
     func orderBack() {
         panel?.orderFrontRegardless()
-        panel?.makeKey()
+        if !isMinimized {
+            panel?.makeKey()
+        }
     }
 
     var isVisible: Bool { panel != nil }
