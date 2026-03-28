@@ -1,5 +1,4 @@
 import Foundation
-import OSLog
 
 /// HTTP client for the VCDR companion server.
 enum CompanionClient {
@@ -53,7 +52,6 @@ enum CompanionClient {
         }
 
         let result = try JSONDecoder().decode(ProcessResponse.self, from: data)
-        Logger.app.info("Companion server processed text successfully")
         return result.text
     }
 }

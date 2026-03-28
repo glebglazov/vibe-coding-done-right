@@ -48,8 +48,6 @@ final class RecordingFlowCoordinator {
     /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
     /// until this task completes and the recognition task begins consuming them.
     private var streamingSetupTask: Task<Void, Error>?
-    /// Background task for companion server post-processing
-    private var companionTask: Task<Void, Never>?
     /// Text sent to companion server — needed for retry
     private var companionInputText: String = ""
 
@@ -133,6 +131,8 @@ final class RecordingFlowCoordinator {
     /// - Parameter fromDeepLink: When true, transcription result will be sent to the keyboard extension.
     func startRecording(fromDeepLink: Bool = false) async {
         launchedViaDeepLink = fromDeepLink
+        companionActiveThisSession = CompanionSettings.activeInDictation
+        companionStatus = .idle
 
         // Show "LISTENING" immediately — before any async work.
         // If audio fails to start, state reverts to .error below.
@@ -206,48 +206,59 @@ final class RecordingFlowCoordinator {
             transcribingMessage = ""
         }
 
-        // Show result immediately from the live transcript — no "PROCESSING" spinner.
+        let useCompanion = companionActiveThisSession && CompanionSettings.isConfigured
+
+        // Show local result immediately unless companion will replace it
         let immediateText = TextPostProcessor.process(liveTranscript)
-        if !immediateText.isEmpty {
+        if !useCompanion && !immediateText.isEmpty {
             state = .complete(immediateText)
         } else {
             state = .transcribing
+            transcribingMessage = useCompanion ? "Enhancing with server..." : ""
         }
         writeState(.transcribing)
         liveTranscript = ""
 
-        // Finalize streaming in background — may refine the last few words.
+        // Request background execution time for deep-link flow so the companion
+        // HTTP request isn't throttled when the user switches to the keyboard app.
+        let bgTaskID = launchedViaDeepLink
+            ? UIApplication.shared.beginBackgroundTask()
+            : .invalid
+
+        // Finalize streaming — may refine the last few words.
         do {
             let rawText = try await streaming.finish()
             let finalText = TextPostProcessor.process(rawText)
-
-            state = .complete(finalText)
-            writeState(.idle)
             Logger.app.info("Streaming transcription complete: \(finalText.prefix(50))...")
 
-            if launchedViaDeepLink {
-                // Wait up to 5s for companion server before pasting to keyboard
-                let textToPaste: String
-                if companionActiveThisSession && CompanionSettings.isConfigured {
-                    textToPaste = await waitForCompanion(localText: finalText)
-                } else {
-                    textToPaste = finalText
-                }
-                SharedConstants.sharedDefaults.set(textToPaste, forKey: SharedConstants.transcriptionResultKey)
-                DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
+            // Wait up to 5s for companion server, or use local result
+            let resultText: String
+            if useCompanion {
+                resultText = await waitForCompanion(localText: finalText)
             } else {
-                // In-app use: fire companion in background, update UI when done
-                startCompanionProcessing(text: finalText)
+                resultText = finalText
+            }
+
+            state = .complete(resultText)
+            writeState(.idle)
+            transcribingMessage = ""
+
+            if launchedViaDeepLink {
+                SharedConstants.sharedDefaults.set(resultText, forKey: SharedConstants.transcriptionResultKey)
+                DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
             }
         } catch {
-            // If finish() fails but we already have immediate text, keep it
             if immediateText.isEmpty {
                 state = .error("Transcription failed: \(error.localizedDescription)")
             }
             writeState(.idle)
+            transcribingMessage = ""
             Logger.app.error("Streaming transcription failed: \(error)")
         }
 
+        if bgTaskID != .invalid {
+            UIApplication.shared.endBackgroundTask(bgTaskID)
+        }
         streamingManager = nil
     }
 
@@ -258,8 +269,6 @@ final class RecordingFlowCoordinator {
         launchedViaDeepLink = false
         companionStatus = .idle
         companionActiveThisSession = CompanionSettings.activeInDictation
-        companionTask?.cancel()
-        companionTask = nil
         companionInputText = ""
         updateTask?.cancel()
         streamingSetupTask?.cancel()
@@ -269,55 +278,10 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Companion Processing
 
-    /// Starts companion server post-processing if the companion is configured.
-    private func startCompanionProcessing(text: String) {
-        guard companionActiveThisSession && CompanionSettings.isConfigured else { return }
-
-        companionInputText = text
-        companionStatus = .processing
-        let host = CompanionSettings.host
-        let apiKey = CompanionSettings.apiKey
-
-        companionTask = Task {
-            let startTime = ContinuousClock.now
-
-            // Race the server request against the timeout
-            let serverTask = Task {
-                try await CompanionClient.process(text: text, host: host, apiKey: apiKey)
-            }
-
-            // Wait for timeout, then mark as timed out if still processing
-            let timeoutTask = Task {
-                try await Task.sleep(for: Self.companionTimeout)
-                if companionStatus == .processing {
-                    companionStatus = .timedOut
-                    Logger.app.warning("Companion server timed out after \(Self.companionTimeout)")
-                }
-            }
-
-            do {
-                let result = try await serverTask.value
-                let elapsed = ContinuousClock.now - startTime
-                timeoutTask.cancel()
-                guard !Task.isCancelled else { return }
-                state = .complete(result)
-                companionStatus = .completed
-                Logger.app.info("Companion processing completed in \(elapsed)")
-            } catch is CancellationError {
-                // Task was cancelled (user tapped NEW or reset)
-            } catch {
-                let elapsed = ContinuousClock.now - startTime
-                timeoutTask.cancel()
-                guard !Task.isCancelled else { return }
-                companionStatus = .error(error.localizedDescription)
-                Logger.app.error("Companion processing failed after \(elapsed): \(error)")
-            }
-        }
-    }
-
     /// Waits up to 5 seconds for the companion server to process text.
     /// Returns server-enhanced text if available within the timeout, otherwise the local text.
-    /// Used in the deep-link flow to paste the best available result to the keyboard.
+    /// Uses detached tasks + AsyncStream to race the server request against the timeout,
+    /// ensuring the HTTP request runs off the main actor and returns as soon as it completes.
     private func waitForCompanion(localText: String) async -> String {
         companionInputText = localText
         companionStatus = .processing
@@ -332,27 +296,45 @@ final class RecordingFlowCoordinator {
             case timeout
         }
 
-        let result: RaceResult = await withTaskGroup(of: RaceResult.self) { group in
-            group.addTask {
-                do {
-                    let text = try await CompanionClient.process(
-                        text: localText, host: host, apiKey: apiKey
-                    )
-                    return .server(text)
-                } catch {
-                    return .serverError(error.localizedDescription)
-                }
+        let (stream, streamContinuation) = AsyncStream.makeStream(of: RaceResult.self)
+
+        // Run HTTP request off the main actor so it isn't serialized
+        let serverTask = Task.detached { [streamContinuation] in
+            do {
+                let text = try await CompanionClient.process(
+                    text: localText, host: host, apiKey: apiKey
+                )
+                streamContinuation.yield(.server(text))
+            } catch is CancellationError {
+                // Cancelled — timeout won, no need to yield
+            } catch {
+                streamContinuation.yield(.serverError(error.localizedDescription))
             }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                return .timeout
-            }
-            return await group.next()!
         }
+
+        let timeoutTask = Task.detached { [streamContinuation] in
+            do {
+                try await Task.sleep(for: timeout)
+                streamContinuation.yield(.timeout)
+            } catch {
+                // Cancelled — server won, no need to yield
+            }
+        }
+
+        // First result wins
+        var raceResult: RaceResult = .timeout
+        for await result in stream {
+            raceResult = result
+            break
+        }
+
+        serverTask.cancel()
+        timeoutTask.cancel()
+        streamContinuation.finish()
 
         let elapsed = ContinuousClock.now - startTime
 
-        switch result {
+        switch raceResult {
         case .server(let text):
             companionStatus = .completed
             state = .complete(text)
@@ -371,9 +353,11 @@ final class RecordingFlowCoordinator {
 
     /// Retries the companion server request with the previously sent text.
     func retryCompanion() {
-        companionTask?.cancel()
-        companionTask = nil
-        startCompanionProcessing(text: companionInputText)
+        guard !companionInputText.isEmpty else { return }
+        Task {
+            let result = await waitForCompanion(localText: companionInputText)
+            state = .complete(result)
+        }
     }
 
     func cleanupStaleResults() {

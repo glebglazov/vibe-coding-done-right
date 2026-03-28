@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 )
 
 type processRequest struct {
@@ -61,13 +62,18 @@ func processHandler(client *anthropicClient) http.HandlerFunc {
 			systemPrompt = prompt
 		}
 
+		start := time.Now()
 		result, err := client.process(systemPrompt, req.Text, req.Model, req.MaxTokens)
+		llmDuration := time.Since(start)
+
 		if err != nil {
-			log.Printf("ERROR processing request: %v", err)
+			log.Printf("ERROR processing request (LLM took %s): %v", llmDuration, err)
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "LLM processing failed"})
 			return
 		}
 
+		log.Printf("Processed %s in %s (input: %d chars, output: %d chars)",
+			req.IntegrationMode, llmDuration, len(req.Text), len(result))
 		writeJSON(w, http.StatusOK, processResponse{Text: result})
 	}
 }

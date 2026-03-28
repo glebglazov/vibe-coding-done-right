@@ -138,7 +138,6 @@ struct RecordingView: View {
     private var readyContent: some View {
         VStack(spacing: 40) {
             heroTitle("READY")
-            companionSessionToggle
             actionCircle(
                 icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
                 label: "RECORD"
@@ -169,17 +168,19 @@ struct RecordingView: View {
                     .padding(.horizontal, 8)
             }
 
-            if coordinator.launchedViaDeepLink {
-                // Top-left pulsating hint to return to the originating app
-                VStack {
-                    HStack {
+            // Top overlay — return hint (left) and companion toggle (right)
+            VStack {
+                HStack {
+                    if coordinator.launchedViaDeepLink {
                         returnHint
-                            .padding(.top, 16)
                             .padding(.leading, 20)
-                        Spacer()
                     }
                     Spacer()
+                    companionSessionToggle
+                        .padding(.trailing, 20)
                 }
+                .padding(.top, 16)
+                Spacer()
             }
 
             // Bottom-pinned content — transcript and stop button
@@ -291,10 +292,9 @@ struct RecordingView: View {
 
     @ViewBuilder
     private var companionStatusView: some View {
-        switch coordinator.companionStatus {
-        case .idle:
+        if !coordinator.companionActiveThisSession || coordinator.companionStatus == .idle {
             EmptyView()
-        case .processing:
+        } else if coordinator.companionStatus == .processing {
             HStack(spacing: 8) {
                 ProgressView()
                     .tint(theme.onSurfaceVariant)
@@ -304,7 +304,7 @@ struct RecordingView: View {
                     .tracking(2)
                     .foregroundStyle(theme.onSurfaceVariant)
             }
-        case .timedOut:
+        } else if coordinator.companionStatus == .timedOut {
             VStack(spacing: 8) {
                 Text("SERVER UNAVAILABLE")
                     .font(.system(size: 11, weight: .bold))
@@ -314,12 +314,12 @@ struct RecordingView: View {
                     coordinator.retryCompanion()
                 }
             }
-        case .completed:
+        } else if coordinator.companionStatus == .completed {
             Text("ENHANCED BY SERVER")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(2)
                 .foregroundStyle(theme.primary)
-        case .error(let message):
+        } else if case .error(let message) = coordinator.companionStatus {
             VStack(spacing: 8) {
                 Text(message.uppercased())
                     .font(.system(size: 11, weight: .bold))
