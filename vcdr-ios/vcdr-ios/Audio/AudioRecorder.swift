@@ -100,6 +100,17 @@ final class AudioRecorder {
         bufferHandler = nil
         isRecording = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
+
+        // Deactivate audio session so other apps (e.g. Music) resume playback
+        if audioSessionConfigured {
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            } catch {
+                Logger.recording.warning("Failed to deactivate audio session: \(error)")
+            }
+            audioSessionConfigured = false
+        }
+
         Logger.recording.info("Recording stopped")
     }
 
