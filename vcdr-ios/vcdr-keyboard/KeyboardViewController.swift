@@ -25,8 +25,13 @@ class KeyboardViewController: KeyboardInputViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // writeHostBundleID() — disabled: no longer using private hostApplicationBundleId API
-        // refreshRecordingState() — disabled: no background recording state to track
+        // Mitigate the brownish background flash on keyboard load.
+        // KeyboardKit only clears the child UIHostingController's view background,
+        // not the parent view or inputView. This is a known iOS/KeyboardKit issue
+        // (KeyboardKit#1008) with no full fix yet — this reduces but does not
+        // fully eliminate the flash.
+        view.backgroundColor = .clear
+        inputView?.backgroundColor = .clear
         checkPendingTranscription()
     }
 

@@ -401,7 +401,7 @@
 				DEVELOPMENT_TEAM = R9G7S83AGV;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "vcdr-keyboard/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "VCDR Keyboard";
+				INFOPLIST_KEY_CFBundleDisplayName = VCDR;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -430,7 +430,7 @@
 				DEVELOPMENT_TEAM = R9G7S83AGV;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "vcdr-keyboard/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "VCDR Keyboard";
+				INFOPLIST_KEY_CFBundleDisplayName = VCDR;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
