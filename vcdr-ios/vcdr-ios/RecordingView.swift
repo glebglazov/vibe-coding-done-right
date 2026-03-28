@@ -117,15 +117,23 @@ struct RecordingView: View {
     }
 
     private var initializingContent: some View {
-        VStack(spacing: 24) {
-            heroTitle("PREPARING")
-            ProgressView()
-                .tint(theme.primary)
-                .scaleEffect(1.2)
-            Text(coordinator.initProgress.uppercased())
-                .font(.system(size: 12, weight: .bold))
-                .tracking(3)
-                .foregroundStyle(theme.onSurfaceVariant)
+        VStack(spacing: 40) {
+            VStack(spacing: 24) {
+                heroTitle("PREPARING")
+                ProgressView()
+                    .tint(theme.primary)
+                    .scaleEffect(1.2)
+                Text(coordinator.initProgress.uppercased())
+                    .font(.system(size: 12, weight: .bold))
+                    .tracking(3)
+                    .foregroundStyle(theme.onSurfaceVariant)
+            }
+            actionCircle(
+                icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
+                label: "RECORD"
+            ) {
+                Task { await coordinator.startRecording() }
+            }
         }
     }
 
@@ -238,6 +246,13 @@ struct RecordingView: View {
             ProgressView()
                 .tint(theme.primary)
                 .scaleEffect(1.2)
+            if !coordinator.transcribingMessage.isEmpty {
+                Text(coordinator.transcribingMessage)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(theme.onSurfaceVariant)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
         }
     }
 

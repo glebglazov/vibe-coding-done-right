@@ -20,6 +20,8 @@ final class RecordingFlowCoordinator {
     private(set) var initProgress: String = ""
     /// Live transcription text updated in real-time during recording
     private(set) var liveTranscript: String = ""
+    /// Shown in the transcribing state — describes what the app is waiting on
+    private(set) var transcribingMessage: String = ""
     /// When true, the current recording was started via deep link from keyboard.
     /// Exposed for the view to show/hide the back button.
     private(set) var launchedViaDeepLink = false
@@ -27,11 +29,12 @@ final class RecordingFlowCoordinator {
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
 
-    /// When true, recording starts automatically once the model is ready
-    private var pendingRecordRequest = false
-
     private var streamingManager: StreamingAsrManager?
     private var updateTask: Task<Void, Never>?
+    /// Background task that waits for model initialization and starts the streaming
+    /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
+    /// until this task completes and the recognition task begins consuming them.
+    private var streamingSetupTask: Task<Void, Error>?
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
@@ -44,6 +47,9 @@ final class RecordingFlowCoordinator {
     var audioLevels: [Float] { audioRecorder.audioLevels }
 
     func initializeModel() async {
+        // If recording already started, model init is handled by streamingSetupTask
+        guard state != .recording else { return }
+
         state = .initializing
         initProgress = "Downloading model..."
 
@@ -63,77 +69,73 @@ final class RecordingFlowCoordinator {
         do {
             try await transcriptionProvider.initialize()
             pollTask.cancel()
-            state = .ready
+            // Don't overwrite state if recording started while we were initializing
+            if state == .initializing {
+                state = .ready
+            }
             initProgress = "Ready"
             Logger.app.info("Parakeet model initialized")
-
-            if pendingRecordRequest {
-                pendingRecordRequest = false
-                await startRecording(fromDeepLink: true)
-            }
         } catch {
             pollTask.cancel()
-            state = .error("Model initialization failed: \(error.localizedDescription)")
+            if state == .initializing {
+                state = .error("Model initialization failed: \(error.localizedDescription)")
+            }
             Logger.app.error("Model init failed: \(error)")
         }
     }
 
-    /// Called when a deep link arrives. Starts recording (user stays in VCDR app).
+    /// Called when a deep link arrives. Starts recording immediately (user stays in VCDR app).
+    /// Audio capture begins right away; model initialization is awaited in the background.
     func handleRecordDeepLink() async {
         switch state {
-        case .idle, .initializing:
-            pendingRecordRequest = true
-            Logger.app.info("Record request queued — model still initializing")
-        case .ready, .complete, .error:
-            await startRecording(fromDeepLink: true)
         case .recording, .transcribing:
-            // Already busy, ignore
             break
+        default:
+            await startRecording(fromDeepLink: true)
         }
     }
 
     /// Starts recording with real-time streaming transcription.
+    /// Audio capture begins immediately; model initialization and streaming setup
+    /// proceed in the background. Buffers queue in StreamingAsrManager's AsyncStream
+    /// until the recognition task starts consuming them.
     /// - Parameter fromDeepLink: When true, transcription result will be sent to the keyboard extension.
     func startRecording(fromDeepLink: Bool = false) async {
         launchedViaDeepLink = fromDeepLink
-        guard await transcriptionProvider.isReady else {
-            state = .error("Model not ready")
-            return
-        }
 
-        // Create streaming manager with shared models
-        guard let models = await transcriptionProvider.loadedModels else {
-            state = .error("Models not loaded")
-            return
-        }
-
+        // Create streaming manager immediately — no models needed for construction.
+        // Its internal AsyncStream buffers audio until start() begins consuming.
         let streaming = StreamingAsrManager(config: .streaming)
-        do {
-            try await streaming.start(models: models, source: .microphone)
-        } catch {
-            state = .error("Failed to start streaming transcription: \(error.localizedDescription)")
-            Logger.transcription.error("Streaming start failed: \(error)")
-            return
-        }
         self.streamingManager = streaming
 
-        // Start consuming transcription updates
+        // Start consuming transcription updates (sets updateContinuation on the actor)
         liveTranscript = ""
         startConsumingUpdates(from: streaming)
 
-        // Start audio engine and forward buffers to streaming manager
+        // Start audio engine immediately — buffers forward to the streaming manager
         let started = await audioRecorder.startRecording { buffer in
             Task { await streaming.streamAudio(buffer) }
         }
 
-        if started {
-            state = .recording
-            writeState(.recording)
-        } else {
-            await streaming.cancel()
+        guard started else {
             self.streamingManager = nil
             updateTask?.cancel()
             state = .error("Failed to start recording — check microphone permission")
+            return
+        }
+
+        state = .recording
+        writeState(.recording)
+
+        // Initialize model and start streaming transcription in the background.
+        // Audio buffers accumulate in the AsyncStream until start() launches
+        // the recognition task, which then drains all queued buffers.
+        streamingSetupTask = Task { @MainActor in
+            try await self.transcriptionProvider.initialize()
+            guard let models = await self.transcriptionProvider.loadedModels else {
+                throw TranscriptionError.providerUnavailable
+            }
+            try await streaming.start(models: models, source: .microphone)
         }
     }
 
@@ -147,6 +149,28 @@ final class RecordingFlowCoordinator {
             state = .error("No streaming session")
             writeState(.idle)
             return
+        }
+
+        // Wait for model init + streaming start if still in progress.
+        // Audio has stopped, so no new buffers arrive — the recognition task
+        // will process all queued buffers once it starts.
+        if let task = streamingSetupTask {
+            transcribingMessage = "Compiling model — your recording will be processed shortly"
+            state = .transcribing
+            writeState(.transcribing)
+            do {
+                try await task.value
+            } catch {
+                await streaming.cancel()
+                state = .error("Transcription unavailable: \(error.localizedDescription)")
+                writeState(.idle)
+                streamingManager = nil
+                streamingSetupTask = nil
+                transcribingMessage = ""
+                return
+            }
+            streamingSetupTask = nil
+            transcribingMessage = ""
         }
 
         // Show result immediately from the live transcript — no "PROCESSING" spinner.
@@ -191,6 +215,8 @@ final class RecordingFlowCoordinator {
         liveTranscript = ""
         launchedViaDeepLink = false
         updateTask?.cancel()
+        streamingSetupTask?.cancel()
+        streamingSetupTask = nil
         streamingManager = nil
     }
 
