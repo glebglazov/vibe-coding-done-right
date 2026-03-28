@@ -8,6 +8,7 @@ servers:
 proxy:
   ssl: true
   host: vcdr-server.glebglazov.me
+  app_port: 8080
   healthcheck:
     path: /health
 
