@@ -40,8 +40,4 @@ extension CapturePanel {
         viewModel?.feedbackCounters.rejectCount += 1
     }
 
-    func setDestinationSubmitHandler(_ handler: @escaping (UUID) -> Void) {
-        viewModel?.onDestinationSubmit = handler
-    }
-
 }

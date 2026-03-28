@@ -53,11 +53,11 @@ final class CaptureViewModel {
     // MARK: - Callbacks
 
     let onDismiss: () -> Void
-    var onCancelCapture: (() -> Void)?
+    let onCancelCapture: (() -> Void)?
     /// Called when the user presses Return to confirm the preview.
-    var onConfirm: (() -> Void)?
+    let onConfirm: (() -> Void)?
     /// Called when a destination hotkey is pressed during preview, passing the destination ID.
-    var onDestinationSubmit: ((UUID) -> Void)?
+    let onDestinationSubmit: ((UUID) -> Void)?
     let onExpand: () -> Void
     let audioRecorder: AudioRecorder?
 
@@ -109,6 +109,9 @@ final class CaptureViewModel {
         displayedTurn: DisplayedTurn? = nil,
         outputDestinations: [OutputDestination] = [],
         onDismiss: @escaping () -> Void,
+        onConfirm: (() -> Void)? = nil,
+        onCancelCapture: (() -> Void)? = nil,
+        onDestinationSubmit: ((UUID) -> Void)? = nil,
         onExpand: @escaping () -> Void = {},
         audioRecorder: AudioRecorder? = nil
     ) {
@@ -117,6 +120,9 @@ final class CaptureViewModel {
         self.displayedTurn = displayedTurn
         self.outputDestinations = outputDestinations
         self.onDismiss = onDismiss
+        self.onConfirm = onConfirm
+        self.onCancelCapture = onCancelCapture
+        self.onDestinationSubmit = onDestinationSubmit
         self.onExpand = onExpand
         self.audioRecorder = audioRecorder
     }
@@ -180,37 +186,19 @@ final class CaptureViewModel {
         return event.keyCode == binding.keyCode && (eventFlags & requiredFlags) == requiredFlags
     }
 
-    /// Checks if the event matches any output destination's activation hotkey.
-    /// Uses superset modifier matching — extra modifiers are allowed.
-    /// When multiple destinations share the same keyCode, the most specific match
-    /// (most required modifier bits) wins, so Shift+Ctrl+P beats Ctrl+P.
+    /// Matches against output destination hotkeys using the shared superset-modifier matching algorithm.
     private func matchDestinationHotkey(_ event: NSEvent) -> UUID? {
         let eventFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
-        let hasControlModifier = event.modifierFlags.contains(.control)
-        if hasControlModifier {
-            Logger.hotkeys.debug("Destination hotkey check: keyCode=\(event.keyCode) eventFlags=0x\(String(eventFlags, radix: 16)) destinations=\(self.outputDestinations.count)")
-            for destination in outputDestinations where destination.activationHotkey.isAssigned {
-                Logger.hotkeys.debug("  dest '\(destination.name)': keyCode=\(destination.activationHotkey.keyCode) modifiers=0x\(String(destination.activationHotkey.modifiers, radix: 16))")
-            }
+        let bindings = outputDestinations.map { ($0.id, $0.activationHotkey.keyCode, $0.activationHotkey.modifiers) }
+        let match = DestinationHotkeyManager.matchBinding(
+            keyCode: event.keyCode,
+            modifierBits: UInt64(eventFlags),
+            bindings: bindings
+        )
+        if let match, event.modifierFlags.contains(.control) {
+            let dest = outputDestinations.first { $0.id == match }
+            Logger.hotkeys.debug("Destination hotkey matched: '\(dest?.name ?? "unknown")'")
         }
-        var bestMatch: (id: UUID, specificity: Int)?
-        for destination in outputDestinations where destination.activationHotkey.isAssigned {
-            let requiredFlags = UInt(destination.activationHotkey.modifiers)
-            if event.keyCode == destination.activationHotkey.keyCode && (eventFlags & requiredFlags) == requiredFlags {
-                let specificity = requiredFlags.nonzeroBitCount
-                if bestMatch == nil || specificity > bestMatch!.specificity {
-                    bestMatch = (destination.id, specificity)
-                }
-            }
-        }
-        if hasControlModifier {
-            if let match = bestMatch {
-                let dest = outputDestinations.first { $0.id == match.id }
-                Logger.hotkeys.debug("Destination hotkey matched: '\(dest?.name ?? "unknown")'")
-            } else {
-                Logger.hotkeys.debug("Destination hotkey: no match for keyCode=\(event.keyCode)")
-            }
-        }
-        return bestMatch?.id
+        return match
     }
 }

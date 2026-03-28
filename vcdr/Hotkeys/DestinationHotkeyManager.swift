@@ -57,6 +57,30 @@ final class DestinationHotkeyManager {
         bindings = []
     }
 
+    // MARK: - Shared Matching
+
+    /// Matches a key event against hotkey bindings using superset modifier matching.
+    /// Extra modifiers on the event are allowed. When multiple bindings share the same
+    /// keyCode, the most specific match (most required modifier bits) wins.
+    /// Returns the UUID of the best match, or nil if none matched.
+    static func matchBinding(
+        keyCode: UInt16,
+        modifierBits: UInt64,
+        bindings: [(id: UUID, keyCode: UInt16, modifiers: UInt64)]
+    ) -> UUID? {
+        var bestMatch: (id: UUID, specificity: Int)?
+        for binding in bindings where binding.keyCode != 0 || binding.modifiers != 0 {
+            if keyCode == binding.keyCode
+                && (modifierBits & binding.modifiers) == binding.modifiers {
+                let specificity = binding.modifiers.nonzeroBitCount
+                if bestMatch == nil || specificity > bestMatch!.specificity {
+                    bestMatch = (binding.id, specificity)
+                }
+            }
+        }
+        return bestMatch?.id
+    }
+
     // MARK: - Event Handling
 
     private func handleEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -75,24 +99,13 @@ final class DestinationHotkeyManager {
         let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         guard !isRepeat else { return Unmanaged.passUnretained(event) }
 
-        let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
+        let flatBindings = bindings.map { ($0.id, UInt16($0.keyCode), $0.modifiers.rawValue) }
 
-        // Superset matching: event flags must contain all binding modifiers (extras are OK).
-        // When multiple bindings share the same keyCode, prefer the most specific match
-        // (most required modifier bits), so Shift+Ctrl+P beats Ctrl+P.
-        var bestMatch: (id: UUID, specificity: UInt32)?
-        for binding in bindings {
-            if keyCode == binding.keyCode && flags.intersection(binding.modifiers) == binding.modifiers {
-                let specificity = binding.modifiers.rawValue.nonzeroBitCount
-                if bestMatch == nil || specificity > bestMatch!.specificity {
-                    bestMatch = (binding.id, UInt32(specificity))
-                }
-            }
-        }
-        if let match = bestMatch {
-            Logger.hotkeys.debug("DestinationHotkeyManager: matched destination \(match.id)")
-            onDestinationMatched?(match.id)
+        if let matchedID = Self.matchBinding(keyCode: keyCode, modifierBits: flags.rawValue, bindings: flatBindings) {
+            Logger.hotkeys.debug("DestinationHotkeyManager: matched destination \(matchedID)")
+            onDestinationMatched?(matchedID)
             return nil // Consume the event
         }
 

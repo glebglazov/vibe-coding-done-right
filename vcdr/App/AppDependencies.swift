@@ -92,11 +92,6 @@ final class AppDependencies {
         // Wire ModeSwitcherCoordinator → AppDependencies via delegate
         modeSwitcherCoordinator.delegate = self
 
-        // Wire cancel capture hotkey: cancels the capture (removes from history) and dismisses
-        captureCoordinator.panel.onCancelCapture = { [weak captureCoordinator] in
-            captureCoordinator?.cancelCapture()
-        }
-
     }
 
     func initialize() async {

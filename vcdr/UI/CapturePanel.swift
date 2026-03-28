@@ -13,8 +13,6 @@ final class CapturePanel {
 
     var onFocusLost: (() -> Void)?
 
-    var onCancelCapture: (() -> Void)?
-
     // MARK: - Constants
 
     private static let panelWidth: CGFloat = 480
@@ -31,7 +29,10 @@ final class CapturePanel {
         initialAppName: String? = nil,
         audioRecorder: AudioRecorder? = nil,
         minimized: Bool = false,
-        onDismiss: @escaping () -> Void
+        onDismiss: @escaping () -> Void,
+        onConfirm: (() -> Void)? = nil,
+        onCancelCapture: (() -> Void)? = nil,
+        onDestinationSubmit: ((UUID) -> Void)? = nil
     ) {
         tearDown()
 
@@ -40,23 +41,19 @@ final class CapturePanel {
             overrides: overrides,
             displayedTurn: displayedTurn,
             outputDestinations: outputDestinations,
-            onDismiss: {
-                onDismiss()
-            },
+            onDismiss: onDismiss,
+            onConfirm: onConfirm,
+            onCancelCapture: onCancelCapture,
+            onDestinationSubmit: onDestinationSubmit,
             onExpand: { [weak self] in
                 self?.expand()
             },
             audioRecorder: audioRecorder
         )
         viewModel.initialAppName = initialAppName
-        viewModel.onCancelCapture = onCancelCapture
         self.viewModel = viewModel
 
         presentPanel(viewModel: viewModel, displayedTurn: displayedTurn, skipFocus: minimized)
-    }
-
-    func hide() {
-        tearDown()
     }
 
     func dismiss() {

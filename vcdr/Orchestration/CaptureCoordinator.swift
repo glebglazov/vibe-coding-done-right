@@ -79,15 +79,17 @@ final class CaptureCoordinator {
             minimized: minimized,
             onDismiss: { [weak self] in
                 self?.dismissOverlay()
+            },
+            onConfirm: { [weak self] in
+                self?.confirmPreview()
+            },
+            onCancelCapture: { [weak self] in
+                self?.cancelCapture()
+            },
+            onDestinationSubmit: { [weak self] destinationID in
+                self?.confirmPreviewWithDestination(destinationID)
             }
         )
-
-        panel.viewModel?.onConfirm = { [weak self] in
-            self?.confirmPreview()
-        }
-        panel.setDestinationSubmitHandler { [weak self] destinationID in
-            self?.confirmPreviewWithDestination(destinationID)
-        }
     }
 
     // MARK: - Preview Confirmation
