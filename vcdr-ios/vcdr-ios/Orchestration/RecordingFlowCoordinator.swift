@@ -69,9 +69,7 @@ final class RecordingFlowCoordinator {
 
             if pendingRecordRequest {
                 pendingRecordRequest = false
-                // Previously called startRecordingAndBounceBack(); now stays in app.
-                launchedViaDeepLink = true
-                await startRecording()
+                await startRecording(fromDeepLink: true)
             }
         } catch {
             pollTask.cancel()
@@ -87,10 +85,7 @@ final class RecordingFlowCoordinator {
             pendingRecordRequest = true
             Logger.app.info("Record request queued — model still initializing")
         case .ready, .complete, .error:
-            // Previously called startRecordingAndBounceBack() which auto-returned to host app.
-            // Disabled: user now stays in VCDR to see real-time transcription.
-            launchedViaDeepLink = true
-            await startRecording()
+            await startRecording(fromDeepLink: true)
         case .recording, .transcribing:
             // Already busy, ignore
             break
@@ -98,7 +93,9 @@ final class RecordingFlowCoordinator {
     }
 
     /// Starts recording with real-time streaming transcription.
-    func startRecording() async {
+    /// - Parameter fromDeepLink: When true, transcription result will be sent to the keyboard extension.
+    func startRecording(fromDeepLink: Bool = false) async {
+        launchedViaDeepLink = fromDeepLink
         guard await transcriptionProvider.isReady else {
             state = .error("Model not ready")
             return
@@ -181,6 +178,7 @@ final class RecordingFlowCoordinator {
         state = .ready
         writeState(.idle)
         liveTranscript = ""
+        launchedViaDeepLink = false
         updateTask?.cancel()
         streamingManager = nil
     }
@@ -247,9 +245,9 @@ final class RecordingFlowCoordinator {
         switch command {
         case .startRecording:
             Logger.app.info("Received start command from keyboard (session already active)")
-            await startRecording()
+            await startRecording(fromDeepLink: true)
             if case .recording = state {
-                launchedViaDeepLink = true
+                // Recording started successfully via keyboard command
             } else {
                 SharedConstants.sharedDefaults.set(false, forKey: SharedConstants.audioSessionActiveKey)
                 Logger.app.warning("Background recording failed — cleared audio session flag")
