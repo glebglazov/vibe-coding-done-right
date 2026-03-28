@@ -8,6 +8,8 @@ servers:
 proxy:
   ssl: true
   host: vcdr-server.glebglazov.me
+  healthcheck:
+    path: /health
 
 registry:
   server: localhost:5555
