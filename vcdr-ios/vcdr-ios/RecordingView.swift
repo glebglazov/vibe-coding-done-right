@@ -17,6 +17,8 @@ struct RecordingView: View {
     private static let transcriptFontSize: CGFloat = 18
     private static let transcriptMaxHeight: CGFloat = 200
     private static let hintFontSize: CGFloat = 13
+    private static let returnDotSize: CGFloat = 8
+    private static let returnPulseDuration: Double = 0.8
 
     var body: some View {
         ZStack {
@@ -131,7 +133,20 @@ struct RecordingView: View {
                     .padding(.horizontal, 8)
             }
 
-            // Bottom-pinned content — transcript, hint, stop button
+            if coordinator.launchedViaDeepLink {
+                // Top-left pulsating hint to return to the originating app
+                VStack {
+                    HStack {
+                        returnHint
+                            .padding(.top, 16)
+                            .padding(.leading, 20)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+            }
+
+            // Bottom-pinned content — transcript and stop button
             VStack(spacing: 0) {
                 Spacer()
 
@@ -156,30 +171,36 @@ struct RecordingView: View {
                     .padding(.bottom, 16)
                 }
 
-                if coordinator.launchedViaDeepLink {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.uturn.backward")
-                            .font(.system(size: Self.hintFontSize))
-                        Text("Switch back to paste")
-                            .font(.system(size: Self.hintFontSize, weight: .medium))
+                if !coordinator.launchedViaDeepLink {
+                    actionCircle(
+                        icon: {
+                            Rectangle()
+                                .fill(Theme.onSurface)
+                                .frame(width: Self.stopIconSize, height: Self.stopIconSize)
+                        },
+                        label: "STOP"
+                    ) {
+                        Task { await coordinator.stopAndTranscribe() }
                     }
-                    .foregroundStyle(Theme.onSurfaceVariant)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 24)
                 }
-
-                actionCircle(
-                    icon: {
-                        Rectangle()
-                            .fill(Theme.onSurface)
-                            .frame(width: Self.stopIconSize, height: Self.stopIconSize)
-                    },
-                    label: "STOP"
-                ) {
-                    Task { await coordinator.stopAndTranscribe() }
-                }
-                .padding(.bottom, 24)
             }
         }
+    }
+
+    private var returnHint: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: Self.hintFontSize, weight: .semibold))
+                .phaseAnimator([false, true]) { content, phase in
+                    content.opacity(phase ? 1 : 0.3)
+                } animation: { _ in
+                    .easeInOut(duration: Self.returnPulseDuration)
+                }
+            Text("Switch back to paste")
+                .font(.system(size: Self.hintFontSize, weight: .medium))
+        }
+        .foregroundStyle(Theme.onSurfaceVariant)
     }
 
     private var transcribingContent: some View {
