@@ -91,8 +91,12 @@ struct Mode: Identifiable, Codable, Equatable {
     func applyPreProcessing(_ text: String, captures: [CapturedContext]) -> String {
         var result = text
 
-        if processingType == .bashScript && systemPromptEnabled && !systemPrompt.isEmpty {
-            result = systemPrompt + "\n\n" + result
+        if processingType == .bashScript {
+            result = "<dictation>\(result)</dictation>"
+
+            if systemPromptEnabled && !systemPrompt.isEmpty {
+                result = systemPrompt + "\n\n" + result
+            }
         }
 
         if !captures.isEmpty {

@@ -34,7 +34,7 @@ enum CompanionClient {
 
         let body: [String: Any] = [
             "integration_mode": integrationMode,
-            "text": text,
+            "text": "<dictation>\(text)</dictation>",
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

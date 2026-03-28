@@ -83,7 +83,7 @@ extension ModeTemplate {
         processingType: .bashScript,
         processingCommand: "zsh -ic 'set -o pipefail; cd /tmp && claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"'",
         systemPromptEnabled: true,
-        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. Input is voice-dictated and may contain minor transcription errors — interpret the intent.",
+        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
         parameters: [
             ModeParameter(id: claudeCodeModelParamID, name: "Model", options: [
                 ModeParameterOption(id: claudeCodeHaikuOptionID, label: "Haiku", value: "haiku"),
@@ -102,7 +102,7 @@ extension ModeTemplate {
         processingType: .bashScript,
         processingCommand: "zsh -ic 'TERM=dumb ollama run --hidethinking --nowordwrap $VCDR_PARAM_MODEL \"$VCDR_TEXT\" 2>/dev/null'",
         systemPromptEnabled: true,
-        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. Input is voice-dictated and may contain minor transcription errors — interpret the intent.",
+        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
         parameters: [
             ModeParameter(id: ollamaModelParamID, name: "Model", options: [
                 ModeParameterOption(id: ollamaQwen35_08bOptionID, label: "Qwen3.5 - 0.8B", value: "qwen3.5:0.8b"),
