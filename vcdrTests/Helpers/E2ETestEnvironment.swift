@@ -50,7 +50,7 @@ struct E2ETestEnvironment {
         func recordingCoordinatorDidRejectInput() {
             rejectCount += 1
         }
-        func recordingCoordinatorDidCaptureSelection() {}
+        func recordingCoordinatorSelectionCaptureFinished(didCapture: Bool) {}
     }
 
     init(

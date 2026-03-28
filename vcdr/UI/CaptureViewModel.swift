@@ -21,7 +21,6 @@ final class CaptureViewModel {
         case processing
         case success
         case error
-        case cancelled
     }
     var phase: CapturePhase = .idle
     var errorMessage: String?

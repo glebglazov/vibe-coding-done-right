@@ -36,28 +36,12 @@ extension CapturePanel {
         }
     }
 
-    func updateInitialAppName(_ name: String?) {
-        viewModel?.initialAppName = name
-    }
-
     func buzz() {
         viewModel?.rejectCount += 1
-    }
-
-    func setProcessedByModeName(_ name: String?) {
-        viewModel?.processedByModeName = name
     }
 
     func setDestinationSubmitHandler(_ handler: @escaping (UUID) -> Void) {
         viewModel?.onDestinationSubmit = handler
     }
 
-    func makeKeyIfVisible() {
-        guard let panel, isVisible else { return }
-        if isMinimized {
-            expand()
-            return
-        }
-        panel.makeKey()
-    }
 }

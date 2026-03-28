@@ -59,7 +59,7 @@ struct CaptureView: View {
                 AudioWaveformView(audioLevels: viewModel.audioRecorder?.audioLevels ?? [])
             case .processing:
                 AnimatedDotsView()
-            case .error, .cancelled:
+            case .error:
                 Image(systemName: "xmark")
                     .font(.system(size: Self.pillIconSize, weight: .semibold))
                     .foregroundStyle(.red)
