@@ -35,5 +35,6 @@ enum CompanionSettings {
         UserDefaults.standard.set(true, forKey: enabledKey)
         UserDefaults.standard.set(host, forKey: hostKey)
         UserDefaults.standard.set(apiKey, forKey: apiKeyKey)
+        UserDefaults.standard.set(true, forKey: activeInDictationKey)
     }
 }
