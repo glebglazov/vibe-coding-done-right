@@ -381,6 +381,8 @@ struct RecordingView: View {
             .font(.system(size: 64, weight: .black))
             .tracking(-2)
             .foregroundStyle(theme.onSurface)
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
     }
 
     private func actionCircle<Icon: View>(
