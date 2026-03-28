@@ -84,11 +84,23 @@ final class RecordingFlowCoordinator {
         }
     }
 
+    /// Sets state to `.recording` synchronously so the view shows "LISTENING"
+    /// on the very first frame after a deep link opens the app.
+    /// Called from `onOpenURL` before the async recording flow begins.
+    func prepareForDeepLinkRecording() {
+        guard state != .recording && state != .transcribing else { return }
+        state = .recording
+        launchedViaDeepLink = true
+    }
+
     /// Called when a deep link arrives. Starts recording immediately (user stays in VCDR app).
     /// Audio capture begins right away; model initialization is awaited in the background.
     func handleRecordDeepLink() async {
         switch state {
-        case .recording, .transcribing:
+        case .recording where audioRecorder.isRecording:
+            // Already recording, ignore duplicate deep link
+            break
+        case .transcribing:
             break
         default:
             await startRecording(fromDeepLink: true)
@@ -102,6 +114,11 @@ final class RecordingFlowCoordinator {
     /// - Parameter fromDeepLink: When true, transcription result will be sent to the keyboard extension.
     func startRecording(fromDeepLink: Bool = false) async {
         launchedViaDeepLink = fromDeepLink
+
+        // Show "LISTENING" immediately — before any async work.
+        // If audio fails to start, state reverts to .error below.
+        state = .recording
+        writeState(.recording)
 
         // Create streaming manager immediately — no models needed for construction.
         // Its internal AsyncStream buffers audio until start() begins consuming.
@@ -123,9 +140,6 @@ final class RecordingFlowCoordinator {
             state = .error("Failed to start recording — check microphone permission")
             return
         }
-
-        state = .recording
-        writeState(.recording)
 
         // Initialize model and start streaming transcription in the background.
         // Audio buffers accumulate in the AsyncStream until start() launches

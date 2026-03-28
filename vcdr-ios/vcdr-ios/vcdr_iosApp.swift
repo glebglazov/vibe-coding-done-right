@@ -17,6 +17,9 @@ struct VCDRiOSApp: App {
                 }
                 .onOpenURL { url in
                     guard url.scheme == "vcdr-ios", url.host == "record" else { return }
+                    // Set recording state synchronously so the first rendered frame
+                    // shows "LISTENING" — eliminates the flash of the previous state.
+                    coordinator.prepareForDeepLinkRecording()
                     Task { await coordinator.handleRecordDeepLink() }
                 }
         }
