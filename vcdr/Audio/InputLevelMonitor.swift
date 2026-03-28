@@ -18,6 +18,21 @@ final class InputLevelMonitor {
 
     // MARK: - Lifecycle
 
+    /// Toggles monitoring on the specified device. Stops if running, starts if not.
+    func toggle(deviceUID: String?) {
+        if isMonitoring {
+            stop()
+        } else {
+            start(deviceUID: deviceUID)
+        }
+    }
+
+    /// Restarts monitoring on a new device, only if already monitoring.
+    func restartIfMonitoring(deviceUID: String?) {
+        guard isMonitoring else { return }
+        start(deviceUID: deviceUID)
+    }
+
     func start(deviceUID: String?) {
         stop()
 

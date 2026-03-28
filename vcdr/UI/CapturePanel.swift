@@ -134,8 +134,8 @@ final class CapturePanel {
     func expand() {
         let wasMinimized = viewModel?.isMinimized == true
         viewModel?.isMinimized = false
-        if viewModel?.phase != .recording && viewModel?.phase != .error && viewModel?.phase != .processing {
-            viewModel?.phase = .idle
+        if viewModel?.phaseState.phase != .recording && viewModel?.phaseState.phase != .error && viewModel?.phaseState.phase != .processing {
+            viewModel?.phaseState.phase = .idle
         }
         if wasMinimized {
             resizePanelToExpanded()
@@ -144,11 +144,11 @@ final class CapturePanel {
     }
 
     func setPhase(_ phase: CaptureViewModel.CapturePhase) {
-        viewModel?.phase = phase
+        viewModel?.phaseState.phase = phase
     }
 
     func signalClipboardCapture() {
-        viewModel?.clipboardCaptureCount += 1
+        viewModel?.feedbackCounters.clipboardCaptureCount += 1
     }
 
     // MARK: - Panel Resize
@@ -162,7 +162,7 @@ final class CapturePanel {
 
     func resizePanelToExpanded() {
         guard let panel, let viewModel else { return }
-        let newHeight = Self.calculateHeight(for: viewModel.displayedTurn, hasError: viewModel.errorMessage != nil)
+        let newHeight = Self.calculateHeight(for: viewModel.displayedTurn, hasError: viewModel.phaseState.errorMessage != nil)
         guard let origin = Self.panelOrigin(width: Self.panelWidth, height: newHeight) else { return }
         let newFrame = NSRect(origin: origin, size: NSSize(width: Self.panelWidth, height: newHeight))
         panel.animateResize(to: newFrame)
@@ -170,7 +170,7 @@ final class CapturePanel {
 
     func resizePanel() {
         guard let panel, let viewModel else { return }
-        let newHeight = Self.calculateHeight(for: viewModel.displayedTurn, hasError: viewModel.errorMessage != nil)
+        let newHeight = Self.calculateHeight(for: viewModel.displayedTurn, hasError: viewModel.phaseState.errorMessage != nil)
         let targetWidth = viewModel.isMinimized ? Self.minimizedPanelWidth : Self.panelWidth
         guard let origin = Self.panelOrigin(width: targetWidth, height: newHeight) else { return }
         let newFrame = NSRect(origin: origin, size: NSSize(width: targetWidth, height: newHeight))

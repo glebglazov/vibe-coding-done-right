@@ -82,6 +82,7 @@ extension CaptureCoordinator {
         panel.setPhase(phase)
         if shouldMinimize && !panel.isMinimized { panel.minimize() }
         pillResetTask?.cancel()
+        // Brief visual flash: show the phase on the pill, then reset to idle after the duration
         pillResetTask = Task {
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
@@ -91,6 +92,7 @@ extension CaptureCoordinator {
 
     func scheduleAutoDismiss(after duration: Duration) {
         autoDismissTask?.cancel()
+        // Auto-dismiss the capture panel after the configured duration if user doesn't interact
         autoDismissTask = Task {
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }

@@ -26,12 +26,7 @@ struct AudioTabView: View {
                             AudioLevelMeter(level: inputLevelMonitor.level)
                         }
                         Button(inputLevelMonitor.isMonitoring ? "Stop" : "Test") {
-                            let enable = !inputLevelMonitor.isMonitoring
-                            if enable {
-                                startLevelMonitoring()
-                            } else {
-                                inputLevelMonitor.stop()
-                            }
+                            inputLevelMonitor.toggle(deviceUID: audioDeviceMonitor.selectedDeviceUID)
                         }
                         .controlSize(.small)
                     }
@@ -68,16 +63,7 @@ struct AudioTabView: View {
             inputLevelMonitor.stop()
         }
         .onChange(of: audioDeviceMonitor.selectedDeviceID) {
-            // Restart on the new device only if already monitoring
-            if inputLevelMonitor.isMonitoring {
-                startLevelMonitoring()
-            }
+            inputLevelMonitor.restartIfMonitoring(deviceUID: audioDeviceMonitor.selectedDeviceUID)
         }
-    }
-
-    private func startLevelMonitoring() {
-        inputLevelMonitor.start(
-            deviceUID: audioDeviceMonitor.selectedDeviceUID
-        )
     }
 }

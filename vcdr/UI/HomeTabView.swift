@@ -2,6 +2,10 @@ import SwiftUI
 import AVFoundation
 
 struct HomeTabView: View {
+    // MARK: - Constants
+
+    private static let accessibilitySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+
     let settings: AppSettings
     let coordinator: RecordingCoordinator
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
@@ -46,9 +50,7 @@ struct HomeTabView: View {
                             }
                             Spacer()
                             Button("Open Settings") {
-                                NSWorkspace.shared.open(
-                                    URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-                                )
+                                NSWorkspace.shared.open(Self.accessibilitySettingsURL)
                             }
                             .controlSize(.small)
                         }

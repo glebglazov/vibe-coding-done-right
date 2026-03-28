@@ -64,6 +64,7 @@ struct CopiedIndicatorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task {
+            // Animate from clipboard icon to checkmark after a short delay for visual feedback
             try? await Task.sleep(for: Self.transitionDelay)
             showCheckmark = true
         }

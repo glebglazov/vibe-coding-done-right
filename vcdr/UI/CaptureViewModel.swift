@@ -3,16 +3,7 @@ import OSLog
 
 @Observable
 final class CaptureViewModel {
-    // MARK: - State
-
-    var displayedTurn: DisplayedTurn?
-    var isMinimized: Bool = false
-    var processedByModeName: String?
-    var clipboardCaptureCount: Int = 0
-    var rejectCount: Int = 0
-    /// Set to true when the mode switcher is shown as a standalone panel — prevents
-    /// the CapturePanel from auto-dismissing when it loses focus to the mode switcher.
-    var isSuspendedForModeSwitcher: Bool = false
+    // MARK: - Types
 
     /// Unified phase for both the minimized pill and expanded view state
     enum CapturePhase {
@@ -22,20 +13,42 @@ final class CaptureViewModel {
         case success
         case error
     }
-    var phase: CapturePhase = .idle
-    var errorMessage: String?
 
-    /// Convenience for view compatibility
-    var isRecording: Bool { phase == .recording }
-    var isProcessing: Bool { phase == .processing }
+    struct PhaseState {
+        var phase: CapturePhase = .idle
+        var errorMessage: String?
+
+        var isRecording: Bool { phase == .recording }
+        var isProcessing: Bool { phase == .processing }
+    }
+
+    struct FeedbackCounters {
+        var clipboardCaptureCount: Int = 0
+        var rejectCount: Int = 0
+    }
+
+    // MARK: - State (5 observable properties)
+
+    var displayedTurn: DisplayedTurn?
+    var isMinimized: Bool = false
+    var phaseState = PhaseState()
+    var feedbackCounters = FeedbackCounters()
+    var initialAppName: String?
+
+    @ObservationIgnored var processedByModeName: String?
+    /// Set to true when the mode switcher is shown as a standalone panel — prevents
+    /// the CapturePanel from auto-dismissing when it loses focus to the mode switcher.
+    @ObservationIgnored var isSuspendedForModeSwitcher: Bool = false
+
+    /// Convenience forwarders
+    var isRecording: Bool { phaseState.isRecording }
+    var isProcessing: Bool { phaseState.isProcessing }
 
     // MARK: - Configuration
 
     let settings: AppSettings
     let overrides: SessionOverrides
     let outputDestinations: [OutputDestination]
-    /// Name of the app that was frontmost when capture started, for display in "Paste to Initial App" labels.
-    var initialAppName: String?
 
     // MARK: - Callbacks
 
@@ -109,8 +122,15 @@ final class CaptureViewModel {
     }
 
     func clearError() {
-        errorMessage = nil
-        phase = .idle
+        phaseState = PhaseState()
+    }
+
+    /// Handles pill tap: copies error message to clipboard if in error state, then expands.
+    func onPillTapped() {
+        if phaseState.phase == .error, let msg = phaseState.errorMessage {
+            ClipboardHelper.writeString(msg)
+        }
+        onExpand()
     }
 
     // MARK: - Key Handling

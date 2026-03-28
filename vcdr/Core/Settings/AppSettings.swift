@@ -25,12 +25,12 @@ struct HotkeyBinding: Codable, Equatable {
 
     static let unassigned = HotkeyBinding(keyCode: 0, modifiers: 0)
 
-    /// Default cancel recording: Escape (key code 53, no modifiers)
-    static let defaultCancelRecording = HotkeyBinding(keyCode: 53, modifiers: 0)
+    /// Default cancel recording: Escape, no modifiers
+    static let defaultCancelRecording = HotkeyBinding(keyCode: KeyCodeMap.escapeKeyCode, modifiers: 0)
 
     /// Default toggle recording: Cmd+Option+Space
     static let defaultToggleRecording = HotkeyBinding(
-        keyCode: 49,
+        keyCode: KeyCodeMap.spaceKeyCode,
         modifiers: UInt64(CGEventFlags.maskCommand.rawValue | CGEventFlags.maskAlternate.rawValue)
     )
 
@@ -50,6 +50,11 @@ struct HotkeyBinding: Codable, Equatable {
 
 @Observable
 final class AppSettings {
+    // MARK: - Migration Constants
+
+    /// Legacy output panel destination ID, used during migration to redirect modes to paste-to-initial-app
+    private static let legacyOutputPanelID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+
     var hotkeySettings: HotkeySettings {
         didSet { save() }
     }
@@ -238,9 +243,8 @@ final class AppSettings {
         }
 
         // Migration: remove outputPanel destination and migrate modes that referenced it
-        let outputPanelID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-        outputDestinations.removeAll { $0.id == outputPanelID }
-        for i in modeConfig.modes.indices where modeConfig.modes[i].defaultOutputDestinationID == outputPanelID {
+        outputDestinations.removeAll { $0.id == Self.legacyOutputPanelID }
+        for i in modeConfig.modes.indices where modeConfig.modes[i].defaultOutputDestinationID == Self.legacyOutputPanelID {
             modeConfig.modes[i].defaultOutputDestinationID = OutputDestination.builtInPasteToInitialAppID
         }
     }

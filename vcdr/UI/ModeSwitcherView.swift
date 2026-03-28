@@ -9,6 +9,9 @@ struct ModeSwitcherView: View {
     private static let rowCornerRadius: CGFloat = 6
     private static let horizontalPadding: CGFloat = 10
     private static let verticalPadding: CGFloat = 10
+    private static let rowHorizontalPadding: CGFloat = 8
+    private static let rowVerticalPadding: CGFloat = 6
+    private static let headerVerticalPadding: CGFloat = 4
 
     var body: some View {
         VStack(spacing: 2) {
@@ -28,7 +31,7 @@ struct ModeSwitcherView: View {
 
     @ViewBuilder
     private var modesContent: some View {
-        ForEach(Array(viewModel.modes.enumerated().prefix(9)), id: \.element.id) { index, mode in
+        ForEach(Array(viewModel.modes.enumerated().prefix(ModeSwitcherPanel.maxModesInSwitcher)), id: \.element.id) { index, mode in
             modeRow(index: index, mode: mode)
                 .onHover { hovering in
                     if hovering { viewModel.highlightedIndex = index }
@@ -59,8 +62,8 @@ struct ModeSwitcherView: View {
                 parameterIndicator(for: mode)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, Self.rowHorizontalPadding)
+        .padding(.vertical, Self.rowVerticalPadding)
         .background(
             RoundedRectangle(cornerRadius: Self.rowCornerRadius)
                 .fill(isHighlighted ? Color.accentColor.opacity(0.3) : Color.clear)
@@ -126,8 +129,8 @@ struct ModeSwitcherView: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, Self.rowHorizontalPadding)
+        .padding(.vertical, Self.rowVerticalPadding)
         .background(
             RoundedRectangle(cornerRadius: Self.rowCornerRadius)
                 .fill(isHighlighted ? Color.accentColor.opacity(0.3) : Color.clear)
@@ -175,8 +178,8 @@ struct ModeSwitcherView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, Self.rowHorizontalPadding)
+        .padding(.vertical, Self.rowVerticalPadding)
         .background(
             RoundedRectangle(cornerRadius: Self.rowCornerRadius)
                 .fill(isHighlighted ? Color.accentColor.opacity(0.3) : Color.clear)
@@ -196,7 +199,7 @@ struct ModeSwitcherView: View {
                 .foregroundStyle(.secondary)
             Spacer()
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, Self.rowHorizontalPadding)
+        .padding(.vertical, Self.headerVerticalPadding)
     }
 }

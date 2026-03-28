@@ -94,9 +94,15 @@ struct CommandTextEditor: NSViewRepresentable {
         private static let builtInVariablePrefix = "VCDR_PARAM_"
         private static let definedVariableColor = NSColor.systemGreen
         private static let undefinedVariableColor = NSColor.systemRed
+        /// Minimum height change (in points) to trigger layout invalidation — suppresses sub-pixel fluctuations
+        private static let heightChangeThreshold: CGFloat = 1
 
         init(_ parent: CommandTextEditor) {
             self.parent = parent
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
         }
 
         func textDidChange(_ notification: Notification) {
@@ -117,7 +123,7 @@ struct CommandTextEditor: NSViewRepresentable {
             layoutManager.ensureLayout(for: textContainer)
             let usedRect = layoutManager.usedRect(for: textContainer)
             let newHeight = usedRect.height
-            if abs(newHeight - contentHeight) > 1 {
+            if abs(newHeight - contentHeight) > Self.heightChangeThreshold {
                 contentHeight = newHeight
                 scrollView?.invalidateIntrinsicContentSize()
             }

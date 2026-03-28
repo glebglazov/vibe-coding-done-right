@@ -137,4 +137,9 @@ final class ModeSwitcherPanel {
     }
 
     var isVisible: Bool { panel != nil }
+
+    deinit {
+        removeEventMonitor(&eventMonitor)
+        removeEventMonitor(&localEventMonitor)
+    }
 }

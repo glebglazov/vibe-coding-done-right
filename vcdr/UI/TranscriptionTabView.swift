@@ -60,22 +60,30 @@ struct TranscriptionTabView: View {
 }
 
 private struct ModelStatusBadge: View {
+    // MARK: - Constants
+
+    private static let dotSpacing: CGFloat = 6
+    private static let dotSize: CGFloat = 8
+    private static let badgeHPadding: CGFloat = 10
+    private static let badgeVPadding: CGFloat = 4
+    private static let badgeCornerRadius: CGFloat = 12
+
     let isReady: Bool
     let statusText: String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Self.dotSpacing) {
             Circle()
                 .fill(badgeColor)
-                .frame(width: 8, height: 8)
+                .frame(width: Self.dotSize, height: Self.dotSize)
             Text(badgeText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, Self.badgeHPadding)
+        .padding(.vertical, Self.badgeVPadding)
         .background(badgeColor.opacity(0.1))
-        .cornerRadius(12)
+        .cornerRadius(Self.badgeCornerRadius)
     }
 
     private var badgeColor: Color {

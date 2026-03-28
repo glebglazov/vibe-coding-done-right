@@ -193,6 +193,7 @@ final class RecordingIndicatorPanel {
         ephemeralPanel.orderFrontRegardless()
         self.panel = ephemeralPanel
 
+        // Auto-close the ephemeral indicator after the display duration elapses
         Task {
             try? await Task.sleep(for: duration)
             ephemeralPanel.close()

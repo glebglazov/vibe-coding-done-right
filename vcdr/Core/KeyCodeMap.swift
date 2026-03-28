@@ -13,6 +13,7 @@ enum KeyCodeMap {
 
     static let cKeyCode: UInt16 = 8
     static let vKeyCode: UInt16 = 9
+    static let spaceKeyCode: UInt16 = 49
 
     // MARK: - Navigation Key Codes
 

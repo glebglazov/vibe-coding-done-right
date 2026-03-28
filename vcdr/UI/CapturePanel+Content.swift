@@ -9,7 +9,7 @@ extension CapturePanel {
     /// Does NOT minimize — the panel is already minimized from recording start.
     func populateImmediateActionText(inputSegments: [InputSegment]) {
         viewModel?.displayedTurn = DisplayedTurn(inputSegments: inputSegments, output: nil)
-        viewModel?.errorMessage = nil
+        viewModel?.phaseState.errorMessage = nil
         // Phase is already .processing from handleTranscribing → setPhase(.processing)
     }
 
@@ -21,14 +21,14 @@ extension CapturePanel {
         if let modeName {
             viewModel.processedByModeName = modeName
         }
-        viewModel.phase = .idle
+        viewModel.phaseState.phase = .idle
         expand()
     }
 
     func setError(_ message: String) {
         guard let viewModel else { return }
-        viewModel.errorMessage = message
-        viewModel.phase = .error
+        viewModel.phaseState.errorMessage = message
+        viewModel.phaseState.phase = .error
         if viewModel.isMinimized {
             expand()
         } else {
@@ -37,7 +37,7 @@ extension CapturePanel {
     }
 
     func buzz() {
-        viewModel?.rejectCount += 1
+        viewModel?.feedbackCounters.rejectCount += 1
     }
 
     func setDestinationSubmitHandler(_ handler: @escaping (UUID) -> Void) {

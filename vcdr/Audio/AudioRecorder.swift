@@ -45,6 +45,11 @@ final class AudioRecorder {
     private static let channelCount = 1
     /// 16-bit PCM depth for Parakeet compatibility
     private static let bitDepth = 16
+    /// How often audio levels are sampled for the waveform display
+    private static let levelTimerInterval: TimeInterval = 0.05
+    /// AVFoundation reports average power from roughly -N dBFS to 0 dBFS;
+    /// this floor is used to normalize the value into a 0.0–1.0 range
+    private static let decibelFloor: Float = 60
 
     nonisolated func requestMicrophonePermission() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -182,11 +187,11 @@ final class AudioRecorder {
     }
 
     private func startLevelMonitoring() {
-        levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+        levelTimer = Timer.scheduledTimer(withTimeInterval: Self.levelTimerInterval, repeats: true) { [weak self] _ in
             guard let self, let recorder = self.audioRecorder, recorder.isRecording else { return }
             recorder.updateMeters()
             let averagePower = recorder.averagePower(forChannel: 0)
-            let linear = max(0.0, (averagePower + 60) / 60)
+            let linear = max(0.0, (averagePower + Self.decibelFloor) / Self.decibelFloor)
             // Square root curve expands the speech range (~0.4–0.8 linear)
             // into a wider visual range, making the waveform more responsive
             let curved = sqrt(linear)

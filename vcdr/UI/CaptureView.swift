@@ -37,19 +37,19 @@ struct CaptureView: View {
 
     private var minimizedPillView: some View {
         HStack(spacing: Self.pillSpacing) {
-            switch viewModel.phase {
+            switch viewModel.phaseState.phase {
             case .idle:
                 Image(systemName: "text.cursor")
                     .font(.system(size: Self.pillIconSize))
                     .foregroundStyle(.secondary)
             case .recording:
-                if viewModel.clipboardCaptureCount > 0 {
+                if viewModel.feedbackCounters.clipboardCaptureCount > 0 {
                     HStack(spacing: 1) {
                         Image(systemName: "doc.on.clipboard")
                             .font(.system(size: Self.captureBadgeSize, weight: .medium))
                             .foregroundStyle(.secondary)
-                        if viewModel.clipboardCaptureCount > 1 {
-                            Text("×\(viewModel.clipboardCaptureCount)")
+                        if viewModel.feedbackCounters.clipboardCaptureCount > 1 {
+                            Text("×\(viewModel.feedbackCounters.clipboardCaptureCount)")
                                 .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
@@ -69,19 +69,18 @@ struct CaptureView: View {
                     .foregroundStyle(.green)
             }
 
-            Text((viewModel.phase == .error ? viewModel.errorMessage : nil) ?? viewModel.pillModeLabel)
+            Text((viewModel.phaseState.phase == .error ? viewModel.phaseState.errorMessage : nil) ?? viewModel.pillModeLabel)
                 .font(.caption)
-                .foregroundStyle(viewModel.phase == .error && viewModel.errorMessage != nil ? Color.red : Color.primary)
+                .foregroundStyle(viewModel.phaseState.phase == .error && viewModel.phaseState.errorMessage != nil ? Color.red : Color.primary)
                 .lineLimit(1)
         }
         .pillShape()
-        .modifier(ShakeEffect(shakeCount: viewModel.rejectCount))
-        .animation(.default, value: viewModel.rejectCount)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.clipboardCaptureCount)
+        .modifier(ShakeEffect(shakeCount: viewModel.feedbackCounters.rejectCount))
+        .animation(.default, value: viewModel.feedbackCounters.rejectCount)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.feedbackCounters.clipboardCaptureCount)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onTapGesture {
-            if viewModel.phase == .error, let msg = viewModel.errorMessage { ClipboardHelper.writeString(msg) }
-            viewModel.onExpand()
+            viewModel.onPillTapped()
         }
     }
 
@@ -123,7 +122,7 @@ struct CaptureView: View {
             .padding(.bottom, Self.headerBottomPadding)
 
             Divider()
-            if viewModel.phase == .error, let errorMessage = viewModel.errorMessage {
+            if viewModel.phaseState.phase == .error, let errorMessage = viewModel.phaseState.errorMessage {
                 ErrorBannerView(message: errorMessage, onDismiss: { viewModel.clearError() })
                 Divider()
             }
