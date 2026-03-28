@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WaveformView: View {
     let levels: [Float]
+    @Environment(\.theme) private var theme
 
     // MARK: - Constants
     private static let barWidth: CGFloat = 4
@@ -16,14 +17,14 @@ struct WaveformView: View {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                 let isLoud = level > Self.glowThreshold
                 Rectangle()
-                    .fill(isLoud ? Theme.primary : Theme.primaryDim)
+                    .fill(isLoud ? theme.primary : theme.primaryDim)
                     .frame(
                         width: Self.barWidth,
                         height: max(Self.minBarHeight, CGFloat(level) * Self.maxBarHeight)
                     )
                     .opacity(0.2 + Double(level) * 0.8)
                     .shadow(
-                        color: isLoud ? Theme.primary.opacity(0.3) : .clear,
+                        color: isLoud ? theme.primary.opacity(0.3) : .clear,
                         radius: Self.glowRadius
                     )
             }

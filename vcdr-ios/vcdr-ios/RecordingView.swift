@@ -3,6 +3,8 @@ import SwiftUI
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.theme) private var theme
+    @AppStorage("appearance") private var appearance: Appearance = .system
     @State private var showCopiedConfirmation = false
     @State private var recordingStart: Date?
 
@@ -22,7 +24,7 @@ struct RecordingView: View {
 
     var body: some View {
         ZStack {
-            Theme.surfaceLowest.ignoresSafeArea()
+            theme.surfaceLowest.ignoresSafeArea()
             dotGrid
 
             VStack(spacing: 0) {
@@ -32,7 +34,6 @@ struct RecordingView: View {
                 bottomArea
             }
         }
-        .preferredColorScheme(.dark)
         .onChange(of: coordinator.state) { _, newState in
             if case .recording = newState {
                 recordingStart = .now
@@ -51,14 +52,42 @@ struct RecordingView: View {
         }
     }
 
-    // MARK: - Top Bar (non-recording states only)
+    // MARK: - Top Bar
 
     @ViewBuilder
     private var topBar: some View {
         if case .recording = coordinator.state {
             EmptyView()
         } else {
-            Spacer().frame(height: 56)
+            HStack {
+                Spacer()
+                appearanceToggle
+                    .padding(.trailing, 20)
+                    .padding(.top, 12)
+            }
+        }
+    }
+
+    private var appearanceToggle: some View {
+        Button {
+            let allCases = Appearance.allCases
+            let currentIndex = allCases.firstIndex(of: appearance) ?? 0
+            let nextIndex = (currentIndex + 1) % allCases.count
+            appearance = allCases[nextIndex]
+        } label: {
+            Image(systemName: appearanceIcon)
+                .font(.system(size: 18))
+                .foregroundStyle(theme.onSurfaceVariant)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+    }
+
+    private var appearanceIcon: String {
+        switch appearance {
+        case .dark: "moon.fill"
+        case .light: "sun.max.fill"
+        case .system: "circle.lefthalf.filled"
         }
     }
 
@@ -91,12 +120,12 @@ struct RecordingView: View {
         VStack(spacing: 24) {
             heroTitle("PREPARING")
             ProgressView()
-                .tint(Theme.primary)
+                .tint(theme.primary)
                 .scaleEffect(1.2)
             Text(coordinator.initProgress.uppercased())
                 .font(.system(size: 12, weight: .bold))
                 .tracking(3)
-                .foregroundStyle(Theme.onSurfaceVariant)
+                .foregroundStyle(theme.onSurfaceVariant)
         }
     }
 
@@ -104,7 +133,7 @@ struct RecordingView: View {
         VStack(spacing: 40) {
             heroTitle("READY")
             actionCircle(
-                icon: { Circle().fill(Theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
+                icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
                 label: "RECORD"
             ) {
                 Task { await coordinator.startRecording() }
@@ -124,7 +153,7 @@ struct RecordingView: View {
                     Text(formatDuration(elapsed))
                         .font(.system(size: 12, weight: .bold))
                         .tracking(3)
-                        .foregroundStyle(Theme.primary.opacity(0.8))
+                        .foregroundStyle(theme.primary.opacity(0.8))
                 }
                 .padding(.bottom, 32)
 
@@ -155,7 +184,7 @@ struct RecordingView: View {
                         ScrollView {
                             Text(coordinator.liveTranscript)
                                 .font(.system(size: Self.transcriptFontSize, weight: .light))
-                                .foregroundStyle(Theme.onSurface.opacity(0.7))
+                                .foregroundStyle(theme.onSurface.opacity(0.7))
                                 .lineSpacing(6)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, 32)
@@ -175,7 +204,7 @@ struct RecordingView: View {
                     actionCircle(
                         icon: {
                             Rectangle()
-                                .fill(Theme.onSurface)
+                                .fill(theme.onSurface)
                                 .frame(width: Self.stopIconSize, height: Self.stopIconSize)
                         },
                         label: "STOP"
@@ -200,14 +229,14 @@ struct RecordingView: View {
             Text("Switch back to paste")
                 .font(.system(size: Self.hintFontSize, weight: .medium))
         }
-        .foregroundStyle(Theme.onSurfaceVariant)
+        .foregroundStyle(theme.onSurfaceVariant)
     }
 
     private var transcribingContent: some View {
         VStack(spacing: 24) {
             heroTitle("PROCESSING")
             ProgressView()
-                .tint(Theme.primary)
+                .tint(theme.primary)
                 .scaleEffect(1.2)
         }
     }
@@ -218,11 +247,11 @@ struct RecordingView: View {
 
             HStack(alignment: .top, spacing: 16) {
                 Rectangle()
-                    .fill(Theme.primary)
+                    .fill(theme.primary)
                     .frame(width: 2)
                 Text(text)
                     .font(.system(size: 18, weight: .light))
-                    .foregroundStyle(Theme.onSurface)
+                    .foregroundStyle(theme.onSurface)
                     .lineSpacing(6)
             }
             .frame(maxHeight: 140)
@@ -249,7 +278,7 @@ struct RecordingView: View {
             heroTitle("ERROR")
             Text(message)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Theme.onSurfaceVariant)
+                .foregroundStyle(theme.onSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             brutalistButton("TRY AGAIN") { coordinator.reset() }
@@ -269,7 +298,7 @@ struct RecordingView: View {
         Text(text)
             .font(.system(size: 64, weight: .black))
             .tracking(-2)
-            .foregroundStyle(Theme.onSurface)
+            .foregroundStyle(theme.onSurface)
     }
 
     private func actionCircle<Icon: View>(
@@ -281,11 +310,11 @@ struct RecordingView: View {
             Button(action: action) {
                 ZStack {
                     Circle()
-                        .fill(Theme.primaryDim)
+                        .fill(theme.primaryDim)
                         .frame(width: Self.actionButtonSize, height: Self.actionButtonSize)
-                        .shadow(color: Theme.primaryDim.opacity(0.2), radius: 20)
+                        .shadow(color: theme.primaryDim.opacity(0.2), radius: 20)
                     Circle()
-                        .stroke(Theme.surfaceHighest, lineWidth: Self.actionButtonBorder)
+                        .stroke(theme.surfaceHighest, lineWidth: Self.actionButtonBorder)
                         .frame(width: Self.actionButtonSize, height: Self.actionButtonSize)
                     icon()
                 }
@@ -293,7 +322,7 @@ struct RecordingView: View {
             Text(label)
                 .font(.system(size: 10, weight: .bold))
                 .tracking(3)
-                .foregroundStyle(Theme.onSurface)
+                .foregroundStyle(theme.onSurface)
         }
     }
 
@@ -302,10 +331,10 @@ struct RecordingView: View {
             Text(title)
                 .font(.system(size: 12, weight: .bold))
                 .tracking(2)
-                .foregroundStyle(Theme.onSurface)
+                .foregroundStyle(theme.onSurface)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
-                .background(Theme.surfaceHigh)
+                .background(theme.surfaceHigh)
         }
     }
 
@@ -321,7 +350,7 @@ struct RecordingView: View {
                         width: Self.dotGridRadius * 2,
                         height: Self.dotGridRadius * 2
                     )
-                    context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(0.04)))
+                    context.fill(Path(ellipseIn: rect), with: .color(theme.dotGridColor))
                 }
             }
         }
