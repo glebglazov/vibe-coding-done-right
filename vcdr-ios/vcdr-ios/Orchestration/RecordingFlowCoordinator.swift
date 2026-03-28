@@ -137,9 +137,11 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    /// Stops recording and finalizes streaming transcription.
+    /// Stops recording and shows the result immediately from the live transcript.
+    /// Finalizes streaming in the background and updates the result if it differs.
     func stopAndTranscribe() async {
         audioRecorder.stopRecording()
+        updateTask?.cancel()
 
         guard let streaming = streamingManager else {
             state = .error("No streaming session")
@@ -147,30 +149,39 @@ final class RecordingFlowCoordinator {
             return
         }
 
-        state = .transcribing
+        // Show result immediately from the live transcript — no "PROCESSING" spinner.
+        let immediateText = TextPostProcessor.process(liveTranscript)
+        if !immediateText.isEmpty {
+            state = .complete(immediateText)
+        } else {
+            state = .transcribing
+        }
         writeState(.transcribing)
+        liveTranscript = ""
 
+        // Finalize streaming in background — may refine the last few words.
         do {
             let rawText = try await streaming.finish()
-            let text = TextPostProcessor.process(rawText)
+            let finalText = TextPostProcessor.process(rawText)
 
             // Send result to keyboard extension when recording was initiated via deep link
             if launchedViaDeepLink {
-                SharedConstants.sharedDefaults.set(text, forKey: SharedConstants.transcriptionResultKey)
+                SharedConstants.sharedDefaults.set(finalText, forKey: SharedConstants.transcriptionResultKey)
                 DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
             }
 
-            state = .complete(text)
+            state = .complete(finalText)
             writeState(.idle)
-            liveTranscript = ""
-            Logger.app.info("Streaming transcription complete: \(text.prefix(50))...")
+            Logger.app.info("Streaming transcription complete: \(finalText.prefix(50))...")
         } catch {
-            state = .error("Transcription failed: \(error.localizedDescription)")
+            // If finish() fails but we already have immediate text, keep it
+            if immediateText.isEmpty {
+                state = .error("Transcription failed: \(error.localizedDescription)")
+            }
             writeState(.idle)
             Logger.app.error("Streaming transcription failed: \(error)")
         }
 
-        updateTask?.cancel()
         streamingManager = nil
     }
 
