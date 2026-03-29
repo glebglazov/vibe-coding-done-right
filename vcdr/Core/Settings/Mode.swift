@@ -3,6 +3,7 @@ import Foundation
 enum ProcessingType: String, Codable, CaseIterable {
     case none
     case bashScript
+    case companion
 }
 
 struct ModeParameterOption: Identifiable, Codable, Equatable {
@@ -55,6 +56,8 @@ struct Mode: Identifiable, Codable, Equatable {
     var processingCommand: String
     var systemPromptEnabled: Bool
     var systemPrompt: String
+    /// Integration mode sent to companion server (e.g. "dictation")
+    var companionIntegrationMode: String
 
     // Parameters
     var parameters: [ModeParameter]
@@ -91,12 +94,16 @@ struct Mode: Identifiable, Codable, Equatable {
     func applyPreProcessing(_ text: String, captures: [CapturedContext]) -> String {
         var result = text
 
-        if processingType == .bashScript {
+        switch processingType {
+        case .bashScript:
             result = "<dictation>\(result)</dictation>"
-
             if systemPromptEnabled && !systemPrompt.isEmpty {
                 result = systemPrompt + "\n\n" + result
             }
+        case .companion:
+            result = "<dictation>\(result)</dictation>"
+        case .none:
+            break
         }
 
         if !captures.isEmpty {
@@ -182,6 +189,7 @@ struct Mode: Identifiable, Codable, Equatable {
         processingCommand: String = "",
         systemPromptEnabled: Bool = false,
         systemPrompt: String = "",
+        companionIntegrationMode: String = "dictation",
         defaultOutputDestinationID: UUID = OutputDestination.builtInPasteToInitialAppID,
         parameters: [ModeParameter] = [],
         showPreview: Bool = false,
@@ -195,6 +203,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.processingCommand = processingCommand
         self.systemPromptEnabled = systemPromptEnabled
         self.systemPrompt = systemPrompt
+        self.companionIntegrationMode = companionIntegrationMode
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.parameters = parameters
         self.showPreview = showPreview
@@ -207,6 +216,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case id, name, isDisabled, templateID
         case processingType, processingCommand
         case systemPromptEnabled, systemPrompt
+        case companionIntegrationMode
         case defaultOutputDestinationID
         case parameters
         case showPreview
@@ -227,6 +237,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(processingCommand, forKey: .processingCommand)
         try container.encode(systemPromptEnabled, forKey: .systemPromptEnabled)
         try container.encode(systemPrompt, forKey: .systemPrompt)
+        try container.encode(companionIntegrationMode, forKey: .companionIntegrationMode)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
         try container.encode(showPreview, forKey: .showPreview)
@@ -243,6 +254,7 @@ struct Mode: Identifiable, Codable, Equatable {
         templateID = try container.decodeIfPresent(String.self, forKey: .templateID)
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
+        companionIntegrationMode = try container.decodeIfPresent(String.self, forKey: .companionIntegrationMode) ?? "dictation"
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteToInitialAppID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
         // New key takes precedence; fall back to inverted legacy quickAction

@@ -49,10 +49,17 @@ struct ModeDetailView: View {
                 Picker(selection: $mode.processingType) {
                     Text("None").tag(ProcessingType.none)
                     Text("Bash Script").tag(ProcessingType.bashScript)
+                    Text("Companion").tag(ProcessingType.companion)
                 } label: {
                     EmptyView()
                 }
                 .pickerStyle(.radioGroup)
+
+                if mode.processingType == .companion {
+                    Picker("Integration Mode", selection: $mode.companionIntegrationMode) {
+                        Text("Dictation").tag("dictation")
+                    }
+                }
 
                 if mode.processingType == .bashScript {
                     Menu("Load Preset") {

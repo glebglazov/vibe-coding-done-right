@@ -119,7 +119,9 @@ final class CaptureCoordinator {
             variableEnvironment: snapshot.pipelineContext.variableEnvironment,
             destination: destination,
             targetAppPID: snapshot.pipelineContext.targetAppPID,
-            saveResultToClipboard: snapshot.mode.saveResultToClipboard
+            saveResultToClipboard: snapshot.mode.saveResultToClipboard,
+            companionHost: snapshot.pipelineContext.companionHost,
+            companionApiKey: snapshot.pipelineContext.companionApiKey
         )
         let overriddenSnapshot = SubmissionSnapshot(
             pipelineContext: overriddenContext,

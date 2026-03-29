@@ -17,7 +17,9 @@ enum TextProcessingPipeline {
         text: String,
         captures: [CapturedContext],
         parameterValues: [String: String] = [:],
-        variableEnvironment: [String: String] = [:]
+        variableEnvironment: [String: String] = [:],
+        companionHost: String = "",
+        companionApiKey: String = ""
     ) async throws -> PipelineResult {
         let preprocessedText = mode.applyPreProcessing(text, captures: captures)
 
@@ -35,6 +37,14 @@ enum TextProcessingPipeline {
                 command: mode.processingCommand,
                 text: preprocessedText,
                 extraEnvironment: combinedEnv
+            )
+            return PipelineResult(text: processedText, hadExternalProcessing: true)
+        case .companion:
+            let processedText = try await CompanionClient.process(
+                text: preprocessedText,
+                host: companionHost,
+                apiKey: companionApiKey,
+                integrationMode: mode.companionIntegrationMode
             )
             return PipelineResult(text: processedText, hadExternalProcessing: true)
         }

@@ -14,6 +14,8 @@ struct HomeTabView: View {
     let hasMicrophonePermission: Bool
     let hasAccessibilityPermission: Bool
     let isInitialized: Bool
+    @State private var isEditingApiKey = false
+    @State private var apiKeyDraft = ""
 
     private var needsPermissionAttention: Bool {
         isInitialized && (!hasMicrophonePermission || !hasAccessibilityPermission)
@@ -135,6 +137,41 @@ struct HomeTabView: View {
                     )
                 )
             }
+            Section("Companion Server") {
+                Toggle("Enabled", isOn: Binding(
+                    get: { settings.companionServer.enabled },
+                    set: { settings.companionServer.enabled = $0 }
+                ))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Host")
+                        .foregroundStyle(.secondary)
+                    TextField("vcdr-server.example.com", text: Binding(
+                        get: { settings.companionServer.host },
+                        set: { settings.companionServer.host = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("API Key")
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text(maskedApiKey)
+                            .foregroundStyle(settings.companionServer.apiKey.isEmpty ? .secondary : .primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Edit") { isEditingApiKey = true }
+                            .controlSize(.small)
+                    }
+                    .sheet(isPresented: $isEditingApiKey) {
+                        apiKeyEditor
+                    }
+                }
+
+                Text("Enhances transcriptions using AI. Scan the server's QR code or enter connection details manually.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .navigationTitle("Home")
@@ -153,5 +190,34 @@ struct HomeTabView: View {
     private var canToggleRecording: Bool {
         let state = coordinator.state
         return state == .idle || state == .preparingToRecord || state == .recording
+    }
+
+    private var maskedApiKey: String {
+        let key = settings.companionServer.apiKey
+        guard key.count > 6 else {
+            return key.isEmpty ? "Not set" : String(repeating: "•", count: key.count)
+        }
+        return "\(key.prefix(3))•••\(key.suffix(3))"
+    }
+
+    private var apiKeyEditor: some View {
+        VStack(spacing: 16) {
+            Text("API Key")
+                .font(.headline)
+            TextField("Enter API key", text: $apiKeyDraft)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 300)
+            HStack {
+                Button("Cancel") { isEditingApiKey = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    settings.companionServer.apiKey = apiKeyDraft
+                    isEditingApiKey = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .onAppear { apiKeyDraft = settings.companionServer.apiKey }
     }
 }

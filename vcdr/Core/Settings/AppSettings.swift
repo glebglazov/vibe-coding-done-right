@@ -73,6 +73,9 @@ final class AppSettings {
     var variables: [Variable] {
         didSet { save() }
     }
+    var companionServer: CompanionServerSettings {
+        didSet { save() }
+    }
 
     /// Modes visible in the mode switcher and default settings list.
     /// Excludes disabled modes and template modes whose tools are unavailable.
@@ -114,6 +117,7 @@ final class AppSettings {
         static let audioSettings = "audioSettings"
 
         static let variables = "variables"
+        static let companionServer = "companionServer"
         static let removeFillerWords = "removeFillerWords"
         static let terminatorTemplateEnabled = "terminatorTemplateEnabled"
         static let terminatorTemplate = "terminatorTemplate"
@@ -234,6 +238,9 @@ final class AppSettings {
         // Load variables
         self.variables = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
 
+        // Load companion server settings
+        self.companionServer = Self.decodeSetting(from: userDefaults, forKey: Keys.companionServer, default: .default)
+
         // Ensure built-in destinations exist (migration for existing installs)
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
             outputDestinations.append(OutputDestination.makeDefaultCopy())
@@ -259,6 +266,7 @@ final class AppSettings {
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
         encode(variables, forKey: Keys.variables)
+        encode(companionServer, forKey: Keys.companionServer)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
         userDefaults.set(transcriptionSettings.terminatorTemplateEnabled, forKey: Keys.terminatorTemplateEnabled)
         userDefaults.set(transcriptionSettings.terminatorTemplate, forKey: Keys.terminatorTemplate)

@@ -26,7 +26,9 @@ extension CaptureCoordinator {
                 parameterValues: overrides.resolvedParameterValues(for: mode),
                 variableEnvironment: settings.variableEnvironment,
                 destination: destination, targetAppPID: result.previousActiveApp?.processIdentifier,
-                saveResultToClipboard: mode.saveResultToClipboard
+                saveResultToClipboard: mode.saveResultToClipboard,
+                companionHost: settings.companionServer.host,
+                companionApiKey: settings.companionServer.apiKey
             ),
             mode: mode,
             inputSegments: quickSegments,

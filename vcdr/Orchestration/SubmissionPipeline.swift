@@ -15,6 +15,8 @@ enum SubmissionPipeline {
         let destination: OutputDestination
         let targetAppPID: pid_t?
         let saveResultToClipboard: Bool
+        let companionHost: String
+        let companionApiKey: String
     }
 
     struct Result {
@@ -31,7 +33,9 @@ enum SubmissionPipeline {
             text: context.text,
             captures: context.captures,
             parameterValues: context.parameterValues,
-            variableEnvironment: context.variableEnvironment
+            variableEnvironment: context.variableEnvironment,
+            companionHost: context.companionHost,
+            companionApiKey: context.companionApiKey
         )
         return Result(
             processedText: pipelineResult.text,
