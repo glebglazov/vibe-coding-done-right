@@ -4,11 +4,11 @@
 You assess how well a system prompt performed on the dictation cleanup eval set by comparing actual outputs to expected outputs.
 
 ## Task
-1. Read eval set from `thoughts/shared/dictation_evals.json`
-2. Read actual outputs from `thoughts/shared/eval_harness/outputs/{prompt_id}/` (one .txt file per eval case)
+1. Read eval set from `evals/dictation_prompts/evals.json`
+2. Read actual outputs from `evals/dictation_prompts/outputs/{prompt_id}/` (one .txt file per eval case)
 3. For each eval case, compare the actual output to the expected output
 4. Score each case on multiple dimensions (0.00 to 1.00)
-5. Append results to `thoughts/shared/eval_harness/results/scores.csv`
+5. Append results to `evals/dictation_prompts/results/scores.csv`
 6. Print a summary to the console
 
 ## Scoring dimensions
