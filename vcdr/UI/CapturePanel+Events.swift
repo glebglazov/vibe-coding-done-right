@@ -41,4 +41,5 @@ extension CapturePanel {
             self.onFocusLost?()
         }
     }
+    
 }
