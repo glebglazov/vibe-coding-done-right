@@ -168,6 +168,7 @@ final class CaptureCoordinator {
     private func clearPendingPreview() {
         pendingPreviewSnapshot = nil
         pendingPreviewText = nil
+        pendingCompanionRetryText = nil
     }
 
     func dismissOverlay(saveToHistory: Bool = true) {
