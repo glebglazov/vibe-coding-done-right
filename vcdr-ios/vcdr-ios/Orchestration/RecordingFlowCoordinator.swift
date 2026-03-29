@@ -16,7 +16,7 @@ final class RecordingFlowCoordinator {
         case error(String)
     }
 
-    enum CompanionStatus: Equatable {
+    enum AIProcessingStatus: Equatable {
         case idle
         case processing
         case timedOut
@@ -33,11 +33,11 @@ final class RecordingFlowCoordinator {
     /// When true, the current recording was started via deep link from keyboard.
     /// Exposed for the view to show/hide the back button.
     private(set) var launchedViaDeepLink = false
-    /// Status of the companion server post-processing request
-    private(set) var companionStatus: CompanionStatus = .idle
-    /// Per-session override — allows disabling companion without changing global settings.
-    /// Initialized from `CompanionSettings.activeInDictation` at session start.
-    var companionActiveThisSession: Bool = CompanionSettings.activeInDictation
+    /// Status of the AI post-processing request
+    private(set) var aiProcessingStatus: AIProcessingStatus = .idle
+    /// Per-session override — allows disabling AI processing without changing global settings.
+    /// Initialized from `AIProcessingSettings.activeInDictation` at session start.
+    var aiActiveThisSession: Bool = AIProcessingSettings.activeInDictation
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
@@ -48,8 +48,8 @@ final class RecordingFlowCoordinator {
     /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
     /// until this task completes and the recognition task begins consuming them.
     private var streamingSetupTask: Task<Void, Error>?
-    /// Text sent to companion server — needed for retry
-    private var companionInputText: String = ""
+    /// Text sent to AI processing — needed for retry
+    private var aiInputText: String = ""
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
@@ -57,8 +57,8 @@ final class RecordingFlowCoordinator {
     private static let bounceBackDelay: Duration = .milliseconds(300)
     /// Delay after posting transcription result before returning to host app
     private static let returnToHostDelay: Duration = .milliseconds(500)
-    /// Time to wait before showing "server unavailable" notice
-    private static let companionTimeout: Duration = .seconds(5)
+    /// Time to wait before showing "AI unavailable" notice
+    private static let aiProcessingTimeout: Duration = .seconds(5)
 
     var isRecording: Bool { audioRecorder.isRecording }
     var audioLevels: [Float] { audioRecorder.audioLevels }
@@ -131,8 +131,8 @@ final class RecordingFlowCoordinator {
     /// - Parameter fromDeepLink: When true, transcription result will be sent to the keyboard extension.
     func startRecording(fromDeepLink: Bool = false) async {
         launchedViaDeepLink = fromDeepLink
-        companionActiveThisSession = CompanionSettings.activeInDictation
-        companionStatus = .idle
+        aiActiveThisSession = AIProcessingSettings.activeInDictation
+        aiProcessingStatus = .idle
 
         // Show "LISTENING" immediately — before any async work.
         // If audio fails to start, state reverts to .error below.
@@ -206,20 +206,20 @@ final class RecordingFlowCoordinator {
             transcribingMessage = ""
         }
 
-        let useCompanion = companionActiveThisSession && CompanionSettings.isConfigured
+        let useAI = aiActiveThisSession && AIProcessingSettings.isConfigured
 
-        // Show local result immediately unless companion will replace it
+        // Show local result immediately unless AI processing will replace it
         let immediateText = TextPostProcessor.process(liveTranscript)
-        if !useCompanion && !immediateText.isEmpty {
+        if !useAI && !immediateText.isEmpty {
             state = .complete(immediateText)
         } else {
             state = .transcribing
-            transcribingMessage = useCompanion ? "Enhancing with server..." : ""
+            transcribingMessage = useAI ? "Enhancing with AI..." : ""
         }
         writeState(.transcribing)
         liveTranscript = ""
 
-        // Request background execution time for deep-link flow so the companion
+        // Request background execution time for deep-link flow so the AI
         // HTTP request isn't throttled when the user switches to the keyboard app.
         let bgTaskID = launchedViaDeepLink
             ? UIApplication.shared.beginBackgroundTask()
@@ -231,10 +231,10 @@ final class RecordingFlowCoordinator {
             let finalText = TextPostProcessor.process(rawText)
             Logger.app.info("Streaming transcription complete: \(finalText.prefix(50))...")
 
-            // Wait up to 5s for companion server, or use local result
+            // Wait for AI processing, or use local result
             let resultText: String
-            if useCompanion {
-                resultText = await waitForCompanion(localText: finalText)
+            if useAI {
+                resultText = await waitForAIProcessing(localText: finalText)
             } else {
                 resultText = finalText
             }
@@ -267,48 +267,50 @@ final class RecordingFlowCoordinator {
         writeState(.idle)
         liveTranscript = ""
         launchedViaDeepLink = false
-        companionStatus = .idle
-        companionActiveThisSession = CompanionSettings.activeInDictation
-        companionInputText = ""
+        aiProcessingStatus = .idle
+        aiActiveThisSession = AIProcessingSettings.activeInDictation
+        aiInputText = ""
         updateTask?.cancel()
         streamingSetupTask?.cancel()
         streamingSetupTask = nil
         streamingManager = nil
     }
 
-    // MARK: - Companion Processing
+    // MARK: - AI Processing
 
-    /// Waits up to 5 seconds for the companion server to process text.
-    /// Returns server-enhanced text if available within the timeout, otherwise the local text.
-    /// Uses detached tasks + AsyncStream to race the server request against the timeout,
-    /// ensuring the HTTP request runs off the main actor and returns as soon as it completes.
-    private func waitForCompanion(localText: String) async -> String {
-        companionInputText = localText
-        companionStatus = .processing
-        let host = CompanionSettings.host
-        let apiKey = CompanionSettings.apiKey
-        let timeout = Self.companionTimeout
+    /// Races the AI API request against a timeout.
+    /// Returns AI-enhanced text if available within the timeout, otherwise the local text.
+    private func waitForAIProcessing(localText: String) async -> String {
+        aiInputText = localText
+        aiProcessingStatus = .processing
+        let provider = AIProcessingSettings.provider
+        let apiKey = AIProcessingSettings.activeApiKey
+        let systemPrompt = BuiltInPrompts.dictation
+        let timeout = Self.aiProcessingTimeout
         let startTime = ContinuousClock.now
 
         enum RaceResult: Sendable {
-            case server(String)
-            case serverError(String)
+            case ai(String)
+            case aiError(String)
             case timeout
         }
 
         let (stream, streamContinuation) = AsyncStream.makeStream(of: RaceResult.self)
 
+        let wrappedText = "<dictation>\(localText)</dictation>"
+
         // Run HTTP request off the main actor so it isn't serialized
-        let serverTask = Task.detached { [streamContinuation] in
+        let aiTask = Task.detached { [streamContinuation] in
             do {
-                let text = try await CompanionClient.process(
-                    text: localText, host: host, apiKey: apiKey
+                let text = try await AIClient.process(
+                    text: wrappedText, systemPrompt: systemPrompt,
+                    provider: provider, apiKey: apiKey
                 )
-                streamContinuation.yield(.server(text))
+                streamContinuation.yield(.ai(text))
             } catch is CancellationError {
                 // Cancelled — timeout won, no need to yield
             } catch {
-                streamContinuation.yield(.serverError(error.localizedDescription))
+                streamContinuation.yield(.aiError(error.localizedDescription))
             }
         }
 
@@ -317,7 +319,7 @@ final class RecordingFlowCoordinator {
                 try await Task.sleep(for: timeout)
                 streamContinuation.yield(.timeout)
             } catch {
-                // Cancelled — server won, no need to yield
+                // Cancelled — AI won, no need to yield
             }
         }
 
@@ -328,34 +330,34 @@ final class RecordingFlowCoordinator {
             break
         }
 
-        serverTask.cancel()
+        aiTask.cancel()
         timeoutTask.cancel()
         streamContinuation.finish()
 
         let elapsed = ContinuousClock.now - startTime
 
         switch raceResult {
-        case .server(let text):
-            companionStatus = .completed
+        case .ai(let text):
+            aiProcessingStatus = .completed
             state = .complete(text)
-            Logger.app.info("Companion processing completed in \(elapsed)")
+            Logger.app.info("AI processing completed in \(elapsed)")
             return text
-        case .serverError(let message):
-            companionStatus = .error(message)
-            Logger.app.error("Companion processing failed after \(elapsed): \(message)")
+        case .aiError(let message):
+            aiProcessingStatus = .error(message)
+            Logger.app.error("AI processing failed after \(elapsed): \(message)")
             return localText
         case .timeout:
-            companionStatus = .timedOut
-            Logger.app.warning("Companion server timed out after \(elapsed)")
+            aiProcessingStatus = .timedOut
+            Logger.app.warning("AI processing timed out after \(elapsed)")
             return localText
         }
     }
 
-    /// Retries the companion server request with the previously sent text.
-    func retryCompanion() {
-        guard !companionInputText.isEmpty else { return }
+    /// Retries the AI processing request with the previously sent text.
+    func retryAIProcessing() {
+        guard !aiInputText.isEmpty else { return }
         Task {
-            let result = await waitForCompanion(localText: companionInputText)
+            let result = await waitForAIProcessing(localText: aiInputText)
             state = .complete(result)
         }
     }

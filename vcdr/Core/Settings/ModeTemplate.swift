@@ -9,6 +9,8 @@ struct ModeTemplate {
     let processingCommand: String
     let systemPromptEnabled: Bool
     let systemPrompt: String
+    let aiProvider: AIProvider
+    let aiPromptType: AIPromptType
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
     let showPreview: Bool
@@ -23,6 +25,8 @@ struct ModeTemplate {
             processingCommand: processingCommand,
             systemPromptEnabled: systemPromptEnabled,
             systemPrompt: systemPrompt,
+            aiProvider: aiProvider,
+            aiPromptType: aiPromptType,
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
             showPreview: showPreview
@@ -36,6 +40,8 @@ struct ModeTemplate {
         mode.processingCommand = processingCommand
         mode.systemPromptEnabled = systemPromptEnabled
         mode.systemPrompt = systemPrompt
+        mode.aiProvider = aiProvider
+        mode.aiPromptType = aiPromptType
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.parameters = parameters
         mode.showPreview = showPreview
@@ -71,8 +77,25 @@ extension ModeTemplate {
         processingCommand: "",
         systemPromptEnabled: false,
         systemPrompt: "",
+        aiProvider: .anthropic,
+        aiPromptType: .dictation,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
+        showPreview: false
+    )
+
+    static let aiDictation = ModeTemplate(
+        id: "ai-dictation",
+        defaultName: "AI Dictation",
+        availabilityCommand: nil,
+        processingType: .aiProcessing,
+        processingCommand: "",
+        systemPromptEnabled: false,
+        systemPrompt: "",
+        aiProvider: .anthropic,
+        aiPromptType: .dictation,
+        parameters: [],
+        defaultOutputDestinationID: OutputDestination.builtInPasteToInitialAppID,
         showPreview: false
     )
 
@@ -84,6 +107,8 @@ extension ModeTemplate {
         processingCommand: "zsh -ic 'set -o pipefail; cd /tmp && claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"'",
         systemPromptEnabled: true,
         systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
+        aiProvider: .anthropic,
+        aiPromptType: .dictation,
         parameters: [
             ModeParameter(id: claudeCodeModelParamID, name: "Model", options: [
                 ModeParameterOption(id: claudeCodeHaikuOptionID, label: "Haiku", value: "haiku"),
@@ -103,6 +128,8 @@ extension ModeTemplate {
         processingCommand: "zsh -ic 'TERM=dumb ollama run --hidethinking --nowordwrap $VCDR_PARAM_MODEL \"$VCDR_TEXT\" 2>/dev/null'",
         systemPromptEnabled: true,
         systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
+        aiProvider: .anthropic,
+        aiPromptType: .dictation,
         parameters: [
             ModeParameter(id: ollamaModelParamID, name: "Model", options: [
                 ModeParameterOption(id: ollamaQwen35_08bOptionID, label: "Qwen3.5 - 0.8B", value: "qwen3.5:0.8b"),
@@ -113,5 +140,5 @@ extension ModeTemplate {
         showPreview: false
     )
 
-    static let all: [ModeTemplate] = [.plain, .claudeCode, .ollama]
+    static let all: [ModeTemplate] = [.plain, .aiDictation, .claudeCode, .ollama]
 }

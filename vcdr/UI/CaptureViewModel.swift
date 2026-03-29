@@ -36,8 +36,8 @@ final class CaptureViewModel {
     var initialAppName: String?
 
     @ObservationIgnored var processedByModeName: String?
-    /// Non-nil when companion processing failed — shown as a notice in the preview
-    var companionErrorMessage: String?
+    /// Non-nil when AI processing failed — shown as a notice in the preview
+    var aiProcessingErrorMessage: String?
     /// Set to true when the mode switcher is shown as a standalone panel — prevents
     /// the CapturePanel from auto-dismissing when it loses focus to the mode switcher.
     @ObservationIgnored var isSuspendedForModeSwitcher: Bool = false
@@ -62,8 +62,8 @@ final class CaptureViewModel {
     let onDestinationSubmit: ((UUID) -> Void)?
     let onExpand: () -> Void
     let audioRecorder: AudioRecorder?
-    /// Called when user taps Retry after companion processing failed
-    var onRetryCompanion: (() -> Void)?
+    /// Called when user taps Retry after AI processing failed
+    var onRetryAIProcessing: (() -> Void)?
 
     // MARK: - Computed
 

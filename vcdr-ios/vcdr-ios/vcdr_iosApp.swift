@@ -13,6 +13,10 @@ struct VCDRiOSApp: App {
                     coordinator.cleanupStaleResults()
                     // coordinator.setupCommandListener() — disabled: no background recording commands
                     await coordinator.initializeModel()
+                    // Fetch updated prompts in background (non-blocking)
+                    Task.detached {
+                        await PromptFetcher.refreshIfNeeded()
+                    }
                 }
                 .onOpenURL { url in
                     if url.scheme == "vcdr-ios", url.host == "record" {
@@ -20,14 +24,6 @@ struct VCDRiOSApp: App {
                         // shows "LISTENING" — eliminates the flash of the previous state.
                         coordinator.prepareForDeepLinkRecording()
                         Task { await coordinator.handleRecordDeepLink() }
-                    } else if url.host == "connect" {
-                        // QR pairing: vcdr://connect?host=...&key=...
-                        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                        let host = components?.queryItems?.first(where: { $0.name == "host" })?.value
-                        let key = components?.queryItems?.first(where: { $0.name == "key" })?.value
-                        if let host, let key {
-                            CompanionSettings.configureFromDeepLink(host: host, apiKey: key)
-                        }
                     }
                 }
         }
@@ -56,4 +52,3 @@ enum Appearance: String, CaseIterable {
         }
     }
 }
-

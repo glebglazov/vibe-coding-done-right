@@ -2,8 +2,40 @@ import Foundation
 
 enum ProcessingType: String, Codable, CaseIterable {
     case none
+    case aiProcessing
     case bashScript
-    case companion
+}
+
+enum AIProvider: String, Codable, CaseIterable {
+    case anthropic
+    case openai
+
+    var displayName: String {
+        switch self {
+        case .anthropic: "Anthropic"
+        case .openai: "OpenAI"
+        }
+    }
+
+    /// The variable name the user must set in Variables for this provider.
+    var apiKeyVariableName: String {
+        switch self {
+        case .anthropic: "ANTHROPIC_API_KEY"
+        case .openai: "OPENAI_API_KEY"
+        }
+    }
+}
+
+enum AIPromptType: String, Codable, CaseIterable {
+    case dictation
+    case custom
+
+    var displayName: String {
+        switch self {
+        case .dictation: "AI Dictation"
+        case .custom: "Custom"
+        }
+    }
 }
 
 struct ModeParameterOption: Identifiable, Codable, Equatable {
@@ -56,8 +88,8 @@ struct Mode: Identifiable, Codable, Equatable {
     var processingCommand: String
     var systemPromptEnabled: Bool
     var systemPrompt: String
-    /// Integration mode sent to companion server (e.g. "dictation")
-    var companionIntegrationMode: String
+    var aiProvider: AIProvider
+    var aiPromptType: AIPromptType
 
     // Parameters
     var parameters: [ModeParameter]
@@ -164,7 +196,8 @@ struct Mode: Identifiable, Codable, Equatable {
         processingCommand: String = "",
         systemPromptEnabled: Bool = false,
         systemPrompt: String = "",
-        companionIntegrationMode: String = "dictation",
+        aiProvider: AIProvider = .anthropic,
+        aiPromptType: AIPromptType = .dictation,
         defaultOutputDestinationID: UUID = OutputDestination.builtInPasteToInitialAppID,
         parameters: [ModeParameter] = [],
         showPreview: Bool = false,
@@ -178,7 +211,8 @@ struct Mode: Identifiable, Codable, Equatable {
         self.processingCommand = processingCommand
         self.systemPromptEnabled = systemPromptEnabled
         self.systemPrompt = systemPrompt
-        self.companionIntegrationMode = companionIntegrationMode
+        self.aiProvider = aiProvider
+        self.aiPromptType = aiPromptType
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.parameters = parameters
         self.showPreview = showPreview
@@ -191,7 +225,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case id, name, isDisabled, templateID
         case processingType, processingCommand
         case systemPromptEnabled, systemPrompt
-        case companionIntegrationMode
+        case aiProvider, aiPromptType
         case defaultOutputDestinationID
         case parameters
         case showPreview
@@ -200,6 +234,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case quickAction
         // Legacy keys (read-only, for migration)
         case actionType, bashCommand, pasteScriptOutput
+        case companionIntegrationMode // legacy, read-only for migration
     }
 
     func encode(to encoder: Encoder) throws {
@@ -212,7 +247,8 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(processingCommand, forKey: .processingCommand)
         try container.encode(systemPromptEnabled, forKey: .systemPromptEnabled)
         try container.encode(systemPrompt, forKey: .systemPrompt)
-        try container.encode(companionIntegrationMode, forKey: .companionIntegrationMode)
+        try container.encode(aiProvider, forKey: .aiProvider)
+        try container.encode(aiPromptType, forKey: .aiPromptType)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
         try container.encode(showPreview, forKey: .showPreview)
@@ -229,7 +265,6 @@ struct Mode: Identifiable, Codable, Equatable {
         templateID = try container.decodeIfPresent(String.self, forKey: .templateID)
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
-        companionIntegrationMode = try container.decodeIfPresent(String.self, forKey: .companionIntegrationMode) ?? "dictation"
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteToInitialAppID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
         // New key takes precedence; fall back to inverted legacy quickAction
@@ -243,9 +278,18 @@ struct Mode: Identifiable, Codable, Equatable {
         }
         saveResultToClipboard = try container.decodeIfPresent(Bool.self, forKey: .saveResultToClipboard) ?? false
 
-        // New fields
-        if let newProcessingType = try container.decodeIfPresent(ProcessingType.self, forKey: .processingType) {
-            self.processingType = newProcessingType
+        // New fields — with companion → aiProcessing migration
+        if let rawType = try container.decodeIfPresent(String.self, forKey: .processingType) {
+            if rawType == "companion" {
+                // Migration: companion → aiProcessing with Anthropic defaults
+                self.processingType = .aiProcessing
+                self.aiProvider = .anthropic
+                self.aiPromptType = .dictation
+            } else {
+                self.processingType = ProcessingType(rawValue: rawType) ?? .none
+                self.aiProvider = try container.decodeIfPresent(AIProvider.self, forKey: .aiProvider) ?? .anthropic
+                self.aiPromptType = try container.decodeIfPresent(AIPromptType.self, forKey: .aiPromptType) ?? .dictation
+            }
             self.processingCommand = try container.decodeIfPresent(String.self, forKey: .processingCommand) ?? ""
         } else {
             // Migrate from legacy actionType + bashCommand
@@ -259,6 +303,8 @@ struct Mode: Identifiable, Codable, Equatable {
                 self.processingType = .none
                 self.processingCommand = ""
             }
+            self.aiProvider = .anthropic
+            self.aiPromptType = .dictation
         }
     }
 }

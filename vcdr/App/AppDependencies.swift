@@ -98,6 +98,11 @@ final class AppDependencies {
         // Check tool availability and create template modes (async to avoid blocking main thread)
         await settings.refreshTemplateAvailability()
 
+        // Fetch updated prompts from server in background (non-blocking)
+        Task.detached {
+            await PromptFetcher.refreshIfNeeded()
+        }
+
         checkPermissions()
         isInitialized = true
         startPermissionPolling()

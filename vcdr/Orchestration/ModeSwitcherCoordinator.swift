@@ -43,7 +43,7 @@ final class ModeSwitcherCoordinator {
     /// Creates a ModeSwitcherViewModel with standard callbacks.
     /// `onDismiss` is caller-provided to handle context-specific cleanup.
     func makeViewModel(onDismiss: @escaping () -> Void) -> ModeSwitcherViewModel {
-        let modes = settings.visibleModes
+        let modes = settings.switcherModes
         let activeIndex = modes.firstIndex(where: { $0.id == settings.activeModeID }) ?? 0
 
         let vm = ModeSwitcherViewModel(
@@ -82,7 +82,7 @@ final class ModeSwitcherCoordinator {
     }
 
     func showSwitcher() {
-        let modes = settings.visibleModes
+        let modes = settings.switcherModes
         guard !modes.isEmpty else { return }
 
         delegate?.modeSwitcherWillShow()

@@ -25,10 +25,10 @@ extension CapturePanel {
         expand()
     }
 
-    /// Shows the preview with a companion error notice — user can use raw text or retry.
-    func setCompanionError(_ message: String) {
+    /// Shows the preview with an AI processing error notice — user can use raw text or retry.
+    func setAIProcessingError(_ message: String) {
         guard let viewModel else { return }
-        viewModel.companionErrorMessage = "Companion: \(message)"
+        viewModel.aiProcessingErrorMessage = "AI: \(message)"
         viewModel.phaseState.phase = .idle
         if viewModel.isMinimized {
             expand()

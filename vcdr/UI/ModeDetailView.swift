@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ModeDetailView: View {
     @Binding var mode: Mode
+    let settings: AppSettings
     let outputDestinations: [OutputDestination]
     let definedVariableNames: Set<String>
     @FocusState private var isNameFieldFocused: Bool
@@ -48,24 +49,55 @@ struct ModeDetailView: View {
             Section("Processing") {
                 Picker(selection: $mode.processingType) {
                     Text("None").tag(ProcessingType.none)
+                    Text("AI Processing").tag(ProcessingType.aiProcessing)
                     Text("Bash Script").tag(ProcessingType.bashScript)
-                    Text("Companion").tag(ProcessingType.companion)
                 } label: {
                     EmptyView()
                 }
                 .pickerStyle(.radioGroup)
 
-                if mode.processingType == .companion {
-                    Picker("Integration Mode", selection: $mode.companionIntegrationMode) {
-                        Text("Dictation").tag("dictation")
+                if mode.processingType == .aiProcessing {
+                    if !settings.isModeConfigured(mode) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.yellow)
+                            Text("Set \(mode.aiProvider.apiKeyVariableName) in Variables to use this mode.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Picker("Provider", selection: $mode.aiProvider) {
+                        ForEach(AIProvider.allCases, id: \.self) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
+                    }
+
+                    Picker("Prompt", selection: $mode.aiPromptType) {
+                        ForEach(AIPromptType.allCases, id: \.self) { promptType in
+                            Text(promptType.displayName).tag(promptType)
+                        }
+                    }
+
+                    if mode.aiPromptType == .custom {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("System Prompt")
+                                .foregroundStyle(.secondary)
+                            TextEditor(text: $mode.systemPrompt)
+                                .font(.body)
+                                .frame(minHeight: 80)
+                                .border(Color.secondary.opacity(0.3))
+                        }
                     }
                 }
 
                 if mode.processingType == .bashScript {
-                    Menu("Load Preset") {
-                        ForEach(BashScriptPreset.all) { preset in
-                            Button(preset.name) {
-                                preset.apply(to: &mode)
+                    if !BashScriptPreset.all.isEmpty {
+                        Menu("Load Preset") {
+                            ForEach(BashScriptPreset.all) { preset in
+                                Button(preset.name) {
+                                    preset.apply(to: &mode)
+                                }
                             }
                         }
                     }

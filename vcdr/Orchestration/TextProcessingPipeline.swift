@@ -2,18 +2,18 @@ import Foundation
 import OSLog
 
 /// Result of running the text processing pipeline, including metadata
-/// about whether external processing (e.g. a bash script) was invoked.
+/// about whether external processing (e.g. a bash script or AI) was invoked.
 struct PipelineResult {
     let text: String
-    /// True when the pipeline executed an external command (bash script or companion)
-    /// whose stdout became the output.
+    /// True when the pipeline executed an external command (bash script or AI processing)
+    /// whose output became the result.
     let hadExternalProcessing: Bool
-    /// When companion processing fails, this contains the raw text and error message
+    /// When AI processing fails, this contains the raw text and error message
     /// so the caller can offer a preview with retry.
-    let companionFallback: CompanionFallback?
+    let aiProcessingFallback: AIProcessingFallback?
 }
 
-struct CompanionFallback {
+struct AIProcessingFallback {
     let rawText: String
     let errorMessage: String
 }
@@ -22,7 +22,7 @@ enum TextProcessingPipeline {
 
     /// Runs the three-stage text processing pipeline:
     /// 1. Algorithmic pre-processing — speech cleanup (filler word removal)
-    /// 2. External processing — input structuring + content processing (none/bash/companion)
+    /// 2. External processing — input structuring + content processing (none/AI/bash)
     /// 3. Algorithmic post-processing — output formatting (terminator)
     static func run(
         mode: Mode,
@@ -30,8 +30,6 @@ enum TextProcessingPipeline {
         captures: [CapturedContext],
         parameterValues: [String: String] = [:],
         variableEnvironment: [String: String] = [:],
-        companionHost: String = "",
-        companionApiKey: String = "",
         removeFillerWords: Bool = false,
         terminatorTemplateEnabled: Bool = false,
         terminatorTemplate: String = ""
@@ -45,7 +43,31 @@ enum TextProcessingPipeline {
 
         switch mode.processingType {
         case .none:
-            result = PipelineResult(text: structured, hadExternalProcessing: false, companionFallback: nil)
+            result = PipelineResult(text: structured, hadExternalProcessing: false, aiProcessingFallback: nil)
+
+        case .aiProcessing:
+            let apiKey = variableEnvironment[mode.aiProvider.apiKeyVariableName] ?? ""
+            let systemPrompt: String = switch mode.aiPromptType {
+            case .dictation: BuiltInPrompts.dictation
+            case .custom: mode.systemPrompt
+            }
+            do {
+                let processedText = try await AIClient.process(
+                    text: structured,
+                    systemPrompt: systemPrompt,
+                    provider: mode.aiProvider,
+                    apiKey: apiKey
+                )
+                result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
+            } catch {
+                Logger.app.warning("AI processing failed, falling back to raw text: \(error)")
+                let fallbackText = structureInputPlaintext(text: cleanedText, captures: captures)
+                result = PipelineResult(
+                    text: fallbackText,
+                    hadExternalProcessing: false,
+                    aiProcessingFallback: AIProcessingFallback(rawText: cleanedText, errorMessage: error.localizedDescription)
+                )
+            }
 
         case .bashScript:
             let paramEnv = Dictionary(
@@ -58,29 +80,7 @@ enum TextProcessingPipeline {
                 text: structured,
                 extraEnvironment: combinedEnv
             )
-            result = PipelineResult(text: processedText, hadExternalProcessing: true, companionFallback: nil)
-
-        case .companion:
-            do {
-                let processedText = try await CompanionClient.process(
-                    text: structured,
-                    host: companionHost,
-                    apiKey: companionApiKey,
-                    integrationMode: mode.companionIntegrationMode
-                )
-                result = PipelineResult(text: processedText, hadExternalProcessing: true, companionFallback: nil)
-            } catch {
-                Logger.app.warning("Companion processing failed, reprocessing as .none: \(error)")
-                // Companion failed — reprocess as if processing type were .none.
-                // Structure input for human-readable output (plaintext captures).
-                let fallbackText = structureInputPlaintext(text: cleanedText, captures: captures)
-                // companionFallback.rawText stores cleanedText (no structuring) for retry.
-                result = PipelineResult(
-                    text: fallbackText,
-                    hadExternalProcessing: false,
-                    companionFallback: CompanionFallback(rawText: cleanedText, errorMessage: error.localizedDescription)
-                )
-            }
+            result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
         }
 
         // MARK: Algorithmic post-processing — output formatting
@@ -91,7 +91,7 @@ enum TextProcessingPipeline {
         return PipelineResult(
             text: finalText,
             hadExternalProcessing: result.hadExternalProcessing,
-            companionFallback: result.companionFallback
+            aiProcessingFallback: result.aiProcessingFallback
         )
     }
 
@@ -107,8 +107,12 @@ enum TextProcessingPipeline {
         switch mode.processingType {
         case .none:
             return structureInputPlaintext(text: text, captures: captures)
-        case .bashScript, .companion:
-            return structureInputXML(text: text, captures: captures, mode: mode)
+        case .aiProcessing:
+            // AI processing: XML structure WITHOUT system prompt in the text
+            // (system prompt is sent as a separate API parameter)
+            return structureInputXML(text: text, captures: captures, includeSystemPrompt: false, mode: mode)
+        case .bashScript:
+            return structureInputXML(text: text, captures: captures, includeSystemPrompt: true, mode: mode)
         }
     }
 
@@ -127,15 +131,16 @@ enum TextProcessingPipeline {
         return text + "\n\n" + quoted
     }
 
-    /// XML input structuring for .bashScript/.companion — <dictation> wrapping,
+    /// XML input structuring for .aiProcessing/.bashScript — <dictation> wrapping,
     /// optional system prompt, and XML capture tags for machine-parseable input.
     private static func structureInputXML(
         text: String,
         captures: [CapturedContext],
+        includeSystemPrompt: Bool,
         mode: Mode
     ) -> String {
         var result = "<dictation>\(text)</dictation>"
-        if mode.systemPromptEnabled && !mode.systemPrompt.isEmpty {
+        if includeSystemPrompt && mode.systemPromptEnabled && !mode.systemPrompt.isEmpty {
             result = mode.systemPrompt + "\n\n" + result
         }
         if !captures.isEmpty {

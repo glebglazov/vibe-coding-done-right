@@ -166,9 +166,12 @@ struct RecordingView: View {
                 WaveformView(levels: coordinator.audioLevels)
                     .frame(height: 120)
                     .padding(.horizontal, 8)
+
+                aiSessionToggle
+                    .padding(.top, 20)
             }
 
-            // Top overlay — return hint (left) and companion toggle (right)
+            // Top overlay — return hint
             VStack {
                 HStack {
                     if coordinator.launchedViaDeepLink {
@@ -176,8 +179,6 @@ struct RecordingView: View {
                             .padding(.leading, 20)
                     }
                     Spacer()
-                    companionSessionToggle
-                        .padding(.trailing, 20)
                 }
                 .padding(.top, 16)
                 Spacer()
@@ -272,7 +273,7 @@ struct RecordingView: View {
             .frame(maxHeight: 140)
             .padding(.horizontal, 32)
 
-            companionStatusView
+            aiStatusView
 
             HStack(spacing: 16) {
                 brutalistButton(showCopiedConfirmation ? "COPIED" : "COPY") {
@@ -291,35 +292,35 @@ struct RecordingView: View {
     }
 
     @ViewBuilder
-    private var companionStatusView: some View {
-        if !coordinator.companionActiveThisSession || coordinator.companionStatus == .idle {
+    private var aiStatusView: some View {
+        if !coordinator.aiActiveThisSession || coordinator.aiProcessingStatus == .idle {
             EmptyView()
-        } else if coordinator.companionStatus == .processing {
+        } else if coordinator.aiProcessingStatus == .processing {
             HStack(spacing: 8) {
                 ProgressView()
                     .tint(theme.onSurfaceVariant)
                     .scaleEffect(0.8)
-                Text("SERVER PROCESSING")
+                Text("AI PROCESSING")
                     .font(.system(size: 11, weight: .bold))
                     .tracking(2)
                     .foregroundStyle(theme.onSurfaceVariant)
             }
-        } else if coordinator.companionStatus == .timedOut {
+        } else if coordinator.aiProcessingStatus == .timedOut {
             VStack(spacing: 8) {
-                Text("SERVER UNAVAILABLE")
+                Text("AI UNAVAILABLE")
                     .font(.system(size: 11, weight: .bold))
                     .tracking(2)
                     .foregroundStyle(theme.onSurfaceVariant)
                 brutalistButton("RETRY") {
-                    coordinator.retryCompanion()
+                    coordinator.retryAIProcessing()
                 }
             }
-        } else if coordinator.companionStatus == .completed {
-            Text("ENHANCED BY SERVER")
+        } else if coordinator.aiProcessingStatus == .completed {
+            Text("ENHANCED BY AI")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(2)
                 .foregroundStyle(theme.primary)
-        } else if case .error(let message) = coordinator.companionStatus {
+        } else if case .error(let message) = coordinator.aiProcessingStatus {
             VStack(spacing: 8) {
                 Text(message.uppercased())
                     .font(.system(size: 11, weight: .bold))
@@ -328,26 +329,26 @@ struct RecordingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                 brutalistButton("RETRY") {
-                    coordinator.retryCompanion()
+                    coordinator.retryAIProcessing()
                 }
             }
         }
     }
 
     @ViewBuilder
-    private var companionSessionToggle: some View {
-        if CompanionSettings.isConfigured {
+    private var aiSessionToggle: some View {
+        if AIProcessingSettings.isConfigured {
             Button {
-                coordinator.companionActiveThisSession.toggle()
+                coordinator.aiActiveThisSession.toggle()
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: coordinator.companionActiveThisSession ? "server.rack" : "server.rack")
+                    Image(systemName: "sparkles")
                         .font(.system(size: 12))
-                    Text(coordinator.companionActiveThisSession ? "SERVER ON" : "SERVER OFF")
+                    Text(coordinator.aiActiveThisSession ? "AI ON" : "AI OFF")
                         .font(.system(size: 11, weight: .bold))
                         .tracking(2)
                 }
-                .foregroundStyle(coordinator.companionActiveThisSession ? theme.primary : theme.onSurfaceVariant)
+                .foregroundStyle(coordinator.aiActiveThisSession ? theme.primary : theme.onSurfaceVariant)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(theme.surfaceHigh)

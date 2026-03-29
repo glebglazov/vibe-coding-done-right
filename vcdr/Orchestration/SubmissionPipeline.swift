@@ -15,8 +15,6 @@ enum SubmissionPipeline {
         let destination: OutputDestination
         let targetAppPID: pid_t?
         let saveResultToClipboard: Bool
-        let companionHost: String
-        let companionApiKey: String
         // Algorithmic processing settings
         let removeFillerWords: Bool
         let terminatorTemplateEnabled: Bool
@@ -26,7 +24,7 @@ enum SubmissionPipeline {
     struct Result {
         let processedText: String
         let hadExternalProcessing: Bool
-        let companionFallback: CompanionFallback?
+        let aiProcessingFallback: AIProcessingFallback?
     }
 
     // MARK: - Non-Streaming Execution
@@ -39,8 +37,6 @@ enum SubmissionPipeline {
             captures: context.captures,
             parameterValues: context.parameterValues,
             variableEnvironment: context.variableEnvironment,
-            companionHost: context.companionHost,
-            companionApiKey: context.companionApiKey,
             removeFillerWords: context.removeFillerWords,
             terminatorTemplateEnabled: context.terminatorTemplateEnabled,
             terminatorTemplate: context.terminatorTemplate
@@ -48,7 +44,7 @@ enum SubmissionPipeline {
         return Result(
             processedText: pipelineResult.text,
             hadExternalProcessing: pipelineResult.hadExternalProcessing,
-            companionFallback: pipelineResult.companionFallback
+            aiProcessingFallback: pipelineResult.aiProcessingFallback
         )
     }
 

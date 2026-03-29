@@ -26,6 +26,7 @@ struct ModesListView: View {
                         mode: mode,
                         isActive: mode.id == settings.activeModeID,
                         isHidden: !settings.visibleModes.contains(where: { $0.id == mode.id }),
+                        isUnconfigured: !settings.isModeConfigured(mode),
                         switcherNumber: switcherNumber(for: mode),
                         outputDestinationName: settings.outputDestination(for: mode.defaultOutputDestinationID).name
                     )
@@ -92,7 +93,7 @@ struct ModesListView: View {
 
     /// Returns the 1-based switcher shortcut number for a mode, or nil if not in the switcher.
     private func switcherNumber(for mode: Mode) -> Int? {
-        guard let index = settings.visibleModes.firstIndex(where: { $0.id == mode.id }),
+        guard let index = settings.switcherModes.firstIndex(where: { $0.id == mode.id }),
               index < ModeSwitcherPanel.maxModesInSwitcher else { return nil }
         return index + 1
     }
@@ -126,6 +127,7 @@ private struct ModeRowView: View {
     let mode: Mode
     let isActive: Bool
     let isHidden: Bool
+    let isUnconfigured: Bool
     /// 1-based position in the mode switcher (1-9), or nil if not in switcher
     let switcherNumber: Int?
     let outputDestinationName: String
@@ -149,9 +151,20 @@ private struct ModeRowView: View {
                         ActiveModeIndicator()
                     }
                 }
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if isUnconfigured {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                            .font(.caption2)
+                        Text("Set \(mode.aiProvider.apiKeyVariableName) in Variables")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             if mode.templateID != nil {
@@ -165,11 +178,15 @@ private struct ModeRowView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .opacity(isHidden ? 0.5 : 1.0)
+        .opacity(isHidden || isUnconfigured ? 0.5 : 1.0)
     }
 
     private var subtitle: String {
-        let processing = mode.processingType == .bashScript ? "Script" : "Direct"
+        let processing: String = switch mode.processingType {
+        case .none: "Direct"
+        case .aiProcessing: "AI · \(mode.aiProvider.displayName)"
+        case .bashScript: "Script"
+        }
         if let params = mode.defaultParameterLabels {
             return "\(processing) · \(params) → \(outputDestinationName)"
         }

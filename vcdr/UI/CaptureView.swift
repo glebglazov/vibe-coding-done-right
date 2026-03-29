@@ -126,15 +126,15 @@ struct CaptureView: View {
                 ErrorBannerView(message: errorMessage, onDismiss: { viewModel.clearError() })
                 Divider()
             }
-            if let companionError = viewModel.companionErrorMessage {
+            if let aiError = viewModel.aiProcessingErrorMessage {
                 HStack {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
-                    Text(companionError)
+                    Text(aiError)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if let retry = viewModel.onRetryCompanion {
+                    if let retry = viewModel.onRetryAIProcessing {
                         Button("Retry") { retry() }
                             .controlSize(.small)
                     }

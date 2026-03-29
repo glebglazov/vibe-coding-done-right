@@ -27,8 +27,6 @@ extension CaptureCoordinator {
                 variableEnvironment: settings.variableEnvironment,
                 destination: destination, targetAppPID: result.previousActiveApp?.processIdentifier,
                 saveResultToClipboard: mode.saveResultToClipboard,
-                companionHost: settings.companionServer.host,
-                companionApiKey: settings.companionServer.apiKey,
                 removeFillerWords: settings.removeFillerWords,
                 terminatorTemplateEnabled: settings.terminatorTemplateEnabled,
                 terminatorTemplate: settings.terminatorTemplate
@@ -77,19 +75,19 @@ extension CaptureCoordinator {
 
             guard !Task.isCancelled else { return }
 
-            // Companion failed — show preview with raw text so user can use it or retry
-            if let fallback = pipelineResult.companionFallback {
+            // AI processing failed — show preview with raw text so user can use it or retry
+            if let fallback = pipelineResult.aiProcessingFallback {
                 panel.showPreview(text: pipelineResult.processedText, modeName: nil)
-                panel.setCompanionError(fallback.errorMessage)
-                panel.viewModel?.onRetryCompanion = { [weak self] in
-                    self?.retryCompanionProcessing()
+                panel.setAIProcessingError(fallback.errorMessage)
+                panel.viewModel?.onRetryAIProcessing = { [weak self] in
+                    self?.retryAIProcessing()
                 }
                 pendingPreviewSnapshot = snapshot
                 pendingPreviewText = pipelineResult.processedText
-                pendingCompanionRetryText = fallback.rawText
+                pendingAIRetryText = fallback.rawText
                 immediateActionTask = nil
                 recordingIndicator.hide()
-                Logger.app.warning("Companion failed, showing preview with raw text for retry")
+                Logger.app.warning("AI processing failed, showing preview with raw text for retry")
                 return
             }
 
@@ -140,40 +138,46 @@ extension CaptureCoordinator {
         }
     }
 
-    // MARK: - Companion Retry
+    // MARK: - AI Processing Retry
 
-    func retryCompanionProcessing() {
+    func retryAIProcessing() {
         guard let snapshot = pendingPreviewSnapshot,
-              let rawText = pendingCompanionRetryText else { return }
+              let rawText = pendingAIRetryText else { return }
 
-        panel.viewModel?.companionErrorMessage = nil
+        panel.viewModel?.aiProcessingErrorMessage = nil
         panel.viewModel?.phaseState.phase = .processing
 
         immediateActionTask = Task { @MainActor in
             do {
-                let processedText = try await CompanionClient.process(
-                    text: rawText,
-                    host: snapshot.pipelineContext.companionHost,
-                    apiKey: snapshot.pipelineContext.companionApiKey,
-                    integrationMode: snapshot.mode.companionIntegrationMode
+                let apiKey = snapshot.pipelineContext.variableEnvironment[snapshot.mode.aiProvider.apiKeyVariableName] ?? ""
+                let systemPrompt: String = switch snapshot.mode.aiPromptType {
+                case .dictation: BuiltInPrompts.dictation
+                case .custom: snapshot.mode.systemPrompt
+                }
+                let structured = "<dictation>\(rawText)</dictation>"
+                var processedText = try await AIClient.process(
+                    text: structured,
+                    systemPrompt: systemPrompt,
+                    provider: snapshot.mode.aiProvider,
+                    apiKey: apiKey
                 )
                 guard !Task.isCancelled else { return }
-                // Apply algorithmic post-processing (output formatting) to companion result
-                let finalText = snapshot.pipelineContext.terminatorTemplateEnabled
-                    ? Mode.applyTerminator(processedText, terminator: snapshot.pipelineContext.terminatorTemplate)
-                    : processedText
-                panel.showPreview(text: finalText, modeName: snapshot.mode.name)
-                panel.viewModel?.companionErrorMessage = nil
-                pendingPreviewText = finalText
-                pendingCompanionRetryText = nil
+                // Apply algorithmic post-processing (output formatting)
+                if snapshot.pipelineContext.terminatorTemplateEnabled {
+                    processedText = Mode.applyTerminator(processedText, terminator: snapshot.pipelineContext.terminatorTemplate)
+                }
+                panel.showPreview(text: processedText, modeName: snapshot.mode.name)
+                panel.viewModel?.aiProcessingErrorMessage = nil
+                pendingPreviewText = processedText
+                pendingAIRetryText = nil
                 immediateActionTask = nil
-                Logger.app.info("Companion retry succeeded")
+                Logger.app.info("AI processing retry succeeded")
             } catch {
                 guard !Task.isCancelled else { return }
                 panel.viewModel?.phaseState.phase = .idle
-                panel.setCompanionError(error.localizedDescription)
+                panel.setAIProcessingError(error.localizedDescription)
                 immediateActionTask = nil
-                Logger.app.warning("Companion retry failed: \(error)")
+                Logger.app.warning("AI processing retry failed: \(error)")
             }
         }
     }

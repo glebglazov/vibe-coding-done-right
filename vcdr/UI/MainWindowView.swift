@@ -128,6 +128,7 @@ struct MainWindowView: View {
                                 get: { dependencies.settings.modes[index] },
                                 set: { dependencies.settings.modes[index] = $0 }
                             ),
+                            settings: dependencies.settings,
                             outputDestinations: dependencies.settings.outputDestinations,
                             definedVariableNames: dependencies.settings.definedVariableNames
                         )

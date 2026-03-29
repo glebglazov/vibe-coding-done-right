@@ -26,18 +26,6 @@ struct TranscriptionSettings: Codable, Equatable {
     )
 }
 
-struct CompanionServerSettings: Codable, Equatable {
-    var enabled: Bool
-    var host: String
-    var apiKey: String
-
-    var isConfigured: Bool {
-        enabled && !host.isEmpty && !apiKey.isEmpty
-    }
-
-    static let `default` = CompanionServerSettings(enabled: false, host: "", apiKey: "")
-}
-
 struct ModeConfiguration: Equatable {
     var modes: [Mode]
     var activeModeID: UUID

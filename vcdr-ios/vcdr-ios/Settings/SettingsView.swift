@@ -4,11 +4,13 @@ struct SettingsView: View {
     @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance: Appearance = .system
-    @AppStorage(CompanionSettings.enabledKey) private var companionEnabled = false
-    @AppStorage(CompanionSettings.hostKey) private var companionHost = ""
-    @AppStorage(CompanionSettings.apiKeyKey) private var companionApiKey = ""
-    @AppStorage(CompanionSettings.activeInDictationKey) private var companionActiveInDictation = false
-    @State private var isEditingApiKey = false
+    @AppStorage(AIProcessingSettings.enabledKey) private var aiEnabled = false
+    @AppStorage(AIProcessingSettings.activeInDictationKey) private var aiActiveInDictation = false
+    @AppStorage(AIProcessingSettings.providerKey) private var aiProviderRaw = AIProvider.anthropic.rawValue
+    @AppStorage(AIProcessingSettings.anthropicApiKeyKey) private var anthropicApiKey = ""
+    @AppStorage(AIProcessingSettings.openaiApiKeyKey) private var openaiApiKey = ""
+    @State private var isEditingAnthropicKey = false
+    @State private var isEditingOpenAIKey = false
 
     var body: some View {
         NavigationStack {
@@ -18,7 +20,7 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(spacing: 32) {
                         themeSection
-                        companionSection
+                        aiProcessingSection
                     }
                     .padding(24)
                 }
@@ -60,75 +62,112 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Companion
+    // MARK: - AI Processing
 
-    private var companionSection: some View {
+    private var aiProcessingSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            sectionTitle("COMPANION SERVER")
+            sectionTitle("AI PROCESSING")
 
-            Toggle(isOn: $companionEnabled) {
+            Toggle(isOn: $aiEnabled) {
                 Text("Enabled")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(theme.onSurface)
             }
             .tint(theme.primary)
 
-            Toggle(isOn: $companionActiveInDictation) {
-                Text("Active by default in dictation")
+            Toggle(isOn: $aiActiveInDictation) {
+                Text("Active by default")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(theme.onSurface)
             }
             .tint(theme.primary)
 
-            settingsField("Host", text: $companionHost, placeholder: "vcdr-server.example.com")
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
+            // Provider picker
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Provider")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.onSurfaceVariant)
+                HStack(spacing: 0) {
+                    ForEach(AIProvider.allCases, id: \.self) { provider in
+                        Button {
+                            aiProviderRaw = provider.rawValue
+                        } label: {
+                            Text(provider.displayName.uppercased())
+                                .font(.system(size: 11, weight: .bold))
+                                .tracking(2)
+                                .foregroundStyle(aiProviderRaw == provider.rawValue ? theme.onSurface : theme.onSurfaceVariant)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(aiProviderRaw == provider.rawValue ? theme.surfaceHigh : .clear)
+                        }
+                    }
+                }
+                .background(theme.surfaceContainer)
+            }
 
-            maskedApiKeyField
+            // Anthropic API Key
+            maskedApiKeyField(
+                label: "Anthropic API Key",
+                key: $anthropicApiKey,
+                isEditing: $isEditingAnthropicKey
+            )
 
-            Text("The companion server enhances transcriptions using AI. Scan the server's QR code to configure automatically.")
+            // OpenAI API Key
+            maskedApiKeyField(
+                label: "OpenAI API Key",
+                key: $openaiApiKey,
+                isEditing: $isEditingOpenAIKey
+            )
+
+            // Warning if selected provider has no key
+            if aiEnabled && AIProcessingSettings.activeApiKey.isEmpty {
+                let provider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
+                Text("Enter your \(provider.displayName) API key to enable AI processing.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.yellow)
+            }
+
+            Text("Enhances transcriptions using AI. Enter your API key for the selected provider.")
                 .font(.system(size: 12))
                 .foregroundStyle(theme.onSurfaceVariant)
         }
     }
 
-    private var maskedApiKeyField: some View {
+    // MARK: - Components
+
+    private func maskedApiKeyField(
+        label: String,
+        key: Binding<String>,
+        isEditing: Binding<Bool>
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("API Key")
+            Text(label)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(theme.onSurfaceVariant)
-            if isEditingApiKey {
-                TextField("Your API key", text: $companionApiKey)
+            if isEditing.wrappedValue {
+                ApiKeyTextField(text: key, onSubmit: { isEditing.wrappedValue = false })
                     .font(.system(size: 14))
                     .foregroundStyle(theme.onSurface)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
                     .padding(12)
                     .background(theme.surfaceContainer)
-                    .onSubmit { isEditingApiKey = false }
             } else {
-                Text(maskedApiKey)
+                Text(maskedKey(key.wrappedValue))
                     .font(.system(size: 14))
-                    .foregroundStyle(companionApiKey.isEmpty ? theme.onSurfaceVariant : theme.onSurface)
+                    .foregroundStyle(key.wrappedValue.isEmpty ? theme.onSurfaceVariant : theme.onSurface)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
                     .background(theme.surfaceContainer)
-                    .onTapGesture { isEditingApiKey = true }
+                    .onTapGesture { isEditing.wrappedValue = true }
             }
         }
     }
 
-    private var maskedApiKey: String {
-        guard companionApiKey.count > 6 else {
-            return companionApiKey.isEmpty ? "Your API key" : String(repeating: "•", count: companionApiKey.count)
+    private func maskedKey(_ key: String) -> String {
+        guard key.count > 6 else {
+            return key.isEmpty ? "Not set" : String(repeating: "\u{2022}", count: key.count)
         }
-        let prefix = companionApiKey.prefix(3)
-        let suffix = companionApiKey.suffix(3)
-        return "\(prefix)•••\(suffix)"
+        return "\(key.prefix(3))\u{2022}\u{2022}\u{2022}\(key.suffix(3))"
     }
-
-    // MARK: - Components
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
@@ -136,17 +175,21 @@ struct SettingsView: View {
             .tracking(3)
             .foregroundStyle(theme.onSurfaceVariant)
     }
+}
 
-    private func settingsField(_ label: String, text: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(theme.onSurfaceVariant)
-            TextField(placeholder, text: text)
-                .font(.system(size: 14))
-                .foregroundStyle(theme.onSurface)
-                .padding(12)
-                .background(theme.surfaceContainer)
-        }
+/// A TextField that auto-focuses on appear and properly supports paste.
+private struct ApiKeyTextField: View {
+    @Binding var text: String
+    let onSubmit: () -> Void
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        TextField("Your API key", text: $text)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .textContentType(.password)
+            .focused($isFocused)
+            .onSubmit(onSubmit)
+            .onAppear { isFocused = true }
     }
 }

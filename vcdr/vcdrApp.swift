@@ -66,17 +66,6 @@ struct vcdrApp: App {
                 .task {
                     await dependencies.initialize()
                 }
-                .onOpenURL { url in
-                    guard url.host == "connect" else { return }
-                    let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                    let host = components?.queryItems?.first(where: { $0.name == "host" })?.value
-                    let key = components?.queryItems?.first(where: { $0.name == "key" })?.value
-                    if let host, let key {
-                        dependencies.settings.companionServer = CompanionServerSettings(
-                            enabled: true, host: host, apiKey: key
-                        )
-                    }
-                }
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 650, height: 450)

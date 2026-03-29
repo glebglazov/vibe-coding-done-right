@@ -27,8 +27,8 @@ final class CaptureCoordinator {
     /// Stored snapshot while waiting for preview confirmation (Return key or destination hotkey).
     @ObservationIgnored var pendingPreviewSnapshot: SubmissionSnapshot?
     @ObservationIgnored var pendingPreviewText: String?
-    /// Raw text for companion retry — set when companion processing fails and preview is shown
-    @ObservationIgnored var pendingCompanionRetryText: String?
+    /// Raw text for AI processing retry — set when AI processing fails and preview is shown
+    @ObservationIgnored var pendingAIRetryText: String?
 
     @ObservationIgnored var onWillStartInput: (() -> Void)?
 
@@ -122,8 +122,6 @@ final class CaptureCoordinator {
             destination: destination,
             targetAppPID: snapshot.pipelineContext.targetAppPID,
             saveResultToClipboard: snapshot.mode.saveResultToClipboard,
-            companionHost: snapshot.pipelineContext.companionHost,
-            companionApiKey: snapshot.pipelineContext.companionApiKey,
             removeFillerWords: snapshot.pipelineContext.removeFillerWords,
             terminatorTemplateEnabled: snapshot.pipelineContext.terminatorTemplateEnabled,
             terminatorTemplate: snapshot.pipelineContext.terminatorTemplate
@@ -175,7 +173,7 @@ final class CaptureCoordinator {
     private func clearPendingPreview() {
         pendingPreviewSnapshot = nil
         pendingPreviewText = nil
-        pendingCompanionRetryText = nil
+        pendingAIRetryText = nil
     }
 
     func dismissOverlay(saveToHistory: Bool = true) {

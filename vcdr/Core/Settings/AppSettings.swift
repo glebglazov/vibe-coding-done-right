@@ -73,12 +73,18 @@ final class AppSettings {
     var variables: [Variable] {
         didSet { save() }
     }
-    var companionServer: CompanionServerSettings {
-        didSet { save() }
+
+    /// Whether a mode is fully configured and ready to use.
+    /// AI Processing modes require the provider's API key variable to be set.
+    func isModeConfigured(_ mode: Mode) -> Bool {
+        guard mode.processingType == .aiProcessing else { return true }
+        let apiKeyName = mode.aiProvider.apiKeyVariableName
+        guard let value = variableEnvironment[apiKeyName] else { return false }
+        return !value.isEmpty
     }
 
-    /// Modes visible in the mode switcher and default settings list.
-    /// Excludes disabled modes and template modes whose tools are unavailable.
+    /// Modes shown in the settings modes list. Excludes disabled and unavailable templates,
+    /// but INCLUDES unconfigured AI modes (so users can see the warning).
     var visibleModes: [Mode] {
         modeConfig.modes.filter { mode in
             guard !mode.isDisabled else { return false }
@@ -89,10 +95,16 @@ final class AppSettings {
         }
     }
 
-    /// Active mode looked up by ID, falling back to first visible mode, then first mode overall
+    /// Modes shown in the mode switcher. Excludes disabled, unavailable template tools,
+    /// AND unconfigured AI modes (missing API key).
+    var switcherModes: [Mode] {
+        visibleModes.filter { isModeConfigured($0) }
+    }
+
+    /// Active mode looked up by ID, falling back to first switcher mode, then first mode overall
     var activeMode: Mode {
         modeConfig.modes.first(where: { $0.id == modeConfig.activeModeID })
-            ?? visibleModes.first
+            ?? switcherModes.first
             ?? modeConfig.modes.first
             ?? Mode.makeDefault()
     }
@@ -117,7 +129,6 @@ final class AppSettings {
         static let audioSettings = "audioSettings"
 
         static let variables = "variables"
-        static let companionServer = "companionServer"
         static let removeFillerWords = "removeFillerWords"
         static let terminatorTemplateEnabled = "terminatorTemplateEnabled"
         static let terminatorTemplate = "terminatorTemplate"
@@ -238,8 +249,12 @@ final class AppSettings {
         // Load variables
         self.variables = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
 
-        // Load companion server settings
-        self.companionServer = Self.decodeSetting(from: userDefaults, forKey: Keys.companionServer, default: .default)
+        // Ensure API key variables exist (pre-created with empty values for discoverability)
+        let requiredVariables = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+        let existingNames = Set(variables.map(\.name))
+        for name in requiredVariables where !existingNames.contains(name) {
+            variables.append(Variable(id: UUID(), name: name, value: ""))
+        }
 
         // Ensure built-in destinations exist (migration for existing installs)
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
@@ -266,7 +281,6 @@ final class AppSettings {
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
         encode(variables, forKey: Keys.variables)
-        encode(companionServer, forKey: Keys.companionServer)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
         userDefaults.set(transcriptionSettings.terminatorTemplateEnabled, forKey: Keys.terminatorTemplateEnabled)
         userDefaults.set(transcriptionSettings.terminatorTemplate, forKey: Keys.terminatorTemplate)
@@ -294,11 +308,11 @@ final class AppSettings {
             }
         }
 
-        // Auto-switch if active mode is no longer visible
-        if !visibleModes.contains(where: { $0.id == modeConfig.activeModeID }) {
-            if let firstVisible = visibleModes.first {
-                modeConfig.activeModeID = firstVisible.id
-                Logger.settings.info("Active mode hidden, switched to: \(firstVisible.name)")
+        // Auto-switch if active mode is no longer in the switcher
+        if !switcherModes.contains(where: { $0.id == modeConfig.activeModeID }) {
+            if let firstAvailable = switcherModes.first {
+                modeConfig.activeModeID = firstAvailable.id
+                Logger.settings.info("Active mode hidden, switched to: \(firstAvailable.name)")
             }
         }
     }

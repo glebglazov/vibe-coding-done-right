@@ -61,8 +61,8 @@ extension AppSettings {
         modes[index].isDisabled = disabled
 
         if disabled && activeModeID == mode.id {
-            if let firstVisible = visibleModes.first {
-                activeModeID = firstVisible.id
+            if let firstAvailable = switcherModes.first {
+                activeModeID = firstAvailable.id
             }
         }
     }
