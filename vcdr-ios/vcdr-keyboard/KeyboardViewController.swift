@@ -82,18 +82,9 @@ class KeyboardViewController: KeyboardInputViewController {
 
     override func viewWillSetupKeyboardView() {
         setupKeyboardView { controller in
-            KeyboardView(
+            VCDRKeyboardView(
                 services: controller.services,
-                buttonContent: { $0.view },
-                buttonView: { $0.view },
-                collapsedView: { $0.view },
-                emojiKeyboard: { $0.view },
-                toolbar: { params in
-                    HStack(spacing: 0) {
-                        params.view
-                        DictateBarView()
-                    }
-                }
+                state: controller.state
             )
         }
     }
