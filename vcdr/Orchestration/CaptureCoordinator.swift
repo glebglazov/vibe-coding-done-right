@@ -141,17 +141,20 @@ final class CaptureCoordinator {
     private func executeConfirmedAction(snapshot: SubmissionSnapshot, processedText: String, pipelineContext: SubmissionPipeline.Context) {
         panel.orderOut()
 
-        Task { @MainActor in
+        immediateActionTask = Task { @MainActor in
             do {
                 try await SubmissionPipeline.executeAction(
                     context: pipelineContext, processedText: processedText
                 )
             } catch {
+                guard !Task.isCancelled else { return }
                 panel.orderBack()
                 panel.setError(error.localizedDescription)
                 Logger.app.error("Preview confirmation action failed: \(error)")
                 return
             }
+
+            guard !Task.isCancelled else { return }
 
             panel.dismiss()
             recordingIndicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
@@ -161,6 +164,7 @@ final class CaptureCoordinator {
                 hadExternalProcessing: snapshot.mode.processingType != .none
             )
             overrides.markPipelineCompleted()
+            immediateActionTask = nil
             Logger.app.info("Preview confirmed and action executed")
         }
     }
