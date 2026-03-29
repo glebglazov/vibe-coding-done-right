@@ -25,7 +25,7 @@ final class RecordingFlowCoordinator {
     }
 
     private(set) var state: State = .idle
-    private(set) var initProgress: String = ""
+    private(set) var initProgress: String = "Preparing..."
     /// Live transcription text updated in real-time during recording
     private(set) var liveTranscript: String = ""
     /// Shown in the transcribing state — describes what the app is waiting on
