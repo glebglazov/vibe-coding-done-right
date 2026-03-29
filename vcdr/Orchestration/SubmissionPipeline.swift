@@ -17,6 +17,10 @@ enum SubmissionPipeline {
         let saveResultToClipboard: Bool
         let companionHost: String
         let companionApiKey: String
+        // Algorithmic processing settings
+        let removeFillerWords: Bool
+        let terminatorTemplateEnabled: Bool
+        let terminatorTemplate: String
     }
 
     struct Result {
@@ -36,7 +40,10 @@ enum SubmissionPipeline {
             parameterValues: context.parameterValues,
             variableEnvironment: context.variableEnvironment,
             companionHost: context.companionHost,
-            companionApiKey: context.companionApiKey
+            companionApiKey: context.companionApiKey,
+            removeFillerWords: context.removeFillerWords,
+            terminatorTemplateEnabled: context.terminatorTemplateEnabled,
+            terminatorTemplate: context.terminatorTemplate
         )
         return Result(
             processedText: pipelineResult.text,

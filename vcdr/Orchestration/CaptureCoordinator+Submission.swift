@@ -28,7 +28,10 @@ extension CaptureCoordinator {
                 destination: destination, targetAppPID: result.previousActiveApp?.processIdentifier,
                 saveResultToClipboard: mode.saveResultToClipboard,
                 companionHost: settings.companionServer.host,
-                companionApiKey: settings.companionServer.apiKey
+                companionApiKey: settings.companionServer.apiKey,
+                removeFillerWords: settings.removeFillerWords,
+                terminatorTemplateEnabled: settings.terminatorTemplateEnabled,
+                terminatorTemplate: settings.terminatorTemplate
             ),
             mode: mode,
             inputSegments: quickSegments,
@@ -155,9 +158,13 @@ extension CaptureCoordinator {
                     integrationMode: snapshot.mode.companionIntegrationMode
                 )
                 guard !Task.isCancelled else { return }
-                panel.showPreview(text: processedText, modeName: snapshot.mode.name)
+                // Apply algorithmic post-processing (output formatting) to companion result
+                let finalText = snapshot.pipelineContext.terminatorTemplateEnabled
+                    ? Mode.applyTerminator(processedText, terminator: snapshot.pipelineContext.terminatorTemplate)
+                    : processedText
+                panel.showPreview(text: finalText, modeName: snapshot.mode.name)
                 panel.viewModel?.companionErrorMessage = nil
-                pendingPreviewText = processedText
+                pendingPreviewText = finalText
                 pendingCompanionRetryText = nil
                 immediateActionTask = nil
                 Logger.app.info("Companion retry succeeded")

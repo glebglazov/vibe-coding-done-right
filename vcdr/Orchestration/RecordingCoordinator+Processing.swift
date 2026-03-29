@@ -17,10 +17,8 @@ extension RecordingCoordinator {
             let elapsed = transcriptionStart.duration(to: .now)
             Logger.app.info("Transcribed in \(elapsed): \(rawText)")
 
-            let cleanedText = settings.removeFillerWords ? FillerWordRemover.remove(from: rawText) : rawText
-            let text = settings.terminatorTemplateEnabled
-                ? Mode.applyTerminator(cleanedText, terminator: settings.terminatorTemplate)
-                : cleanedText
+            // Speech cleanup and output formatting now run inside TextProcessingPipeline
+            let text = rawText
 
             try? FileManager.default.removeItem(at: audioURL)
 

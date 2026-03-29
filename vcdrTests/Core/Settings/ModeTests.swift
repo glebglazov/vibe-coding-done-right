@@ -110,76 +110,30 @@ struct ModeApplyTerminatorTests {
     }
 }
 
-// MARK: - applyPreProcessing
+// MARK: - formatCaptures
 
-@Suite("Mode.applyPreProcessing")
-struct ModeApplyPreProcessingTests {
+@Suite("Mode.formatCaptures")
+struct ModeFormatCapturesTests {
 
-    @Test("Returns text as-is when all options disabled")
-    @MainActor func passthrough() {
-        let mode = makeMode()
-        #expect(mode.applyPreProcessing("hello", captures: []) == "hello")
-    }
-
-    @Test("Prepends system prompt when bash processing and system prompt enabled")
-    @MainActor func systemPromptWithBash() {
-        let mode = makeMode(
-            processingType: .bashScript,
-            systemPromptEnabled: true,
-            systemPrompt: "Fix grammar:"
-        )
-        #expect(mode.applyPreProcessing("hello world", captures: []) == "Fix grammar:\n\nhello world")
-    }
-
-    @Test("Does NOT prepend system prompt when processing type is none")
-    @MainActor func systemPromptIgnoredForNoneType() {
-        let mode = makeMode(
-            processingType: .none,
-            systemPromptEnabled: true,
-            systemPrompt: "Fix grammar:"
-        )
-        #expect(mode.applyPreProcessing("hello world", captures: []) == "hello world")
-    }
-
-    @Test("Does NOT prepend system prompt when system prompt disabled")
-    @MainActor func systemPromptDisabled() {
-        let mode = makeMode(
-            processingType: .bashScript,
-            systemPromptEnabled: false,
-            systemPrompt: "Fix grammar:"
-        )
-        #expect(mode.applyPreProcessing("hello world", captures: []) == "hello world")
-    }
-
-    @Test("Does NOT prepend system prompt when system prompt is empty")
-    @MainActor func systemPromptEmpty() {
-        let mode = makeMode(
-            processingType: .bashScript,
-            systemPromptEnabled: true,
-            systemPrompt: ""
-        )
-        #expect(mode.applyPreProcessing("hello world", captures: []) == "hello world")
-    }
-
-    @Test("Appends captured selection after text")
-    @MainActor func capturedSelection() {
-        let mode = makeMode()
+    @Test("Single capture produces capture tag with id=1")
+    @MainActor func singleCapture() {
         let captures = [CapturedContext(text: "selected text", source: .selection)]
-        #expect(mode.applyPreProcessing("rewrite this", captures: captures)
-            == "rewrite this\n\n<capture id=\"1\">selected text</capture>")
+        #expect(Mode.formatCaptures(captures) == "<capture id=\"1\">selected text</capture>")
     }
 
-    @Test("Full pipeline: system prompt + captures in correct order")
-    @MainActor func fullPipeline() {
-        let mode = makeMode(
-            processingType: .bashScript,
-            systemPromptEnabled: true,
-            systemPrompt: "Prompt:"
-        )
-        let captures = [CapturedContext(text: "selection", source: .selection)]
-        let result = mode.applyPreProcessing("dictation", captures: captures)
-        // Order: system prompt prepended → captures appended
-        #expect(result == "Prompt:\n\ndictation\n\n<capture id=\"1\">selection</capture>")
+    @Test("Multiple captures produce sequential capture tags")
+    @MainActor func multipleCaptures() {
+        let captures = [
+            CapturedContext(text: "first", source: .selection),
+            CapturedContext(text: "second", source: .clipboard)
+        ]
+        let expected = "<capture id=\"1\">first</capture>\n\n<capture id=\"2\">second</capture>"
+        #expect(Mode.formatCaptures(captures) == expected)
+    }
+
+    @Test("Empty captures returns empty string")
+    @MainActor func emptyCaptures() {
+        #expect(Mode.formatCaptures([]) == "")
     }
 }
 

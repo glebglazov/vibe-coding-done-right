@@ -95,9 +95,9 @@ struct RecordingCoordinatorSingleCycleTests {
         #expect(!env.results.failedMessages.isEmpty)
     }
 
-    @Test("Filler words are removed when setting is enabled")
+    @Test("Raw transcription passes through without transforms (filler removal now in pipeline)")
     @MainActor
-    func fillerWordRemoval() async {
+    func rawTextPassthrough() async {
         let provider = MockTranscriptionProvider(
             result: "Um so I was thinking uh that we should fix this"
         )
@@ -116,10 +116,9 @@ struct RecordingCoordinatorSingleCycleTests {
         #expect(finished)
 
         #expect(env.results.completed.count == 1)
+        // RecordingCoordinator now emits raw text — filler removal runs in TextProcessingPipeline
         let resultText = env.results.completed.first?.text ?? ""
-        #expect(!resultText.contains("Um"))
-        #expect(!resultText.contains("uh"))
-        #expect(resultText.contains("fix this"))
+        #expect(resultText == "Um so I was thinking uh that we should fix this")
     }
 }
 

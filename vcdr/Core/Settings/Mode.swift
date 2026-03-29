@@ -88,31 +88,6 @@ struct Mode: Identifiable, Codable, Equatable {
 
     // MARK: - Text Pipeline
 
-    /// Pre-processes text by prepending system prompt (bash processing only)
-    /// and appending any captured context items.
-    /// This is step 1 of the pipeline — before the optional processing script.
-    func applyPreProcessing(_ text: String, captures: [CapturedContext]) -> String {
-        var result = text
-
-        switch processingType {
-        case .bashScript:
-            result = "<dictation>\(result)</dictation>"
-            if systemPromptEnabled && !systemPrompt.isEmpty {
-                result = systemPrompt + "\n\n" + result
-            }
-        case .companion:
-            result = "<dictation>\(result)</dictation>"
-        case .none:
-            break
-        }
-
-        if !captures.isEmpty {
-            result += "\n\n" + Self.formatCaptures(captures)
-        }
-
-        return result
-    }
-
     /// Formats captures for inclusion in pipeline text using `<capture id="N">` tags.
     static func formatCaptures(_ captures: [CapturedContext]) -> String {
         guard !captures.isEmpty else { return "" }

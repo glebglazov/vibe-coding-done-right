@@ -123,7 +123,10 @@ final class CaptureCoordinator {
             targetAppPID: snapshot.pipelineContext.targetAppPID,
             saveResultToClipboard: snapshot.mode.saveResultToClipboard,
             companionHost: snapshot.pipelineContext.companionHost,
-            companionApiKey: snapshot.pipelineContext.companionApiKey
+            companionApiKey: snapshot.pipelineContext.companionApiKey,
+            removeFillerWords: snapshot.pipelineContext.removeFillerWords,
+            terminatorTemplateEnabled: snapshot.pipelineContext.terminatorTemplateEnabled,
+            terminatorTemplate: snapshot.pipelineContext.terminatorTemplate
         )
         let overriddenSnapshot = SubmissionSnapshot(
             pipelineContext: overriddenContext,
