@@ -6,13 +6,14 @@ struct SelectionCapturer: Sendable {
 
     // MARK: - Constants
 
-    /// Browser bundle IDs that need AXEnhancedUserInterface set to expose text selection.
+    /// Bundle IDs for Electron/Chromium apps that need AXEnhancedUserInterface set to expose text selection.
     private static let enhancedUIBundleIDs: Set<String> = [
         "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary", "com.google.Chrome.dev",
         "com.brave.Browser", "com.brave.Browser.beta", "com.brave.Browser.nightly",
         "com.microsoft.edgemac", "com.microsoft.edgemac.Beta", "com.microsoft.edgemac.Canary", "com.microsoft.edgemac.Dev",
         "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition",
         "com.apple.Safari", "com.apple.SafariTechnologyPreview",
+        "md.obsidian",
     ]
 
     /// Virtual key code for C key — used to identify the Copy menu item locale-independently
@@ -49,9 +50,18 @@ struct SelectionCapturer: Sendable {
         }
 
         // Layer 1: Try AX direct (fastest, no clipboard interaction)
-        if let text = captureViaAccessibility() {
+        switch captureViaAccessibility() {
+        case .captured(let text):
             Logger.actions.info("SelectionCapturer: result from AX direct: \"\(text.prefix(Self.logPreviewLength))\" (\(text.count) chars)")
             return text
+        case .confirmedEmpty:
+            // AX confirmed cursor is positioned but nothing is selected.
+            // Skip clipboard-based layers — apps like Obsidian and VS Code copy the
+            // entire current line on Cmd+C when nothing is selected, producing false captures.
+            Logger.actions.info("SelectionCapturer: AX confirmed empty selection, skipping clipboard layers")
+            return nil
+        case .unavailable:
+            break
         }
 
         // Layer 2: Try Edit > Copy via AX menu bar (works for apps with standard menus)
@@ -73,9 +83,21 @@ struct SelectionCapturer: Sendable {
 
     // MARK: - Layer 1: Accessibility Direct
 
+    /// Result of the AX direct capture attempt.
+    private enum AXCaptureResult {
+        /// AX returned selected text.
+        case captured(String)
+        /// AX successfully queried the element but selection is empty (cursor with no selection).
+        /// Clipboard-based layers should be skipped — apps like Obsidian copy the current line
+        /// on Cmd+C when nothing is selected, producing false captures.
+        case confirmedEmpty
+        /// AX could not access the element or attribute. Fall through to clipboard layers.
+        case unavailable
+    }
+
     /// Reads selected text via AX attributes. Tries kAXSelectedTextAttribute first,
     /// then falls back to AXSelectedTextMarkerRange for WebKit-based apps.
-    private func captureViaAccessibility() -> String? {
+    private func captureViaAccessibility() -> AXCaptureResult {
         let systemWide = AXUIElementCreateSystemWide()
 
         var focusedElementRef: AnyObject?
@@ -86,24 +108,30 @@ struct SelectionCapturer: Sendable {
         )
         guard focusedResult == .success else {
             Logger.actions.info("AX capture: no focused element (error: \(focusedResult.rawValue))")
-            return nil
+            return .unavailable
         }
 
         // AXUIElementCopyAttributeValue returns AnyObject; bridge to AXUIElement.
         // AX guarantees the type when returning .success for element attributes.
         // unsafeBitCast avoids as! (force unwrap) and as? (always-succeeds warning for CF types).
-        guard let ref = focusedElementRef else { return nil }
+        guard let ref = focusedElementRef else { return .unavailable }
         let focusedElement = unsafeBitCast(ref, to: AXUIElement.self)
 
         // Try standard kAXSelectedTextAttribute (works in native Cocoa apps)
         var selectedTextRef: AnyObject?
-        if AXUIElementCopyAttributeValue(
+        let selectedTextResult = AXUIElementCopyAttributeValue(
             focusedElement,
             kAXSelectedTextAttribute as CFString,
             &selectedTextRef
-        ) == .success, let text = selectedTextRef as? String, !text.isEmpty {
-            Logger.actions.info("Captured selection via AX direct (\(text.count) chars)")
-            return text
+        )
+        if selectedTextResult == .success, let text = selectedTextRef as? String {
+            if !text.isEmpty {
+                Logger.actions.info("Captured selection via AX direct (\(text.count) chars)")
+                return .captured(text)
+            }
+            // AX returned empty string — cursor is positioned but nothing is selected.
+            Logger.actions.info("AX capture: selected text attribute is empty (no selection)")
+            return .confirmedEmpty
         }
 
         // Try text marker range (works in WebKit/browser content views)
@@ -121,12 +149,12 @@ struct SelectionCapturer: Sendable {
                 &textRef
             ) == .success, let text = textRef as? String, !text.isEmpty {
                 Logger.actions.info("Captured selection via AX text marker (\(text.count) chars)")
-                return text
+                return .captured(text)
             }
         }
 
         Logger.actions.info("AX capture: no selected text found")
-        return nil
+        return .unavailable
     }
 
     // MARK: - Layer 2: Edit Menu Copy
