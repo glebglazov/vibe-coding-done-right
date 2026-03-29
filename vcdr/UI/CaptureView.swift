@@ -126,6 +126,23 @@ struct CaptureView: View {
                 ErrorBannerView(message: errorMessage, onDismiss: { viewModel.clearError() })
                 Divider()
             }
+            if let companionError = viewModel.companionErrorMessage {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                    Text(companionError)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let retry = viewModel.onRetryCompanion {
+                        Button("Retry") { retry() }
+                            .controlSize(.small)
+                    }
+                }
+                .padding(.horizontal, Self.closeButtonPadding)
+                .padding(.vertical, 6)
+                Divider()
+            }
         }
         .background(Color.primary.opacity(Self.headerBackgroundOpacity))
     }

@@ -25,6 +25,16 @@ extension CapturePanel {
         expand()
     }
 
+    /// Shows the preview with a companion error notice — user can use raw text or retry.
+    func setCompanionError(_ message: String) {
+        guard let viewModel else { return }
+        viewModel.companionErrorMessage = "Companion: \(message)"
+        viewModel.phaseState.phase = .idle
+        if viewModel.isMinimized {
+            expand()
+        }
+    }
+
     func setError(_ message: String) {
         guard let viewModel else { return }
         viewModel.phaseState.errorMessage = message

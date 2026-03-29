@@ -27,6 +27,8 @@ final class CaptureCoordinator {
     /// Stored snapshot while waiting for preview confirmation (Return key or destination hotkey).
     @ObservationIgnored var pendingPreviewSnapshot: SubmissionSnapshot?
     @ObservationIgnored var pendingPreviewText: String?
+    /// Raw text for companion retry — set when companion processing fails and preview is shown
+    @ObservationIgnored var pendingCompanionRetryText: String?
 
     @ObservationIgnored var onWillStartInput: (() -> Void)?
 

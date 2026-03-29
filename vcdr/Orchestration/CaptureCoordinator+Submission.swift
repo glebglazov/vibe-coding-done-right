@@ -74,6 +74,22 @@ extension CaptureCoordinator {
 
             guard !Task.isCancelled else { return }
 
+            // Companion failed — show preview with raw text so user can use it or retry
+            if let fallback = pipelineResult.companionFallback {
+                panel.showPreview(text: pipelineResult.processedText, modeName: nil)
+                panel.setCompanionError(fallback.errorMessage)
+                panel.viewModel?.onRetryCompanion = { [weak self] in
+                    self?.retryCompanionProcessing()
+                }
+                pendingPreviewSnapshot = snapshot
+                pendingPreviewText = pipelineResult.processedText
+                pendingCompanionRetryText = fallback.rawText
+                immediateActionTask = nil
+                recordingIndicator.hide()
+                Logger.app.warning("Companion failed, showing preview with raw text for retry")
+                return
+            }
+
             if showPreview {
                 // Preview mode: show the result and wait for confirmation
                 panel.showPreview(text: pipelineResult.processedText, modeName: pipelineResult.hadExternalProcessing ? snapshot.mode.name : nil)
@@ -118,6 +134,40 @@ extension CaptureCoordinator {
             )
             overrides.markPipelineCompleted()
             Logger.app.info("Quick action pipeline complete")
+        }
+    }
+
+    // MARK: - Companion Retry
+
+    func retryCompanionProcessing() {
+        guard let snapshot = pendingPreviewSnapshot,
+              let rawText = pendingCompanionRetryText else { return }
+
+        panel.viewModel?.companionErrorMessage = nil
+        panel.viewModel?.phaseState.phase = .processing
+
+        immediateActionTask = Task { @MainActor in
+            do {
+                let processedText = try await CompanionClient.process(
+                    text: rawText,
+                    host: snapshot.pipelineContext.companionHost,
+                    apiKey: snapshot.pipelineContext.companionApiKey,
+                    integrationMode: snapshot.mode.companionIntegrationMode
+                )
+                guard !Task.isCancelled else { return }
+                panel.showPreview(text: processedText, modeName: snapshot.mode.name)
+                panel.viewModel?.companionErrorMessage = nil
+                pendingPreviewText = processedText
+                pendingCompanionRetryText = nil
+                immediateActionTask = nil
+                Logger.app.info("Companion retry succeeded")
+            } catch {
+                guard !Task.isCancelled else { return }
+                panel.viewModel?.phaseState.phase = .idle
+                panel.setCompanionError(error.localizedDescription)
+                immediateActionTask = nil
+                Logger.app.warning("Companion retry failed: \(error)")
+            }
         }
     }
 

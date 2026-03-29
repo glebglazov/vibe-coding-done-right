@@ -22,6 +22,7 @@ enum SubmissionPipeline {
     struct Result {
         let processedText: String
         let hadExternalProcessing: Bool
+        let companionFallback: CompanionFallback?
     }
 
     // MARK: - Non-Streaming Execution
@@ -39,7 +40,8 @@ enum SubmissionPipeline {
         )
         return Result(
             processedText: pipelineResult.text,
-            hadExternalProcessing: pipelineResult.hadExternalProcessing
+            hadExternalProcessing: pipelineResult.hadExternalProcessing,
+            companionFallback: pipelineResult.companionFallback
         )
     }
 
