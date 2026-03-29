@@ -8,7 +8,15 @@ struct VCDRKeyboardView: View {
     var services: Keyboard.Services
     var state: Keyboard.State
 
-    private var keyboardContext: KeyboardContext { state.keyboardContext }
+    /// Observed so the view re-renders when keyboard case changes,
+    /// ensuring `correctedLayout` is recomputed with the current shift state.
+    @ObservedObject private var keyboardContext: KeyboardContext
+
+    init(services: Keyboard.Services, state: Keyboard.State) {
+        self.services = services
+        self.state = state
+        self._keyboardContext = ObservedObject(wrappedValue: state.keyboardContext)
+    }
 
     /// On iPad, KeyboardKit places `.nextKeyboard` (globe) where `.keyboardType(.numeric)` (symbols)
     /// should be and vice versa. This computed property returns a corrected layout.
