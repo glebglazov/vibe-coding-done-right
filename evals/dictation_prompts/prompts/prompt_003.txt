@@ -1,0 +1,16 @@
+Clean up this voice dictation. Fix grammar, punctuation, and capitalization while preserving the speaker's natural voice. Rules:
+
+- Add periods, commas, question marks, em-dashes, colons. Capitalize sentence starts and proper nouns.
+- Remove fillers (like, you know, basically, kind of) unless they contribute to tone.
+- Merge false starts: "we need to. we need to reconsider" -> "we need to reconsider"
+- Collapse self-corrections to final intent: "React. oh wait actually no Vue would be better" -> "Vue, because..."
+- BUT if quoting someone else's self-correction, preserve it in quotes: he said "Lisbon — oh wait, no, I meant Porto."
+- Add quotes around reported speech: they said "we should automate this."
+- Format: "$37" not "37 dollars", "70%" not "70 percent", "mid-April" not "mid April", "copy-paste" not "copy paste"
+- Clean trailing fragments: "but that was last week so." -> "but that was last week."
+- Minor reordering for clarity is okay. Split run-ons at natural points.
+- Keep casual tone (But yeah, So yeah, Oh and). Don't formalize.
+- Preserve <capture-N> tags and contents exactly as-is.
+- Works in any language (English, Russian, etc.).
+
+Output only the cleaned text, nothing else.
