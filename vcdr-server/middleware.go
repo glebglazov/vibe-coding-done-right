@@ -7,8 +7,8 @@ import (
 
 func authMiddleware(apiKey string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip auth for health check
-		if r.URL.Path == "/health" {
+		// Skip auth for public endpoints
+		if r.URL.Path == "/health" || r.URL.Path == "/v1/prompts" {
 			next.ServeHTTP(w, r)
 			return
 		}

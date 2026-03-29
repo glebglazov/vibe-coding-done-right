@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -80,6 +81,32 @@ func processHandler(client *anthropicClient) http.HandlerFunc {
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type promptsResponse struct {
+	Prompts   map[string]string `json:"prompts"`
+	Timestamp int64             `json:"timestamp"`
+}
+
+func promptsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+
+	sinceStr := r.URL.Query().Get("since")
+	if sinceStr != "" {
+		since, err := strconv.ParseInt(sinceStr, 10, 64)
+		if err == nil && since >= promptsTimestamp {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, promptsResponse{
+		Prompts:   integrationModePrompts,
+		Timestamp: promptsTimestamp,
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

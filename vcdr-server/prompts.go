@@ -1,5 +1,9 @@
 package main
 
+// promptsTimestamp is updated manually when prompts change. Unix timestamp.
+// Clients send ?since=<timestamp> and receive 304 if nothing changed.
+var promptsTimestamp int64 = 1743292800 // 2025-03-30T00:00:00Z
+
 // integrationModePrompts maps integration_mode values to their system prompts.
 // The server controls these prompts — clients just send the mode name and raw text.
 var integrationModePrompts = map[string]string{

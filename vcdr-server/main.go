@@ -38,6 +38,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/v1/prompts", promptsHandler)
 	mux.Handle("/v1/process", processHandler(client))
 
 	handler := authMiddleware(vcdrKey, mux)
