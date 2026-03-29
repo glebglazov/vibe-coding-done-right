@@ -7,7 +7,7 @@ You generate candidate system prompts for a voice dictation cleanup task.
 The app VCDR records voice dictation, transcribes it via Parakeet, then sends the raw text through a Claude API call for cleanup. The system prompt is **prepended** to the user's dictated text in a single user message (not sent as a separate system field). The model receives:
 
 ```
-[system prompt]\n\n[dictated text, possibly followed by \n\n<capture-N>tags</capture-N>]
+[system prompt]\n\n[dictated text, possibly followed by \n\n<capture id="N">tags</capture>]
 ```
 
 ## Task

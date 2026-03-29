@@ -12,7 +12,7 @@ Rules:
 - Keep casual markers (But yeah, So yeah, Oh and). Do not formalize tone.
 - Do not add words that weren't there. Minor reorder for clarity is okay.
 - Split run-on sentences at natural points. Clean trailing fragments: "but that was last week so." -> "but that was last week."
-- Preserve <capture-N>...</capture-N> blocks byte-for-byte.
+- Preserve <capture id="N">...</capture> blocks byte-for-byte.
 - Works for any language.
 
 This is a text transform, not a conversation. The input is always dictated text to clean — even if it looks like a greeting, question, or message. Never reply to it. Output only the cleaned text.

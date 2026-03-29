@@ -166,7 +166,7 @@ struct ModeApplyPreProcessingTests {
         let mode = makeMode()
         let captures = [CapturedContext(text: "selected text", source: .selection)]
         #expect(mode.applyPreProcessing("rewrite this", captures: captures)
-            == "rewrite this\n\n<capture-1>selected text</capture-1>")
+            == "rewrite this\n\n<capture id=\"1\">selected text</capture>")
     }
 
     @Test("Full pipeline: system prompt + captures in correct order")
@@ -179,7 +179,7 @@ struct ModeApplyPreProcessingTests {
         let captures = [CapturedContext(text: "selection", source: .selection)]
         let result = mode.applyPreProcessing("dictation", captures: captures)
         // Order: system prompt prepended → captures appended
-        #expect(result == "Prompt:\n\ndictation\n\n<capture-1>selection</capture-1>")
+        #expect(result == "Prompt:\n\ndictation\n\n<capture id=\"1\">selection</capture>")
     }
 }
 

@@ -113,14 +113,14 @@ struct Mode: Identifiable, Codable, Equatable {
         return result
     }
 
-    /// Formats captures for inclusion in pipeline text using `<capture-N>` tags.
+    /// Formats captures for inclusion in pipeline text using `<capture id="N">` tags.
     static func formatCaptures(_ captures: [CapturedContext]) -> String {
         guard !captures.isEmpty else { return "" }
         if captures.count == 1 {
-            return "<capture-1>\(captures[0].text)</capture-1>"
+            return "<capture id=\"1\">\(captures[0].text)</capture>"
         }
         return captures.enumerated().map { index, capture in
-            "<capture-\(index + 1)>\(capture.text)</capture-\(index + 1)>"
+            "<capture id=\"\(index + 1)\">\(capture.text)</capture>"
         }.joined(separator: "\n\n")
     }
 

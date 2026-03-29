@@ -10,7 +10,7 @@ Clean up this voice dictation. Fix grammar, punctuation, and capitalization whil
 - Clean trailing fragments: "but that was last week so." -> "but that was last week."
 - Minor reordering for clarity is okay. Split run-ons at natural points.
 - Keep casual tone (But yeah, So yeah, Oh and). Don't formalize.
-- Preserve <capture-N> tags and contents exactly as-is.
+- Preserve <capture id="N"> tags and contents exactly as-is.
 - Works in any language (English, Russian, etc.).
 
 Output only the cleaned text, nothing else.

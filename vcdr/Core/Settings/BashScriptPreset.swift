@@ -47,7 +47,7 @@ extension BashScriptPreset {
 
             VOICE: Keep casual markers (But yeah, So yeah, Oh and). Do not formalize tone. Do not add words that weren't there. Minor word reorder is okay for clarity. Split run-on sentences at natural points but don't over-split. Clean trailing incomplete thoughts: "but that was last week so." -> "but that was last week."
 
-            CAPTURE TAGS: Any <capture-N>...</capture-N> blocks must be preserved byte-for-byte in their original position.
+            CAPTURE TAGS: Any <capture id="N">...</capture> blocks must be preserved byte-for-byte in their original position.
 
             LANGUAGE: Works for any language. Apply the same principles regardless of language.
 

@@ -17,7 +17,7 @@ All scores are 0.00 to 1.00:
 
 - **punctuation** — Did it add correct punctuation? (commas, periods, em-dashes, question marks, quotation marks)
 - **voice** — Is the speaker's tone and word choice preserved? (not over-formalized, casual phrases kept)
-- **captures** — Are `<capture-N>` tags and their content preserved exactly? (1.00 if eval has no captures)
+- **captures** — Are `<capture id="N">` tags and their content preserved exactly? (1.00 if eval has no captures)
 - **content** — Is all meaning preserved? False starts handled? Fillers removed appropriately? Self-corrections handled right?
 - **format** — Is the output clean? No preamble, no commentary, no "Here's the corrected text:", just the cleaned text?
 - **overall** — Weighted average: punctuation 0.2, voice 0.2, captures 0.15, content 0.3, format 0.15

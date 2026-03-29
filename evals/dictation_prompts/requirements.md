@@ -99,7 +99,7 @@ Clean up sentences that trail off without a conclusion:
 
 ## R13. Capture tag preservation
 
-`<capture-N>...</capture-N>` tags and their entire content must be preserved **byte-for-byte**. They always appear at the end of the input, separated from dictated text by `\n\n`. Keep them exactly where they are. Do not modify, reformat, reorder, or remove any content inside capture tags.
+`<capture id="N">...</capture>` tags and their entire content must be preserved **byte-for-byte**. They always appear at the end of the input, separated from dictated text by `\n\n`. Keep them exactly where they are. Do not modify, reformat, reorder, or remove any content inside capture tags.
 
 ## R14. Output format
 
