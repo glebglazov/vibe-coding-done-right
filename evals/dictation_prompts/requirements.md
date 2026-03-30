@@ -21,15 +21,19 @@ Add missing commas, periods, question marks, colons, and em-dashes. Specific pat
 - Fix sentence-start capitalization: "so the way" → "So the way"
 - Capitalize proper nouns: "john" → "John", "гугл" → "Google"
 
-## R4. Filler word removal
+## R4. Aggressive filler word removal
 
-Remove fillers that add nothing: "like", "you know", "kind of", "basically", "I mean", "ну" (Russian).
+Remove fillers and verbal crutches: "like", "you know", "kind of", "basically", "I mean", "so yeah", "actually", "ну", "короче" (Russian). Also remove hedging phrases that weaken the message: "I think" (when used as a verbal tic, not genuine uncertainty), "sort of", "a little bit".
 
-**But keep them when they contribute to voice or meaning.** Examples:
-- REMOVE: "you like actually work" → "you actually work"
-- REMOVE: "up to like 30 seconds" → "up to 30 seconds"
-- KEEP: "But yeah, overall" (voice marker, not filler)
-- KEEP: "Oh, and I almost forgot" (voice marker)
+Remove aggressively — when in doubt, remove. Only keep a filler word if removing it would change the meaning or lose a genuinely casual tone marker.
+
+- REMOVE: "you like actually work" → "you work"
+- REMOVE: "basically the launch date is May" → "the launch date is May"
+- REMOVE: "I think Jake's version is better" → "Jake's version is better"
+- REMOVE: "So yeah, basically" → (just state the conclusion)
+- REMOVE: "Oh, and I almost forgot" → "And" or "We also need to"
+- KEEP: "I think we need to reconsider" (genuine hedged opinion)
+- KEEP: "I think I need to use a different potato" (genuine uncertainty)
 
 ## R5. False start consolidation
 
@@ -82,12 +86,12 @@ Add quotation marks around reported speech:
 
 ## R11. Voice preservation
 
-Keep casual speech markers that define the speaker's tone. Do NOT over-formalize:
+Keep the speaker's vocabulary and personality. Do NOT over-formalize:
 
-- KEEP: "But yeah,", "So yeah,", "Короче,", "Oh, and I almost forgot —"
-- KEEP: "I don't know, it's just something I've been thinking about"
 - DO NOT replace "But" with "However", "Also" with "Additionally", etc.
-- DO NOT add words or transitions that weren't in the original
+- DO NOT add words, ideas, or transitions that weren't in the original
+- Preserve casual vocabulary — the speaker's word choices stay, even if informal
+- But DO remove verbal crutches and filler patterns (see R4) — those are not "voice"
 
 ## R12. Trailing incomplete thoughts
 
@@ -118,3 +122,27 @@ Small word-order improvements are acceptable when they clearly improve readabili
 - Split long run-on sentences at natural breath points
 - But don't over-split — preserve the natural conversational flow
 - Don't merge separate ideas into one sentence
+
+## R17. Thought restructuring and compaction
+
+Actively restructure scattered or rambling dictation for clarity:
+
+- If the speaker takes a long time to reach their point, tighten the path — remove redundant phrasing, merge fragmented ideas
+- If the same idea is expressed twice in different words, keep the better version and drop the other
+- Remove wordy intros: "So the way X works is basically" → "X has two levels:" or similar
+- Remove redundant commentary: "so that's another thing we need to factor in" (adds nothing after stating the fact)
+- Compact where possible without losing meaning: "a little bit of miso paste, I think" → "miso paste"
+- Do NOT reorder ideas or move conclusions first — preserve the speaker's narrative flow
+- Do NOT add words or ideas that weren't in the original
+
+## R18. List formatting
+
+When the speaker is clearly listing items (tasks, action items, things to buy, steps), format them as a bullet list:
+
+```
+- First item
+- Second item
+- Third item
+```
+
+Use unordered lists (dashes), not numbered lists. Only apply this when the dictation is genuinely a list — not for narrative text that happens to mention multiple things.
