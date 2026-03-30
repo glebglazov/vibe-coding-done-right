@@ -71,7 +71,7 @@ struct ModesListView: View {
                 }
             }
             .onMove { source, destination in
-                settings.modes.move(fromOffsets: source, toOffset: destination)
+                moveDisplayedModes(from: source, to: destination)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -96,6 +96,24 @@ struct ModesListView: View {
         guard let index = settings.switcherModes.firstIndex(where: { $0.id == mode.id }),
               index < ModeSwitcherPanel.maxModesInSwitcher else { return nil }
         return index + 1
+    }
+
+    /// Reorders modes by mapping filtered-list indices back to the full `settings.modes` array.
+    /// When `displayedModes` is a filtered subset, SwiftUI's `onMove` indices refer to the
+    /// filtered list, not the backing array — applying them directly would move the wrong items.
+    private func moveDisplayedModes(from source: IndexSet, to destination: Int) {
+        var reordered = displayedModes
+        reordered.move(fromOffsets: source, toOffset: destination)
+
+        // Rebuild settings.modes: swap in the reordered visible items while keeping hidden items in place
+        let visibleIDs = Set(reordered.map(\.id))
+        var reorderedIterator = reordered.makeIterator()
+        settings.modes = settings.modes.map { mode in
+            if visibleIDs.contains(mode.id), let next = reorderedIterator.next() {
+                return next
+            }
+            return mode
+        }
     }
 
     private func toggleDisabled(_ mode: Mode, disabled: Bool) {
