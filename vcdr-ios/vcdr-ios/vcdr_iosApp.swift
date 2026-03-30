@@ -4,6 +4,7 @@ import SwiftUI
 struct VCDRiOSApp: App {
     @State private var coordinator = RecordingFlowCoordinator()
     @AppStorage("appearance") private var appearance: Appearance = .system
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +17,13 @@ struct VCDRiOSApp: App {
                     // Fetch updated prompts in background (non-blocking)
                     Task.detached {
                         await PromptFetcher.refreshIfNeeded()
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        // Re-apply idle timer state — iOS can reset it on scene transitions
+                        let shouldDisable = coordinator.state == .recording
+                        UIApplication.shared.isIdleTimerDisabled = shouldDisable
                     }
                 }
                 .onOpenURL { url in

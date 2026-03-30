@@ -138,6 +138,7 @@ final class RecordingFlowCoordinator {
         // If audio fails to start, state reverts to .error below.
         state = .recording
         writeState(.recording)
+        setIdleTimerDisabled(true)
 
         // Create streaming manager immediately — no models needed for construction.
         // Its internal AsyncStream buffers audio until start() begins consuming.
@@ -176,6 +177,7 @@ final class RecordingFlowCoordinator {
     /// Finalizes streaming in the background and updates the result if it differs.
     func stopAndTranscribe() async {
         audioRecorder.stopRecording()
+        setIdleTimerDisabled(false)
         updateTask?.cancel()
 
         guard let streaming = streamingManager else {
@@ -265,6 +267,7 @@ final class RecordingFlowCoordinator {
     func reset() {
         state = .ready
         writeState(.idle)
+        setIdleTimerDisabled(false)
         liveTranscript = ""
         launchedViaDeepLink = false
         aiProcessingStatus = .idle
@@ -382,6 +385,15 @@ final class RecordingFlowCoordinator {
                 liveTranscript = full.trimmingCharacters(in: .whitespaces)
             }
         }
+    }
+
+    // MARK: - Idle Timer
+
+    /// Prevents the screen from auto-locking while recording is active.
+    /// Must be re-applied after scene phase transitions (iOS can reset it).
+    private func setIdleTimerDisabled(_ disabled: Bool) {
+        UIApplication.shared.isIdleTimerDisabled = disabled
+        Logger.app.info("Idle timer \(disabled ? "disabled" : "enabled")")
     }
 
     // MARK: - State Publishing

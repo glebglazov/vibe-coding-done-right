@@ -15,6 +15,9 @@ final class AudioRecorder {
     /// Safe: only set before starting the engine, cleared after stopping it.
     @ObservationIgnored
     private nonisolated(unsafe) var bufferHandler: (@Sendable (AVAudioPCMBuffer) -> Void)?
+    /// Notification observer tokens for audio session interruption and route change.
+    @ObservationIgnored
+    private var interruptionObservers: [Any] = []
 
     // MARK: - Constants
 
@@ -47,9 +50,10 @@ final class AudioRecorder {
         if !audioSessionConfigured {
             let session = AVAudioSession.sharedInstance()
             do {
-                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
                 try session.setActive(true)
                 audioSessionConfigured = true
+                setupInterruptionObservers()
             } catch {
                 Logger.recording.error("Failed to configure audio session: \(error)")
                 return false
@@ -110,6 +114,7 @@ final class AudioRecorder {
             }
             audioSessionConfigured = false
         }
+        removeInterruptionObservers()
 
         Logger.recording.info("Recording stopped")
     }
@@ -140,5 +145,83 @@ final class AudioRecorder {
             : previous * Self.levelDecayFactor + level * (1 - Self.levelDecayFactor)
         audioLevels.removeFirst()
         audioLevels.append(smoothed)
+    }
+
+    // MARK: - Audio Session Interruption Handling
+
+    private func setupInterruptionObservers() {
+        let center = NotificationCenter.default
+
+        let interruptionToken = center.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            // Extract values before crossing isolation boundary to avoid Sendable warnings
+            let typeValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let optionsValue = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
+            Task { @MainActor [weak self] in
+                self?.handleInterruption(typeValue: typeValue, optionsValue: optionsValue)
+            }
+        }
+
+        let routeChangeToken = center.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            Task { @MainActor [weak self] in
+                self?.handleRouteChange(reasonValue: reasonValue)
+            }
+        }
+
+        interruptionObservers = [interruptionToken, routeChangeToken]
+    }
+
+    private func removeInterruptionObservers() {
+        for observer in interruptionObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        interruptionObservers = []
+    }
+
+    private func handleInterruption(typeValue: UInt?, optionsValue: UInt?) {
+        guard
+            let typeValue,
+            let type = AVAudioSession.InterruptionType(rawValue: typeValue)
+        else { return }
+
+        switch type {
+        case .began:
+            Logger.recording.info("Audio session interrupted (e.g., phone call)")
+
+        case .ended:
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue ?? 0)
+
+            if options.contains(.shouldResume) {
+                Logger.recording.info("Audio interruption ended — resuming")
+                try? AVAudioSession.sharedInstance().setActive(true)
+                try? audioEngine?.start()
+            } else {
+                Logger.recording.warning("Audio interruption ended — system says do not resume")
+            }
+
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleRouteChange(reasonValue: UInt?) {
+        guard
+            let reasonValue,
+            let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue)
+        else { return }
+
+        if reason == .oldDeviceUnavailable {
+            // Headphones unplugged — audio route changed to speaker.
+            // Recording continues through the new route.
+            Logger.recording.info("Audio route changed — old device unavailable")
+        }
     }
 }
