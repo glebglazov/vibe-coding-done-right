@@ -2,7 +2,7 @@ import Foundation
 
 enum ProcessingType: String, Codable, CaseIterable {
     case none
-    case aiProcessing
+    case cloudAI
     case bashScript
 }
 
@@ -278,13 +278,13 @@ struct Mode: Identifiable, Codable, Equatable {
         }
         saveResultToClipboard = try container.decodeIfPresent(Bool.self, forKey: .saveResultToClipboard) ?? false
 
-        // New fields — with companion → aiProcessing migration
+        // New fields — with companion/aiProcessing → cloudAI migration
         if let rawType = try container.decodeIfPresent(String.self, forKey: .processingType) {
-            if rawType == "companion" {
-                // Migration: companion → aiProcessing with Anthropic defaults
-                self.processingType = .aiProcessing
-                self.aiProvider = .anthropic
-                self.aiPromptType = .dictation
+            if rawType == "companion" || rawType == "aiProcessing" {
+                // Migration: companion/aiProcessing → cloudAI with Anthropic defaults
+                self.processingType = .cloudAI
+                self.aiProvider = try container.decodeIfPresent(AIProvider.self, forKey: .aiProvider) ?? .anthropic
+                self.aiPromptType = try container.decodeIfPresent(AIPromptType.self, forKey: .aiPromptType) ?? .dictation
             } else {
                 self.processingType = ProcessingType(rawValue: rawType) ?? .none
                 self.aiProvider = try container.decodeIfPresent(AIProvider.self, forKey: .aiProvider) ?? .anthropic

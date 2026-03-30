@@ -45,7 +45,7 @@ enum TextProcessingPipeline {
         case .none:
             result = PipelineResult(text: structured, hadExternalProcessing: false, aiProcessingFallback: nil)
 
-        case .aiProcessing:
+        case .cloudAI:
             let apiKey = variableEnvironment[mode.aiProvider.apiKeyVariableName] ?? ""
             let systemPrompt: String = switch mode.aiPromptType {
             case .dictation: BuiltInPrompts.dictation
@@ -107,8 +107,8 @@ enum TextProcessingPipeline {
         switch mode.processingType {
         case .none:
             return structureInputPlaintext(text: text, captures: captures)
-        case .aiProcessing:
-            // AI processing: XML structure WITHOUT system prompt in the text
+        case .cloudAI:
+            // Cloud AI: XML structure WITHOUT system prompt in the text
             // (system prompt is sent as a separate API parameter)
             return structureInputXML(text: text, captures: captures, includeSystemPrompt: false, mode: mode)
         case .bashScript:
@@ -131,7 +131,7 @@ enum TextProcessingPipeline {
         return text + "\n\n" + quoted
     }
 
-    /// XML input structuring for .aiProcessing/.bashScript — <dictation> wrapping,
+    /// XML input structuring for .cloudAI/.bashScript — <dictation> wrapping,
     /// optional system prompt, and XML capture tags for machine-parseable input.
     private static func structureInputXML(
         text: String,

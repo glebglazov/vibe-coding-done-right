@@ -49,14 +49,14 @@ struct ModeDetailView: View {
             Section("Processing") {
                 Picker(selection: $mode.processingType) {
                     Text("None").tag(ProcessingType.none)
-                    Text("AI Processing").tag(ProcessingType.aiProcessing)
+                    Text("Cloud AI").tag(ProcessingType.cloudAI)
                     Text("Bash Script").tag(ProcessingType.bashScript)
                 } label: {
                     EmptyView()
                 }
                 .pickerStyle(.radioGroup)
 
-                if mode.processingType == .aiProcessing {
+                if mode.processingType == .cloudAI {
                     if !settings.isModeConfigured(mode) {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")

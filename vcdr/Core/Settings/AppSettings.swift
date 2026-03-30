@@ -75,9 +75,9 @@ final class AppSettings {
     }
 
     /// Whether a mode is fully configured and ready to use.
-    /// AI Processing modes require the provider's API key variable to be set.
+    /// Cloud AI modes require the provider's API key variable to be set.
     func isModeConfigured(_ mode: Mode) -> Bool {
-        guard mode.processingType == .aiProcessing else { return true }
+        guard mode.processingType == .cloudAI else { return true }
         let apiKeyName = mode.aiProvider.apiKeyVariableName
         guard let value = variableEnvironment[apiKeyName] else { return false }
         return !value.isEmpty

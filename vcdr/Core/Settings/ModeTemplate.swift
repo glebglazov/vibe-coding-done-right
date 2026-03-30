@@ -88,7 +88,7 @@ extension ModeTemplate {
         id: "ai-dictation",
         defaultName: "AI Dictation",
         availabilityCommand: nil,
-        processingType: .aiProcessing,
+        processingType: .cloudAI,
         processingCommand: "",
         systemPromptEnabled: false,
         systemPrompt: "",
