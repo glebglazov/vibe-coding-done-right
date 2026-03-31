@@ -63,27 +63,14 @@ struct HomeTabView: View {
             Section("Quick Actions") {
                 HStack {
                     Spacer()
-                    VStack(spacing: 8) {
-                        Button(action: { coordinator.toggleRecording() }) {
-                            Label(
-                                coordinator.state.isRecording ? "Stop Recording" : "Start Recording",
-                                systemImage: coordinator.state.isRecording ? "stop.circle.fill" : "record.circle"
-                            )
-                            .font(.title3)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(coordinator.state.isRecording ? .red : .accentColor)
-                        .disabled(!coordinator.state.canToggleRecording)
-
-                        Button(action: { modeSwitcherCoordinator.showSwitcher() }) {
-                            let mode = settings.activeMode
-                            let dest = settings.outputDestination(for: mode.defaultOutputDestinationID)
-                            Text(buildModeLabel(modeName: mode.name, parameterLabels: mode.defaultParameterLabels, destinationSymbol: dest.symbol))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
+                    Button(action: { modeSwitcherCoordinator.showSwitcher() }) {
+                        let mode = settings.activeMode
+                        let dest = settings.outputDestination(for: mode.defaultOutputDestinationID)
+                        Text(buildModeLabel(modeName: mode.name, parameterLabels: mode.defaultParameterLabels, destinationSymbol: dest.symbol))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(.plain)
                     Spacer()
                 }
             }
