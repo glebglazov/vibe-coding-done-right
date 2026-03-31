@@ -1,5 +1,6 @@
 import Foundation
 import FluidAudio
+import FoundationModels
 import OSLog
 import UIKit
 
@@ -58,8 +59,10 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
-    /// Time to wait before showing "AI unavailable" notice
+    /// Time budget for the primary AI provider (including retries)
     private static let aiProcessingTimeout: Duration = .seconds(5)
+    /// Maximum retry attempts for cloud providers within the timeout budget
+    private static let maxRetries = 3
 
     var isRecording: Bool { audioRecorder.isRecording }
     var audioLevels: [Float] { audioRecorder.audioLevels }
@@ -295,83 +298,127 @@ final class RecordingFlowCoordinator {
 
     // MARK: - AI Processing
 
-    /// Races the AI API request against a timeout.
-    /// Returns AI-enhanced text if available within the timeout, otherwise the local text.
+    /// Runs the full AI processing chain: primary provider (with retries) → AFM fallback → local text.
     private func waitForAIProcessing(localText: String) async -> String {
         aiInputText = localText
         aiProcessingStatus = .processing
         let provider = AIProcessingSettings.provider
         let apiKey = AIProcessingSettings.activeApiKey
         let systemPrompt = BuiltInPrompts.dictation
-        let timeout = Self.aiProcessingTimeout
+        let wrappedText = "<dictation>\(localText)</dictation>"
+        let deadline = ContinuousClock.now + Self.aiProcessingTimeout
         let startTime = ContinuousClock.now
 
-        enum RaceResult: Sendable {
-            case ai(String)
-            case aiError(String)
-            case timeout
-        }
+        // --- Primary provider ---
+        let primaryResult = await runPrimaryProvider(
+            provider: provider, apiKey: apiKey,
+            text: wrappedText, systemPrompt: systemPrompt,
+            deadline: deadline
+        )
 
-        let (stream, streamContinuation) = AsyncStream.makeStream(of: RaceResult.self)
-
-        let wrappedText = "<dictation>\(localText)</dictation>"
-
-        // Run HTTP request off the main actor so it isn't serialized
-        let aiTask = Task.detached { [streamContinuation] in
-            do {
-                let text = try await AIClient.process(
-                    text: wrappedText, systemPrompt: systemPrompt,
-                    provider: provider, apiKey: apiKey
-                )
-                streamContinuation.yield(.ai(text))
-            } catch is CancellationError {
-                // Cancelled — timeout won, no need to yield
-            } catch {
-                streamContinuation.yield(.aiError(error.localizedDescription))
-            }
-        }
-
-        let timeoutTask = Task.detached { [streamContinuation] in
-            do {
-                try await Task.sleep(for: timeout)
-                streamContinuation.yield(.timeout)
-            } catch {
-                // Cancelled — AI won, no need to yield
-            }
-        }
-
-        // First result wins
-        var raceResult: RaceResult = .timeout
-        for await result in stream {
-            raceResult = result
-            break
-        }
-
-        aiTask.cancel()
-        timeoutTask.cancel()
-        streamContinuation.finish()
-
-        let elapsed = ContinuousClock.now - startTime
-
-        switch raceResult {
-        case .ai(let text):
+        if let result = primaryResult {
+            let elapsed = ContinuousClock.now - startTime
             aiProcessingStatus = .completed
-            state = .complete(text)
             Logger.app.info("AI processing completed in \(elapsed)")
-            return text
-        case .aiError(let message):
-            aiProcessingStatus = .error(message)
-            Logger.app.error("AI processing failed after \(elapsed): \(message)")
-            return localText
-        case .timeout:
+            return result
+        }
+
+        // --- AFM fallback (only when a cloud provider was primary) ---
+        if AIProcessingSettings.afmFallbackEnabled, provider != .apple {
+            let fallbackResult = await runAFMFallback(
+                text: wrappedText, systemPrompt: systemPrompt
+            )
+            if let result = fallbackResult {
+                let elapsed = ContinuousClock.now - startTime
+                aiProcessingStatus = .completed
+                Logger.app.info("AFM fallback completed in \(elapsed)")
+                return result
+            }
+        }
+
+        // --- Local text fallback ---
+        let elapsed = ContinuousClock.now - startTime
+        if aiProcessingStatus == .processing {
             aiProcessingStatus = .timedOut
             Logger.app.warning("AI processing timed out after \(elapsed)")
-            return localText
+        }
+        return localText
+    }
+
+    /// Attempts the primary provider up to `maxRetries` times within the deadline.
+    /// Cloud providers retry on error; Apple gets a single attempt.
+    /// Returns the AI text on success, or nil on failure/timeout.
+    private func runPrimaryProvider(
+        provider: AIProvider,
+        apiKey: String,
+        text: String,
+        systemPrompt: String,
+        deadline: ContinuousClock.Instant
+    ) async -> String? {
+        let maxAttempts = provider.requiresAPIKey ? Self.maxRetries : 1
+
+        for attempt in 1...maxAttempts {
+            guard ContinuousClock.now < deadline else {
+                Logger.app.warning("AI timeout budget exhausted after \(attempt - 1) attempt(s)")
+                return nil
+            }
+
+            let remaining = deadline - ContinuousClock.now
+
+            do {
+                return try await withThrowingTaskGroup(of: String?.self) { group in
+                    group.addTask {
+                        try await AIClient.process(
+                            text: text, systemPrompt: systemPrompt,
+                            provider: provider, apiKey: apiKey
+                        )
+                    }
+                    group.addTask {
+                        try await Task.sleep(for: remaining)
+                        return nil // timeout sentinel
+                    }
+
+                    for try await result in group {
+                        group.cancelAll()
+                        return result
+                    }
+                    return nil
+                }
+            } catch is CancellationError {
+                return nil
+            } catch {
+                Logger.app.error("AI attempt \(attempt)/\(maxAttempts) failed: \(error)")
+                if attempt == maxAttempts {
+                    aiProcessingStatus = .error(error.localizedDescription)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Tries Apple Foundation Models once as a fallback. Returns result text or nil.
+    /// On `unsupportedLanguageOrLocale`, returns nil silently (local text will be used).
+    private func runAFMFallback(text: String, systemPrompt: String) async -> String? {
+        guard AIProcessingSettings.isAFMAvailable else { return nil }
+
+        do {
+            return try await AFMClient.process(text: text, systemPrompt: systemPrompt)
+        } catch let error as LanguageModelSession.GenerationError {
+            switch error {
+            case .unsupportedLanguageOrLocale:
+                Logger.app.info("AFM fallback: unsupported language, using local text")
+            default:
+                Logger.app.error("AFM fallback generation error: \(error)")
+            }
+            return nil
+        } catch {
+            Logger.app.error("AFM fallback failed: \(error)")
+            return nil
         }
     }
 
     /// Retries the AI processing request with the previously sent text.
-    /// Cancels any in-flight retry before starting a new one.
+    /// Replays the full chain: primary provider (with retries) + AFM fallback.
     func retryAIProcessing() {
         guard !aiInputText.isEmpty else { return }
         aiRetryTask?.cancel()

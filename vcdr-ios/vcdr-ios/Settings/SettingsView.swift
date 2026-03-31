@@ -11,6 +11,8 @@ struct SettingsView: View {
     @AppStorage(AIProcessingSettings.providerKey) private var aiProviderRaw = AIProvider.anthropic.rawValue
     @AppStorage(AIProcessingSettings.anthropicApiKeyKey) private var anthropicApiKey = ""
     @AppStorage(AIProcessingSettings.openaiApiKeyKey) private var openaiApiKey = ""
+    @AppStorage(AIProcessingSettings.afmFallbackEnabledKey) private var afmFallbackEnabled = false
+    @AppStorage(AIProcessingSettings.afmFallbackRememberedKey) private var afmFallbackRemembered = false
     @State private var isEditingAnthropicKey = false
     @State private var isEditingOpenAIKey = false
     @State private var availableInputs: [AVAudioSessionPortDescription] = []
@@ -164,21 +166,40 @@ struct SettingsView: View {
                     .foregroundStyle(theme.onSurfaceVariant)
                 HStack(spacing: 0) {
                     ForEach(AIProvider.allCases, id: \.self) { provider in
+                        let isAvailable = provider != .apple || AIProcessingSettings.isAFMAvailable
                         Button {
+                            let oldProvider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
                             aiProviderRaw = provider.rawValue
+
+                            // When switching TO Apple: remember fallback state, force it off
+                            if provider == .apple && oldProvider != .apple {
+                                afmFallbackRemembered = afmFallbackEnabled
+                                afmFallbackEnabled = false
+                            }
+                            // When switching AWAY from Apple: restore remembered fallback state
+                            if provider != .apple && oldProvider == .apple {
+                                afmFallbackEnabled = afmFallbackRemembered
+                            }
                         } label: {
                             Text(provider.displayName.uppercased())
                                 .font(.system(size: 11, weight: .bold))
                                 .tracking(2)
-                                .foregroundStyle(aiProviderRaw == provider.rawValue ? theme.onSurface : theme.onSurfaceVariant)
+                                .foregroundStyle(
+                                    !isAvailable ? theme.onSurfaceVariant.opacity(0.4) :
+                                    aiProviderRaw == provider.rawValue ? theme.onSurface : theme.onSurfaceVariant
+                                )
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
                                 .background(aiProviderRaw == provider.rawValue ? theme.surfaceHigh : .clear)
                         }
+                        .disabled(!isAvailable)
                     }
                 }
                 .background(theme.surfaceContainer)
             }
+
+            // AFM fallback toggle
+            afmFallbackToggle
 
             // Anthropic API Key
             maskedApiKeyField(
@@ -194,10 +215,10 @@ struct SettingsView: View {
                 isEditing: $isEditingOpenAIKey
             )
 
-            // Warning if selected provider has no key
-            if aiEnabled && AIProcessingSettings.activeApiKey.isEmpty {
-                let provider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
-                Text("Enter your \(provider.displayName) API key to enable AI processing.")
+            // Warning if selected cloud provider has no key
+            let currentProvider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
+            if aiEnabled && currentProvider.requiresAPIKey && AIProcessingSettings.activeApiKey.isEmpty {
+                Text("Enter your \(currentProvider.displayName) API key to enable AI processing.")
                     .font(.system(size: 12))
                     .foregroundStyle(.yellow)
             }
@@ -206,6 +227,19 @@ struct SettingsView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(theme.onSurfaceVariant)
         }
+    }
+
+    private var afmFallbackToggle: some View {
+        let isDisabled = !AIProcessingSettings.isAFMAvailable
+            || (AIProvider(rawValue: aiProviderRaw) ?? .anthropic) == .apple
+
+        return Toggle(isOn: $afmFallbackEnabled) {
+            Text("Use Apple as fallback")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(isDisabled ? theme.onSurfaceVariant.opacity(0.4) : theme.onSurface)
+        }
+        .tint(theme.primary)
+        .disabled(isDisabled)
     }
 
     // MARK: - Components

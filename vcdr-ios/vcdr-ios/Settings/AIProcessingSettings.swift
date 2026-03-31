@@ -1,14 +1,24 @@
 import Foundation
+import FoundationModels
 
 /// AI provider selection — matches the macOS AIProvider enum.
 enum AIProvider: String, Codable, CaseIterable {
     case anthropic
     case openai
+    case apple
 
     var displayName: String {
         switch self {
         case .anthropic: "Anthropic"
         case .openai: "OpenAI"
+        case .apple: "Apple"
+        }
+    }
+
+    var requiresAPIKey: Bool {
+        switch self {
+        case .anthropic, .openai: true
+        case .apple: false
         }
     }
 
@@ -16,6 +26,7 @@ enum AIProvider: String, Codable, CaseIterable {
         switch self {
         case .anthropic: "ANTHROPIC_API_KEY"
         case .openai: "OPENAI_API_KEY"
+        case .apple: ""
         }
     }
 }
@@ -28,6 +39,10 @@ enum AIProcessingSettings {
     static let providerKey = "ai_processing_provider"
     static let anthropicApiKeyKey = "ai_processing_anthropic_api_key"
     static let openaiApiKeyKey = "ai_processing_openai_api_key"
+    static let afmFallbackEnabledKey = "ai_processing_afm_fallback_enabled"
+    /// Remembers the user's fallback preference so it can be restored when
+    /// switching away from Apple as primary provider.
+    static let afmFallbackRememberedKey = "ai_processing_afm_fallback_remembered"
 
     static var enabled: Bool {
         UserDefaults.standard.bool(forKey: enabledKey)
@@ -49,16 +64,31 @@ enum AIProcessingSettings {
         UserDefaults.standard.string(forKey: openaiApiKeyKey) ?? ""
     }
 
+    static var afmFallbackEnabled: Bool {
+        UserDefaults.standard.bool(forKey: afmFallbackEnabledKey)
+    }
+
+    /// Whether Apple Foundation Models are available on this device
+    /// (Apple Intelligence enabled + supported hardware + model downloaded).
+    static var isAFMAvailable: Bool {
+        SystemLanguageModel.default.isAvailable
+    }
+
     /// The API key for the currently selected provider.
     static var activeApiKey: String {
         switch provider {
         case .anthropic: anthropicApiKey
         case .openai: openaiApiKey
+        case .apple: ""
         }
     }
 
-    /// Whether AI processing is fully configured: enabled + API key set for selected provider.
+    /// Whether AI processing is fully configured: enabled + provider ready.
     static var isConfigured: Bool {
-        enabled && !activeApiKey.isEmpty
+        guard enabled else { return false }
+        if provider.requiresAPIKey {
+            return !activeApiKey.isEmpty
+        }
+        return isAFMAvailable
     }
 }

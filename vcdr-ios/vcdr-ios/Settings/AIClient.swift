@@ -19,15 +19,15 @@ enum AIClient {
         provider: AIProvider,
         apiKey: String
     ) async throws -> String {
-        guard !apiKey.isEmpty else {
-            throw AIClientError.missingAPIKey(provider: provider)
-        }
-
         switch provider {
         case .anthropic:
+            guard !apiKey.isEmpty else { throw AIClientError.missingAPIKey(provider: provider) }
             return try await callAnthropic(text: text, systemPrompt: systemPrompt, apiKey: apiKey)
         case .openai:
+            guard !apiKey.isEmpty else { throw AIClientError.missingAPIKey(provider: provider) }
             return try await callOpenAI(text: text, systemPrompt: systemPrompt, apiKey: apiKey)
+        case .apple:
+            return try await AFMClient.process(text: text, systemPrompt: systemPrompt)
         }
     }
 
@@ -136,6 +136,7 @@ enum AIClientError: LocalizedError {
     case missingAPIKey(provider: AIProvider)
     case apiError(provider: AIProvider, statusCode: Int, message: String)
     case invalidResponse(provider: AIProvider)
+    case providerUnavailable(provider: AIProvider)
 
     var errorDescription: String? {
         switch self {
@@ -145,6 +146,8 @@ enum AIClientError: LocalizedError {
             "\(provider.displayName) API error (\(statusCode)): \(message)"
         case .invalidResponse(let provider):
             "Invalid response from \(provider.displayName) API"
+        case .providerUnavailable(let provider):
+            "\(provider.displayName) is not available on this device."
         }
     }
 }
