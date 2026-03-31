@@ -74,15 +74,7 @@ struct ModeSwitcherView: View {
     // MARK: - Parameter Indicator
 
     private func parameterIndicator(for mode: Mode) -> some View {
-        let labels = mode.parameters.compactMap { param -> String? in
-            if let overrideValue = viewModel.parameterOverrides[param.id],
-               let option = param.options.first(where: { $0.value == overrideValue }) {
-                return option.label
-            }
-            return param.options.first?.label
-        }
-        let text = labels.joined(separator: ", ")
-        return Text(text)
+        Text(viewModel.parameterLabel(for: mode))
             .font(.caption)
             .foregroundStyle(.tertiary)
             .lineLimit(1)
@@ -100,9 +92,7 @@ struct ModeSwitcherView: View {
                         if hovering { viewModel.navigation.subHighlightedIndex = index }
                     }
                     .onTapGesture {
-                        viewModel.navigation.level = .options(modeIndex: modeIndex, parameterIndex: index)
-                        viewModel.navigation.subHighlightedIndex = 0
-                        viewModel.onResize?()
+                        viewModel.navigateToParameterOptions(modeIndex: modeIndex, parameterIndex: index)
                     }
             }
         }
@@ -154,9 +144,7 @@ struct ModeSwitcherView: View {
                         if hovering { viewModel.navigation.subHighlightedIndex = index }
                     }
                     .onTapGesture {
-                        viewModel.parameterOverrides[parameter.id] = option.value
-                        viewModel.onParameterOverride(parameter.id, option.value)
-                        viewModel.goBackFromOptions(modeIndex: modeIndex)
+                        viewModel.selectOption(modeIndex: modeIndex, parameter: parameter, value: option.value)
                     }
             }
         }

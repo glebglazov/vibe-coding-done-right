@@ -71,13 +71,7 @@ struct MenuBarView: View {
         if !dependencies.isTranscriptionReady {
             return dependencies.initializationStatus
         }
-        switch dependencies.coordinator.state {
-        case .idle: return "Ready"
-        case .preparingToRecord: return "Starting..."
-        case .recording: return "Recording..."
-        case .transcribing: return "Transcribing..."
-        case .error(let msg): return "Error: \(msg)"
-        }
+        return dependencies.coordinator.state.statusText
     }
 
     private var hotkeyDisplay: String {

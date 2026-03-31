@@ -7,9 +7,6 @@ struct ModesListView: View {
     @Binding var path: NavigationPath
     @State private var showDisabledModes = false
 
-    // MARK: - Constants
-    private static let newModeBaseName = "New Mode"
-
     /// Modes to display in the list, respecting the show-disabled toggle
     private var displayedModes: [Mode] {
         if showDisabledModes {
@@ -98,22 +95,8 @@ struct ModesListView: View {
         return index + 1
     }
 
-    /// Reorders modes by mapping filtered-list indices back to the full `settings.modes` array.
-    /// When `displayedModes` is a filtered subset, SwiftUI's `onMove` indices refer to the
-    /// filtered list, not the backing array — applying them directly would move the wrong items.
     private func moveDisplayedModes(from source: IndexSet, to destination: Int) {
-        var reordered = displayedModes
-        reordered.move(fromOffsets: source, toOffset: destination)
-
-        // Rebuild settings.modes: swap in the reordered visible items while keeping hidden items in place
-        let visibleIDs = Set(reordered.map(\.id))
-        var reorderedIterator = reordered.makeIterator()
-        settings.modes = settings.modes.map { mode in
-            if visibleIDs.contains(mode.id), let next = reorderedIterator.next() {
-                return next
-            }
-            return mode
-        }
+        settings.moveDisplayedModes(displayedModes, from: source, to: destination)
     }
 
     private func toggleDisabled(_ mode: Mode, disabled: Bool) {
@@ -121,17 +104,12 @@ struct ModesListView: View {
     }
 
     private func resetToDefaults(_ mode: Mode) {
-        guard let templateID = mode.templateID,
-              let template = ModeTemplate.template(for: templateID),
-              let index = settings.modes.firstIndex(where: { $0.id == mode.id }) else { return }
-        template.resetMode(&settings.modes[index])
+        settings.resetModeToDefaults(mode)
     }
 
     private func addMode() {
-        let name = nextUniqueName(base: Self.newModeBaseName, existingNames: Set(settings.modes.map(\.name)))
-        let newMode = Mode(id: UUID(), name: name)
-        settings.modes.append(newMode)
-        path.append(newMode.id)
+        let id = settings.addMode()
+        path.append(id)
     }
 
     private func deleteMode(_ mode: Mode) {

@@ -20,8 +20,9 @@ struct TranscriptionTabView: View {
                     Spacer()
 
                     ModelStatusBadge(
-                        isReady: isTranscriptionReady,
-                        statusText: initializationStatus
+                        status: isTranscriptionReady ? .ready
+                            : initializationStatus.hasPrefix("Failed") ? .failed
+                            : .loading(initializationStatus)
                     )
                 }
             }
@@ -68,8 +69,13 @@ private struct ModelStatusBadge: View {
     private static let badgeVPadding: CGFloat = 4
     private static let badgeCornerRadius: CGFloat = 12
 
-    let isReady: Bool
-    let statusText: String
+    enum Status {
+        case ready
+        case loading(String)
+        case failed
+    }
+
+    let status: Status
 
     var body: some View {
         HStack(spacing: Self.dotSpacing) {
@@ -87,14 +93,18 @@ private struct ModelStatusBadge: View {
     }
 
     private var badgeColor: Color {
-        if isReady { return .green }
-        if statusText.hasPrefix("Failed") { return .red }
-        return .gray
+        switch status {
+        case .ready: .green
+        case .loading: .gray
+        case .failed: .red
+        }
     }
 
     private var badgeText: String {
-        if isReady { return "Ready" }
-        if statusText.hasPrefix("Failed") { return "Error" }
-        return statusText
+        switch status {
+        case .ready: "Ready"
+        case .loading(let text): text
+        case .failed: "Error"
+        }
     }
 }

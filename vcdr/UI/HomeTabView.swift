@@ -66,14 +66,14 @@ struct HomeTabView: View {
                     VStack(spacing: 8) {
                         Button(action: { coordinator.toggleRecording() }) {
                             Label(
-                                isRecording ? "Stop Recording" : "Start Recording",
-                                systemImage: isRecording ? "stop.circle.fill" : "record.circle"
+                                coordinator.state.isRecording ? "Stop Recording" : "Start Recording",
+                                systemImage: coordinator.state.isRecording ? "stop.circle.fill" : "record.circle"
                             )
                             .font(.title3)
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(isRecording ? .red : .accentColor)
-                        .disabled(!canToggleRecording)
+                        .tint(coordinator.state.isRecording ? .red : .accentColor)
+                        .disabled(!coordinator.state.canToggleRecording)
 
                         Button(action: { modeSwitcherCoordinator.showSwitcher() }) {
                             let mode = settings.activeMode
@@ -142,16 +142,6 @@ struct HomeTabView: View {
                 Color.clear.frame(width: 0, height: 0)
             }
         }
-    }
-
-    private var isRecording: Bool {
-        let state = coordinator.state
-        return state == .preparingToRecord || state == .recording
-    }
-
-    private var canToggleRecording: Bool {
-        let state = coordinator.state
-        return state == .idle || state == .preparingToRecord || state == .recording
     }
 
 }

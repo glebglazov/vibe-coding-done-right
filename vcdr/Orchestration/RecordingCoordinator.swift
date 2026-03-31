@@ -248,4 +248,25 @@ extension RecordingCoordinator.State {
         case .error: "exclamationmark.circle"
         }
     }
+
+    /// Whether the coordinator is in a recording-related state (preparing or actively recording).
+    var isRecording: Bool {
+        self == .preparingToRecord || self == .recording
+    }
+
+    /// Whether the user can toggle recording (idle, preparing, or recording).
+    var canToggleRecording: Bool {
+        self == .idle || self == .preparingToRecord || self == .recording
+    }
+
+    /// Human-readable status text for display.
+    var statusText: String {
+        switch self {
+        case .idle: "Ready"
+        case .preparingToRecord: "Starting..."
+        case .recording: "Recording..."
+        case .transcribing: "Transcribing..."
+        case .error(let msg): "Error: \(msg)"
+        }
+    }
 }

@@ -20,9 +20,7 @@ struct ModeDetailView: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button("Reset to Defaults") {
-                            if let template = ModeTemplate.template(for: templateID) {
-                                template.resetMode(&mode)
-                            }
+                            settings.resetModeToDefaults(mode)
                         }
                         .font(.caption)
                     }

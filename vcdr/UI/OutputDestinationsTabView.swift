@@ -6,9 +6,6 @@ struct OutputDestinationsListView: View {
     @Bindable var settings: AppSettings
     @Binding var path: NavigationPath
 
-    // MARK: - Constants
-    private static let newDestinationBaseName = "New Destination"
-
     var body: some View {
         List {
             ForEach(settings.outputDestinations) { destination in
@@ -51,10 +48,8 @@ struct OutputDestinationsListView: View {
     }
 
     private func addDestination() {
-        let name = nextUniqueName(base: Self.newDestinationBaseName, existingNames: Set(settings.outputDestinations.map(\.name)))
-        let newDest = OutputDestination.makeNewBashScript(name: name)
-        settings.outputDestinations.append(newDest)
-        path.append(OutputDestinationNavID(id: newDest.id))
+        let id = settings.addDestination()
+        path.append(OutputDestinationNavID(id: id))
     }
 
     private func isDestinationInUse(_ destination: OutputDestination) -> Bool {

@@ -1,12 +1,48 @@
 import SwiftUI
 import Carbon
 
+/// Manages the lifecycle of an NSEvent monitor for recording keyboard shortcuts.
+/// Separates event system interaction from the SwiftUI view.
+private final class ShortcutEventMonitor {
+    private var monitor: Any?
+
+    /// Starts listening for key-down events with modifier flags.
+    /// Calls `onCapture` with the keyCode and CGEventFlags when a valid combo is pressed.
+    func start(onCapture: @escaping (UInt16, UInt64) -> Void) {
+        stop()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection([.command, .option, .shift, .control])
+            guard !flags.isEmpty else { return event }
+
+            var cgFlags: UInt64 = 0
+            if flags.contains(.command) { cgFlags |= CGEventFlags.maskCommand.rawValue }
+            if flags.contains(.option) { cgFlags |= CGEventFlags.maskAlternate.rawValue }
+            if flags.contains(.shift) { cgFlags |= CGEventFlags.maskShift.rawValue }
+            if flags.contains(.control) { cgFlags |= CGEventFlags.maskControl.rawValue }
+
+            onCapture(event.keyCode, cgFlags)
+            return nil
+        }
+    }
+
+    func stop() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        monitor = nil
+    }
+
+    deinit {
+        stop()
+    }
+}
+
 struct ShortcutRecorderRow: View {
     let label: String
     @Binding var keyCode: UInt16
     @Binding var modifiers: UInt64
     @State private var isRecording = false
-    @State private var eventMonitor: Any?
+    @State private var eventMonitor = ShortcutEventMonitor()
 
     // MARK: - Constants
 
@@ -80,29 +116,15 @@ struct ShortcutRecorderRow: View {
 
     private func startRecording() {
         isRecording = true
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let flags = event.modifierFlags.intersection([.command, .option, .shift, .control])
-            guard !flags.isEmpty else { return event }
-
-            keyCode = event.keyCode
-
-            var cgFlags: UInt64 = 0
-            if flags.contains(.command) { cgFlags |= CGEventFlags.maskCommand.rawValue }
-            if flags.contains(.option) { cgFlags |= CGEventFlags.maskAlternate.rawValue }
-            if flags.contains(.shift) { cgFlags |= CGEventFlags.maskShift.rawValue }
-            if flags.contains(.control) { cgFlags |= CGEventFlags.maskControl.rawValue }
-            modifiers = cgFlags
-
+        eventMonitor.start { [self] capturedKeyCode, capturedModifiers in
+            keyCode = capturedKeyCode
+            modifiers = capturedModifiers
             stopRecording()
-            return nil
         }
     }
 
     private func stopRecording() {
         isRecording = false
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
-        }
+        eventMonitor.stop()
     }
 }

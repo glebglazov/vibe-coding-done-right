@@ -71,6 +71,31 @@ final class ModeSwitcherViewModel {
         onActivate(id)
     }
 
+    /// Navigates to the options level for a parameter.
+    func navigateToParameterOptions(modeIndex: Int, parameterIndex: Int) {
+        navigation.level = .options(modeIndex: modeIndex, parameterIndex: parameterIndex)
+        navigation.subHighlightedIndex = 0
+        onResize?()
+    }
+
+    /// Selects an option value for a parameter, then navigates back.
+    func selectOption(modeIndex: Int, parameter: ModeParameter, value: String) {
+        parameterOverrides[parameter.id] = value
+        onParameterOverride(parameter.id, value)
+        goBackFromOptions(modeIndex: modeIndex)
+    }
+
+    /// Returns the resolved display label for a mode's parameter overrides.
+    func parameterLabel(for mode: Mode) -> String {
+        mode.parameters.compactMap { param -> String? in
+            if let overrideValue = parameterOverrides[param.id],
+               let option = param.options.first(where: { $0.value == overrideValue }) {
+                return option.label
+            }
+            return param.options.first?.label
+        }.joined(separator: ", ")
+    }
+
     /// Returns true if the event was handled
     func handleKeyEvent(_ event: NSEvent) -> Bool {
         let keyCode = event.keyCode
