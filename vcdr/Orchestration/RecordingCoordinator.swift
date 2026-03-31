@@ -43,6 +43,7 @@ final class RecordingCoordinator {
     let recordingIndicator: RecordingIndicatorPanel
     private let selectionCapturer: SelectionCapturer
     let overrides: SessionOverrides
+    let speakerVerifier: MFCCSpeakerVerifier
 
     @ObservationIgnored weak var delegate: RecordingCoordinatorDelegate?
 
@@ -60,7 +61,8 @@ final class RecordingCoordinator {
         mediaPlaybackController: MediaPlaybackController,
         recordingIndicator: RecordingIndicatorPanel,
         selectionCapturer: SelectionCapturer,
-        overrides: SessionOverrides
+        overrides: SessionOverrides,
+        speakerVerifier: MFCCSpeakerVerifier
     ) {
         self.settings = settings
         self.transcriptionProvider = transcriptionProvider
@@ -69,6 +71,7 @@ final class RecordingCoordinator {
         self.recordingIndicator = recordingIndicator
         self.selectionCapturer = selectionCapturer
         self.overrides = overrides
+        self.speakerVerifier = speakerVerifier
     }
 
     // MARK: - Recording State Machine

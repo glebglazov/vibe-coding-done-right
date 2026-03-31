@@ -16,6 +16,7 @@ struct MainWindowView: View {
         case variables
         case outputDestinations
         case transcription
+        case voiceLock
         case history
         #if DEBUG
         case debug
@@ -29,6 +30,7 @@ struct MainWindowView: View {
             case .variables: "Variables"
             case .outputDestinations: "Output"
             case .transcription: "Transcription"
+            case .voiceLock: "Voice Lock"
             case .history: "History"
             #if DEBUG
             case .debug: "Debug"
@@ -44,6 +46,7 @@ struct MainWindowView: View {
             case .variables: "key"
             case .outputDestinations: "arrow.right.square"
             case .transcription: "waveform"
+            case .voiceLock: "person.badge.shield.checkmark"
             case .history: "clock.arrow.circlepath"
             #if DEBUG
             case .debug: "ant"
@@ -102,6 +105,12 @@ struct MainWindowView: View {
                             settings: dependencies.settings,
                             isTranscriptionReady: dependencies.isTranscriptionReady,
                             initializationStatus: dependencies.initializationStatus
+                        )
+                    case .voiceLock:
+                        VoiceLockTabView(
+                            settings: dependencies.settings,
+                            enrollmentCoordinator: dependencies.enrollmentCoordinator,
+                            hasMicrophonePermission: dependencies.hasMicrophonePermission
                         )
                     case .history:
                         HistoryTabView(

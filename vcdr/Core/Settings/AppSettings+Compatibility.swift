@@ -53,6 +53,16 @@ extension AppSettings {
         set { transcriptionSettings.terminatorTemplate = newValue }
     }
 
+    var voiceLockEnabled: Bool {
+        get { voiceLockSettings.isEnabled }
+        set { voiceLockSettings.isEnabled = newValue }
+    }
+
+    var voiceLockThreshold: Float {
+        get { voiceLockSettings.sensitivityThreshold }
+        set { voiceLockSettings.sensitivityThreshold = newValue }
+    }
+
     // MARK: - Mode Management
 
     /// Disables or enables a mode; if the active mode is disabled, switches to the first visible mode.

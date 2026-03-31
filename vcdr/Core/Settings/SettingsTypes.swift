@@ -26,6 +26,16 @@ struct TranscriptionSettings: Codable, Equatable {
     )
 }
 
+struct VoiceLockSettings: Codable, Equatable {
+    var isEnabled: Bool
+    var sensitivityThreshold: Float
+
+    static let `default` = VoiceLockSettings(
+        isEnabled: false,
+        sensitivityThreshold: MFCCSpeakerVerifier.defaultThreshold
+    )
+}
+
 struct ModeConfiguration: Equatable {
     var modes: [Mode]
     var activeModeID: UUID

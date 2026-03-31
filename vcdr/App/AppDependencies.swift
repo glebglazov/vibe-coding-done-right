@@ -15,6 +15,8 @@ final class AppDependencies {
     let mediaPlaybackController: MediaPlaybackController
     let transcriptionHistory: TranscriptionHistory
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
+    let speakerVerifier: MFCCSpeakerVerifier
+    let enrollmentCoordinator: EnrollmentCoordinator
 
     #if DEBUG
     let audioRecorder: AudioRecorder
@@ -50,6 +52,18 @@ final class AppDependencies {
         let recordingIndicator = RecordingIndicatorPanel(settings: settings, overrides: overrides, audioRecorder: audioRecorder)
         let selectionCapturer = SelectionCapturer()
         let clipboardMonitor = ClipboardMonitor()
+        let voiceProfileStore = VoiceProfileStore()
+        let speakerVerifier = MFCCSpeakerVerifier(
+            store: voiceProfileStore,
+            threshold: settings.voiceLockThreshold
+        )
+        self.speakerVerifier = speakerVerifier
+        let enrollmentRecorder = AudioRecorder()
+        self.enrollmentCoordinator = EnrollmentCoordinator(
+            speakerVerifier: speakerVerifier,
+            audioRecorder: enrollmentRecorder,
+            settings: settings
+        )
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
@@ -72,7 +86,8 @@ final class AppDependencies {
             mediaPlaybackController: mediaPlayback,
             recordingIndicator: recordingIndicator,
             selectionCapturer: selectionCapturer,
-            overrides: overrides
+            overrides: overrides,
+            speakerVerifier: speakerVerifier
         )
 
         self.copyLatestCaptureHandler = CopyLatestCaptureHandler(

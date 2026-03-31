@@ -11,6 +11,28 @@ extension RecordingCoordinator {
 
     func processTranscription(audioURL: URL) async {
         do {
+            // Verify speaker identity before transcribing (avoids wasting time on unrecognized voices)
+            if settings.voiceLockEnabled, await speakerVerifier.hasEnrolledProfile {
+                // Sync the latest threshold from settings into the actor
+                await speakerVerifier.updateThreshold(settings.voiceLockThreshold)
+                let result = try await speakerVerifier.verify(audioURL: audioURL)
+                try Task.checkCancellation()
+                guard result.isMatch else {
+                    Logger.voiceLock.info("Voice not recognized (confidence: \(String(format: "%.3f", result.confidence))), discarding recording")
+                    try? FileManager.default.removeItem(at: audioURL)
+                    cancelHotkeyManager.isEnabled = false
+                    processingTask = nil
+                    recordingRun = nil
+                    state = .error("Voice not recognized")
+                    delegate?.recordingCoordinatorDidFailRecording(message: "Voice not recognized")
+                    recordingIndicator.show()
+                    recordingIndicator.update(phase: .error, message: "Voice not recognized")
+                    recordingIndicator.dismissAfterDelay(Self.errorIndicatorDuration)
+                    resetAfterDelay()
+                    return
+                }
+            }
+
             let transcriptionStart = ContinuousClock.now
             let rawText = try await transcriptionProvider.transcribe(audioFileURL: audioURL)
             try Task.checkCancellation()

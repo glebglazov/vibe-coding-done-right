@@ -73,6 +73,9 @@ final class AppSettings {
     var variables: [Variable] {
         didSet { save() }
     }
+    var voiceLockSettings: VoiceLockSettings {
+        didSet { save() }
+    }
 
     /// Whether a mode is fully configured and ready to use.
     /// Cloud AI modes require the provider's API key variable to be set.
@@ -132,6 +135,7 @@ final class AppSettings {
         static let removeFillerWords = "removeFillerWords"
         static let terminatorTemplateEnabled = "terminatorTemplateEnabled"
         static let terminatorTemplate = "terminatorTemplate"
+        static let voiceLockSettings = "voiceLockSettings"
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         static let legacyPushToTalkHotkey = "pushToTalkHotkey"
         static let legacyKeyCode = "hotkeyKeyCode"
@@ -249,6 +253,9 @@ final class AppSettings {
         // Load variables
         self.variables = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
 
+        // Load voice lock settings
+        self.voiceLockSettings = Self.decodeSetting(from: userDefaults, forKey: Keys.voiceLockSettings, default: .default)
+
         // Ensure API key variables exist (pre-created with empty values for discoverability)
         let requiredVariables = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
         let existingNames = Set(variables.map(\.name))
@@ -281,6 +288,7 @@ final class AppSettings {
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
         encode(variables, forKey: Keys.variables)
+        encode(voiceLockSettings, forKey: Keys.voiceLockSettings)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
         userDefaults.set(transcriptionSettings.terminatorTemplateEnabled, forKey: Keys.terminatorTemplateEnabled)
         userDefaults.set(transcriptionSettings.terminatorTemplate, forKey: Keys.terminatorTemplate)
