@@ -19,6 +19,35 @@ final class AudioRecorder {
     @ObservationIgnored
     private var interruptionObservers: [Any] = []
 
+    // MARK: - Audio Input
+
+    /// UserDefaults key for the preferred audio input port UID
+    static let preferredInputUIDKey = "preferredAudioInputUID"
+
+    /// Returns the list of available audio input ports on the current device.
+    /// Requires an active audio session — returns an empty array if unavailable.
+    var availableInputs: [AVAudioSessionPortDescription] {
+        AVAudioSession.sharedInstance().availableInputs ?? []
+    }
+
+    /// Applies the user's preferred audio input (stored in UserDefaults) to the audio session.
+    /// Falls back to the system default if the saved input is no longer available.
+    private func applyPreferredInput() {
+        let session = AVAudioSession.sharedInstance()
+        guard let savedUID = UserDefaults.standard.string(forKey: Self.preferredInputUIDKey),
+              let match = session.availableInputs?.first(where: { $0.uid == savedUID })
+        else {
+            // No preference or saved device unavailable — use system default
+            return
+        }
+        do {
+            try session.setPreferredInput(match)
+            Logger.recording.info("Set preferred input to \(match.portName)")
+        } catch {
+            Logger.recording.warning("Failed to set preferred input: \(error)")
+        }
+    }
+
     // MARK: - Constants
 
     /// Number of audio level samples kept for the waveform display
@@ -53,6 +82,7 @@ final class AudioRecorder {
                 try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
                 try session.setActive(true)
                 audioSessionConfigured = true
+                applyPreferredInput()
                 setupInterruptionObservers()
             } catch {
                 Logger.recording.error("Failed to configure audio session: \(error)")
@@ -60,23 +90,33 @@ final class AudioRecorder {
             }
         }
 
+        bufferHandler = onBuffer
+
+        guard startEngine() else {
+            audioSessionConfigured = false
+            return false
+        }
+        return true
+    }
+
+    // MARK: - Engine Lifecycle
+
+    /// Creates a new AVAudioEngine, installs the buffer tap, and starts it.
+    /// Returns true on success. Assumes `bufferHandler` is already set.
+    private func startEngine() -> Bool {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
-
-        bufferHandler = onBuffer
 
         inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
             [weak self] buffer, _ in
             guard let self else { return }
 
-            // Compute level from raw samples (runs on audio thread)
             let level = Self.computeLevel(from: buffer)
             Task { @MainActor [weak self] in
                 self?.appendLevel(level)
             }
 
-            // Forward buffer to streaming transcription
             self.bufferHandler?(buffer)
         }
 
@@ -84,13 +124,31 @@ final class AudioRecorder {
             try engine.start()
             audioEngine = engine
             isRecording = true
-            Logger.recording.info("Recording started via AVAudioEngine (format: \(format))")
+            Logger.recording.info("Audio engine started (format: \(format))")
             return true
         } catch {
             Logger.recording.error("Failed to start audio engine: \(error)")
             inputNode.removeTap(onBus: 0)
-            audioSessionConfigured = false
             return false
+        }
+    }
+
+    /// Tears down the current engine and starts a fresh one on the new audio route.
+    /// Called when the audio route changes mid-recording (e.g. AirPods connect/disconnect).
+    private func restartEngine() {
+        guard let oldEngine = audioEngine else { return }
+
+        oldEngine.inputNode.removeTap(onBus: 0)
+        oldEngine.stop()
+        audioEngine = nil
+
+        applyPreferredInput()
+
+        if startEngine() {
+            Logger.recording.info("Audio engine restarted after route change")
+        } else {
+            isRecording = false
+            Logger.recording.error("Failed to restart audio engine after route change")
         }
     }
 
@@ -218,10 +276,24 @@ final class AudioRecorder {
             let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue)
         else { return }
 
-        if reason == .oldDeviceUnavailable {
-            // Headphones unplugged — audio route changed to speaker.
-            // Recording continues through the new route.
-            Logger.recording.info("Audio route changed — old device unavailable")
+        Logger.recording.info("Audio route changed — reason: \(reasonValue)")
+
+        guard isRecording else { return }
+
+        switch reason {
+        case .newDeviceAvailable:
+            // New device connected (e.g. AirPods) — iOS auto-switches to it.
+            // Restart engine to re-apply preferred input and pick up the new format.
+            restartEngine()
+        case .oldDeviceUnavailable:
+            // Device disconnected (e.g. AirPods removed) — input node is stale.
+            // Restart engine so recording continues through the new route.
+            restartEngine()
+        case .override, .routeConfigurationChange:
+            // System or app changed the route — restart to stay in sync.
+            restartEngine()
+        default:
+            break
         }
     }
 }

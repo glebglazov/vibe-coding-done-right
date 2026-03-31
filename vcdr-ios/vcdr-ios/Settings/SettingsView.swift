@@ -1,9 +1,11 @@
 import SwiftUI
+import AVFoundation
 
 struct SettingsView: View {
     @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance: Appearance = .system
+    @AppStorage(AudioRecorder.preferredInputUIDKey) private var preferredInputUID = ""
     @AppStorage(AIProcessingSettings.enabledKey) private var aiEnabled = false
     @AppStorage(AIProcessingSettings.activeInDictationKey) private var aiActiveInDictation = false
     @AppStorage(AIProcessingSettings.providerKey) private var aiProviderRaw = AIProvider.anthropic.rawValue
@@ -11,6 +13,7 @@ struct SettingsView: View {
     @AppStorage(AIProcessingSettings.openaiApiKeyKey) private var openaiApiKey = ""
     @State private var isEditingAnthropicKey = false
     @State private var isEditingOpenAIKey = false
+    @State private var availableInputs: [AVAudioSessionPortDescription] = []
 
     var body: some View {
         NavigationStack {
@@ -20,10 +23,12 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(spacing: 32) {
                         themeSection
+                        microphoneSection
                         aiProcessingSection
                     }
                     .padding(24)
                 }
+                .onAppear { refreshAvailableInputs() }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -59,6 +64,68 @@ struct SettingsView: View {
                 }
             }
             .background(theme.surfaceContainer)
+        }
+    }
+
+    // MARK: - Microphone
+
+    private var microphoneSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle("MICROPHONE")
+
+            if availableInputs.isEmpty {
+                Text("No audio inputs available")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(theme.onSurfaceVariant)
+            } else {
+                VStack(spacing: 0) {
+                    // "Automatic" option — uses system default
+                    microphoneRow(name: "Automatic", uid: "", isSelected: preferredInputUID.isEmpty)
+
+                    ForEach(availableInputs, id: \.uid) { input in
+                        microphoneRow(name: input.portName, uid: input.uid, isSelected: preferredInputUID == input.uid)
+                    }
+                }
+                .background(theme.surfaceContainer)
+            }
+
+            Text("Choose which microphone to use for recording. \"Automatic\" uses the system default.")
+                .font(.system(size: 12))
+                .foregroundStyle(theme.onSurfaceVariant)
+        }
+    }
+
+    private func microphoneRow(name: String, uid: String, isSelected: Bool) -> some View {
+        Button {
+            preferredInputUID = uid
+        } label: {
+            HStack {
+                Text(name)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(theme.onSurface)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(theme.primary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+    }
+
+    private func refreshAvailableInputs() {
+        // Temporarily activate the session to query available inputs,
+        // then deactivate so it doesn't interfere with other audio.
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+            try session.setActive(true)
+            availableInputs = session.availableInputs ?? []
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            availableInputs = session.availableInputs ?? []
         }
     }
 
