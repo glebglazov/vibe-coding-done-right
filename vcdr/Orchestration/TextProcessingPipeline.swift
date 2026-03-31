@@ -69,6 +69,19 @@ enum TextProcessingPipeline {
                 )
             }
 
+        case .localAgent:
+            let paramEnv = Dictionary(
+                uniqueKeysWithValues: parameterValues.map { ("VCDR_PARAM_\($0.key)", $0.value) }
+            )
+            var combinedEnv = variableEnvironment
+            combinedEnv.merge(paramEnv) { _, param in param }
+            let processedText = try await BashRunner.run(
+                command: mode.localAgentProvider.command,
+                text: structured,
+                extraEnvironment: combinedEnv
+            )
+            result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
+
         case .bashScript:
             let paramEnv = Dictionary(
                 uniqueKeysWithValues: parameterValues.map { ("VCDR_PARAM_\($0.key)", $0.value) }
@@ -110,9 +123,18 @@ enum TextProcessingPipeline {
         case .cloudAI:
             // Cloud AI: XML structure WITHOUT system prompt in the text
             // (system prompt is sent as a separate API parameter)
-            return structureInputXML(text: text, captures: captures, includeSystemPrompt: false, mode: mode)
+            return structureInputXML(text: text, captures: captures, systemPrompt: nil)
+        case .localAgent:
+            let prompt: String = switch mode.localAgentPromptType {
+            case .default: mode.localAgentProvider.defaultSystemPrompt
+            case .custom: mode.localAgentSystemPrompt
+            }
+            return structureInputXML(text: text, captures: captures,
+                                     systemPrompt: prompt.isEmpty ? nil : prompt)
         case .bashScript:
-            return structureInputXML(text: text, captures: captures, includeSystemPrompt: true, mode: mode)
+            let prompt = (mode.systemPromptEnabled && !mode.systemPrompt.isEmpty)
+                ? mode.systemPrompt : nil
+            return structureInputXML(text: text, captures: captures, systemPrompt: prompt)
         }
     }
 
@@ -131,17 +153,16 @@ enum TextProcessingPipeline {
         return text + "\n\n" + quoted
     }
 
-    /// XML input structuring for .cloudAI/.bashScript — <dictation> wrapping,
+    /// XML input structuring for .cloudAI/.localAgent/.bashScript — <dictation> wrapping,
     /// optional system prompt, and XML capture tags for machine-parseable input.
     private static func structureInputXML(
         text: String,
         captures: [CapturedContext],
-        includeSystemPrompt: Bool,
-        mode: Mode
+        systemPrompt: String?
     ) -> String {
         var result = "<dictation>\(text)</dictation>"
-        if includeSystemPrompt && mode.systemPromptEnabled && !mode.systemPrompt.isEmpty {
-            result = mode.systemPrompt + "\n\n" + result
+        if let prompt = systemPrompt, !prompt.isEmpty {
+            result = prompt + "\n\n" + result
         }
         if !captures.isEmpty {
             result += "\n\n" + Mode.formatCaptures(captures)

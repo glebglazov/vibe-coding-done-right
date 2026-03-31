@@ -11,6 +11,9 @@ struct ModeTemplate {
     let systemPrompt: String
     let aiProvider: AIProvider
     let aiPromptType: AIPromptType
+    let localAgentProvider: LocalAgentProvider
+    let localAgentPromptType: LocalAgentPromptType
+    let localAgentSystemPrompt: String
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
     let showPreview: Bool
@@ -27,6 +30,9 @@ struct ModeTemplate {
             systemPrompt: systemPrompt,
             aiProvider: aiProvider,
             aiPromptType: aiPromptType,
+            localAgentProvider: localAgentProvider,
+            localAgentPromptType: localAgentPromptType,
+            localAgentSystemPrompt: localAgentSystemPrompt,
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
             showPreview: showPreview
@@ -42,6 +48,9 @@ struct ModeTemplate {
         mode.systemPrompt = systemPrompt
         mode.aiProvider = aiProvider
         mode.aiPromptType = aiPromptType
+        mode.localAgentProvider = localAgentProvider
+        mode.localAgentPromptType = localAgentPromptType
+        mode.localAgentSystemPrompt = localAgentSystemPrompt
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.parameters = parameters
         mode.showPreview = showPreview
@@ -79,6 +88,9 @@ extension ModeTemplate {
         systemPrompt: "",
         aiProvider: .anthropic,
         aiPromptType: .dictation,
+        localAgentProvider: .claudeCode,
+        localAgentPromptType: .default,
+        localAgentSystemPrompt: "",
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false
@@ -94,6 +106,9 @@ extension ModeTemplate {
         systemPrompt: "",
         aiProvider: .anthropic,
         aiPromptType: .dictation,
+        localAgentProvider: .claudeCode,
+        localAgentPromptType: .default,
+        localAgentSystemPrompt: "",
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false
@@ -103,12 +118,15 @@ extension ModeTemplate {
         id: "claude-code",
         defaultName: "Claude Code",
         availabilityCommand: "claude",
-        processingType: .bashScript,
-        processingCommand: "zsh -ic 'set -o pipefail; cd /tmp && claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"'",
-        systemPromptEnabled: true,
-        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
+        processingType: .localAgent,
+        processingCommand: "",
+        systemPromptEnabled: false,
+        systemPrompt: "",
         aiProvider: .anthropic,
         aiPromptType: .dictation,
+        localAgentProvider: .claudeCode,
+        localAgentPromptType: .default,
+        localAgentSystemPrompt: "",
         parameters: [
             ModeParameter(id: claudeCodeModelParamID, name: "Model", options: [
                 ModeParameterOption(id: claudeCodeHaikuOptionID, label: "Haiku", value: "haiku"),
@@ -130,6 +148,9 @@ extension ModeTemplate {
         systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
         aiProvider: .anthropic,
         aiPromptType: .dictation,
+        localAgentProvider: .claudeCode,
+        localAgentPromptType: .default,
+        localAgentSystemPrompt: "",
         parameters: [
             ModeParameter(id: ollamaModelParamID, name: "Model", options: [
                 ModeParameterOption(id: ollamaQwen35_08bOptionID, label: "Qwen3.5 - 0.8B", value: "qwen3.5:0.8b"),

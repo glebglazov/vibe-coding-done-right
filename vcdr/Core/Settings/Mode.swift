@@ -3,6 +3,7 @@ import Foundation
 enum ProcessingType: String, Codable, CaseIterable {
     case none
     case cloudAI
+    case localAgent
     case bashScript
 }
 
@@ -33,6 +34,63 @@ enum AIPromptType: String, Codable, CaseIterable {
     var displayName: String {
         switch self {
         case .dictation: "AI Dictation"
+        case .custom: "Custom"
+        }
+    }
+}
+
+enum LocalAgentProvider: String, Codable, CaseIterable {
+    case claudeCode
+
+    var displayName: String {
+        switch self {
+        case .claudeCode: "Claude Code"
+        }
+    }
+
+    /// Shell command to check availability.
+    var availabilityCommand: String {
+        switch self {
+        case .claudeCode: "claude"
+        }
+    }
+
+    /// Default system prompt for this provider.
+    var defaultSystemPrompt: String {
+        switch self {
+        case .claudeCode:
+            "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent."
+        }
+    }
+
+    /// The CLI command template. Uses $VCDR_TEXT and $VCDR_PARAM_* env vars.
+    var command: String {
+        switch self {
+        case .claudeCode:
+            "zsh -ic 'set -o pipefail; cd /tmp && claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"'"
+        }
+    }
+
+    /// Default parameters for this provider. Used to auto-populate user-created modes.
+    var defaultParameters: [ModeParameter] {
+        switch self {
+        case .claudeCode:
+            [ModeParameter(id: UUID(), name: "Model", options: [
+                ModeParameterOption(id: UUID(), label: "Haiku", value: "haiku"),
+                ModeParameterOption(id: UUID(), label: "Sonnet", value: "sonnet"),
+                ModeParameterOption(id: UUID(), label: "Opus", value: "opus"),
+            ])]
+        }
+    }
+}
+
+enum LocalAgentPromptType: String, Codable, CaseIterable {
+    case `default`
+    case custom
+
+    var displayName: String {
+        switch self {
+        case .default: "Default"
         case .custom: "Custom"
         }
     }
@@ -90,6 +148,11 @@ struct Mode: Identifiable, Codable, Equatable {
     var systemPrompt: String
     var aiProvider: AIProvider
     var aiPromptType: AIPromptType
+
+    // Local Agent
+    var localAgentProvider: LocalAgentProvider
+    var localAgentPromptType: LocalAgentPromptType
+    var localAgentSystemPrompt: String
 
     // Parameters
     var parameters: [ModeParameter]
@@ -198,6 +261,9 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt: String = "",
         aiProvider: AIProvider = .anthropic,
         aiPromptType: AIPromptType = .dictation,
+        localAgentProvider: LocalAgentProvider = .claudeCode,
+        localAgentPromptType: LocalAgentPromptType = .default,
+        localAgentSystemPrompt: String = "",
         defaultOutputDestinationID: UUID = OutputDestination.builtInPasteID,
         parameters: [ModeParameter] = [],
         showPreview: Bool = false,
@@ -213,6 +279,9 @@ struct Mode: Identifiable, Codable, Equatable {
         self.systemPrompt = systemPrompt
         self.aiProvider = aiProvider
         self.aiPromptType = aiPromptType
+        self.localAgentProvider = localAgentProvider
+        self.localAgentPromptType = localAgentPromptType
+        self.localAgentSystemPrompt = localAgentSystemPrompt
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.parameters = parameters
         self.showPreview = showPreview
@@ -226,6 +295,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case processingType, processingCommand
         case systemPromptEnabled, systemPrompt
         case aiProvider, aiPromptType
+        case localAgentProvider, localAgentPromptType, localAgentSystemPrompt
         case defaultOutputDestinationID
         case parameters
         case showPreview
@@ -249,6 +319,9 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(aiProvider, forKey: .aiProvider)
         try container.encode(aiPromptType, forKey: .aiPromptType)
+        try container.encode(localAgentProvider, forKey: .localAgentProvider)
+        try container.encode(localAgentPromptType, forKey: .localAgentPromptType)
+        try container.encode(localAgentSystemPrompt, forKey: .localAgentSystemPrompt)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
         try container.encode(showPreview, forKey: .showPreview)
@@ -306,5 +379,10 @@ struct Mode: Identifiable, Codable, Equatable {
             self.aiProvider = .anthropic
             self.aiPromptType = .dictation
         }
+
+        // Local agent fields — backward-compatible defaults
+        localAgentProvider = try container.decodeIfPresent(LocalAgentProvider.self, forKey: .localAgentProvider) ?? .claudeCode
+        localAgentPromptType = try container.decodeIfPresent(LocalAgentPromptType.self, forKey: .localAgentPromptType) ?? .default
+        localAgentSystemPrompt = try container.decodeIfPresent(String.self, forKey: .localAgentSystemPrompt) ?? ""
     }
 }

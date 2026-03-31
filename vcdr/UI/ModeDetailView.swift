@@ -48,6 +48,7 @@ struct ModeDetailView: View {
                 Picker(selection: $mode.processingType) {
                     Text("None").tag(ProcessingType.none)
                     Text("Cloud AI").tag(ProcessingType.cloudAI)
+                    Text("Local Agent").tag(ProcessingType.localAgent)
                     Text("Bash Script").tag(ProcessingType.bashScript)
                 } label: {
                     EmptyView()
@@ -82,6 +83,36 @@ struct ModeDetailView: View {
                             Text("System Prompt")
                                 .foregroundStyle(.secondary)
                             TextEditor(text: $mode.systemPrompt)
+                                .font(.body)
+                                .frame(minHeight: 80)
+                                .border(Color.secondary.opacity(0.3))
+                        }
+                    }
+                }
+
+                if mode.processingType == .localAgent {
+                    Picker("Provider", selection: $mode.localAgentProvider) {
+                        ForEach(LocalAgentProvider.allCases, id: \.self) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
+                    }
+                    .onChange(of: mode.localAgentProvider) { _, newProvider in
+                        mode.parameters = newProvider.defaultParameters
+                    }
+
+                    localAgentParametersSection
+
+                    Picker("Prompt", selection: $mode.localAgentPromptType) {
+                        ForEach(LocalAgentPromptType.allCases, id: \.self) { promptType in
+                            Text(promptType.displayName).tag(promptType)
+                        }
+                    }
+
+                    if mode.localAgentPromptType == .custom {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("System Prompt")
+                                .foregroundStyle(.secondary)
+                            TextEditor(text: $mode.localAgentSystemPrompt)
                                 .font(.body)
                                 .frame(minHeight: 80)
                                 .border(Color.secondary.opacity(0.3))
@@ -150,6 +181,34 @@ struct ModeDetailView: View {
         .formStyle(.grouped)
         .navigationTitle(mode.name)
         .modifier(SelectAllOnAppear(focusState: $isNameFieldFocused))
+        .onChange(of: mode.processingType) { _, newType in
+            if newType == .localAgent && mode.parameters.isEmpty {
+                mode.parameters = mode.localAgentProvider.defaultParameters
+            }
+        }
+    }
+
+    // MARK: - Local Agent Parameters (read-only)
+
+    @ViewBuilder
+    private var localAgentParametersSection: some View {
+        ForEach(mode.parameters) { parameter in
+            VStack(alignment: .leading, spacing: 4) {
+                Text(parameter.name)
+                    .fontWeight(.medium)
+                HStack(spacing: 4) {
+                    ForEach(parameter.options) { option in
+                        Text(option.label)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+        }
     }
 
     // MARK: - Parameters

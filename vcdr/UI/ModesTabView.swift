@@ -181,6 +181,7 @@ private struct ModeRowView: View {
         let processing: String = switch mode.processingType {
         case .none: "Direct"
         case .cloudAI: "Cloud AI · \(mode.aiProvider.displayName)"
+        case .localAgent: "Local Agent · \(mode.localAgentProvider.displayName)"
         case .bashScript: "Script"
         }
         if let params = mode.defaultParameterLabels {
