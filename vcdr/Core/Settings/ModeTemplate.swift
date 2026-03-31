@@ -95,7 +95,7 @@ extension ModeTemplate {
         aiProvider: .anthropic,
         aiPromptType: .dictation,
         parameters: [],
-        defaultOutputDestinationID: OutputDestination.builtInPasteToInitialAppID,
+        defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false
     )
 
@@ -116,7 +116,7 @@ extension ModeTemplate {
                 ModeParameterOption(id: claudeCodeOpusOptionID, label: "Opus", value: "opus"),
             ]),
         ],
-        defaultOutputDestinationID: OutputDestination.builtInPasteToInitialAppID,
+        defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false
     )
 
@@ -136,7 +136,7 @@ extension ModeTemplate {
                 ModeParameterOption(id: ollamaQwen35_4bOptionID, label: "Qwen3.5 - 4B", value: "qwen3.5:4b"),
             ]),
         ],
-        defaultOutputDestinationID: OutputDestination.builtInPasteToInitialAppID,
+        defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false
     )
 

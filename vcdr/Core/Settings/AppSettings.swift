@@ -267,7 +267,12 @@ final class AppSettings {
         // Migration: remove outputPanel destination and migrate modes that referenced it
         outputDestinations.removeAll { $0.id == Self.legacyOutputPanelID }
         for i in modeConfig.modes.indices where modeConfig.modes[i].defaultOutputDestinationID == Self.legacyOutputPanelID {
-            modeConfig.modes[i].defaultOutputDestinationID = OutputDestination.builtInPasteToInitialAppID
+            modeConfig.modes[i].defaultOutputDestinationID = OutputDestination.builtInPasteID
+        }
+
+        // Migration: redirect Paste to Initial App modes to plain Paste (Cmd+V)
+        for i in modeConfig.modes.indices where modeConfig.modes[i].defaultOutputDestinationID == OutputDestination.builtInPasteToInitialAppID {
+            modeConfig.modes[i].defaultOutputDestinationID = OutputDestination.builtInPasteID
         }
     }
 

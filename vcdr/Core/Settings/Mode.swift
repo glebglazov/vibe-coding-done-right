@@ -198,7 +198,7 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt: String = "",
         aiProvider: AIProvider = .anthropic,
         aiPromptType: AIPromptType = .dictation,
-        defaultOutputDestinationID: UUID = OutputDestination.builtInPasteToInitialAppID,
+        defaultOutputDestinationID: UUID = OutputDestination.builtInPasteID,
         parameters: [ModeParameter] = [],
         showPreview: Bool = false,
         saveResultToClipboard: Bool = false
@@ -265,7 +265,7 @@ struct Mode: Identifiable, Codable, Equatable {
         templateID = try container.decodeIfPresent(String.self, forKey: .templateID)
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
-        defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteToInitialAppID
+        defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
         // New key takes precedence; fall back to inverted legacy quickAction
         if let preview = try container.decodeIfPresent(Bool.self, forKey: .showPreview) {
