@@ -14,8 +14,11 @@ enum SharedConstants {
     // Deep link URLs
     static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
 
+    /// Shared UserDefaults for App Group IPC between main app and keyboard extension.
+    /// Falls back to `.standard` if the App Group is unavailable (e.g. unit tests,
+    /// misconfigured signing) — prevents a crash at the cost of IPC not working.
     static var sharedDefaults: UserDefaults {
-        UserDefaults(suiteName: appGroupID)!
+        UserDefaults(suiteName: appGroupID) ?? .standard
     }
 }
 

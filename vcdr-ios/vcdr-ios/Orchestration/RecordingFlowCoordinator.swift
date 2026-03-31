@@ -50,6 +50,11 @@ final class RecordingFlowCoordinator {
     private var streamingSetupTask: Task<Void, Error>?
     /// Text sent to AI processing — needed for retry
     private var aiInputText: String = ""
+    /// Tracks the in-flight AI retry so rapid taps cancel the previous attempt.
+    private var aiRetryTask: Task<Void, Never>?
+    /// Token for the keyboard command NotificationCenter observer, stored so we can
+    /// remove it before re-registering to prevent observer accumulation on scene re-entry.
+    private var commandObserverToken: (any NSObjectProtocol)?
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
@@ -126,6 +131,12 @@ final class RecordingFlowCoordinator {
     /// until the recognition task starts consuming them.
     /// - Parameter fromDeepLink: When true, transcription result will be sent to the keyboard extension.
     func startRecording(fromDeepLink: Bool = false) async {
+        // Prevent double-start from rapid button taps or duplicate deep links.
+        // Check audioRecorder.isRecording (not state) because the deep link flow
+        // sets state = .recording synchronously in prepareForDeepLinkRecording()
+        // before this method runs — blocking on state would prevent actual startup.
+        guard !audioRecorder.isRecording else { return }
+
         launchedViaDeepLink = fromDeepLink
         aiActiveThisSession = AIProcessingSettings.activeInDictation
         aiProcessingStatus = .idle
@@ -178,6 +189,8 @@ final class RecordingFlowCoordinator {
         updateTask?.cancel()
 
         guard let streaming = streamingManager else {
+            streamingSetupTask?.cancel()
+            streamingSetupTask = nil
             state = .error("No streaming session")
             writeState(.idle)
             return
@@ -276,6 +289,8 @@ final class RecordingFlowCoordinator {
         streamingSetupTask?.cancel()
         streamingSetupTask = nil
         streamingManager = nil
+        aiRetryTask?.cancel()
+        aiRetryTask = nil
     }
 
     // MARK: - AI Processing
@@ -356,10 +371,13 @@ final class RecordingFlowCoordinator {
     }
 
     /// Retries the AI processing request with the previously sent text.
+    /// Cancels any in-flight retry before starting a new one.
     func retryAIProcessing() {
         guard !aiInputText.isEmpty else { return }
-        Task {
+        aiRetryTask?.cancel()
+        aiRetryTask = Task {
             let result = await waitForAIProcessing(localText: aiInputText)
+            guard !Task.isCancelled else { return }
             state = .complete(result)
         }
     }
@@ -372,6 +390,7 @@ final class RecordingFlowCoordinator {
     // MARK: - Streaming Updates
 
     private func startConsumingUpdates(from streaming: StreamingAsrManager) {
+        updateTask?.cancel()
         updateTask = Task {
             let updates = await streaming.transcriptionUpdates
             for await _ in updates {
@@ -412,12 +431,19 @@ final class RecordingFlowCoordinator {
     // MARK: - Keyboard Commands
 
     /// Listens for commands from the keyboard extension via Darwin notifications.
+    /// Safe to call multiple times — removes the previous observer before re-registering.
     func setupCommandListener() {
+        // Remove previous observer if present (e.g. on scene re-entry)
+        if let token = commandObserverToken {
+            NotificationCenter.default.removeObserver(token)
+            commandObserverToken = nil
+        }
+
         DarwinNotificationCenter.observe(
             SharedConstants.commandNotificationName,
             localName: .darwinCommand
         )
-        NotificationCenter.default.addObserver(
+        commandObserverToken = NotificationCenter.default.addObserver(
             forName: .darwinCommand,
             object: nil,
             queue: .main

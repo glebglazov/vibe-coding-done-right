@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Removes filler words (um, uh, hmm, etc.) from transcribed text.
 /// Handles comma-wrapped fillers and cleans up resulting whitespace/capitalization.
@@ -22,22 +23,32 @@ enum FillerWordRemover {
     /// Excludes standalone "I" which is always uppercase but rarely starts a new sentence after a filler.
     private static let sentenceBoundaryFillerPattern = #"(?i),\s*\b(?:"# + fillerAlternatives + #")\b\s*,(?=\s*(?-i:\p{Lu}\p{Ll}))"#
 
-    private static let sentenceBoundaryFillerRegex = try! Regex(sentenceBoundaryFillerPattern)
+    private static let sentenceBoundaryFillerRegex: Regex<AnyRegexOutput>? = {
+        do { return try Regex(sentenceBoundaryFillerPattern) }
+        catch { Logger.transcription.error("Failed to compile sentence boundary filler regex: \(error)"); return nil }
+    }()
 
     /// General pattern matching filler words with optional surrounding commas.
     /// Allows repeated characters (e.g. "ummm", "hmmm", "uhhh", "ээм").
     /// Word boundaries prevent matching substrings (e.g. "umbrella", "это").
     private static let fillerPattern = #"(?i),?\s*\b(?:"# + fillerAlternatives + #")\b\s*,?"#
 
-    private static let fillerRegex = try! Regex(fillerPattern)
+    private static let fillerRegex: Regex<AnyRegexOutput>? = {
+        do { return try Regex(fillerPattern) }
+        catch { Logger.transcription.error("Failed to compile filler regex: \(error)"); return nil }
+    }()
 
     /// Removes filler words from the given text and cleans up punctuation/capitalization.
     static func remove(from text: String) -> String {
+        // If regex compilation failed, return text unmodified rather than crashing
+        guard let sentenceBoundaryRegex = sentenceBoundaryFillerRegex,
+              let generalRegex = fillerRegex else { return text }
+
         // First pass: comma-wrapped fillers before uppercase → period (sentence boundary)
-        var result = text.replacing(sentenceBoundaryFillerRegex, with: ". ")
+        var result = text.replacing(sentenceBoundaryRegex, with: ". ")
 
         // Second pass: remaining fillers → space
-        result = result.replacing(fillerRegex, with: " ")
+        result = result.replacing(generalRegex, with: " ")
 
         // Collapse multiple spaces to single space
         result = result.replacing(#/\s{2,}/#, with: " ")

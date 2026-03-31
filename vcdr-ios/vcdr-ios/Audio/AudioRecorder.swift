@@ -93,6 +93,9 @@ final class AudioRecorder {
         bufferHandler = onBuffer
 
         guard startEngine() else {
+            // Engine failed to start — deactivate the session we just activated
+            // so it doesn't interfere with other apps' audio.
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             audioSessionConfigured = false
             return false
         }
@@ -148,6 +151,8 @@ final class AudioRecorder {
             Logger.recording.info("Audio engine restarted after route change")
         } else {
             isRecording = false
+            // Reset so the next startRecording() re-configures the session from scratch
+            audioSessionConfigured = false
             Logger.recording.error("Failed to restart audio engine after route change")
         }
     }
@@ -259,8 +264,12 @@ final class AudioRecorder {
 
             if options.contains(.shouldResume) {
                 Logger.recording.info("Audio interruption ended — resuming")
-                try? AVAudioSession.sharedInstance().setActive(true)
-                try? audioEngine?.start()
+                do {
+                    try AVAudioSession.sharedInstance().setActive(true)
+                    try audioEngine?.start()
+                } catch {
+                    Logger.recording.error("Failed to resume after interruption: \(error)")
+                }
             } else {
                 Logger.recording.warning("Audio interruption ended — system says do not resume")
             }

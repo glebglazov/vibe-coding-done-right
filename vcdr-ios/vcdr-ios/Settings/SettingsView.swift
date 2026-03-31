@@ -116,9 +116,17 @@ struct SettingsView: View {
     }
 
     private func refreshAvailableInputs() {
+        let session = AVAudioSession.sharedInstance()
+
+        // If the session is already active (recording in progress), just read inputs
+        // without reconfiguring — changing the category mid-recording would disrupt audio.
+        if session.isOtherAudioPlaying || session.category == .playAndRecord {
+            availableInputs = session.availableInputs ?? []
+            return
+        }
+
         // Temporarily activate the session to query available inputs,
         // then deactivate so it doesn't interfere with other audio.
-        let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
             try session.setActive(true)
