@@ -1,25 +1,38 @@
+import Combine
 import KeyboardKit
 import OSLog
 import SwiftUI
 
-class KeyboardViewController: KeyboardInputViewController {
+/// Keyboard-side dictation state, derived from the main app's recording state.
+enum DictationState {
+    case idle
+    case recording
+    case transcribing
+    /// Transcription text available — waiting for user tap to insert
+    case ready
+}
 
-    /// Whether the main app is currently recording in the background.
-    /// Updated via Darwin notifications from the main app.
-    var isAppRecording = false
+class KeyboardViewController: KeyboardInputViewController, ObservableObject {
+
+    /// Current dictation state — drives the DictateBarView appearance.
+    @Published var dictationState: DictationState = .idle
+
+    /// Text waiting to be inserted via tap-to-paste.
+    private var pendingText: String?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         setup(for: .vcdr)
 
-        // Listen for transcription results from the main app
+        // Listen for recording state changes from the main app.
+        // Text is delivered via state bundling ("idle|text") on this same channel.
         DarwinNotificationCenter.observe(
-            SharedConstants.transcriptionNotificationName,
-            localName: .darwinTranscriptionReady
+            SharedConstants.stateNotificationName,
+            localName: .darwinStateChanged
         )
         NotificationCenter.default.addObserver(
-            self, selector: #selector(handleTranscriptionReady),
-            name: .darwinTranscriptionReady, object: nil
+            self, selector: #selector(handleStateChanged),
+            name: .darwinStateChanged, object: nil
         )
     }
 
@@ -32,74 +45,126 @@ class KeyboardViewController: KeyboardInputViewController {
         // fully eliminate the flash.
         view.backgroundColor = .clear
         inputView?.backgroundColor = .clear
-        checkPendingTranscription()
-    }
 
-    // MARK: - Host App Detection
-
-    private func writeHostBundleID() {
-        if let bundleID = hostApplicationBundleId {
-            SharedConstants.sharedDefaults.set(bundleID, forKey: SharedConstants.hostBundleIDKey)
+        // Force cross-process defaults sync to avoid stale state flash
+        // (e.g. reading "recording" from a previous session before sync completes)
+        SharedConstants.sharedDefaults.synchronize()
+        refreshState()
+        // viewWillAppear provides a fresh textDocumentProxy connection —
+        // auto-insert if text is pending (handles the case where the keyboard
+        // wasn't visible when the transcription arrived).
+        if pendingText != nil {
+            insertPendingText()
         }
     }
 
-    // MARK: - Recording State
+    // MARK: - State Parsing
 
     @objc private func handleStateChanged() {
-        refreshRecordingState()
+        refreshState()
     }
 
-    private func refreshRecordingState() {
-        if let rawState = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey),
-           let state = RecordingState(rawValue: rawState) {
-            isAppRecording = (state == .recording)
+    /// Reads the shared state key and updates `dictationState`.
+    /// Parses state bundling format: `"idle|transcription text"`.
+    private func refreshState() {
+        guard let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey) else {
+            dictationState = .idle
+            pendingText = nil
+            return
+        }
+
+        let idlePrefix = "\(RecordingState.idle.rawValue)|"
+        if raw.hasPrefix(idlePrefix) {
+            let text = String(raw.dropFirst(idlePrefix.count))
+            if !text.isEmpty {
+                pendingText = text
+                dictationState = .ready
+            } else {
+                pendingText = nil
+                dictationState = .idle
+            }
+        } else if let state = RecordingState(rawValue: raw) {
+            pendingText = nil
+            switch state {
+            case .recording: dictationState = .recording
+            case .transcribing: dictationState = .transcribing
+            case .idle: dictationState = .idle
+            }
         } else {
-            isAppRecording = false
+            pendingText = nil
+            dictationState = .idle
         }
     }
 
-    /// Sends a start command to the main app (session already active, no flash needed)
-    func sendStartCommand() {
-        SharedConstants.sharedDefaults.set(
-            RecordingCommand.startRecording.rawValue,
-            forKey: SharedConstants.commandKey
-        )
-        DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
-        isAppRecording = true
+    // MARK: - Text Insertion
+
+    /// Inserts pending transcription text into the active text field.
+    /// Must be called from a UIKit event context (button tap handler) for
+    /// `textDocumentProxy.insertText()` to work — this is the WisprFlow pattern.
+    func insertPendingText() {
+        guard let text = pendingText, !text.isEmpty else { return }
+        textDocumentProxy.insertText(text)
+        pendingText = nil
+        dictationState = .idle
+        // Clear the bundled text so it isn't re-inserted on next keyboard appearance
+        SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
     }
 
-    /// Sends a stop command to the main app via App Group + Darwin notification
-    func sendStopCommand() {
+    // MARK: - Constants
+
+    /// Maximum time to wait for transcription result within the tap's event context
+    private static let insertionTimeout: TimeInterval = 15
+    /// Polling interval while waiting for result
+    private static let pollInterval: TimeInterval = 0.1
+
+    // MARK: - Commands
+
+    /// Sends a stop command and polls for the transcription result within the
+    /// button tap's UIKit event context. By never returning from the tap handler,
+    /// the input connection stays alive so `insertText()` works — single-tap insert.
+    /// `RunLoop.main.run(until:)` keeps UI events processing (animations stay alive).
+    /// Falls back to `.ready` state if the result doesn't arrive within the timeout.
+    func stopAndWaitForResult() {
         SharedConstants.sharedDefaults.set(
             RecordingCommand.stopRecording.rawValue,
             forKey: SharedConstants.commandKey
         )
         DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
-        isAppRecording = false
+        dictationState = .transcribing
+
+        let deadline = Date().addingTimeInterval(Self.insertionTimeout)
+        let idlePrefix = "\(RecordingState.idle.rawValue)|"
+
+        while Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(Self.pollInterval))
+
+            guard let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey),
+                  raw.hasPrefix(idlePrefix) else { continue }
+
+            let text = String(raw.dropFirst(idlePrefix.count))
+            guard !text.isEmpty else { continue }
+
+            // Result arrived — insert while the tap's event context is still active
+            textDocumentProxy.insertText(text)
+            SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
+            pendingText = nil
+            dictationState = .idle
+            return
+        }
+
+        // Timeout — show ready button as fallback for manual tap-to-insert
+        refreshState()
     }
 
     // MARK: - Keyboard View Setup
 
     override func viewWillSetupKeyboardView() {
-        setupKeyboardView { controller in
+        setupKeyboardView { [unowned self] controller in
             VCDRKeyboardView(
                 services: controller.services,
-                state: controller.state
+                state: controller.state,
+                controller: self
             )
         }
-    }
-
-    // MARK: - Transcription Handling
-
-    @objc private func handleTranscriptionReady() {
-        checkPendingTranscription()
-    }
-
-    private func checkPendingTranscription() {
-        guard let text = SharedConstants.sharedDefaults.string(forKey: SharedConstants.transcriptionResultKey),
-              !text.isEmpty else { return }
-
-        textDocumentProxy.insertText(text)
-        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
     }
 }

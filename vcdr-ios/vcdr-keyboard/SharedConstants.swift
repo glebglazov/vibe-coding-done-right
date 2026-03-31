@@ -3,23 +3,13 @@ import Foundation
 enum SharedConstants {
     static let appGroupID = "group.glebglazov.vcdr-ios"
 
-    // Transcription result (app → keyboard)
-    static let transcriptionResultKey = "pendingTranscription"
-    static let transcriptionNotificationName = "glebglazov.vcdr-ios.transcriptionReady"
-
-    // Host app detection — keyboard writes the host bundle ID here
-    static let hostBundleIDKey = "hostBundleID"
-
     // Commands (keyboard → app)
     static let commandKey = "command"
     static let commandNotificationName = "glebglazov.vcdr-ios.command"
 
-    // Recording state (app → keyboard)
+    // Recording state (app → keyboard) — also carries transcription text via state bundling ("idle|text")
     static let stateKey = "recordingState"
     static let stateNotificationName = "glebglazov.vcdr-ios.stateChanged"
-
-    // Audio session state — keyboard reads this to decide if flash is needed
-    static let audioSessionActiveKey = "audioSessionActive"
 
     // Deep link URLs
     static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!

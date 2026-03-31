@@ -7,14 +7,16 @@ import SwiftUI
 struct VCDRKeyboardView: View {
     var services: Keyboard.Services
     var state: Keyboard.State
+    @ObservedObject var controller: KeyboardViewController
 
     /// Observed so the view re-renders when keyboard case changes,
     /// ensuring `correctedLayout` is recomputed with the current shift state.
     @ObservedObject private var keyboardContext: KeyboardContext
 
-    init(services: Keyboard.Services, state: Keyboard.State) {
+    init(services: Keyboard.Services, state: Keyboard.State, controller: KeyboardViewController) {
         self.services = services
         self.state = state
+        self.controller = controller
         self._keyboardContext = ObservedObject(wrappedValue: state.keyboardContext)
     }
 
@@ -45,31 +47,66 @@ struct VCDRKeyboardView: View {
             toolbar: { params in
                 HStack(spacing: 0) {
                     params.view
-                    DictateBarView()
+                    DictateBarView(
+                        dictationState: controller.dictationState,
+                        onStop: { controller.stopAndWaitForResult() },
+                        onInsert: { controller.insertPendingText() }
+                    )
                 }
             }
         )
     }
 }
 
-/// Mic icon displayed on the right side of the autocomplete toolbar.
-/// Tapping opens the main VCDR app via deep link to start recording.
+/// State-aware dictation button displayed on the right side of the autocomplete toolbar.
+/// - Idle: blue mic — opens VCDR via deep link to start recording
+/// - Recording: red stop — sends stop command to the main app
+/// - Transcribing: pulsing indicator while the app processes
+/// - Ready: green checkmark — tap inserts transcription text (WisprFlow pattern)
 struct DictateBarView: View {
     // MARK: - Constants
     private static let iconSize: CGFloat = 20
     private static let tapTargetSize: CGFloat = 44
     private static let circleSize: CGFloat = 40
 
+    var dictationState: DictationState
+    var onStop: () -> Void
+    var onInsert: () -> Void
+
     var body: some View {
-        Link(destination: SharedConstants.recordDeepLinkURL) {
-            Image(systemName: "mic.fill")
-                .font(.system(size: Self.iconSize))
-                .foregroundStyle(.white)
-                .frame(width: Self.circleSize, height: Self.circleSize)
-                .background(Circle().fill(.blue))
-                .frame(width: Self.tapTargetSize, height: Self.tapTargetSize)
-                .contentShape(Circle())
+        Group {
+            switch dictationState {
+            case .idle:
+                Link(destination: SharedConstants.recordDeepLinkURL) {
+                    circleButton(icon: "mic.fill", color: .blue)
+                }
+            case .recording:
+                Button(action: onStop) {
+                    circleButton(icon: "stop.fill", color: .red)
+                }
+            case .transcribing:
+                circleButton(icon: "ellipsis", color: .orange)
+                    .phaseAnimator([false, true]) { content, phase in
+                        content.opacity(phase ? 0.4 : 1.0)
+                    } animation: { _ in
+                        .easeInOut(duration: 0.6)
+                    }
+            case .ready:
+                Button(action: onInsert) {
+                    circleButton(icon: "checkmark", color: .green)
+                }
+            }
         }
         .padding(.trailing, 4)
+    }
+
+    private func circleButton(icon: String, color: Color) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: Self.iconSize))
+            .foregroundStyle(.white)
+            .frame(width: Self.circleSize, height: Self.circleSize)
+            .background(Circle().fill(color))
+            .frame(width: Self.tapTargetSize, height: Self.tapTargetSize)
+            .contentShape(Circle())
     }
 }

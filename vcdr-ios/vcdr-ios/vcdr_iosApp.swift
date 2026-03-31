@@ -12,7 +12,7 @@ struct VCDRiOSApp: App {
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     coordinator.cleanupStaleResults()
-                    // coordinator.setupCommandListener() — disabled: no background recording commands
+                    coordinator.setupCommandListener()
                     await coordinator.initializeModel()
                     // Fetch updated prompts in background (non-blocking)
                     Task.detached {

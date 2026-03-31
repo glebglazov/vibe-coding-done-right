@@ -53,10 +53,6 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
-    /// Delay before bouncing back to host app — allows audio session to fully activate
-    private static let bounceBackDelay: Duration = .milliseconds(300)
-    /// Delay after posting transcription result before returning to host app
-    private static let returnToHostDelay: Duration = .milliseconds(500)
     /// Time to wait before showing "AI unavailable" notice
     private static let aiProcessingTimeout: Duration = .seconds(5)
 
@@ -175,7 +171,8 @@ final class RecordingFlowCoordinator {
 
     /// Stops recording and shows the result immediately from the live transcript.
     /// Finalizes streaming in the background and updates the result if it differs.
-    func stopAndTranscribe() async {
+    /// - Parameter sendToKeyboard: When true, the transcription result is delivered to the keyboard extension via state bundling.
+    func stopAndTranscribe(sendToKeyboard: Bool = false) async {
         audioRecorder.stopRecording()
         setIdleTimerDisabled(false)
         updateTask?.cancel()
@@ -221,9 +218,9 @@ final class RecordingFlowCoordinator {
         writeState(.transcribing)
         liveTranscript = ""
 
-        // Request background execution time for deep-link flow so the AI
-        // HTTP request isn't throttled when the user switches to the keyboard app.
-        let bgTaskID = launchedViaDeepLink
+        // Request background execution time so the AI HTTP request isn't
+        // throttled when the user has switched to the keyboard app.
+        let bgTaskID = sendToKeyboard
             ? UIApplication.shared.beginBackgroundTask()
             : .invalid
 
@@ -242,12 +239,14 @@ final class RecordingFlowCoordinator {
             }
 
             state = .complete(resultText)
-            writeState(.idle)
             transcribingMessage = ""
 
-            if launchedViaDeepLink {
-                SharedConstants.sharedDefaults.set(resultText, forKey: SharedConstants.transcriptionResultKey)
-                DarwinNotificationCenter.post(SharedConstants.transcriptionNotificationName)
+            if sendToKeyboard {
+                // Deliver text via state bundling — piggybacking on the stateKey
+                // is reliable cross-process whereas dedicated keys have sync delays.
+                writeState(.idle, bundledText: resultText)
+            } else {
+                writeState(.idle)
             }
         } catch {
             if immediateText.isEmpty {
@@ -366,9 +365,7 @@ final class RecordingFlowCoordinator {
     }
 
     func cleanupStaleResults() {
-        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.transcriptionResultKey)
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
-        SharedConstants.sharedDefaults.set(false, forKey: SharedConstants.audioSessionActiveKey)
         writeState(.idle)
     }
 
@@ -399,15 +396,22 @@ final class RecordingFlowCoordinator {
     // MARK: - State Publishing
 
     /// Writes recording state to App Group so the keyboard extension can read it.
-    private func writeState(_ recordingState: RecordingState) {
-        SharedConstants.sharedDefaults.set(recordingState.rawValue, forKey: SharedConstants.stateKey)
+    /// When `bundledText` is provided, the value is written as `"idle|text"` so the
+    /// keyboard can reliably receive the transcription via the same key that syncs state.
+    private func writeState(_ recordingState: RecordingState, bundledText: String? = nil) {
+        let value: String
+        if let bundledText, recordingState == .idle {
+            value = "\(RecordingState.idle.rawValue)|\(bundledText)"
+        } else {
+            value = recordingState.rawValue
+        }
+        SharedConstants.sharedDefaults.set(value, forKey: SharedConstants.stateKey)
         DarwinNotificationCenter.post(SharedConstants.stateNotificationName)
     }
 
-    // MARK: - Dead Code (kept for potential re-enablement)
+    // MARK: - Keyboard Commands
 
     /// Listens for commands from the keyboard extension via Darwin notifications.
-    /// Disabled: background recording via keyboard commands is no longer used.
     func setupCommandListener() {
         DarwinNotificationCenter.observe(
             SharedConstants.commandNotificationName,
@@ -435,57 +439,11 @@ final class RecordingFlowCoordinator {
 
         switch command {
         case .startRecording:
-            Logger.app.info("Received start command from keyboard (session already active)")
+            Logger.app.info("Received start command from keyboard")
             await startRecording(fromDeepLink: true)
-            if case .recording = state {
-                // Recording started successfully via keyboard command
-            } else {
-                SharedConstants.sharedDefaults.set(false, forKey: SharedConstants.audioSessionActiveKey)
-                Logger.app.warning("Background recording failed — cleared audio session flag")
-            }
         case .stopRecording:
             Logger.app.info("Received stop command from keyboard")
-            await stopAndTranscribe()
-        }
-    }
-
-    /// Returns to the host app using the URL scheme looked up from the bundle ID.
-    /// Disabled: user now returns manually via iOS "Back to [App]" link.
-    private func returnToHostApp() async {
-        guard let hostBundleID = SharedConstants.sharedDefaults.string(
-            forKey: SharedConstants.hostBundleIDKey)
-        else {
-            Logger.app.info("No host bundle ID — user must return manually")
-            return
-        }
-
-        guard let url = AppURLSchemes.url(forBundleID: hostBundleID) else {
-            Logger.app.info("No URL scheme mapping for \(hostBundleID)")
-            return
-        }
-
-        Logger.app.info("Returning to \(hostBundleID) via \(url.absoluteString)")
-        await UIApplication.shared.open(url)
-    }
-
-    /// Starts recording and immediately bounces back to the host app.
-    /// Disabled: user now stays in VCDR to see real-time transcription.
-    private func startRecordingAndBounceBack() async {
-        guard await transcriptionProvider.isReady else {
-            state = .error("Model not ready")
-            return
-        }
-
-        launchedViaDeepLink = true
-        let started = await audioRecorder.startRecording { _ in }
-        if started {
-            state = .recording
-            writeState(.recording)
-            SharedConstants.sharedDefaults.set(true, forKey: SharedConstants.audioSessionActiveKey)
-            try? await Task.sleep(for: Self.bounceBackDelay)
-            await returnToHostApp()
-        } else {
-            state = .error("Failed to start recording — check microphone permission")
+            await stopAndTranscribe(sendToKeyboard: true)
         }
     }
 }

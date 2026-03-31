@@ -2,7 +2,6 @@ import SwiftUI
 
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     private var theme: Theme { Theme.current(for: colorScheme) }
     @AppStorage("appearance") private var appearance: Appearance = .system
@@ -21,7 +20,6 @@ struct RecordingView: View {
     private static let transcriptFontSize: CGFloat = 18
     private static let transcriptMaxHeight: CGFloat = 200
     private static let hintFontSize: CGFloat = 13
-    private static let returnDotSize: CGFloat = 8
     private static let returnPulseDuration: Double = 0.8
 
     var body: some View {
@@ -41,15 +39,6 @@ struct RecordingView: View {
                 recordingStart = .now
             } else {
                 recordingStart = nil
-            }
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            // When app goes to background during a deep-link recording,
-            // auto-stop and send the transcription to the keyboard.
-            if newPhase == .background,
-               coordinator.launchedViaDeepLink,
-               case .recording = coordinator.state {
-                Task { await coordinator.stopAndTranscribe() }
             }
         }
         // Propagate theme to child views (WaveformView) via environment
@@ -209,18 +198,21 @@ struct RecordingView: View {
                     .padding(.bottom, 16)
                 }
 
-                if !coordinator.launchedViaDeepLink {
-                    actionCircle(
-                        icon: {
-                            Rectangle()
-                                .fill(theme.onSurface)
-                                .frame(width: Self.stopIconSize, height: Self.stopIconSize)
-                        },
-                        label: "STOP"
-                    ) {
-                        Task { await coordinator.stopAndTranscribe() }
-                    }
-                    .padding(.bottom, 24)
+                actionCircle(
+                    icon: {
+                        Rectangle()
+                            .fill(theme.onSurface)
+                            .frame(width: Self.stopIconSize, height: Self.stopIconSize)
+                    },
+                    label: "STOP"
+                ) {
+                    Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) }
+                }
+                .padding(.bottom, 16)
+
+                if coordinator.launchedViaDeepLink {
+                    swipeBackHint
+                        .padding(.bottom, 16)
                 }
             }
         }
@@ -235,7 +227,24 @@ struct RecordingView: View {
                 } animation: { _ in
                     .easeInOut(duration: Self.returnPulseDuration)
                 }
-            Text("Switch back to paste")
+            Text("Press to go back")
+                .font(.system(size: Self.hintFontSize, weight: .medium))
+        }
+        .foregroundStyle(theme.onSurfaceVariant)
+    }
+
+    private var swipeBackHint: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.left")
+                .font(.system(size: Self.hintFontSize, weight: .semibold))
+                .phaseAnimator([false, true]) { content, phase in
+                    content
+                        .offset(x: phase ? 8 : -4)
+                        .opacity(phase ? 0.3 : 1)
+                } animation: { _ in
+                    .easeInOut(duration: Self.returnPulseDuration)
+                }
+            Text("Swipe to go back")
                 .font(.system(size: Self.hintFontSize, weight: .medium))
         }
         .foregroundStyle(theme.onSurfaceVariant)
