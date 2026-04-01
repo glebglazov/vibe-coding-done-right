@@ -73,7 +73,9 @@ enum TextProcessingPipeline {
             let paramEnv = Dictionary(
                 uniqueKeysWithValues: parameterValues.map { ("VCDR_PARAM_\($0.key)", $0.value) }
             )
-            var combinedEnv = variableEnvironment
+            // Only include user-defined variables if explicitly opted in, to avoid
+            // passing API keys that would override the agent's subscription credentials.
+            var combinedEnv = mode.localAgentPassVariables ? variableEnvironment : [:]
             combinedEnv.merge(paramEnv) { _, param in param }
             let processedText = try await BashRunner.run(
                 command: mode.localAgentProvider.command,

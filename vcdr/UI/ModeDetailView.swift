@@ -118,6 +118,13 @@ struct ModeDetailView: View {
                                 .border(Color.secondary.opacity(0.3))
                         }
                     }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Pass environment variables from Variables section", isOn: $mode.localAgentPassVariables)
+                        Text("When off (default), the local agent uses its own subscription credentials. When on, variables like ANTHROPIC_API_KEY are passed to the agent process, which may cause it to use your API key with token-based billing instead of the subscription.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if mode.processingType == .bashScript {
