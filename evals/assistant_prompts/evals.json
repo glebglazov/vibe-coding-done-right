@@ -1,0 +1,155 @@
+{
+  "description": "Eval set for assistant mode prompt optimization. The assistant mode receives a voice-dictated instruction + content, processes the content per the instruction, and returns only the result. Inputs simulate raw dictation with embedded instructions. Some cases use <capture> tags to provide screen-captured context. The system prompt being evaluated is sent as the system message; the input below goes inside <dictation> tags as the user message.",
+  "evals": [
+    {
+      "id": "translate_to_russian",
+      "category": "translation",
+      "input": "translate this to Russian. The weather is beautiful today and I'm going for a walk in the park. I might stop by that new coffee shop on the corner.",
+      "expected_output": "Погода сегодня прекрасная, и я собираюсь прогуляться в парке. Может быть, зайду в ту новую кофейню на углу."
+    },
+    {
+      "id": "translate_to_spanish",
+      "category": "translation",
+      "input": "can you put this in Spanish. We need to reschedule the meeting to next Friday because the client isn't available this week",
+      "expected_output": "Necesitamos reprogramar la reunión para el próximo viernes porque el cliente no está disponible esta semana."
+    },
+    {
+      "id": "translate_review_to_russian",
+      "category": "translation",
+      "input": "I need to write a review for a dental clinic translate what I say to Russian. I visited this clinic last week and the experience was great. The staff was very friendly and professional. The waiting time was minimal and the doctor explained everything clearly. I would definitely recommend this place to anyone looking for a good dentist",
+      "expected_output": "Я посетил эту клинику на прошлой неделе, и впечатления отличные. Персонал был очень дружелюбным и профессиональным. Время ожидания было минимальным, а врач всё понятно объяснил. Однозначно рекомендую это место всем, кто ищет хорошего стоматолога."
+    },
+    {
+      "id": "make_concise",
+      "category": "rewriting",
+      "input": "make this more concise. So basically what happened was that during the deployment process yesterday we encountered a series of issues that were primarily related to the database migration scripts not being compatible with the new version of PostgreSQL that we had recently upgraded to and this caused a cascading failure across multiple services which in turn led to approximately two hours of downtime for our production environment",
+      "expected_output": "Yesterday's deployment caused two hours of production downtime. The database migration scripts were incompatible with our recent PostgreSQL upgrade, triggering cascading failures across multiple services."
+    },
+    {
+      "id": "make_formal",
+      "category": "rewriting",
+      "input": "rewrite this in a formal tone. Hey guys just wanted to let you know that the server's been acting weird since last night. It keeps crashing every few hours and we're not sure why. Jake's looking into it but it might take a while. In the meantime try not to push any big changes",
+      "expected_output": "Dear team,\n\nPlease be advised that we have been experiencing intermittent server instability since last evening. The server has been crashing at intervals of several hours, and the root cause is currently under investigation. Jake is leading the troubleshooting effort, though resolution may take some time. In the interim, please refrain from deploying any significant changes.\n\nThank you for your patience."
+    },
+    {
+      "id": "make_casual",
+      "category": "rewriting",
+      "input": "make this sound more casual and friendly. Dear valued customer, we regret to inform you that your order number 4521 has been delayed due to unforeseen circumstances in our supply chain. We anticipate delivery within 5 to 7 business days. We sincerely apologize for any inconvenience this may cause.",
+      "expected_output": "Hey! Just a heads up — your order (#4521) is running a bit late due to some supply chain hiccups. Should be with you in 5–7 business days. Sorry about the wait!"
+    },
+    {
+      "id": "extract_action_items",
+      "category": "extraction",
+      "input": "extract the action items from this meeting. So we talked about the Q2 roadmap and Sarah said she'd have the design mockups ready by Friday. Mike needs to set up the staging environment before the end of the week. I volunteered to write the API documentation and we agreed that everyone should review the security audit report by next Monday. Oh and Tom said he'd reach out to the vendor about the licensing issue",
+      "expected_output": "- Sarah: Have design mockups ready by Friday\n- Mike: Set up staging environment by end of week\n- Me: Write the API documentation\n- Everyone: Review security audit report by next Monday\n- Tom: Reach out to vendor about licensing issue"
+    },
+    {
+      "id": "summarize_long_text",
+      "category": "extraction",
+      "input": "summarize this in two or three sentences. The company's annual report reveals several key findings. Revenue grew by 12% year over year driven primarily by expansion into the European market which now accounts for 30% of total sales. However operating costs also increased by 8% due to new hires and infrastructure investments. The customer retention rate improved to 94% up from 89% last year thanks to the new loyalty program. The board has approved a $50 million investment in AI capabilities for the next fiscal year. Employee satisfaction scores reached an all time high at 4.2 out of 5",
+      "expected_output": "Revenue grew 12% year-over-year, driven by European expansion (now 30% of sales), though operating costs rose 8% from hiring and infrastructure. Customer retention improved to 94% thanks to the loyalty program. The board approved $50M for AI investment next fiscal year."
+    },
+    {
+      "id": "reorder_alphabetically",
+      "category": "restructuring",
+      "input": "reorder these alphabetically. Python, JavaScript, Rust, Go, TypeScript, Swift, Kotlin, Ruby, C sharp, Java",
+      "expected_output": "C#, Go, Java, JavaScript, Kotlin, Python, Ruby, Rust, Swift, TypeScript"
+    },
+    {
+      "id": "format_as_bullet_list",
+      "category": "restructuring",
+      "input": "format this as a bullet list. For the trip I need to pack my passport and also the charger for my laptop. Don't forget sunscreen and a hat since it'll be sunny. I should also bring my noise canceling headphones for the flight and maybe a book or two. Oh and I need to print out the hotel confirmation",
+      "expected_output": "- Passport\n- Laptop charger\n- Sunscreen\n- Hat\n- Noise-canceling headphones\n- Book or two\n- Hotel confirmation (print out)"
+    },
+    {
+      "id": "number_the_steps",
+      "category": "restructuring",
+      "input": "turn this into numbered steps. First you need to clone the repo then install the dependencies with npm install. After that create a .env file and copy the values from .env.example. Then run the database migrations and finally start the dev server with npm run dev",
+      "expected_output": "1. Clone the repo\n2. Install dependencies with `npm install`\n3. Create a `.env` file and copy values from `.env.example`\n4. Run the database migrations\n5. Start the dev server with `npm run dev`"
+    },
+    {
+      "id": "write_email_from_description",
+      "category": "generation",
+      "input": "write an email to my team. I want to tell them that we're moving the standup from 9 AM to 10 AM starting next week because too many people are joining late and it's disrupting the flow. Keep it short and friendly",
+      "expected_output": "Hey team,\n\nStarting next week, we're moving our daily standup from 9 AM to 10 AM. We've noticed a lot of folks joining late, and it's been disrupting the flow. Hopefully the later time works better for everyone.\n\nLet me know if you have any concerns!\n\nThanks"
+    },
+    {
+      "id": "write_commit_message",
+      "category": "generation",
+      "input": "write a git commit message for this. I fixed a bug where the user's session would expire during a file upload if the upload took more than 15 minutes. The fix extends the session timeout during active uploads",
+      "expected_output": "fix: extend session timeout during active file uploads\n\nPreviously, sessions would expire after 15 minutes regardless of\nupload activity, causing users to lose their upload progress.\nThe session timeout is now refreshed while an upload is in progress."
+    },
+    {
+      "id": "simplify_technical",
+      "category": "rewriting",
+      "input": "simplify this for a non technical audience. The microservice architecture employs an event-driven paradigm with Apache Kafka as the message broker facilitating asynchronous inter-service communication. Each service maintains its own bounded context with a dedicated PostgreSQL instance ensuring data sovereignty and loose coupling between domains",
+      "expected_output": "Our system is built as a set of small, independent services that communicate by sending messages to each other through a central message hub (Kafka). Each service has its own database, so they can work independently without depending on each other."
+    },
+    {
+      "id": "capture_make_concise",
+      "category": "capture_instruction",
+      "input": "make this more concise\n\n<capture id=\"1\">The implementation of the new authentication system requires careful consideration of several factors including but not limited to backward compatibility with existing user sessions, migration of password hashes from bcrypt to argon2id, implementation of rate limiting on the login endpoint to prevent brute force attacks, and the addition of multi-factor authentication support using TOTP-based authenticator apps as well as SMS-based verification codes as a fallback option for users who do not have access to an authenticator app.</capture>",
+      "expected_output": "The new auth system needs to handle: backward compatibility with existing sessions, bcrypt-to-argon2id password hash migration, login endpoint rate limiting, and MFA support (TOTP primary, SMS fallback)."
+    },
+    {
+      "id": "capture_fix_code",
+      "category": "capture_instruction",
+      "input": "there's an off by one error in this function fix it\n\n<capture id=\"1\">function getLastNItems(arr, n) {\n  return arr.slice(arr.length - n - 1);\n}</capture>",
+      "expected_output": "```javascript\nfunction getLastNItems(arr, n) {\n  return arr.slice(arr.length - n);\n}\n```"
+    },
+    {
+      "id": "capture_explain_code",
+      "category": "capture_instruction",
+      "input": "explain what this code does in plain English\n\n<capture id=\"1\">const debounce = (fn, ms) => {\n  let id;\n  return (...args) => {\n    clearTimeout(id);\n    id = setTimeout(() => fn(...args), ms);\n  };\n};</capture>",
+      "expected_output": "This creates a debounced version of a function. When the returned function is called repeatedly, it waits until there's a pause of the specified milliseconds before actually running the original function. Each new call resets the timer. This is commonly used for things like search-as-you-type, where you want to wait until the user stops typing before making an API call."
+    },
+    {
+      "id": "capture_reorder_list",
+      "category": "capture_instruction",
+      "input": "reorder these by priority. highest priority first\n\n<capture id=\"1\">- Update README with new API endpoints\n- Fix critical security vulnerability in auth module\n- Add dark mode toggle to settings\n- Resolve database connection timeout in production\n- Refactor CSS to use design tokens</capture>",
+      "expected_output": "- Fix critical security vulnerability in auth module\n- Resolve database connection timeout in production\n- Add dark mode toggle to settings\n- Refactor CSS to use design tokens\n- Update README with new API endpoints"
+    },
+    {
+      "id": "multi_capture_compare",
+      "category": "capture_instruction",
+      "input": "compare these two approaches and tell me which is better and why\n\n<capture id=\"1\">// Approach A: Polling\nsetInterval(async () => {\n  const status = await checkJobStatus(jobId);\n  if (status === 'complete') {\n    clearInterval(timer);\n    handleResult();\n  }\n}, 5000);</capture>\n\n<capture id=\"2\">// Approach B: WebSocket\nconst ws = new WebSocket('/jobs/status');\nws.onmessage = (event) => {\n  const { jobId, status } = JSON.parse(event.data);\n  if (status === 'complete') {\n    ws.close();\n    handleResult();\n  }\n};</capture>",
+      "expected_output": "Approach B (WebSocket) is better. It reacts instantly when the job completes instead of waiting up to 5 seconds between checks. It also reduces server load since the server pushes updates only when state changes, rather than the client repeatedly asking. Polling (Approach A) is simpler and works when WebSocket infrastructure isn't available, but for job status monitoring, the real-time nature of WebSockets is a clear win."
+    },
+    {
+      "id": "translate_with_captures",
+      "category": "translation",
+      "input": "translate this error message and the comment around it to Japanese\n\n<capture id=\"1\">// This error occurs when the user's session token has expired\n// and they need to re-authenticate\nthrow new AuthError('Your session has expired. Please log in again.');</capture>",
+      "expected_output": "```javascript\n// このエラーはユーザーのセッショントークンが期限切れになり、\n// 再認証が必要な場合に発生します\nthrow new AuthError('セッションが期限切れになりました。再度ログインしてください。');\n```"
+    },
+    {
+      "id": "short_instruction_only",
+      "category": "edge_case",
+      "input": "what's the capital of France",
+      "expected_output": "Paris."
+    },
+    {
+      "id": "ambiguous_instruction",
+      "category": "edge_case",
+      "input": "fix this. The meeting is schedulled for Wendsday at 3pm and we need to discus the buget for next quater",
+      "expected_output": "The meeting is scheduled for Wednesday at 3 PM, and we need to discuss the budget for next quarter."
+    },
+    {
+      "id": "messy_dictation_instruction",
+      "category": "edge_case",
+      "input": "okay so I need you to like take this and. make it sound more professional I guess. hey bob just wanted to check in about that thing we talked about last week you know the project with the widgets. anyway I think we should probably move forward with option A because it's cheaper and honestly the other one seems like overkill",
+      "expected_output": "Hi Bob,\n\nI wanted to follow up on our conversation last week regarding the widget project. I recommend we proceed with Option A — it's more cost-effective, and the alternative seems excessive for our needs.\n\nBest regards"
+    },
+    {
+      "id": "russian_instruction",
+      "category": "edge_case",
+      "input": "переведи на английский. Мне нужно отправить это сообщение коллегам из американского офиса. Завтра в три часа дня мы проводим презентацию нового продукта и приглашаем всех желающих присоединиться. Ссылка на зум будет отправлена утром",
+      "expected_output": "Tomorrow at 3 PM we're holding a presentation for the new product, and we invite everyone to join. The Zoom link will be sent out in the morning."
+    },
+    {
+      "id": "proofread_capture",
+      "category": "capture_instruction",
+      "input": "proofread this and fix any issues\n\n<capture id=\"1\">Their going to the store to buy there supplies for they're project. Its important that the team completes it's tasks on time. The data shows that less people are using the old system then expected, which effects our revenue projections.</capture>",
+      "expected_output": "They're going to the store to buy their supplies for their project. It's important that the team completes its tasks on time. The data shows that fewer people are using the old system than expected, which affects our revenue projections."
+    }
+  ]
+}
