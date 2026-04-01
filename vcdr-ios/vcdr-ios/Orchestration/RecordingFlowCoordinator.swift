@@ -234,10 +234,12 @@ final class RecordingFlowCoordinator {
 
         let useAI = aiActiveThisSession && AIProcessingSettings.isConfigured
 
+        // Stage 1: Filler removal only — terminator is applied after external processing
+        let cleanedLive = TextPostProcessor.removeFillers(from: liveTranscript)
+
         // Show local result immediately unless AI processing will replace it
-        let immediateText = TextPostProcessor.process(liveTranscript)
-        if !useAI && !immediateText.isEmpty {
-            state = .complete(immediateText)
+        if !useAI && !cleanedLive.isEmpty {
+            state = .complete(TextPostProcessor.applyTerminator(to: cleanedLive))
         } else {
             state = .transcribing
             transcribingMessage = useAI ? "Enhancing with AI..." : ""
@@ -254,10 +256,11 @@ final class RecordingFlowCoordinator {
         // Finalize streaming — may refine the last few words.
         do {
             let rawText = try await streaming.finish()
-            let finalText = TextPostProcessor.process(rawText)
-            Logger.app.info("Streaming transcription complete: \(finalText.prefix(50))...")
+            // Stage 1: Filler removal only — terminator applied after external processing
+            let cleanedText = TextPostProcessor.removeFillers(from: rawText)
+            Logger.app.info("Streaming transcription complete: \(cleanedText.prefix(50))...")
 
-            guard !finalText.isEmpty else {
+            guard !cleanedText.isEmpty else {
                 state = .error("No speech detected")
                 transcribingMessage = ""
                 if sendToKeyboard {
@@ -272,12 +275,13 @@ final class RecordingFlowCoordinator {
                 return
             }
 
-            // Wait for AI processing, or use local result
+            // Stage 2: External processing (AI), then Stage 3: terminator
             let resultText: String
             if useAI {
-                resultText = await waitForAIProcessing(localText: finalText)
+                let aiResult = await waitForAIProcessing(localText: cleanedText)
+                resultText = TextPostProcessor.applyTerminator(to: aiResult)
             } else {
-                resultText = finalText
+                resultText = TextPostProcessor.applyTerminator(to: cleanedText)
             }
 
             state = .complete(resultText)
@@ -291,7 +295,7 @@ final class RecordingFlowCoordinator {
                 writeState(.idle)
             }
         } catch {
-            if immediateText.isEmpty {
+            if cleanedLive.isEmpty {
                 state = .error("Transcription failed: \(error.localizedDescription)")
             }
             writeState(.idle)
@@ -449,9 +453,9 @@ final class RecordingFlowCoordinator {
         guard !aiInputText.isEmpty else { return }
         aiRetryTask?.cancel()
         aiRetryTask = Task {
-            let result = await waitForAIProcessing(localText: aiInputText)
+            let aiResult = await waitForAIProcessing(localText: aiInputText)
             guard !Task.isCancelled else { return }
-            state = .complete(result)
+            state = .complete(TextPostProcessor.applyTerminator(to: aiResult))
         }
     }
 
