@@ -14,6 +14,7 @@ struct ModeTemplate {
     let localAgentProvider: LocalAgentProvider
     let localAgentPromptType: LocalAgentPromptType
     let localAgentSystemPrompt: String
+    let localAgentPassVariables: Bool
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
     let showPreview: Bool
@@ -33,6 +34,7 @@ struct ModeTemplate {
             localAgentProvider: localAgentProvider,
             localAgentPromptType: localAgentPromptType,
             localAgentSystemPrompt: localAgentSystemPrompt,
+            localAgentPassVariables: localAgentPassVariables,
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
             showPreview: showPreview
@@ -51,6 +53,7 @@ struct ModeTemplate {
         mode.localAgentProvider = localAgentProvider
         mode.localAgentPromptType = localAgentPromptType
         mode.localAgentSystemPrompt = localAgentSystemPrompt
+        mode.localAgentPassVariables = localAgentPassVariables
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.parameters = parameters
         mode.showPreview = showPreview
@@ -91,6 +94,7 @@ extension ModeTemplate {
         localAgentProvider: .claudeCode,
         localAgentPromptType: .default,
         localAgentSystemPrompt: "",
+        localAgentPassVariables: false,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false
@@ -109,6 +113,7 @@ extension ModeTemplate {
         localAgentProvider: .claudeCode,
         localAgentPromptType: .default,
         localAgentSystemPrompt: "",
+        localAgentPassVariables: false,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false
@@ -127,6 +132,7 @@ extension ModeTemplate {
         localAgentProvider: .claudeCode,
         localAgentPromptType: .default,
         localAgentSystemPrompt: "",
+        localAgentPassVariables: false,
         parameters: [
             ModeParameter(id: claudeCodeModelParamID, name: "Model", options: [
                 ModeParameterOption(id: claudeCodeHaikuOptionID, label: "Haiku", value: "haiku"),
@@ -151,6 +157,7 @@ extension ModeTemplate {
         localAgentProvider: .claudeCode,
         localAgentPromptType: .default,
         localAgentSystemPrompt: "",
+        localAgentPassVariables: false,
         parameters: [
             ModeParameter(id: ollamaModelParamID, name: "Model", options: [
                 ModeParameterOption(id: ollamaQwen35_08bOptionID, label: "Qwen3.5 - 0.8B", value: "qwen3.5:0.8b"),

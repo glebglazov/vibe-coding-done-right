@@ -153,6 +153,7 @@ struct Mode: Identifiable, Codable, Equatable {
     var localAgentProvider: LocalAgentProvider
     var localAgentPromptType: LocalAgentPromptType
     var localAgentSystemPrompt: String
+    var localAgentPassVariables: Bool
 
     // Parameters
     var parameters: [ModeParameter]
@@ -264,6 +265,7 @@ struct Mode: Identifiable, Codable, Equatable {
         localAgentProvider: LocalAgentProvider = .claudeCode,
         localAgentPromptType: LocalAgentPromptType = .default,
         localAgentSystemPrompt: String = "",
+        localAgentPassVariables: Bool = false,
         defaultOutputDestinationID: UUID = OutputDestination.builtInPasteID,
         parameters: [ModeParameter] = [],
         showPreview: Bool = false,
@@ -282,6 +284,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.localAgentProvider = localAgentProvider
         self.localAgentPromptType = localAgentPromptType
         self.localAgentSystemPrompt = localAgentSystemPrompt
+        self.localAgentPassVariables = localAgentPassVariables
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.parameters = parameters
         self.showPreview = showPreview
@@ -295,7 +298,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case processingType, processingCommand
         case systemPromptEnabled, systemPrompt
         case aiProvider, aiPromptType
-        case localAgentProvider, localAgentPromptType, localAgentSystemPrompt
+        case localAgentProvider, localAgentPromptType, localAgentSystemPrompt, localAgentPassVariables
         case defaultOutputDestinationID
         case parameters
         case showPreview
@@ -322,6 +325,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(localAgentProvider, forKey: .localAgentProvider)
         try container.encode(localAgentPromptType, forKey: .localAgentPromptType)
         try container.encode(localAgentSystemPrompt, forKey: .localAgentSystemPrompt)
+        try container.encode(localAgentPassVariables, forKey: .localAgentPassVariables)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
         try container.encode(showPreview, forKey: .showPreview)
@@ -384,5 +388,6 @@ struct Mode: Identifiable, Codable, Equatable {
         localAgentProvider = try container.decodeIfPresent(LocalAgentProvider.self, forKey: .localAgentProvider) ?? .claudeCode
         localAgentPromptType = try container.decodeIfPresent(LocalAgentPromptType.self, forKey: .localAgentPromptType) ?? .default
         localAgentSystemPrompt = try container.decodeIfPresent(String.self, forKey: .localAgentSystemPrompt) ?? ""
+        localAgentPassVariables = try container.decodeIfPresent(Bool.self, forKey: .localAgentPassVariables) ?? false
     }
 }
