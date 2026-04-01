@@ -33,4 +33,5 @@ enum RecordingState: String {
     case idle
     case recording
     case transcribing
+    case emptyResult
 }

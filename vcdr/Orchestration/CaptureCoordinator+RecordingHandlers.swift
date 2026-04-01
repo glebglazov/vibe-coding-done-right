@@ -56,7 +56,7 @@ extension CaptureCoordinator {
     func handleTranscriptionFailed() {
         immediateActionTask?.cancel()
         immediateActionTask = nil
-        flashPill(phase: .error, duration: Self.pillErrorDisplayDuration)
+        panel.setError("No speech detected")
         scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
     }
 

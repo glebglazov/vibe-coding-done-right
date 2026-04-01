@@ -10,6 +10,8 @@ enum DictationState {
     case transcribing
     /// Transcription text available — waiting for user tap to insert
     case ready
+    /// Recording produced no speech — shown briefly before reverting to idle
+    case emptyResult
 }
 
 class KeyboardViewController: KeyboardInputViewController, ObservableObject {
@@ -83,12 +85,23 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 pendingText = nil
                 dictationState = .idle
             }
+        } else if raw == RecordingState.emptyResult.rawValue {
+            pendingText = nil
+            dictationState = .emptyResult
+            // Clear the state so it doesn't persist across keyboard appearances
+            SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
+            // Auto-revert to idle after the flash duration
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
+                guard self?.dictationState == .emptyResult else { return }
+                self?.dictationState = .idle
+            }
         } else if let state = RecordingState(rawValue: raw) {
             pendingText = nil
             switch state {
             case .recording: dictationState = .recording
             case .transcribing: dictationState = .transcribing
             case .idle: dictationState = .idle
+            case .emptyResult: break // handled above
             }
         } else {
             pendingText = nil
@@ -116,6 +129,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     private static let insertionTimeout: TimeInterval = 15
     /// Polling interval while waiting for result
     private static let pollInterval: TimeInterval = 0.1
+    /// Duration to show the yellow empty-result indicator before reverting to idle
+    private static let emptyResultFlashDuration: TimeInterval = 2
 
     // MARK: - Commands
 
@@ -138,8 +153,20 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         while Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(Self.pollInterval))
 
-            guard let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey),
-                  raw.hasPrefix(idlePrefix) else { continue }
+            guard let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey) else { continue }
+
+            // Empty result — break out immediately, show yellow flash
+            if raw == RecordingState.emptyResult.rawValue {
+                dictationState = .emptyResult
+                SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
+                    guard self?.dictationState == .emptyResult else { return }
+                    self?.dictationState = .idle
+                }
+                return
+            }
+
+            guard raw.hasPrefix(idlePrefix) else { continue }
 
             let text = String(raw.dropFirst(idlePrefix.count))
             guard !text.isEmpty else { continue }

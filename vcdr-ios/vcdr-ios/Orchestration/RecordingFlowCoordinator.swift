@@ -257,6 +257,21 @@ final class RecordingFlowCoordinator {
             let finalText = TextPostProcessor.process(rawText)
             Logger.app.info("Streaming transcription complete: \(finalText.prefix(50))...")
 
+            guard !finalText.isEmpty else {
+                state = .error("No speech detected")
+                transcribingMessage = ""
+                if sendToKeyboard {
+                    writeState(.emptyResult)
+                } else {
+                    writeState(.idle)
+                }
+                if bgTaskID != .invalid {
+                    UIApplication.shared.endBackgroundTask(bgTaskID)
+                }
+                streamingManager = nil
+                return
+            }
+
             // Wait for AI processing, or use local result
             let resultText: String
             if useAI {

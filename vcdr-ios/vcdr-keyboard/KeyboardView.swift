@@ -95,6 +95,10 @@ struct DictateBarView: View {
                 Button(action: onInsert) {
                     circleButton(icon: "checkmark", color: .green)
                 }
+            case .emptyResult:
+                Link(destination: SharedConstants.recordDeepLinkURL) {
+                    circleButton(icon: "mic.fill", color: .yellow)
+                }
             }
         }
         .padding(.trailing, 4)
