@@ -16,37 +16,37 @@
 			containerPortal = E5D6B8122F466C82002066AA /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = E5D6B8192F466C82002066AA;
-			remoteInfo = vcdr;
+			remoteInfo = "vcdr-mac";
 		};
 		E5D6B8322F466C83002066AA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = E5D6B8122F466C82002066AA /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = E5D6B8192F466C82002066AA;
-			remoteInfo = vcdr;
+			remoteInfo = "vcdr-mac";
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		E5D6B81A2F466C82002066AA /* vcdr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = vcdr.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		E5D6B8272F466C83002066AA /* vcdrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = vcdrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		E5D6B8312F466C83002066AA /* vcdrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = vcdrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5D6B81A2F466C82002066AA /* vcdr-mac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "vcdr-mac.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5D6B8272F466C83002066AA /* vcdr-macTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "vcdr-macTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5D6B8312F466C83002066AA /* vcdr-macUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "vcdr-macUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		E5D6B81C2F466C82002066AA /* vcdr */ = {
+		E5D6B81C2F466C82002066AA /* vcdr-mac */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = vcdr;
+			path = vcdr-mac;
 			sourceTree = "<group>";
 		};
-		E5D6B82A2F466C83002066AA /* vcdrTests */ = {
+		E5D6B82A2F466C83002066AA /* vcdr-macTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = vcdrTests;
+			path = vcdr-macTests;
 			sourceTree = "<group>";
 		};
-		E5D6B8342F466C83002066AA /* vcdrUITests */ = {
+		E5D6B8342F466C83002066AA /* vcdr-macUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = vcdrUITests;
+			path = vcdr-macUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -80,9 +80,9 @@
 		E5D6B8112F466C82002066AA = {
 			isa = PBXGroup;
 			children = (
-				E5D6B81C2F466C82002066AA /* vcdr */,
-				E5D6B82A2F466C83002066AA /* vcdrTests */,
-				E5D6B8342F466C83002066AA /* vcdrUITests */,
+				E5D6B81C2F466C82002066AA /* vcdr-mac */,
+				E5D6B82A2F466C83002066AA /* vcdr-macTests */,
+				E5D6B8342F466C83002066AA /* vcdr-macUITests */,
 				E5D6B81B2F466C82002066AA /* Products */,
 			);
 			sourceTree = "<group>";
@@ -90,9 +90,9 @@
 		E5D6B81B2F466C82002066AA /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E5D6B81A2F466C82002066AA /* vcdr.app */,
-				E5D6B8272F466C83002066AA /* vcdrTests.xctest */,
-				E5D6B8312F466C83002066AA /* vcdrUITests.xctest */,
+				E5D6B81A2F466C82002066AA /* vcdr-mac.app */,
+				E5D6B8272F466C83002066AA /* vcdr-macTests.xctest */,
+				E5D6B8312F466C83002066AA /* vcdr-macUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -100,9 +100,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E5D6B8192F466C82002066AA /* vcdr */ = {
+		E5D6B8192F466C82002066AA /* vcdr-mac */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E5D6B83B2F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdr" */;
+			buildConfigurationList = E5D6B83B2F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdr-mac" */;
 			buildPhases = (
 				E5D6B8162F466C82002066AA /* Sources */,
 				E5D6B8172F466C82002066AA /* Frameworks */,
@@ -114,19 +114,19 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				E5D6B81C2F466C82002066AA /* vcdr */,
+				E5D6B81C2F466C82002066AA /* vcdr-mac */,
 			);
-			name = vcdr;
+			name = "vcdr-mac";
 			packageProductDependencies = (
 				E5D6B8502F466D00002066AA /* FluidAudio */,
 			);
-			productName = vcdr;
-			productReference = E5D6B81A2F466C82002066AA /* vcdr.app */;
+			productName = "vcdr-mac";
+			productReference = E5D6B81A2F466C82002066AA /* vcdr-mac.app */;
 			productType = "com.apple.product-type.application";
 		};
-		E5D6B8262F466C83002066AA /* vcdrTests */ = {
+		E5D6B8262F466C83002066AA /* vcdr-macTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E5D6B83E2F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdrTests" */;
+			buildConfigurationList = E5D6B83E2F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdr-macTests" */;
 			buildPhases = (
 				E5D6B8232F466C83002066AA /* Sources */,
 				E5D6B8242F466C83002066AA /* Frameworks */,
@@ -138,18 +138,18 @@
 				E5D6B8292F466C83002066AA /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				E5D6B82A2F466C83002066AA /* vcdrTests */,
+				E5D6B82A2F466C83002066AA /* vcdr-macTests */,
 			);
-			name = vcdrTests;
+			name = "vcdr-macTests";
 			packageProductDependencies = (
 			);
-			productName = vcdrTests;
-			productReference = E5D6B8272F466C83002066AA /* vcdrTests.xctest */;
+			productName = "vcdr-macTests";
+			productReference = E5D6B8272F466C83002066AA /* vcdr-macTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		E5D6B8302F466C83002066AA /* vcdrUITests */ = {
+		E5D6B8302F466C83002066AA /* vcdr-macUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E5D6B8412F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdrUITests" */;
+			buildConfigurationList = E5D6B8412F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdr-macUITests" */;
 			buildPhases = (
 				E5D6B82D2F466C83002066AA /* Sources */,
 				E5D6B82E2F466C83002066AA /* Frameworks */,
@@ -161,13 +161,13 @@
 				E5D6B8332F466C83002066AA /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				E5D6B8342F466C83002066AA /* vcdrUITests */,
+				E5D6B8342F466C83002066AA /* vcdr-macUITests */,
 			);
-			name = vcdrUITests;
+			name = "vcdr-macUITests";
 			packageProductDependencies = (
 			);
-			productName = vcdrUITests;
-			productReference = E5D6B8312F466C83002066AA /* vcdrUITests.xctest */;
+			productName = "vcdr-macUITests";
+			productReference = E5D6B8312F466C83002066AA /* vcdr-macUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -193,7 +193,7 @@
 					};
 				};
 			};
-			buildConfigurationList = E5D6B8152F466C82002066AA /* Build configuration list for PBXProject "vcdr" */;
+			buildConfigurationList = E5D6B8152F466C82002066AA /* Build configuration list for PBXProject "vcdr-mac" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -210,9 +210,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				E5D6B8192F466C82002066AA /* vcdr */,
-				E5D6B8262F466C83002066AA /* vcdrTests */,
-				E5D6B8302F466C83002066AA /* vcdrUITests */,
+				E5D6B8192F466C82002066AA /* vcdr-mac */,
+				E5D6B8262F466C83002066AA /* vcdr-macTests */,
+				E5D6B8302F466C83002066AA /* vcdr-macUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -289,12 +289,12 @@
 /* Begin PBXTargetDependency section */
 		E5D6B8292F466C83002066AA /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = E5D6B8192F466C82002066AA /* vcdr */;
+			target = E5D6B8192F466C82002066AA /* vcdr-mac */;
 			targetProxy = E5D6B8282F466C83002066AA /* PBXContainerItemProxy */;
 		};
 		E5D6B8332F466C83002066AA /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = E5D6B8192F466C82002066AA /* vcdr */;
+			target = E5D6B8192F466C82002066AA /* vcdr-mac */;
 			targetProxy = E5D6B8322F466C83002066AA /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -425,7 +425,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = vcdr/Info.plist;
+				INFOPLIST_FILE = "vcdr-mac/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
@@ -453,7 +453,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = vcdr/Info.plist;
+				INFOPLIST_FILE = "vcdr-mac/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
@@ -488,7 +488,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vcdr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vcdr";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vcdr-mac.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vcdr-mac";
 			};
 			name = Debug;
 		};
@@ -510,7 +510,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vcdr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vcdr";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vcdr-mac.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vcdr-mac";
 			};
 			name = Release;
 		};
@@ -531,7 +531,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = vcdr;
+				TEST_TARGET_NAME = "vcdr-mac";
 			};
 			name = Debug;
 		};
@@ -552,14 +552,14 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = vcdr;
+				TEST_TARGET_NAME = "vcdr-mac";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E5D6B8152F466C82002066AA /* Build configuration list for PBXProject "vcdr" */ = {
+		E5D6B8152F466C82002066AA /* Build configuration list for PBXProject "vcdr-mac" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E5D6B8392F466C83002066AA /* Debug */,
@@ -568,7 +568,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E5D6B83B2F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdr" */ = {
+		E5D6B83B2F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdr-mac" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E5D6B83C2F466C83002066AA /* Debug */,
@@ -577,7 +577,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E5D6B83E2F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdrTests" */ = {
+		E5D6B83E2F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdr-macTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E5D6B83F2F466C83002066AA /* Debug */,
@@ -586,7 +586,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E5D6B8412F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdrUITests" */ = {
+		E5D6B8412F466C83002066AA /* Build configuration list for PBXNativeTarget "vcdr-macUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E5D6B8422F466C83002066AA /* Debug */,
