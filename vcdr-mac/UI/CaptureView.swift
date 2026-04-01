@@ -43,21 +43,10 @@ struct CaptureView: View {
                     .font(.system(size: Self.pillIconSize))
                     .foregroundStyle(.secondary)
             case .recording:
-                if viewModel.feedbackCounters.clipboardCaptureCount > 0 {
-                    HStack(spacing: 1) {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.system(size: Self.captureBadgeSize, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        if viewModel.feedbackCounters.clipboardCaptureCount > 1 {
-                            Text("×\(viewModel.feedbackCounters.clipboardCaptureCount)")
-                                .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .transition(.opacity)
-                }
+                captureBadge
                 AudioWaveformView(audioLevels: viewModel.audioRecorder?.audioLevels ?? [])
             case .processing:
+                captureBadge
                 AnimatedDotsView()
             case .error:
                 Image(systemName: "xmark")
@@ -81,6 +70,23 @@ struct CaptureView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onTapGesture {
             viewModel.onPillTapped()
+        }
+    }
+
+    @ViewBuilder
+    private var captureBadge: some View {
+        if viewModel.feedbackCounters.clipboardCaptureCount > 0 {
+            HStack(spacing: 1) {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: Self.captureBadgeSize, weight: .medium))
+                    .foregroundStyle(.secondary)
+                if viewModel.feedbackCounters.clipboardCaptureCount > 1 {
+                    Text("×\(viewModel.feedbackCounters.clipboardCaptureCount)")
+                        .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .transition(.opacity)
         }
     }
 
