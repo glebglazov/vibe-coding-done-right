@@ -150,10 +150,7 @@ extension CaptureCoordinator {
         immediateActionTask = Task { @MainActor in
             do {
                 let apiKey = snapshot.pipelineContext.variableEnvironment[snapshot.mode.aiProvider.apiKeyVariableName] ?? ""
-                let systemPrompt: String = switch snapshot.mode.aiPromptType {
-                case .dictation: BuiltInPrompts.dictation
-                case .custom: snapshot.mode.systemPrompt
-                }
+                let systemPrompt = TextProcessingPipeline.resolvePrompt(snapshot.mode)
                 let structured = "<dictation>\(rawText)</dictation>"
                 var processedText = try await AIClient.process(
                     text: structured,

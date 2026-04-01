@@ -1,30 +1,43 @@
 import Foundation
 
 enum BuiltInPrompts {
+    // MARK: - Prompt Accessors
+
     /// The AI Dictation system prompt. Returns server-fetched version if available, otherwise the bundled default.
     static var dictation: String {
-        cachedDictation ?? defaultDictation
+        cached("dictation") ?? defaultDictation
     }
 
-    // MARK: - Cache
+    /// The Assistant system prompt. Returns server-fetched version if available, otherwise the bundled default.
+    static var assistant: String {
+        cached("assistant") ?? defaultAssistant
+    }
 
-    private static let cachedPromptKey = "cachedDictationPrompt"
+    // MARK: - Cache (generic per-key)
+
+    private static let cachedPromptKeyPrefix = "cachedPrompt_"
     private static let cachedTimestampKey = "cachedPromptsTimestamp"
 
-    static var cachedDictation: String? {
-        UserDefaults.standard.string(forKey: cachedPromptKey)
+    static func cached(_ key: String) -> String? {
+        UserDefaults.standard.string(forKey: cachedPromptKeyPrefix + key)
     }
 
     static var cachedTimestamp: Int {
         UserDefaults.standard.integer(forKey: cachedTimestampKey)
     }
 
-    static func updateCache(dictation: String, timestamp: Int) {
-        UserDefaults.standard.set(dictation, forKey: cachedPromptKey)
+    static func updateCache(prompts: [String: String], timestamp: Int) {
+        for (key, value) in prompts {
+            UserDefaults.standard.set(value, forKey: cachedPromptKeyPrefix + key)
+        }
         UserDefaults.standard.set(timestamp, forKey: cachedTimestampKey)
     }
 
-    // MARK: - Default
+    // MARK: - Defaults
+
+    static let defaultAssistant = """
+        Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.
+        """
 
     static let defaultDictation = """
         You clean up and restructure raw voice dictation. Apply these rules:

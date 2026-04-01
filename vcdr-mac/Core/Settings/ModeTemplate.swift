@@ -10,10 +10,8 @@ struct ModeTemplate {
     let systemPromptEnabled: Bool
     let systemPrompt: String
     let aiProvider: AIProvider
-    let aiPromptType: AIPromptType
+    let promptType: PromptType
     let localAgentProvider: LocalAgentProvider
-    let localAgentPromptType: LocalAgentPromptType
-    let localAgentSystemPrompt: String
     let localAgentPassVariables: Bool
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
@@ -30,10 +28,8 @@ struct ModeTemplate {
             systemPromptEnabled: systemPromptEnabled,
             systemPrompt: systemPrompt,
             aiProvider: aiProvider,
-            aiPromptType: aiPromptType,
+            promptType: promptType,
             localAgentProvider: localAgentProvider,
-            localAgentPromptType: localAgentPromptType,
-            localAgentSystemPrompt: localAgentSystemPrompt,
             localAgentPassVariables: localAgentPassVariables,
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
@@ -49,10 +45,8 @@ struct ModeTemplate {
         mode.systemPromptEnabled = systemPromptEnabled
         mode.systemPrompt = systemPrompt
         mode.aiProvider = aiProvider
-        mode.aiPromptType = aiPromptType
+        mode.promptType = promptType
         mode.localAgentProvider = localAgentProvider
-        mode.localAgentPromptType = localAgentPromptType
-        mode.localAgentSystemPrompt = localAgentSystemPrompt
         mode.localAgentPassVariables = localAgentPassVariables
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.parameters = parameters
@@ -83,17 +77,15 @@ extension ModeTemplate {
 
     static let plain = ModeTemplate(
         id: "plain",
-        defaultName: "Plain",
+        defaultName: "Transcription",
         availabilityCommand: nil,
         processingType: .none,
         processingCommand: "",
         systemPromptEnabled: false,
         systemPrompt: "",
         aiProvider: .anthropic,
-        aiPromptType: .dictation,
+        promptType: .dictation,
         localAgentProvider: .claudeCode,
-        localAgentPromptType: .default,
-        localAgentSystemPrompt: "",
         localAgentPassVariables: false,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
@@ -102,17 +94,15 @@ extension ModeTemplate {
 
     static let aiDictation = ModeTemplate(
         id: "ai-dictation",
-        defaultName: "AI Dictation",
+        defaultName: "Dictation",
         availabilityCommand: nil,
         processingType: .cloudAI,
         processingCommand: "",
         systemPromptEnabled: false,
         systemPrompt: "",
         aiProvider: .anthropic,
-        aiPromptType: .dictation,
+        promptType: .dictation,
         localAgentProvider: .claudeCode,
-        localAgentPromptType: .default,
-        localAgentSystemPrompt: "",
         localAgentPassVariables: false,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
@@ -121,17 +111,15 @@ extension ModeTemplate {
 
     static let claudeCode = ModeTemplate(
         id: "claude-code",
-        defaultName: "Claude Code",
+        defaultName: "Assistant (Remote)",
         availabilityCommand: "claude",
         processingType: .localAgent,
         processingCommand: "",
         systemPromptEnabled: false,
         systemPrompt: "",
         aiProvider: .anthropic,
-        aiPromptType: .dictation,
+        promptType: .assistant,
         localAgentProvider: .claudeCode,
-        localAgentPromptType: .default,
-        localAgentSystemPrompt: "",
         localAgentPassVariables: false,
         parameters: [
             ModeParameter(id: claudeCodeModelParamID, name: "Model", options: [
@@ -146,17 +134,15 @@ extension ModeTemplate {
 
     static let ollama = ModeTemplate(
         id: "ollama",
-        defaultName: "Ollama",
+        defaultName: "Assistant (Local)",
         availabilityCommand: "ollama",
         processingType: .bashScript,
         processingCommand: "zsh -ic 'TERM=dumb ollama run --hidethinking --nowordwrap $VCDR_PARAM_MODEL \"$VCDR_TEXT\" 2>/dev/null'",
         systemPromptEnabled: true,
         systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
         aiProvider: .anthropic,
-        aiPromptType: .dictation,
+        promptType: .dictation,
         localAgentProvider: .claudeCode,
-        localAgentPromptType: .default,
-        localAgentSystemPrompt: "",
         localAgentPassVariables: false,
         parameters: [
             ModeParameter(id: ollamaModelParamID, name: "Model", options: [

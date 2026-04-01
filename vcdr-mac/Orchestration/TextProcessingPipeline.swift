@@ -47,10 +47,7 @@ enum TextProcessingPipeline {
 
         case .cloudAI:
             let apiKey = variableEnvironment[mode.aiProvider.apiKeyVariableName] ?? ""
-            let systemPrompt: String = switch mode.aiPromptType {
-            case .dictation: BuiltInPrompts.dictation
-            case .custom: mode.systemPrompt
-            }
+            let systemPrompt = resolvePrompt(mode)
             do {
                 let processedText = try await AIClient.process(
                     text: structured,
@@ -110,6 +107,18 @@ enum TextProcessingPipeline {
         )
     }
 
+    // MARK: - Prompt Resolution
+
+    /// Resolves the prompt text for the current mode's prompt type.
+    /// Shared by all processing types that use prompts (cloudAI, localAgent).
+    static func resolvePrompt(_ mode: Mode) -> String {
+        switch mode.promptType {
+        case .dictation: BuiltInPrompts.dictation
+        case .assistant: BuiltInPrompts.assistant
+        case .custom: mode.systemPrompt
+        }
+    }
+
     // MARK: - Processing Type Input Structuring
 
     /// Shared interface: each processing type structures input for its consumer.
@@ -127,10 +136,7 @@ enum TextProcessingPipeline {
             // (system prompt is sent as a separate API parameter)
             return structureInputXML(text: text, captures: captures, systemPrompt: nil)
         case .localAgent:
-            let prompt: String = switch mode.localAgentPromptType {
-            case .default: mode.localAgentProvider.defaultSystemPrompt
-            case .custom: mode.localAgentSystemPrompt
-            }
+            let prompt = resolvePrompt(mode)
             return structureInputXML(text: text, captures: captures,
                                      systemPrompt: prompt.isEmpty ? nil : prompt)
         case .bashScript:

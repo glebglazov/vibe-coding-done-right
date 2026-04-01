@@ -72,13 +72,13 @@ struct ModeDetailView: View {
                         }
                     }
 
-                    Picker("Prompt", selection: $mode.aiPromptType) {
-                        ForEach(AIPromptType.allCases, id: \.self) { promptType in
+                    Picker("Prompt", selection: $mode.promptType) {
+                        ForEach(PromptType.allCases, id: \.self) { promptType in
                             Text(promptType.displayName).tag(promptType)
                         }
                     }
 
-                    if mode.aiPromptType == .custom {
+                    if mode.promptType == .custom {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("System Prompt")
                                 .foregroundStyle(.secondary)
@@ -102,17 +102,17 @@ struct ModeDetailView: View {
 
                     localAgentParametersSection
 
-                    Picker("Prompt", selection: $mode.localAgentPromptType) {
-                        ForEach(LocalAgentPromptType.allCases, id: \.self) { promptType in
+                    Picker("Prompt", selection: $mode.promptType) {
+                        ForEach(PromptType.allCases, id: \.self) { promptType in
                             Text(promptType.displayName).tag(promptType)
                         }
                     }
 
-                    if mode.localAgentPromptType == .custom {
+                    if mode.promptType == .custom {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("System Prompt")
                                 .foregroundStyle(.secondary)
-                            TextEditor(text: $mode.localAgentSystemPrompt)
+                            TextEditor(text: $mode.systemPrompt)
                                 .font(.body)
                                 .frame(minHeight: 80)
                                 .border(Color.secondary.opacity(0.3))

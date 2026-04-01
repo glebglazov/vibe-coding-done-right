@@ -38,11 +38,10 @@ enum PromptFetcher {
 
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let prompts = json["prompts"] as? [String: String],
-                  let timestamp = json["timestamp"] as? Int,
-                  let dictation = prompts["dictation"] else { return }
+                  let timestamp = json["timestamp"] as? Int else { return }
 
-            BuiltInPrompts.updateCache(dictation: dictation, timestamp: timestamp)
-            Logger.app.info("Updated dictation prompt from server (timestamp: \(timestamp))")
+            BuiltInPrompts.updateCache(prompts: prompts, timestamp: timestamp)
+            Logger.app.info("Updated \(prompts.count) prompt(s) from server (timestamp: \(timestamp))")
         } catch {
             Logger.app.warning("Failed to fetch prompts: \(error.localizedDescription)")
         }

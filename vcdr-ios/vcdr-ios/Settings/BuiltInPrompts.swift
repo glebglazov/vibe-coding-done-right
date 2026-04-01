@@ -1,30 +1,54 @@
 import Foundation
 
 enum BuiltInPrompts {
-    /// The AI Dictation system prompt. Returns server-fetched version if available, otherwise the bundled default.
+    // MARK: - Public API
+
+    /// Returns the prompt for the given mode: server-cached if available, otherwise bundled default.
+    static func prompt(for mode: AIPromptMode) -> String {
+        cachedPrompt(for: mode) ?? defaultPrompt(for: mode)
+    }
+
+    /// Legacy accessor — kept for call sites that specifically need the dictation prompt.
     static var dictation: String {
-        cachedDictation ?? defaultDictation
+        prompt(for: .dictation)
     }
 
     // MARK: - Cache
 
-    private static let cachedPromptKey = "cachedDictationPrompt"
     private static let cachedTimestampKey = "cachedPromptsTimestamp"
 
-    static var cachedDictation: String? {
-        UserDefaults.standard.string(forKey: cachedPromptKey)
+    /// Per-mode cache key: "cachedPrompt_dictation", "cachedPrompt_assistant", etc.
+    private static func cacheKey(for mode: AIPromptMode) -> String {
+        "cachedPrompt_\(mode.rawValue)"
+    }
+
+    static func cachedPrompt(for mode: AIPromptMode) -> String? {
+        UserDefaults.standard.string(forKey: cacheKey(for: mode))
     }
 
     static var cachedTimestamp: Int {
         UserDefaults.standard.integer(forKey: cachedTimestampKey)
     }
 
-    static func updateCache(dictation: String, timestamp: Int) {
-        UserDefaults.standard.set(dictation, forKey: cachedPromptKey)
+    /// Updates cached prompts from the server response.
+    /// Only overwrites modes present in the dictionary; others remain unchanged.
+    static func updateCache(prompts: [String: String], timestamp: Int) {
+        for (key, value) in prompts {
+            if let mode = AIPromptMode(rawValue: key) {
+                UserDefaults.standard.set(value, forKey: cacheKey(for: mode))
+            }
+        }
         UserDefaults.standard.set(timestamp, forKey: cachedTimestampKey)
     }
 
-    // MARK: - Default
+    // MARK: - Defaults
+
+    private static func defaultPrompt(for mode: AIPromptMode) -> String {
+        switch mode {
+        case .dictation: defaultDictation
+        case .assistant: defaultAssistant
+        }
+    }
 
     static let defaultDictation = """
         You clean up and restructure raw voice dictation. Apply these rules:
@@ -48,5 +72,9 @@ enum BuiltInPrompts {
         LANGUAGE: Works for any language. Same principles apply.
 
         OUTPUT: Return only the cleaned text. No preamble, no explanation.
+        """
+
+    static let defaultAssistant = """
+        Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.
         """
 }

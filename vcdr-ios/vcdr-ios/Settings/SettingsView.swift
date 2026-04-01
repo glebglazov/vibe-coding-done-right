@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance: Appearance = .system
     @AppStorage(AudioRecorder.preferredInputUIDKey) private var preferredInputUID = ""
+    @AppStorage(AIProcessingSettings.defaultModeKey) private var defaultModeRaw = AIPromptMode.dictation.rawValue
     @AppStorage(AIProcessingSettings.enabledKey) private var aiEnabled = false
     @AppStorage(AIProcessingSettings.activeInDictationKey) private var aiActiveInDictation = false
     @AppStorage(AIProcessingSettings.providerKey) private var aiProviderRaw = AIProvider.anthropic.rawValue
@@ -158,6 +159,39 @@ struct SettingsView: View {
                     .foregroundStyle(theme.onSurface)
             }
             .tint(theme.primary)
+
+            // Default processing mode
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Default processing mode")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.onSurfaceVariant)
+                Menu {
+                    ForEach(AIPromptMode.availableModes, id: \.self) { mode in
+                        Button {
+                            defaultModeRaw = mode.rawValue
+                        } label: {
+                            if defaultModeRaw == mode.rawValue {
+                                Label(mode.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(mode.displayName)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text(AIProcessingSettings.defaultMode.displayName)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(theme.onSurface)
+                        Spacer()
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundStyle(theme.onSurfaceVariant)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(theme.surfaceContainer)
+                }
+            }
 
             // Provider picker
             VStack(alignment: .leading, spacing: 6) {

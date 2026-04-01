@@ -1,6 +1,34 @@
 import Foundation
 import FoundationModels
 
+/// Available AI processing prompt modes.
+/// Raw values match the server's prompt keys for cache lookup.
+enum AIPromptMode: String, CaseIterable, Codable {
+    case dictation
+    case assistant
+
+    var displayName: String {
+        switch self {
+        case .dictation: "Dictation"
+        case .assistant: "Assistant"
+        }
+    }
+
+    /// Whether this mode is currently available for selection.
+    /// Used to filter the picker — allows defining enum cases before they're ready.
+    var isAvailable: Bool {
+        switch self {
+        case .dictation: true
+        case .assistant: true
+        }
+    }
+
+    /// Modes that should appear in the UI picker.
+    static var availableModes: [AIPromptMode] {
+        allCases.filter(\.isAvailable)
+    }
+}
+
 /// AI provider selection — matches the macOS AIProvider enum.
 enum AIProvider: String, Codable, CaseIterable {
     case anthropic
@@ -34,6 +62,7 @@ enum AIProvider: String, Codable, CaseIterable {
 /// Reads AI processing settings from UserDefaults.
 /// The settings view writes via @AppStorage; other code reads through these static properties.
 enum AIProcessingSettings {
+    static let defaultModeKey = "ai_processing_default_mode"
     static let enabledKey = "ai_processing_enabled"
     static let activeInDictationKey = "ai_processing_active_in_dictation"
     static let providerKey = "ai_processing_provider"
@@ -43,6 +72,10 @@ enum AIProcessingSettings {
     /// Remembers the user's fallback preference so it can be restored when
     /// switching away from Apple as primary provider.
     static let afmFallbackRememberedKey = "ai_processing_afm_fallback_remembered"
+
+    static var defaultMode: AIPromptMode {
+        AIPromptMode(rawValue: UserDefaults.standard.string(forKey: defaultModeKey) ?? "") ?? .dictation
+    }
 
     static var enabled: Bool {
         UserDefaults.standard.bool(forKey: enabledKey)

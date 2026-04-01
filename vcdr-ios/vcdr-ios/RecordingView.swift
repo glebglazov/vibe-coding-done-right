@@ -21,6 +21,7 @@ struct RecordingView: View {
     private static let transcriptMaxHeight: CGFloat = 200
     private static let hintFontSize: CGFloat = 13
     private static let returnPulseDuration: Double = 0.8
+    private static let aiPillHeight: CGFloat = 32
 
     var body: some View {
         ZStack {
@@ -347,21 +348,55 @@ struct RecordingView: View {
     @ViewBuilder
     private var aiSessionToggle: some View {
         if AIProcessingSettings.isConfigured {
-            Button {
-                coordinator.aiActiveThisSession.toggle()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12))
-                    Text(coordinator.aiActiveThisSession ? "AI ON" : "AI OFF")
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(2)
+            HStack(spacing: 8) {
+                Button {
+                    coordinator.aiActiveThisSession.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 12))
+                        Text(coordinator.aiActiveThisSession ? "AI ON" : "AI OFF")
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(2)
+                    }
+                    .foregroundStyle(coordinator.aiActiveThisSession ? theme.primary : theme.onSurfaceVariant)
+                    .padding(.horizontal, 16)
+                    .frame(height: Self.aiPillHeight)
+                    .background(theme.surfaceHigh)
                 }
-                .foregroundStyle(coordinator.aiActiveThisSession ? theme.primary : theme.onSurfaceVariant)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(theme.surfaceHigh)
+
+                if coordinator.aiActiveThisSession {
+                    promptModePicker
+                }
             }
+        }
+    }
+
+    private var promptModePicker: some View {
+        Menu {
+            ForEach(AIPromptMode.availableModes, id: \.self) { mode in
+                Button {
+                    coordinator.selectedPromptMode = mode
+                } label: {
+                    if coordinator.selectedPromptMode == mode {
+                        Label(mode.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(mode.displayName)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(coordinator.selectedPromptMode.displayName.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(2)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(theme.primary)
+            .padding(.horizontal, 12)
+            .frame(height: Self.aiPillHeight)
+            .background(theme.surfaceHigh)
         }
     }
 

@@ -39,6 +39,8 @@ final class RecordingFlowCoordinator {
     /// Per-session override — allows disabling AI processing without changing global settings.
     /// Initialized from `AIProcessingSettings.activeInDictation` at session start.
     var aiActiveThisSession: Bool = AIProcessingSettings.activeInDictation
+    /// Per-session prompt mode — initialized from settings default, changeable during recording.
+    var selectedPromptMode: AIPromptMode = AIProcessingSettings.defaultMode
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
@@ -151,6 +153,7 @@ final class RecordingFlowCoordinator {
 
         launchedViaDeepLink = fromDeepLink
         aiActiveThisSession = AIProcessingSettings.activeInDictation
+        selectedPromptMode = AIProcessingSettings.defaultMode
         aiProcessingStatus = .idle
 
         // Show "LISTENING" immediately — before any async work.
@@ -317,6 +320,7 @@ final class RecordingFlowCoordinator {
         launchedViaDeepLink = false
         aiProcessingStatus = .idle
         aiActiveThisSession = AIProcessingSettings.activeInDictation
+        selectedPromptMode = AIProcessingSettings.defaultMode
         aiInputText = ""
         updateTask?.cancel()
         streamingSetupTask?.cancel()
@@ -334,7 +338,7 @@ final class RecordingFlowCoordinator {
         aiProcessingStatus = .processing
         let provider = AIProcessingSettings.provider
         let apiKey = AIProcessingSettings.activeApiKey
-        let systemPrompt = BuiltInPrompts.dictation
+        let systemPrompt = BuiltInPrompts.prompt(for: selectedPromptMode)
         let wrappedText = "<dictation>\(localText)</dictation>"
         let deadline = ContinuousClock.now + Self.aiProcessingTimeout
         let startTime = ContinuousClock.now
