@@ -182,6 +182,15 @@ final class CaptureCoordinator {
         autoDismissTask = nil
         immediateActionTask?.cancel()
         immediateActionTask = nil
+
+        // Save to history if user dismissed a preview that had visible results
+        if saveToHistory, let snapshot = pendingPreviewSnapshot, let processedText = pendingPreviewText {
+            finalizeHistory(
+                snapshot: snapshot, processedText: processedText,
+                hadExternalProcessing: snapshot.mode.processingType != .none
+            )
+        }
+
         clearPendingPreview()
         panel.onFocusLost = nil
         panel.dismiss()
