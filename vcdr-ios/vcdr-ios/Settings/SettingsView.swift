@@ -165,25 +165,16 @@ struct SettingsView: View {
                 Text("Default processing mode")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(theme.onSurfaceVariant)
-                Menu {
-                    ForEach(AIPromptMode.availableModes, id: \.self) { mode in
-                        Button {
-                            defaultModeRaw = mode.rawValue
-                        } label: {
-                            if defaultModeRaw == mode.rawValue {
-                                Label(mode.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(mode.displayName)
-                            }
-                        }
-                    }
+                Button {
+                    let current = AIProcessingSettings.defaultMode
+                    defaultModeRaw = current.next.rawValue
                 } label: {
                     HStack {
                         Text(AIProcessingSettings.defaultMode.displayName)
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(theme.onSurface)
                         Spacer()
-                        Image(systemName: "chevron.up.chevron.down")
+                        Image(systemName: "arrow.triangle.2.circlepath")
                             .font(.system(size: 12))
                             .foregroundStyle(theme.onSurfaceVariant)
                     }

@@ -366,37 +366,19 @@ struct RecordingView: View {
                 }
 
                 if coordinator.aiActiveThisSession {
-                    promptModePicker
-                }
-            }
-        }
-    }
-
-    private var promptModePicker: some View {
-        Menu {
-            ForEach(AIPromptMode.availableModes, id: \.self) { mode in
-                Button {
-                    coordinator.selectedPromptMode = mode
-                } label: {
-                    if coordinator.selectedPromptMode == mode {
-                        Label(mode.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(mode.displayName)
+                    Button {
+                        coordinator.selectedPromptMode = coordinator.selectedPromptMode.next
+                    } label: {
+                        Text(coordinator.selectedPromptMode.displayName.uppercased())
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(2)
+                            .foregroundStyle(theme.primary)
+                            .padding(.horizontal, 12)
+                            .frame(height: Self.aiPillHeight)
+                            .background(theme.surfaceHigh)
                     }
                 }
             }
-        } label: {
-            HStack(spacing: 4) {
-                Text(coordinator.selectedPromptMode.displayName.uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(2)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-            }
-            .foregroundStyle(theme.primary)
-            .padding(.horizontal, 12)
-            .frame(height: Self.aiPillHeight)
-            .background(theme.surfaceHigh)
         }
     }
 

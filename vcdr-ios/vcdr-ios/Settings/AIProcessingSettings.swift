@@ -27,6 +27,13 @@ enum AIPromptMode: String, CaseIterable, Codable {
     static var availableModes: [AIPromptMode] {
         allCases.filter(\.isAvailable)
     }
+
+    /// Cycles to the next available mode, wrapping around.
+    var next: AIPromptMode {
+        let modes = Self.availableModes
+        guard let index = modes.firstIndex(of: self) else { return modes.first ?? self }
+        return modes[(index + 1) % modes.count]
+    }
 }
 
 /// AI provider selection — matches the macOS AIProvider enum.
