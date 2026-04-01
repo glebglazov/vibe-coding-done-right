@@ -67,9 +67,18 @@ final class RecordingFlowCoordinator {
     var isRecording: Bool { audioRecorder.isRecording }
     var audioLevels: [Float] { audioRecorder.audioLevels }
 
+    /// Deactivates the audio session when the app goes to background.
+    func deactivateAudioSession() {
+        audioRecorder.deactivateSession()
+    }
+
     func initializeModel() async {
         // If recording already started, model init is handled by streamingSetupTask
         guard state != .recording else { return }
+
+        // Pre-warm the audio session so it's ready when the user taps record.
+        // This runs concurrently with model download/compilation.
+        audioRecorder.prepareAudioSession()
 
         state = .initializing
         initProgress = "Downloading model..."
@@ -159,19 +168,7 @@ final class RecordingFlowCoordinator {
         liveTranscript = ""
         startConsumingUpdates(from: streaming)
 
-        // Start audio engine immediately — buffers forward to the streaming manager
-        let started = await audioRecorder.startRecording { buffer in
-            Task { await streaming.streamAudio(buffer) }
-        }
-
-        guard started else {
-            self.streamingManager = nil
-            updateTask?.cancel()
-            state = .error("Failed to start recording — check microphone permission")
-            return
-        }
-
-        // Initialize model and start streaming transcription in the background.
+        // Begin model init + streaming setup NOW — overlaps with audio engine startup.
         // Audio buffers accumulate in the AsyncStream until start() launches
         // the recognition task, which then drains all queued buffers.
         streamingSetupTask = Task { @MainActor in
@@ -180,6 +177,20 @@ final class RecordingFlowCoordinator {
                 throw TranscriptionError.providerUnavailable
             }
             try await streaming.start(models: models, source: .microphone)
+        }
+
+        // Start audio engine — buffers forward to the streaming manager
+        let started = await audioRecorder.startRecording { buffer in
+            Task { await streaming.streamAudio(buffer) }
+        }
+
+        guard started else {
+            self.streamingManager = nil
+            updateTask?.cancel()
+            streamingSetupTask?.cancel()
+            streamingSetupTask = nil
+            state = .error("Failed to start recording — check microphone permission")
+            return
         }
     }
 

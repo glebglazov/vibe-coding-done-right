@@ -20,10 +20,19 @@ struct VCDRiOSApp: App {
                     }
                 }
                 .onChange(of: scenePhase) { _, newPhase in
-                    if newPhase == .active {
+                    switch newPhase {
+                    case .active:
                         // Re-apply idle timer state — iOS can reset it on scene transitions
                         let shouldDisable = coordinator.state == .recording
                         UIApplication.shared.isIdleTimerDisabled = shouldDisable
+                    case .background:
+                        // Deactivate audio session so other apps can resume playback.
+                        // Skip if recording is active (background audio mode keeps it alive).
+                        if !coordinator.isRecording {
+                            coordinator.deactivateAudioSession()
+                        }
+                    default:
+                        break
                     }
                 }
                 .onOpenURL { url in

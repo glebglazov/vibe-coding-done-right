@@ -63,7 +63,29 @@ final class AudioRecorder {
     private nonisolated static let dbRange: Float = 60
 
     func requestMicrophonePermission() async -> Bool {
-        await AVAudioApplication.requestRecordPermission()
+        // Fast path: skip the async hop when permission is already granted
+        if AVAudioApplication.shared.recordPermission == .granted {
+            return true
+        }
+        return await AVAudioApplication.requestRecordPermission()
+    }
+
+    /// Pre-configures the AVAudioSession so it's ready when recording starts.
+    /// Safe to call multiple times — skipped if already configured.
+    func prepareAudioSession() {
+        guard !audioSessionConfigured else { return }
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+            try session.setActive(true)
+            audioSessionConfigured = true
+            applyPreferredInput()
+            setupInterruptionObservers()
+            Logger.recording.info("Audio session pre-configured")
+        } catch {
+            Logger.recording.warning("Failed to pre-configure audio session: \(error)")
+            // Not fatal — startRecording() will retry
+        }
     }
 
     /// Starts recording via AVAudioEngine. Buffers are forwarded to `onBuffer` on the audio thread.
@@ -151,13 +173,14 @@ final class AudioRecorder {
             Logger.recording.info("Audio engine restarted after route change")
         } else {
             isRecording = false
-            // Reset so the next startRecording() re-configures the session from scratch
-            audioSessionConfigured = false
+            deactivateSession()
             Logger.recording.error("Failed to restart audio engine after route change")
         }
     }
 
     /// Stops recording and cleans up the audio engine.
+    /// The audio session stays active so subsequent recordings start faster.
+    /// Call `deactivateSession()` when the app goes to background.
     func stopRecording() {
         guard let engine = audioEngine else { return }
 
@@ -168,18 +191,21 @@ final class AudioRecorder {
         isRecording = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
 
-        // Deactivate audio session so other apps (e.g. Music) resume playback
-        if audioSessionConfigured {
-            do {
-                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            } catch {
-                Logger.recording.warning("Failed to deactivate audio session: \(error)")
-            }
-            audioSessionConfigured = false
-        }
-        removeInterruptionObservers()
+        Logger.recording.info("Recording stopped (session stays active)")
+    }
 
-        Logger.recording.info("Recording stopped")
+    /// Deactivates the audio session and cleans up observers.
+    /// Called when the app goes to background so other audio apps can resume.
+    func deactivateSession() {
+        guard audioSessionConfigured else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            Logger.recording.warning("Failed to deactivate audio session: \(error)")
+        }
+        audioSessionConfigured = false
+        removeInterruptionObservers()
+        Logger.recording.info("Audio session deactivated")
     }
 
     // MARK: - Level Metering
