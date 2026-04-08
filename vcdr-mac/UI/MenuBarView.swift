@@ -71,7 +71,7 @@ struct MenuBarView: View {
         if !dependencies.isTranscriptionReady {
             return dependencies.initializationStatus
         }
-        return dependencies.coordinator.state.statusText
+        return dependencies.session.status.statusText
     }
 
     private var hotkeyDisplay: String {

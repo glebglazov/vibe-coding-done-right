@@ -1,21 +1,21 @@
 import Foundation
-import AppKit
+import CoreGraphics
 
-extension RecordingCoordinator {
+extension CaptureSession {
 
-    func setupToggleRecordingHotkey() {
+    // MARK: - Registration
+
+    func setupToggleHotkey() {
         let binding = settings.toggleRecordingHotkey
         guard binding.isAssigned else {
-            toggleRecordingHotkeyManager.unregister()
+            toggleHotkey.unregister()
             return
         }
-
-        toggleRecordingHotkeyManager.onKeyDown = { [weak self] in
-            self?.toggleRecording()
+        toggleHotkey.onKeyDown = { [weak self] in
+            self?.toggle()
         }
-        toggleRecordingHotkeyManager.onKeyUp = nil
-
-        _ = toggleRecordingHotkeyManager.register(
+        toggleHotkey.onKeyUp = nil
+        _ = toggleHotkey.register(
             keyCode: CGKeyCode(binding.keyCode),
             modifiers: CGEventFlags(rawValue: binding.modifiers)
         )
@@ -24,18 +24,21 @@ extension RecordingCoordinator {
     func setupCancelHotkey() {
         let binding = settings.cancelRecordingHotkey
         guard binding.isAssigned else {
-            cancelHotkeyManager.isEnabled = false
+            cancelHotkey.isEnabled = false
             return
         }
-        cancelHotkeyManager.isEnabled = false
-        cancelHotkeyManager.onKeyDown = { [weak self] in
+        cancelHotkey.isEnabled = false
+        cancelHotkey.onKeyDown = { [weak self] in
             guard let self else { return }
-            if self.state == .preparingToRecord || self.state == .recording || self.state == .transcribing {
-                self.cancelRecording()
+            switch self.status.phase {
+            case .preparingToRecord, .recording, .transcribing, .executing, .awaitingPreview:
+                self.cancel()
+            default:
+                break
             }
         }
-        cancelHotkeyManager.onKeyUp = nil
-        _ = cancelHotkeyManager.register(
+        cancelHotkey.onKeyUp = nil
+        _ = cancelHotkey.register(
             keyCode: CGKeyCode(binding.keyCode),
             modifiers: CGEventFlags(rawValue: binding.modifiers)
         )
@@ -43,37 +46,35 @@ extension RecordingCoordinator {
 
     func setupDestinationHotkeys() {
         let bindings = settings.outputDestinations.map { ($0.id, $0.activationHotkey) }
-        destinationHotkeyManager.onDestinationMatched = { [weak self] destinationID in
+        destinationHotkey.onDestinationMatched = { [weak self] destinationID in
             guard let self else { return }
-            self.pendingDestinationOverride = destinationID
+            // Smuggle the override into the current run so it's consumed when transcription finishes.
+            self.run?.destinationOverrideID = destinationID
             self.stopRecordingAndTranscribe()
         }
-        destinationHotkeyManager.register(bindings: bindings)
+        destinationHotkey.register(bindings: bindings)
     }
 
+    /// Enables the cancel hotkey iff the session is in an active capture phase.
     func updateCancelHotkey() {
-        let recordingActive = (state == .preparingToRecord || state == .recording || state == .transcribing)
-        cancelHotkeyManager.isEnabled = recordingActive
+        switch status.phase {
+        case .preparingToRecord, .recording, .transcribing, .executing, .awaitingPreview:
+            cancelHotkey.isEnabled = true
+        default:
+            cancelHotkey.isEnabled = false
+        }
     }
 
-    func suspendCancelHotkey() {
-        cancelHotkeyManager.isEnabled = false
-    }
-
-    func resumeCancelHotkey() {
-        updateCancelHotkey()
-    }
-
-    // MARK: - Settings + Re-registration
+    // MARK: - Settings updates
 
     func updateToggleRecordingKeyCode(_ code: UInt16) {
         settings.toggleRecordingHotkey.keyCode = code
-        setupToggleRecordingHotkey()
+        setupToggleHotkey()
     }
 
     func updateToggleRecordingModifiers(_ mods: UInt64) {
         settings.toggleRecordingHotkey.modifiers = mods
-        setupToggleRecordingHotkey()
+        setupToggleHotkey()
     }
 
     func updateCancelRecordingKeyCode(_ code: UInt16) {

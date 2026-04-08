@@ -1,0 +1,372 @@
+import Foundation
+import AppKit
+import OSLog
+
+/// Unified orchestrator for the full capture lifecycle:
+/// `idle → recording → transcribing → processing → (awaitingPreview | executing) → idle`.
+///
+/// Replaces the previous split between `RecordingCoordinator` (state machine + audio)
+/// and `CaptureCoordinator` (panel + submission + history). Merging eliminates the
+/// 9-method delegate protocol, the shared `SessionOverrides` observable, the smuggled
+/// `pendingDestinationOverride`, and the silent `hadDestinationOverride` flag — all of
+/// which previously split a single conceptual flow across six files.
+///
+/// Design invariants:
+///
+/// - Callers observe exactly one property: `status: Status`. Everything else is private.
+/// - The only four entry points are `toggle()`, `cancel()`, `suspend()`, and the
+///   DEBUG-only `waitForNextIdle(timeout:)`.
+/// - Both the initial AI call and the user-triggered retry route through `runProcessingPipeline`
+///   and thence through `AIProcessingPort`. They cannot drift.
+/// - Preview skipping is expressed by one named predicate, `shouldSkipPreview(result:mode:)`,
+///   whose test name IS the rule.
+/// - Hotkey registration is owned internally and is re-entrant against accessibility grants.
+@Observable
+@MainActor
+final class CaptureSession {
+
+    // MARK: - Public types
+
+    struct Status: Equatable {
+        enum Phase: Equatable {
+            case idle
+            case preparingToRecord
+            case recording
+            case transcribing
+            case awaitingPreview
+            case executing
+            case error(String)
+        }
+        var phase: Phase
+        var statusText: String
+        var menuBarIcon: String
+        var canToggle: Bool
+    }
+
+    /// Test observation seam — returned by `waitForNextIdle(timeout:)`.
+    /// Production code never inspects this.
+    struct Outcome: Equatable {
+        enum Kind: Equatable {
+            case executed
+            case previewShown
+            case aiProcessingFallback
+            case cancelled
+            case failed
+            case rejected
+        }
+        let kind: Kind
+        let finalText: String?
+        let destinationID: UUID?
+        let historyConversationID: UUID?
+    }
+
+    /// RAII handle returned by `suspend()`. Releases suspension on deinit —
+    /// callers cannot forget to "resume". Store it in a property; nil it to release.
+    ///
+    /// Deinit hops to the main actor via a Task because class deinit is not
+    /// inherently actor-isolated under Swift 6 strict concurrency. In practice
+    /// callers hold the token on a @MainActor type, so the hop is immediate.
+    final class SuspensionToken: @unchecked Sendable {
+        private var onRelease: (@MainActor @Sendable () -> Void)?
+
+        fileprivate init(_ onRelease: @escaping @MainActor @Sendable () -> Void) {
+            self.onRelease = onRelease
+        }
+
+        /// Explicitly release the suspension now (idempotent).
+        func release() {
+            guard let handler = onRelease else { return }
+            onRelease = nil
+            Task { @MainActor in handler() }
+        }
+
+        deinit {
+            guard let handler = onRelease else { return }
+            Task { @MainActor in handler() }
+        }
+    }
+
+    // MARK: - Dependencies
+
+    struct Dependencies {
+        let transcription: any TranscriptionProvider
+        let audio: AudioRecorder
+        let media: MediaPlaybackController
+        let selectionCapturer: SelectionCapturer
+        let clipboardMonitor: ClipboardMonitor
+        let indicator: RecordingIndicatorPanel
+        let panel: any CapturePanelSurface
+        let ai: any AIProcessingPort
+        /// The session owns destination overrides per-run, but
+        /// `ModeSwitcherCoordinator` + `RecordingIndicatorPanel` still need
+        /// shared read/write access to parameter overrides — so the same
+        /// instance is wired through dependencies rather than created here.
+        let overrides: SessionOverrides
+    }
+
+    // MARK: - Constants
+
+    static let errorIndicatorDuration: Duration = .seconds(10)
+    static let successIndicatorDuration: Duration = .seconds(2)
+    static let pillErrorDisplayDuration: Duration = .seconds(1.5)
+    static let pillFlashDuration: Duration = .seconds(1)
+    static let audioSettleDelayBeforeResume: Duration = .milliseconds(300)
+
+    // MARK: - Injected state (stored for internal use)
+
+    let settings: AppSettings
+    let history: TranscriptionHistory
+    let transcription: any TranscriptionProvider
+    let audio: AudioRecorder
+    let media: MediaPlaybackController
+    let selectionCapturer: SelectionCapturer
+    let clipboardMonitor: ClipboardMonitor
+    let indicator: RecordingIndicatorPanel
+    let panel: any CapturePanelSurface
+    let ai: any AIProcessingPort
+    let overrides: SessionOverrides
+
+    // MARK: - Public observable
+
+    private(set) var status: Status = Status(
+        phase: .idle,
+        statusText: "Ready",
+        menuBarIcon: "waveform.circle",
+        canToggle: true
+    )
+
+    // MARK: - Hotkey managers (owned internally)
+
+    @ObservationIgnored let toggleHotkey = GlobalHotkeyManager()
+    @ObservationIgnored let cancelHotkey = GlobalHotkeyManager()
+    @ObservationIgnored let destinationHotkey = DestinationHotkeyManager()
+
+    // MARK: - Per-run state (cleared on terminal transitions)
+
+    struct RunState {
+        var previousActiveApp: NSRunningApplication?
+        var captureTask: Task<CapturedContext?, Never>?
+        var captures: [CapturedContext] = []
+        var destinationOverrideID: UUID?
+        var hadDestinationOverride: Bool = false
+        var conversationID: UUID = UUID()
+    }
+
+    @ObservationIgnored var run: RunState?
+    @ObservationIgnored var accumulatedClipboardCaptures: [CapturedContext] = []
+
+    /// Pending preview state — populated when we show a preview and wait for user confirmation.
+    struct PendingPreview {
+        var snapshot: SubmissionSnapshot
+        var processedText: String
+        /// The exact structured text passed to the AI port on the failed attempt —
+        /// non-nil only when the preview is showing because AI processing failed.
+        /// The retry replays this string through the same port call.
+        var aiRetryStructuredText: String?
+    }
+    @ObservationIgnored var pendingPreview: PendingPreview?
+
+    // MARK: - Cancellable tasks (all torn down in deinit)
+
+    @ObservationIgnored var processingTask: Task<Void, Never>?
+    @ObservationIgnored var immediateActionTask: Task<Void, Never>?
+    @ObservationIgnored var autoDismissTask: Task<Void, Never>?
+    @ObservationIgnored var pillResetTask: Task<Void, Never>?
+
+    @ObservationIgnored private var recordingStartInstant: ContinuousClock.Instant?
+
+    // MARK: - Test observation
+
+    @ObservationIgnored private var lastOutcome: Outcome?
+
+    // MARK: - Init
+
+    init(
+        settings: AppSettings,
+        history: TranscriptionHistory,
+        deps: Dependencies
+    ) {
+        self.settings = settings
+        self.history = history
+        self.transcription = deps.transcription
+        self.audio = deps.audio
+        self.media = deps.media
+        self.selectionCapturer = deps.selectionCapturer
+        self.clipboardMonitor = deps.clipboardMonitor
+        self.indicator = deps.indicator
+        self.panel = deps.panel
+        self.ai = deps.ai
+        self.overrides = deps.overrides
+        wirePanelCallbacks()
+    }
+
+    deinit {
+        processingTask?.cancel()
+        immediateActionTask?.cancel()
+        autoDismissTask?.cancel()
+        pillResetTask?.cancel()
+    }
+
+    // MARK: - Public API
+
+    /// Global toggle hotkey entry point. Behavior depends on current phase:
+    /// - `.idle` / `.error`         → start recording
+    /// - `.recording`               → stop and transcribe
+    /// - `.awaitingPreview`         → confirm preview with default destination
+    /// - other transient phases     → no-op (may emit a reject buzz)
+    func toggle() {
+        switch status.phase {
+        case .idle, .error:
+            Task { await startRecording() }
+        case .recording:
+            stopRecordingAndTranscribe()
+        case .awaitingPreview:
+            confirmPreview()
+        case .preparingToRecord, .transcribing, .executing:
+            // Re-entrant press — indicate rejection.
+            panel.buzz()
+            emit(.rejected, finalText: nil, destinationID: nil, historyConversationID: nil)
+        }
+    }
+
+    /// Esc or menu bar "Cancel". Cancels whatever is happening and returns to idle.
+    func cancel() {
+        switch status.phase {
+        case .idle:
+            return
+        case .preparingToRecord, .recording, .transcribing:
+            cancelRecording()
+        case .awaitingPreview, .executing:
+            cancelCapture()
+        case .error:
+            clearError()
+        }
+    }
+
+    /// Mode switcher asks us to step out of the way. Returns an RAII token; releasing
+    /// it restores the panel and recording hotkey state. Safe to call repeatedly —
+    /// nesting is not supported (prior tokens are independent).
+    func suspend() -> SuspensionToken {
+        cancelHotkey.isEnabled = false
+        let wasVisible = panel.isVisible
+        if wasVisible {
+            panel.setSuspendedForModeSwitcher(true)
+        }
+
+        return SuspensionToken { [weak self] in
+            guard let self else { return }
+            if wasVisible {
+                self.panel.setSuspendedForModeSwitcher(false)
+            }
+            self.updateCancelHotkey()
+        }
+    }
+
+    /// DEBUG / test-only: poll until the session reaches a resting phase
+    /// (`.idle`, `.error`, or `.awaitingPreview`) and return the last emitted
+    /// outcome. Returns nil on timeout.
+    @discardableResult
+    func waitForNextIdle(timeout: Duration = .seconds(10)) async -> Outcome? {
+        let start = ContinuousClock.now
+        let pollInterval: Duration = .milliseconds(20)
+        while start.duration(to: .now) < timeout {
+            switch status.phase {
+            case .idle, .error, .awaitingPreview:
+                let outcome = lastOutcome
+                lastOutcome = nil
+                return outcome
+            default:
+                try? await Task.sleep(for: pollInterval)
+            }
+        }
+        return nil
+    }
+
+    /// Accessibility permission polling hook — the app delegate calls this when
+    /// accessibility is granted so the session can (re-)register its hotkeys.
+    func accessibilityGranted() {
+        setupToggleHotkey()
+        setupCancelHotkey()
+        setupDestinationHotkeys()
+    }
+
+    // MARK: - Internal helpers
+
+    func setStatus(_ phase: Status.Phase) {
+        let old = status.phase
+        status = Status(
+            phase: phase,
+            statusText: Self.statusText(for: phase),
+            menuBarIcon: Self.menuBarIcon(for: phase),
+            canToggle: Self.canToggle(for: phase)
+        )
+        if old != phase {
+            Logger.consistency.info("Session phase: \(String(describing: old)) → \(String(describing: phase))")
+        }
+    }
+
+    /// Records an outcome so the next `waitForNextIdle` call can return it.
+    /// Only the most recent outcome is retained.
+    func emit(_ kind: Outcome.Kind, finalText: String?, destinationID: UUID?, historyConversationID: UUID?) {
+        lastOutcome = Outcome(
+            kind: kind,
+            finalText: finalText,
+            destinationID: destinationID,
+            historyConversationID: historyConversationID
+        )
+    }
+
+    private func wirePanelCallbacks() {
+        panel.onFocusLost = { [weak self] in
+            self?.dismissOverlay()
+        }
+        panel.onConfirm = { [weak self] in
+            self?.confirmPreview()
+        }
+        panel.onCancelCapture = { [weak self] in
+            self?.cancelCapture()
+        }
+        panel.onDestinationSubmit = { [weak self] destinationID in
+            self?.confirmPreviewWithDestination(destinationID)
+        }
+        panel.onRetryAIProcessing = { [weak self] in
+            self?.retryAIProcessing()
+        }
+    }
+
+    private func clearError() {
+        setStatus(.idle)
+    }
+
+    // MARK: - Status derivation
+
+    private static func statusText(for phase: Status.Phase) -> String {
+        switch phase {
+        case .idle: "Ready"
+        case .preparingToRecord: "Starting..."
+        case .recording: "Recording..."
+        case .transcribing: "Transcribing..."
+        case .awaitingPreview: "Confirm..."
+        case .executing: "Executing..."
+        case .error(let msg): "Error: \(msg)"
+        }
+    }
+
+    private static func menuBarIcon(for phase: Status.Phase) -> String {
+        switch phase {
+        case .idle: "waveform.circle"
+        case .preparingToRecord: "waveform.circle"
+        case .recording: "waveform.circle.fill"
+        case .transcribing, .executing: "ellipsis.circle"
+        case .awaitingPreview: "eye.circle"
+        case .error: "exclamationmark.circle"
+        }
+    }
+
+    private static func canToggle(for phase: Status.Phase) -> Bool {
+        switch phase {
+        case .idle, .preparingToRecord, .recording, .awaitingPreview, .error: true
+        case .transcribing, .executing: false
+        }
+    }
+}

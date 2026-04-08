@@ -76,9 +76,8 @@ struct MainWindowView: View {
                     case .home:
                         HomeTabView(
                             settings: dependencies.settings,
-                            coordinator: dependencies.coordinator,
+                            session: dependencies.session,
                             modeSwitcherCoordinator: dependencies.modeSwitcherCoordinator,
-                            captureCoordinator: dependencies.captureCoordinator,
                             copyLatestCaptureHandler: dependencies.copyLatestCaptureHandler,
                             hasMicrophonePermission: dependencies.hasMicrophonePermission,
                             hasAccessibilityPermission: dependencies.hasAccessibilityPermission,
@@ -111,7 +110,7 @@ struct MainWindowView: View {
                     #if DEBUG
                     case .debug:
                         DebugTabView(
-                            coordinator: dependencies.coordinator,
+                            session: dependencies.session,
                             audioRecorder: dependencies.audioRecorder,
                             isTranscriptionReady: dependencies.isTranscriptionReady
                         )

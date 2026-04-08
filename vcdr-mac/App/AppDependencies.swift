@@ -7,11 +7,10 @@ import OSLog
 final class AppDependencies {
     let settings: AppSettings
     let transcriptionProvider: ParakeetProvider
-    let coordinator: RecordingCoordinator
+    let session: CaptureSession
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
-    let captureCoordinator: CaptureCoordinator
     let mediaPlaybackController: MediaPlaybackController
     let transcriptionHistory: TranscriptionHistory
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
@@ -32,9 +31,12 @@ final class AppDependencies {
 
     private var permissionTimer: Timer?
 
+    /// Holds the active mode-switcher suspension token. Nilling it releases the
+    /// suspension via `SuspensionToken`'s RAII deinit.
+    @ObservationIgnored fileprivate var modeSwitcherSuspension: CaptureSession.SuspensionToken?
+
     init() {
         let settings = AppSettings()
-        // Tool availability is checked asynchronously after init via refreshTemplateAvailability()
         let provider = ParakeetProvider()
         self.settings = settings
         self.transcriptionProvider = provider
@@ -47,32 +49,31 @@ final class AppDependencies {
         self.audioRecorder = audioRecorder
         #endif
         let overrides = SessionOverrides()
-        let recordingIndicator = RecordingIndicatorPanel(settings: settings, overrides: overrides, audioRecorder: audioRecorder)
+        let recordingIndicator = RecordingIndicatorPanel(
+            settings: settings,
+            overrides: overrides,
+            audioRecorder: audioRecorder
+        )
         let selectionCapturer = SelectionCapturer()
         let clipboardMonitor = ClipboardMonitor()
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
         let capturePanel = CapturePanel()
-        let captureCoordinator = CaptureCoordinator(
+        self.session = CaptureSession(
             settings: settings,
-            panel: capturePanel,
-            recordingIndicator: recordingIndicator,
-            audioRecorder: audioRecorder,
-            selectionCapturer: selectionCapturer,
-            clipboardMonitor: clipboardMonitor,
-            transcriptionHistory: history,
-            overrides: overrides
-        )
-        self.captureCoordinator = captureCoordinator
-        self.coordinator = RecordingCoordinator(
-            settings: settings,
-            transcriptionProvider: provider,
-            audioRecorder: audioRecorder,
-            mediaPlaybackController: mediaPlayback,
-            recordingIndicator: recordingIndicator,
-            selectionCapturer: selectionCapturer,
-            overrides: overrides
+            history: history,
+            deps: .init(
+                transcription: provider,
+                audio: audioRecorder,
+                media: mediaPlayback,
+                selectionCapturer: selectionCapturer,
+                clipboardMonitor: clipboardMonitor,
+                indicator: recordingIndicator,
+                panel: CapturePanelAdapter(capturePanel),
+                ai: AIProcessingAdapter(),
+                overrides: overrides
+            )
         )
 
         self.copyLatestCaptureHandler = CopyLatestCaptureHandler(
@@ -81,17 +82,8 @@ final class AppDependencies {
             recordingIndicator: recordingIndicator
         )
 
-        // Wire RecordingCoordinator → CaptureCoordinator via delegate
-        coordinator.delegate = captureCoordinator
-
-        // Dismiss mode switcher when recording starts
-        captureCoordinator.onWillStartInput = { [weak self] in
-            self?.modeSwitcherCoordinator.confirmAndHideSwitcher()
-        }
-
         // Wire ModeSwitcherCoordinator → AppDependencies via delegate
         modeSwitcherCoordinator.delegate = self
-
     }
 
     func initialize() async {
@@ -108,14 +100,11 @@ final class AppDependencies {
         startPermissionPolling()
 
         // Register hotkeys immediately — don't wait for model loading.
-        // RecordingCoordinator.onHotkeyDown() already guards on transcriptionProvider.isReady,
+        // `CaptureSession.toggle()` guards on transcription readiness internally,
         // so hotkeys pressed before the model is ready show an appropriate error.
         if hasAccessibilityPermission {
-            coordinator.setupToggleRecordingHotkey()
-            coordinator.setupCancelHotkey()
-            coordinator.setupDestinationHotkeys()
+            session.accessibilityGranted()
             modeSwitcherCoordinator.setupHotkey()
-
             copyLatestCaptureHandler.setupHotkey()
         }
 
@@ -167,11 +156,9 @@ final class AppDependencies {
             let wasAccessible = self.hasAccessibilityPermission
             self.checkPermissions()
 
-            // Register hotkey as soon as accessibility is granted
+            // Register hotkeys as soon as accessibility is granted
             if !wasAccessible && self.hasAccessibilityPermission {
-                self.coordinator.setupToggleRecordingHotkey()
-                self.coordinator.setupCancelHotkey()
-                self.coordinator.setupDestinationHotkeys()
+                self.session.accessibilityGranted()
                 self.modeSwitcherCoordinator.setupHotkey()
                 self.copyLatestCaptureHandler.setupHotkey()
                 Logger.app.info("Accessibility granted, hotkeys registered")
@@ -195,22 +182,15 @@ final class AppDependencies {
 extension AppDependencies: ModeSwitcherCoordinatorDelegate {
 
     var isRecordingActive: Bool {
-        coordinator.state == .recording
+        if case .recording = session.status.phase { return true }
+        return false
     }
 
     func modeSwitcherWillShow() {
-        coordinator.suspendCancelHotkey()
-        if captureCoordinator.isPanelVisible {
-            captureCoordinator.panel.viewModel?.isSuspendedForModeSwitcher = true
-            captureCoordinator.panel.orderOut()
-        }
+        modeSwitcherSuspension = session.suspend()
     }
 
     func modeSwitcherDidHide() {
-        coordinator.resumeCancelHotkey()
-        if captureCoordinator.isPanelVisible {
-            captureCoordinator.panel.orderBack()
-            captureCoordinator.panel.viewModel?.isSuspendedForModeSwitcher = false
-        }
+        modeSwitcherSuspension = nil
     }
 }

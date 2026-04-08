@@ -30,7 +30,10 @@ enum SubmissionPipeline {
     // MARK: - Non-Streaming Execution
 
     /// Runs the text processing pipeline (mode transforms) without executing the output action.
-    static func process(context: Context) async throws -> Result {
+    static func process(
+        context: Context,
+        aiPort: any AIProcessingPort = AIProcessingAdapter()
+    ) async throws -> Result {
         let pipelineResult = try await TextProcessingPipeline.run(
             mode: context.mode,
             text: context.text,
@@ -39,7 +42,8 @@ enum SubmissionPipeline {
             variableEnvironment: context.variableEnvironment,
             removeFillerWords: context.removeFillerWords,
             terminatorTemplateEnabled: context.terminatorTemplateEnabled,
-            terminatorTemplate: context.terminatorTemplate
+            terminatorTemplate: context.terminatorTemplate,
+            aiPort: aiPort
         )
         return Result(
             processedText: pipelineResult.text,

@@ -1,8 +1,9 @@
 import Foundation
 
 /// Manages parameter and destination overrides for the current session.
-/// Shared between RecordingCoordinator and CaptureCoordinator so both
-/// participate in the same override lifecycle: set → consume → clear-on-next.
+/// Shared between `CaptureSession`, `ModeSwitcherCoordinator`, and
+/// `RecordingIndicatorPanel` — the set → consume → clear-on-next lifecycle
+/// is driven by `CaptureSession`.
 @Observable
 @MainActor
 final class SessionOverrides {

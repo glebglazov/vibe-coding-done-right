@@ -35,7 +35,7 @@ final class DebugTestRunner {
     private(set) var status: Status = .idle
     private(set) var logEntries: [LogEntry] = []
 
-    private let coordinator: RecordingCoordinator
+    private let session: CaptureSession
     private var runTask: Task<Void, Never>?
     private var runStart: ContinuousClock.Instant = .now
 
@@ -44,8 +44,8 @@ final class DebugTestRunner {
         return false
     }
 
-    init(coordinator: RecordingCoordinator) {
-        self.coordinator = coordinator
+    init(session: CaptureSession) {
+        self.session = session
     }
 
     // MARK: - Controls
@@ -53,7 +53,7 @@ final class DebugTestRunner {
     func stop() {
         runTask?.cancel()
         runTask = nil
-        coordinator.cancelRecording()
+        session.cancel()
         status = .idle
         log("Stopped by user")
     }
@@ -93,12 +93,12 @@ final class DebugTestRunner {
                 try Task.checkCancellation()
                 status = .running(scenario: "Cancel Storm", iteration: i + 1, total: iterations)
                 log("Cancel \(i + 1)/\(iterations)")
-                coordinator.toggleRecording()
+                session.toggle()
                 let delay = Duration.milliseconds(Int.random(in: 10...200))
                 try await Task.sleep(for: delay)
-                coordinator.cancelRecording()
+                session.cancel()
                 if !(await waitForIdle()) {
-                    log("Failed to reach idle (state: \(coordinator.state))", isError: true)
+                    log("Failed to reach idle (phase: \(String(describing: session.status.phase)))", isError: true)
                     errors += 1
                 }
                 try? await Task.sleep(for: Self.interCycleDelay)
@@ -122,11 +122,11 @@ final class DebugTestRunner {
                 log("\(name) finished — \(total - errors)/\(total) passed")
                 status = .completed(iterations: total, errors: errors)
             } catch is CancellationError {
-                coordinator.cancelRecording()
+                session.cancel()
                 log("\(name) cancelled")
                 status = .idle
             } catch {
-                coordinator.cancelRecording()
+                session.cancel()
                 log("\(name) failed: \(error)", isError: true)
                 status = .idle
             }
@@ -139,25 +139,25 @@ final class DebugTestRunner {
         log("\(label): starting")
         let cycleStart = ContinuousClock.now
 
-        coordinator.toggleRecording()
-        guard await waitForState({ $0 == .recording }) else {
-            log("\(label): failed to reach recording (state: \(coordinator.state))", isError: true)
+        session.toggle()
+        guard await waitForPhase({ $0 == .recording }) else {
+            log("\(label): failed to reach recording (phase: \(String(describing: session.status.phase)))", isError: true)
             _ = await waitForIdle()
             return false
         }
 
         try? await Task.sleep(for: Self.testRecordingDuration)
 
-        coordinator.toggleRecording()
+        session.toggle()
 
         guard await waitForIdle() else {
-            log("\(label): timeout (state: \(coordinator.state))", isError: true)
-            coordinator.cancelRecording()
+            log("\(label): timeout (phase: \(String(describing: session.status.phase)))", isError: true)
+            session.cancel()
             _ = await waitForIdle()
             return false
         }
 
-        if case .error(let msg) = coordinator.state {
+        if case .error(let msg) = session.status.phase {
             log("\(label): error — \(msg)", isError: true)
             return false
         }
@@ -167,19 +167,19 @@ final class DebugTestRunner {
         return true
     }
 
-    private func waitForState(_ condition: @escaping (RecordingCoordinator.State) -> Bool) async -> Bool {
+    private func waitForPhase(_ condition: @escaping (CaptureSession.Status.Phase) -> Bool) async -> Bool {
         let start = ContinuousClock.now
         while start.duration(to: .now) < Self.cycleTimeout {
-            if condition(coordinator.state) { return true }
+            if condition(session.status.phase) { return true }
             try? await Task.sleep(for: Self.statePollingInterval)
         }
         return false
     }
 
     private func waitForIdle() async -> Bool {
-        await waitForState { state in
-            if case .idle = state { return true }
-            if case .error = state { return true }
+        await waitForPhase { phase in
+            if case .idle = phase { return true }
+            if case .error = phase { return true }
             return false
         }
     }
