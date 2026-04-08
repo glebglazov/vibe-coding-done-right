@@ -14,7 +14,9 @@ struct PipelineResult {
 }
 
 struct AIProcessingFallback {
-    let rawText: String
+    /// The already-structured text that was passed to the AI port on the failed attempt.
+    /// The retry replays this exact string through the port so both calls share one code path.
+    let structuredText: String
     let errorMessage: String
 }
 
@@ -32,7 +34,8 @@ enum TextProcessingPipeline {
         variableEnvironment: [String: String] = [:],
         removeFillerWords: Bool = false,
         terminatorTemplateEnabled: Bool = false,
-        terminatorTemplate: String = ""
+        terminatorTemplate: String = "",
+        aiPort: any AIProcessingPort = AIProcessingAdapter()
     ) async throws -> PipelineResult {
         // MARK: Algorithmic pre-processing — speech cleanup
         let cleanedText = removeFillerWords ? FillerWordRemover.remove(from: text) : text
@@ -46,14 +49,11 @@ enum TextProcessingPipeline {
             result = PipelineResult(text: structured, hadExternalProcessing: false, aiProcessingFallback: nil)
 
         case .cloudAI:
-            let apiKey = variableEnvironment[mode.aiProvider.apiKeyVariableName] ?? ""
-            let systemPrompt = resolvePrompt(mode)
             do {
-                let processedText = try await AIClient.process(
-                    text: structured,
-                    systemPrompt: systemPrompt,
-                    provider: mode.aiProvider,
-                    apiKey: apiKey
+                let processedText = try await aiPort.process(
+                    structuredText: structured,
+                    mode: mode,
+                    variableEnvironment: variableEnvironment
                 )
                 result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
             } catch {
@@ -62,7 +62,10 @@ enum TextProcessingPipeline {
                 result = PipelineResult(
                     text: fallbackText,
                     hadExternalProcessing: false,
-                    aiProcessingFallback: AIProcessingFallback(rawText: cleanedText, errorMessage: error.localizedDescription)
+                    aiProcessingFallback: AIProcessingFallback(
+                        structuredText: structured,
+                        errorMessage: error.localizedDescription
+                    )
                 )
             }
 
@@ -107,18 +110,6 @@ enum TextProcessingPipeline {
         )
     }
 
-    // MARK: - Prompt Resolution
-
-    /// Resolves the prompt text for the current mode's prompt type.
-    /// Shared by all processing types that use prompts (cloudAI, localAgent).
-    static func resolvePrompt(_ mode: Mode) -> String {
-        switch mode.promptType {
-        case .dictation: BuiltInPrompts.dictation
-        case .assistant: BuiltInPrompts.assistant
-        case .custom: mode.systemPrompt
-        }
-    }
-
     // MARK: - Processing Type Input Structuring
 
     /// Shared interface: each processing type structures input for its consumer.
@@ -136,7 +127,7 @@ enum TextProcessingPipeline {
             // (system prompt is sent as a separate API parameter)
             return structureInputXML(text: text, captures: captures, systemPrompt: nil)
         case .localAgent:
-            let prompt = resolvePrompt(mode)
+            let prompt = AIProcessingAdapter.resolvePrompt(mode)
             return structureInputXML(text: text, captures: captures,
                                      systemPrompt: prompt.isEmpty ? nil : prompt)
         case .bashScript:

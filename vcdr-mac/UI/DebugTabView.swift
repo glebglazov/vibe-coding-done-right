@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 // MARK: - Debug Tab View
 
 struct DebugTabView: View {
-    let coordinator: RecordingCoordinator
+    let session: CaptureSession
     let audioRecorder: AudioRecorder
     let isTranscriptionReady: Bool
 
@@ -32,7 +32,7 @@ struct DebugTabView: View {
         .navigationTitle("Debug")
         .onAppear {
             if testRunner == nil {
-                testRunner = DebugTestRunner(coordinator: coordinator)
+                testRunner = DebugTestRunner(session: session)
             }
         }
     }
@@ -231,20 +231,23 @@ struct DebugTabView: View {
     }
 
     private var stateLabel: String {
-        switch coordinator.state {
+        switch session.status.phase {
         case .idle: "Idle"
         case .preparingToRecord: "Preparing..."
         case .recording: "Recording"
         case .transcribing: "Transcribing"
+        case .awaitingPreview: "Awaiting Preview"
+        case .executing: "Executing"
         case .error(let msg): "Error: \(msg)"
         }
     }
 
     private var stateColor: Color {
-        switch coordinator.state {
+        switch session.status.phase {
         case .idle: .green
         case .recording: .red
-        case .preparingToRecord, .transcribing: .orange
+        case .preparingToRecord, .transcribing, .executing: .orange
+        case .awaitingPreview: .blue
         case .error: .red
         }
     }

@@ -7,9 +7,8 @@ struct HomeTabView: View {
     private static let accessibilitySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
 
     let settings: AppSettings
-    let coordinator: RecordingCoordinator
+    let session: CaptureSession
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
-    let captureCoordinator: CaptureCoordinator
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
     let hasMicrophonePermission: Bool
     let hasAccessibilityPermission: Bool
@@ -80,11 +79,11 @@ struct HomeTabView: View {
                     label: "Toggle Recording",
                     keyCode: Binding(
                         get: { settings.toggleRecordingHotkey.keyCode },
-                        set: { coordinator.updateToggleRecordingKeyCode($0) }
+                        set: { session.updateToggleRecordingKeyCode($0) }
                     ),
                     modifiers: Binding(
                         get: { settings.toggleRecordingHotkey.modifiers },
-                        set: { coordinator.updateToggleRecordingModifiers($0) }
+                        set: { session.updateToggleRecordingModifiers($0) }
                     )
                 )
                 ShortcutRecorderRow(
@@ -102,11 +101,11 @@ struct HomeTabView: View {
                     label: "Cancel Capture",
                     keyCode: Binding(
                         get: { settings.cancelRecordingHotkey.keyCode },
-                        set: { coordinator.updateCancelRecordingKeyCode($0) }
+                        set: { session.updateCancelRecordingKeyCode($0) }
                     ),
                     modifiers: Binding(
                         get: { settings.cancelRecordingHotkey.modifiers },
-                        set: { coordinator.updateCancelRecordingModifiers($0) }
+                        set: { session.updateCancelRecordingModifiers($0) }
                     )
                 )
                 ShortcutRecorderRow(
