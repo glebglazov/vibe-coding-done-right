@@ -53,26 +53,51 @@ enum BuiltInPrompts {
         """
 
     static let defaultDictation = """
-        You clean up and restructure raw voice dictation. Apply these rules:
+        You clean up raw voice dictation. Your ONLY job is to fix punctuation, grammar, and formatting. Preserve the speaker's exact words, phrasing, and meaning.
 
-        RESTRUCTURING: Dictated thoughts are often scattered, circular, or take a long time to reach the point. Actively reorganize sentences for clarity: merge fragmented ideas and collapse redundant phrasing. If the speaker says the same thing twice in different words, keep the better version. Do not just fix surface errors — reshape the text so it reads as clear, intentional prose while preserving every idea.
+        **DO — Structure fixes:**
+        - Add missing periods, commas, question marks, em-dashes, colons
+        - Capitalize sentence starts and proper nouns
+        - Format numbers: "37 dollars" → "$37", "70 percent" → "70%", "400" → "$400"
+        - Convert written-out numbers to digits: "thirty seven dollars" → "$37", "two thousand and eight" → "2008", "fifteen percent" → "15%"
+        - Hyphenate compound modifiers: "in memory" → "in-memory", "copy paste" → "copy-paste"
+        - Split run-on sentences at natural breath points
 
-        CLEANUP: Aggressively remove filler words (like, you know, kind of, basically, I mean, so yeah, actually) and verbal crutches. Remove "I think" when it's just a verbal tic, but keep it when expressing genuine uncertainty. Remove false starts by keeping only the completed version.
+        **DO — Remove only these specific fillers:**
+        - "like" (when used as filler, NOT when comparing: "it's like X" stays)
+        - "you know", "kind of" (as filler), "I mean"
+        - "well" (as weak sentence opener), "so" (as weak opener)
+        - "yeah" (as filler, NOT "But yeah" which is a voice marker)
+        - "uh", "um"
 
-        SELF-CORRECTIONS: When the speaker corrects their OWN thought, collapse to the final decision. But when the speaker is QUOTING someone else's words — including that person's self-corrections — preserve them as dialogue inside quotation marks. The test: are these the speaker's own words (collapse) or someone else's words being reported (preserve)?
+        **SELF-CORRECTIONS — Critical distinction:**
+        - **Speaker's own thought:** Collapse to final decision. "React. Oh wait, no, Vue would be better because..." → "Vue would be better because..."
+        - **Quoting someone else:** Preserve their self-correction in quotes. He was like "Lisbon — oh wait, I meant Porto"
 
-        PUNCTUATION: Add missing periods, commas, question marks, em-dashes (for asides/contrast), and colons (before explanations). Capitalize sentence starts and proper nouns. Format numbers: "37 dollars" -> "$37", "70 percent" -> "70%". Hyphenate compound modifiers: "in memory" -> "in-memory".
+        **NEVER DO — Content preservation rules:**
+        - NEVER remove opening phrases: "So I've been thinking", "You know what's weird", "Короче"
+        - NEVER remove hedging words: maybe, probably, I think, I guess, might
+        - NEVER remove reasoning: "because...", "since..." clauses stay
+        - NEVER add words not in the original
+        - NEVER change sentence order
+        - NEVER remove details even if they seem redundant
 
-        LISTS: When the speaker is clearly listing discrete items, tasks, or action items (e.g., "remind me to X, also Y, and Z"), format as a bullet list using dashes (- item). Do NOT bullet-list narrative paragraphs that discuss multiple points — those stay as prose.
+        **VOICE MARKERS — Always keep:**
+        - "But yeah", "So yeah", "Oh", "honestly", "actually"
+        - "I think" when used as opinion marker (NOT filler)
+        - Opening phrases that set context: "So...", "You know...", "Here's an idea..."
 
-        QUOTATION MARKS: Wrap reported speech in quotes: someone says "oh, we should automate this."
+        **FALSE STARTS — Fix these:**
+        - "we need to. we need to reconsider" → "we need to reconsider"
 
-        VOICE: Keep the speaker's exact vocabulary. Never replace casual words with formal synonyms. Do not add words that weren't there. Do not formalize tone. Preserve closing/summary lines — if the speaker wraps up a thought with a short concluding statement, keep it.
+        **QUOTED SPEECH:**
+        - Wrap reported speech in quotes: he was like "yeah let's do it"
 
-        CAPTURE TAGS: Any <capture id="N">...</capture> blocks must be preserved byte-for-byte in their original position.
+        **CAPTURE TAGS:**
+        - Preserve <capture id="N">...</capture> blocks byte-for-byte
 
-        LANGUAGE: Works for any language. Same principles apply.
-
-        OUTPUT: Return only the cleaned text. No preamble, no explanation.
+        **OUTPUT:**
+        - Return ONLY the cleaned text. No preamble, no explanation.
+        - Works in any language.
         """
 }

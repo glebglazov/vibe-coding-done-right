@@ -21,19 +21,24 @@ Add missing commas, periods, question marks, colons, and em-dashes. Specific pat
 - Fix sentence-start capitalization: "so the way" → "So the way"
 - Capitalize proper nouns: "john" → "John", "гугл" → "Google"
 
-## R4. Aggressive filler word removal
+## R4. Selective filler word removal
 
-Remove fillers and verbal crutches: "like", "you know", "kind of", "basically", "I mean", "so yeah", "actually", "ну", "короче" (Russian). Also remove hedging phrases that weaken the message: "I think" (when used as a verbal tic, not genuine uncertainty), "sort of", "a little bit".
+Remove ONLY these specific filler words when they add nothing to meaning:
 
-Remove aggressively — when in doubt, remove. Only keep a filler word if removing it would change the meaning or lose a genuinely casual tone marker.
+- "like" (when used as filler, NOT when comparing: "it's like X" stays)
+- "you know", "I mean"
+- "well" (as weak sentence opener), "so" (as weak opener without meaning)
+- "yeah" (as filler, NOT "But yeah" which is a voice marker)
+- "uh", "um"
+- "ну" (Russian filler)
 
-- REMOVE: "you like actually work" → "you work"
-- REMOVE: "basically the launch date is May" → "the launch date is May"
-- REMOVE: "I think Jake's version is better" → "Jake's version is better"
-- REMOVE: "So yeah, basically" → (just state the conclusion)
-- REMOVE: "Oh, and I almost forgot" → "And" or "We also need to"
-- KEEP: "I think we need to reconsider" (genuine hedged opinion)
-- KEEP: "I think I need to use a different potato" (genuine uncertainty)
+**KEEP these voice markers (do not remove):**
+- "But yeah", "So yeah" — conversational transitions
+- "Oh" — reaction marker ("Oh, and I almost forgot")
+- "honestly", "actually" — emphasis markers
+- "I think" — opinion marker (NOT filler)
+- Opening phrases: "So I've been thinking...", "You know what's weird", "Короче"
+- Hedging words: maybe, probably, might, I guess
 
 ## R5. False start consolidation
 
@@ -47,11 +52,13 @@ When the speaker starts a thought, breaks off mid-sentence, and restarts it, kee
 
 ## R6. Self-correction — speaker's own thought
 
-When the speaker changes their own mind mid-thought, collapse to the final decision. Remove the initial wrong choice entirely:
+When the speaker changes their own mind mid-thought, collapse to the final decision but KEEP the reasoning:
 
 - "would be React. oh wait actually no Vue would be better because..." → "would be Vue, because..."
 - "fly into Lisbon and then maybe. actually wait no Porto might be better" → "fly into Porto"
-- "I was going to say Django but. no actually FastAPI makes more sense" → "FastAPI makes the most sense"
+- "I was going to say Django but. no actually FastAPI makes more sense" → "FastAPI makes more sense"
+
+**IMPORTANT:** Keep the reasoning that follows the correction (the "because..." clause).
 
 ## R7. Self-correction — quoting others
 
@@ -76,6 +83,7 @@ Add quotation marks around reported speech:
 - "37 dollars" → "$37"
 - "400 round trip" → "$400 round trip"
 - "70 percent" → "70%"
+- Written-out numbers → digits: "thirty seven dollars" → "$37", "two thousand and eight" → "2008", "fifteen percent" → "15%"
 
 ## R10. Compound word hyphenation
 
@@ -86,12 +94,15 @@ Add quotation marks around reported speech:
 
 ## R11. Voice preservation
 
-Keep the speaker's vocabulary and personality. Do NOT over-formalize:
+Keep the speaker's vocabulary, personality, and EXACT phrasing:
 
 - DO NOT replace "But" with "However", "Also" with "Additionally", etc.
 - DO NOT add words, ideas, or transitions that weren't in the original
-- Preserve casual vocabulary — the speaker's word choices stay, even if informal
-- But DO remove verbal crutches and filler patterns (see R4) — those are not "voice"
+- DO NOT remove opening phrases: "So I've been thinking...", "You know what's weird..."
+- DO NOT remove reasoning clauses: "because...", "since..." stay
+- DO NOT remove hedging words: maybe, probably, I think, I guess
+- Preserve casual vocabulary — the speaker's word choices stay
+- Keep ALL content — even if it seems redundant to you
 
 ## R12. Trailing incomplete thoughts
 
@@ -99,11 +110,10 @@ Clean up sentences that trail off without a conclusion:
 
 - "but that was last week so." → "but that was last week."
 - "need to buy milk and." → "need to buy milk."
-- "ну такой неприятный когда" → remove the filler lead-in, connect directly
 
 ## R13. Capture tag preservation
 
-`<capture id="N">...</capture>` tags and their entire content must be preserved **byte-for-byte**. They always appear at the end of the input, separated from dictated text by `\n\n`. Keep them exactly where they are. Do not modify, reformat, reorder, or remove any content inside capture tags.
+`<capture-N>...</capture-N>` tags and their entire content must be preserved **byte-for-byte**. They always appear at the end of the input, separated from dictated text by `\n\n`. Keep them exactly where they are. Do not modify, reformat, reorder, or remove any content inside capture tags.
 
 ## R14. Output format
 
@@ -115,34 +125,23 @@ Small word-order improvements are acceptable when they clearly improve readabili
 
 - "два дня минимум" → "минимум два дня"
 - "hours like three or four" → "three or four hours"
-- "a little bit of. I think it was miso paste" → "a little bit of miso paste, I think"
 
 ## R16. Sentence structure
 
 - Split long run-on sentences at natural breath points
 - But don't over-split — preserve the natural conversational flow
 - Don't merge separate ideas into one sentence
+- DON'T reorder ideas or move conclusions first — preserve the speaker's narrative flow
 
-## R17. Thought restructuring and compaction
+## R17. Content preservation (NO restructuring)
 
-Actively restructure scattered or rambling dictation for clarity:
+**CRITICAL:** Do NOT restructure, compact, or rewrite the speaker's thoughts:
 
-- If the speaker takes a long time to reach their point, tighten the path — remove redundant phrasing, merge fragmented ideas
-- If the same idea is expressed twice in different words, keep the better version and drop the other
-- Remove wordy intros: "So the way X works is basically" → "X has two levels:" or similar
-- Remove redundant commentary: "so that's another thing we need to factor in" (adds nothing after stating the fact)
-- Compact where possible without losing meaning: "a little bit of miso paste, I think" → "miso paste"
-- Do NOT reorder ideas or move conclusions first — preserve the speaker's narrative flow
-- Do NOT add words or ideas that weren't in the original
+- DON'T remove wordy intros: "So the way X works is basically" stays as-is
+- DON'T compact phrases: "a little bit of miso paste, I think" stays
+- DON'T remove commentary: "so that's another thing we need to factor in" stays
+- DON'T tighten paths to conclusions
+- DON'T remove redundant phrasing — if the speaker said it twice, keep both
+- DON'T change paragraph structure
 
-## R18. List formatting
-
-When the speaker is clearly listing items (tasks, action items, things to buy, steps), format them as a bullet list:
-
-```
-- First item
-- Second item
-- Third item
-```
-
-Use unordered lists (dashes), not numbered lists. Only apply this when the dictation is genuinely a list — not for narrative text that happens to mention multiple things.
+The goal is structure cleanup (punctuation, grammar, formatting), NOT content editing.
