@@ -173,7 +173,7 @@ final class CaptureSession {
     @ObservationIgnored var autoDismissTask: Task<Void, Never>?
     @ObservationIgnored var pillResetTask: Task<Void, Never>?
 
-    @ObservationIgnored private var recordingStartInstant: ContinuousClock.Instant?
+    @ObservationIgnored var recordingStartInstant: ContinuousClock.Instant?
 
     // MARK: - Test observation
 
@@ -300,6 +300,10 @@ final class CaptureSession {
             menuBarIcon: Self.menuBarIcon(for: phase),
             canToggle: Self.canToggle(for: phase)
         )
+        // Keep cancel hotkey in sync with every phase transition so no code
+        // path can accidentally leave it enabled (consuming key events) or
+        // disabled (ignoring cancel presses during processing).
+        updateCancelHotkey()
         if old != phase {
             Logger.consistency.info("Session phase: \(String(describing: old)) → \(String(describing: phase))")
         }
@@ -324,7 +328,7 @@ final class CaptureSession {
             self?.confirmPreview()
         }
         panel.onCancelCapture = { [weak self] in
-            self?.cancelCapture()
+            self?.cancel()
         }
         panel.onDestinationSubmit = { [weak self] destinationID in
             self?.confirmPreviewWithDestination(destinationID)

@@ -73,7 +73,6 @@ extension CaptureSession {
             // Populate the panel with raw text so the user can see it if they expand.
             panel.populateImmediateActionText(segments: snapshot.inputSegments)
 
-            cancelHotkey.isEnabled = false
             processingTask = nil
             setStatus(.executing)
 
@@ -234,7 +233,7 @@ extension CaptureSession {
 
     /// The rule: destination override during recording skips preview even when
     /// `mode.showPreview` is true. Named because the test name is the rule.
-    static func shouldShowPreview(mode: Mode, hadDestinationOverride: Bool) -> Bool {
+    nonisolated static func shouldShowPreview(mode: Mode, hadDestinationOverride: Bool) -> Bool {
         mode.showPreview && !hadDestinationOverride
     }
 
