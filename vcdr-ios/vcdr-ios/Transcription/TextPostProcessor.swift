@@ -4,8 +4,6 @@ import Foundation
 /// Each stage can be called independently so the coordinator can run
 /// the terminator after external processing (matching the macOS pipeline).
 enum TextPostProcessor {
-    /// Default terminator: period followed by a space
-    private static let terminatorTemplate = "<dot><space>"
     private static let sentenceEndingPunctuation: Set<Character> = [".", "?", "!"]
 
     /// Removes filler words only — no terminator.
@@ -13,25 +11,20 @@ enum TextPostProcessor {
         FillerWordRemover.remove(from: text)
     }
 
-    /// Appends a terminator (e.g. ". ") to the text. If the text already ends
-    /// with sentence-ending punctuation, only the spacing portion is appended.
+    /// Appends spacing (terminator) to the text. If the text ends
+    /// with sentence-ending punctuation, a space is appended. Otherwise,
+    /// the text is returned as-is. Period handling is done by StyleTransformer.
     static func applyTerminator(to text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.last != nil else { return text }
+        guard let last = trimmed.last else { return text }
 
-        let resolved = terminatorTemplate
-            .replacingOccurrences(of: "<dot>", with: ".")
-            .replacingOccurrences(of: "<space>", with: " ")
-            .replacingOccurrences(of: "<newline>", with: "\n")
-
-        let punctuationPrefix = String(resolved.prefix(while: { sentenceEndingPunctuation.contains($0) }))
-        let spacingSuffix = String(resolved.dropFirst(punctuationPrefix.count))
-
-        if sentenceEndingPunctuation.contains(trimmed.last!) {
-            return trimmed + spacingSuffix
+        // Only add spacing if text already ends with punctuation.
+        // Periods are added/removed by StyleTransformer based on style.
+        if sentenceEndingPunctuation.contains(last) {
+            return trimmed + " "
         }
 
-        return trimmed + resolved
+        return trimmed
     }
 
     /// Full pipeline: filler removal + terminator. Convenience for callers

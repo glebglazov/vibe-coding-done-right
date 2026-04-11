@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage(AIProcessingSettings.openaiApiKeyKey) private var openaiApiKey = ""
     @AppStorage(AIProcessingSettings.afmFallbackEnabledKey) private var afmFallbackEnabled = false
     @AppStorage(AIProcessingSettings.afmFallbackRememberedKey) private var afmFallbackRemembered = false
+    @AppStorage(StyleSettings.defaultStyleKey) private var defaultStyleRaw = TextStyle.casual.rawValue
     @State private var isEditingAnthropicKey = false
     @State private var isEditingOpenAIKey = false
     @State private var availableInputs: [AVAudioSessionPortDescription] = []
@@ -26,6 +27,7 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(spacing: 32) {
                         themeSection
+                        textStyleSection
                         microphoneSection
                         aiProcessingSection
                     }
@@ -42,6 +44,35 @@ struct SettingsView: View {
                 }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+    }
+
+    // MARK: - Text Style
+
+    private var textStyleSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionTitle("TEXT STYLE")
+
+            HStack(spacing: 0) {
+                ForEach(TextStyle.allCases, id: \.self) { style in
+                    Button {
+                        defaultStyleRaw = style.rawValue
+                    } label: {
+                        Text(style.displayName.uppercased())
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(2)
+                            .foregroundStyle(defaultStyleRaw == style.rawValue ? theme.onSurface : theme.onSurfaceVariant)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(defaultStyleRaw == style.rawValue ? theme.surfaceHigh : .clear)
+                    }
+                }
+            }
+            .background(theme.surfaceContainer)
+
+            Text("Default formatting for all captures")
+                .font(.system(size: 12))
+                .foregroundStyle(theme.onSurfaceVariant)
         }
     }
 

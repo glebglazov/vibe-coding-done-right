@@ -347,8 +347,9 @@ struct RecordingView: View {
 
     @ViewBuilder
     private var aiSessionToggle: some View {
-        if AIProcessingSettings.isConfigured {
-            HStack(spacing: 8) {
+        HStack(spacing: 8) {
+            // AI toggle pill (only show if AI is configured)
+            if AIProcessingSettings.isConfigured {
                 Button {
                     coordinator.aiActiveThisSession.toggle()
                 } label: {
@@ -378,6 +379,19 @@ struct RecordingView: View {
                             .background(theme.surfaceHigh)
                     }
                 }
+            }
+
+            // Style toggle pill
+            Button {
+                coordinator.currentTextStyle = coordinator.currentTextStyle == .casual ? .formal : .casual
+            } label: {
+                Text(coordinator.currentTextStyle.displayName.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(2)
+                    .foregroundStyle(theme.primary)
+                    .padding(.horizontal, 16)
+                    .frame(height: Self.aiPillHeight)
+                    .background(theme.surfaceHigh)
             }
         }
     }

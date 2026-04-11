@@ -41,6 +41,8 @@ final class RecordingFlowCoordinator {
     var aiActiveThisSession: Bool = AIProcessingSettings.activeInDictation
     /// Per-session prompt mode — initialized from settings default, changeable during recording.
     var selectedPromptMode: AIPromptMode = AIProcessingSettings.defaultMode
+    /// Per-session text style — initialized from settings default, changeable during recording.
+    var currentTextStyle: TextStyle = StyleSettings.defaultStyle
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
@@ -154,6 +156,7 @@ final class RecordingFlowCoordinator {
         launchedViaDeepLink = fromDeepLink
         aiActiveThisSession = AIProcessingSettings.activeInDictation
         selectedPromptMode = AIProcessingSettings.defaultMode
+        currentTextStyle = StyleSettings.defaultStyle
         aiProcessingStatus = .idle
 
         // Show "LISTENING" immediately — before any async work.
@@ -278,14 +281,19 @@ final class RecordingFlowCoordinator {
                 return
             }
 
-            // Stage 2: External processing (AI), then Stage 3: terminator
-            let resultText: String
+            // Stage 2: External processing (AI)
+            let processedText: String
             if useAI {
-                let aiResult = await waitForAIProcessing(localText: cleanedText)
-                resultText = TextPostProcessor.applyTerminator(to: aiResult)
+                processedText = await waitForAIProcessing(localText: cleanedText)
             } else {
-                resultText = TextPostProcessor.applyTerminator(to: cleanedText)
+                processedText = cleanedText
             }
+            
+            // Stage 3: Apply style transformation (capitalization, punctuation)
+            let styledText = StyleTransformer.transform(processedText, using: currentTextStyle.style.staticRules)
+            
+            // Stage 4: Apply terminator (spacing)
+            let resultText = TextPostProcessor.applyTerminator(to: styledText)
 
             state = .complete(resultText)
             transcribingMessage = ""
@@ -321,6 +329,7 @@ final class RecordingFlowCoordinator {
         aiProcessingStatus = .idle
         aiActiveThisSession = AIProcessingSettings.activeInDictation
         selectedPromptMode = AIProcessingSettings.defaultMode
+        currentTextStyle = StyleSettings.defaultStyle
         aiInputText = ""
         updateTask?.cancel()
         streamingSetupTask?.cancel()
@@ -459,7 +468,9 @@ final class RecordingFlowCoordinator {
         aiRetryTask = Task {
             let aiResult = await waitForAIProcessing(localText: aiInputText)
             guard !Task.isCancelled else { return }
-            state = .complete(TextPostProcessor.applyTerminator(to: aiResult))
+            // Re-apply style transformation and terminator on retry
+            let styledText = StyleTransformer.transform(aiResult, using: currentTextStyle.style.staticRules)
+            state = .complete(TextPostProcessor.applyTerminator(to: styledText))
         }
     }
 
