@@ -1,7 +1,7 @@
 import OSLog
 
 extension Logger {
-    private static let subsystem = Bundle.main.bundleIdentifier ?? "glebglazov.vcdr"
+    static let subsystem = Bundle.main.bundleIdentifier ?? "glebglazov.vcdr"
 
     static let app = Logger(subsystem: subsystem, category: "app")
     static let recording = Logger(subsystem: subsystem, category: "recording")
@@ -12,4 +12,5 @@ extension Logger {
     static let audio = Logger(subsystem: subsystem, category: "audio")
     static let ui = Logger(subsystem: subsystem, category: "ui")
     static let consistency = Logger(subsystem: subsystem, category: "consistency")
+    static let styles = Logger(subsystem: subsystem, category: "styles")
 }

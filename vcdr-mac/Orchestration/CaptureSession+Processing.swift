@@ -275,7 +275,8 @@ extension CaptureSession {
             saveResultToClipboard: original.mode.saveResultToClipboard,
             removeFillerWords: original.pipelineContext.removeFillerWords,
             terminatorTemplateEnabled: original.pipelineContext.terminatorTemplateEnabled,
-            terminatorTemplate: original.pipelineContext.terminatorTemplate
+            terminatorTemplate: original.pipelineContext.terminatorTemplate,
+            style: original.pipelineContext.style
         )
         let overriddenSnapshot = SubmissionSnapshot(
             pipelineContext: overriddenContext,
@@ -318,6 +319,13 @@ extension CaptureSession {
                     variableEnvironment: snapshot.pipelineContext.variableEnvironment
                 )
                 guard !Task.isCancelled else { return }
+
+                // Apply style transformation after AI processing (before terminator)
+                processedText = StyleTransformer.transform(
+                    processedText,
+                    using: snapshot.pipelineContext.style.staticRules
+                )
+
                 if snapshot.pipelineContext.terminatorTemplateEnabled {
                     processedText = Mode.applyTerminator(
                         processedText,
@@ -386,6 +394,7 @@ extension CaptureSession {
         let destinationID = overrides.resolvedDestinationID(for: mode)
         let destination = settings.outputDestination(for: destinationID)
         let segments = Self.makeSegments(text: text, captures: runState.captures)
+        let effectiveStyle = styleProvider()
         return SubmissionSnapshot(
             pipelineContext: .init(
                 text: text,
@@ -399,7 +408,8 @@ extension CaptureSession {
                 saveResultToClipboard: mode.saveResultToClipboard,
                 removeFillerWords: settings.removeFillerWords,
                 terminatorTemplateEnabled: settings.terminatorTemplateEnabled,
-                terminatorTemplate: settings.terminatorTemplate
+                terminatorTemplate: settings.terminatorTemplate,
+                style: effectiveStyle
             ),
             mode: mode,
             inputSegments: segments,

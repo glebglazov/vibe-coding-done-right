@@ -13,6 +13,7 @@ struct MainWindowView: View {
         case home
         case audio
         case modes
+        case styles
         case variables
         case outputDestinations
         case transcription
@@ -26,6 +27,7 @@ struct MainWindowView: View {
             case .home: "Home"
             case .audio: "Audio"
             case .modes: "Modes"
+            case .styles: "Styles"
             case .variables: "Variables"
             case .outputDestinations: "Output"
             case .transcription: "Transcription"
@@ -41,6 +43,7 @@ struct MainWindowView: View {
             case .home: "house"
             case .audio: "speaker.wave.2"
             case .modes: "list.bullet"
+            case .styles: "paintbrush"
             case .variables: "key"
             case .outputDestinations: "arrow.right.square"
             case .transcription: "waveform"
@@ -92,6 +95,11 @@ struct MainWindowView: View {
                         )
                     case .modes:
                         ModesListView(settings: dependencies.settings, path: $path)
+                    case .styles:
+                        StylesListView(
+                            styleRegistry: dependencies.styleRegistry,
+                            path: $path
+                        )
                     case .variables:
                         VariablesTabView(settings: dependencies.settings)
                     case .outputDestinations:
@@ -143,6 +151,12 @@ struct MainWindowView: View {
                             definedVariableNames: dependencies.settings.definedVariableNames
                         )
                     }
+                }
+                .navigationDestination(for: StyleNavID.self) { navID in
+                    StyleDetailContainer(
+                        styleID: navID.id,
+                        styleRegistry: dependencies.styleRegistry
+                    )
                 }
             }
         }

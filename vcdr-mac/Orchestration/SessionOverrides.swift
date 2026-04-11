@@ -1,8 +1,8 @@
 import Foundation
 
-/// Manages parameter and destination overrides for the current session.
-/// Shared between `CaptureSession`, `ModeSwitcherCoordinator`, and
-/// `RecordingIndicatorPanel` — the set → consume → clear-on-next lifecycle
+/// Manages parameter, destination, and style overrides for the current session.
+/// Shared between `CaptureSession`, `ModeSwitcherCoordinator`,
+/// `RecordingIndicatorPanel`, and `StyleResolutionPipeline` — the set → consume → clear-on-next lifecycle
 /// is driven by `CaptureSession`.
 @Observable
 @MainActor
@@ -12,6 +12,10 @@ final class SessionOverrides {
 
     /// Output destination override; nil means use mode default.
     var destinationOverride: UUID?
+
+    /// Style override; nil means use frontmost-app-resolved style.
+    /// Temporary style selection from menu bar or style switcher.
+    var styleOverride: UUID?
 
 
     // MARK: - Resolution
@@ -62,5 +66,11 @@ final class SessionOverrides {
     func clearAll() {
         parameterOverrides = [:]
         destinationOverride = nil
+        styleOverride = nil
+    }
+
+    /// Clears only the style override.
+    func clearStyleOverride() {
+        styleOverride = nil
     }
 }

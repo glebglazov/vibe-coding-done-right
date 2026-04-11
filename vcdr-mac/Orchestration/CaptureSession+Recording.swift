@@ -116,6 +116,9 @@ extension CaptureSession {
         recordingStartInstant = .now
         destinationHotkey.isEnabled = true
         updateCancelHotkey()
+
+        // Notify delegate that recording started
+        delegate?.captureSessionDidStartRecording(self)
     }
 
     /// Stops the active recording and kicks off transcription.
@@ -145,6 +148,9 @@ extension CaptureSession {
 
         setStatus(.transcribing)
         panel.setPhase(.processing)
+
+        // Notify delegate that recording stopped (before transcription begins)
+        delegate?.captureSessionDidStopRecording(self)
 
         // Stop clipboard monitor before transcription. We intentionally fire-and-forget:
         // the transcription `await` gives the stop task time to drain before results

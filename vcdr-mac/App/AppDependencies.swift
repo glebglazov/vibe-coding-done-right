@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import AVFoundation
 import ApplicationServices
@@ -10,10 +11,20 @@ final class AppDependencies {
     let session: CaptureSession
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
-    let modeSwitcherCoordinator: ModeSwitcherCoordinator
     let mediaPlaybackController: MediaPlaybackController
     let transcriptionHistory: TranscriptionHistory
+    let styleRegistry: StyleRegistry
+    let frontmostAppMonitor: FrontmostAppMonitor
+    let styleResolutionPipeline: StyleResolutionPipeline
+    let styleOverrideController: StyleOverrideController
+    let modeSwitcherCoordinator: ModeSwitcherCoordinator
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
+
+    /// The currently effective style (observable for UI updates).
+    var currentStyle: Style { styleOverrideController.currentEffectiveStyle }
+
+    /// Whether a style override is currently active.
+    var hasStyleOverride: Bool { styleOverrideController.isOverridden }
 
     #if DEBUG
     let audioRecorder: AudioRecorder
@@ -58,9 +69,38 @@ final class AppDependencies {
         let clipboardMonitor = ClipboardMonitor()
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
         self.inputLevelMonitor = InputLevelMonitor()
-        self.modeSwitcherCoordinator = ModeSwitcherCoordinator(settings: settings, overrides: overrides)
+
+        // Initialize style-related components first
+        self.styleRegistry = StyleRegistry()
+        self.frontmostAppMonitor = FrontmostAppMonitor()
+        self.styleResolutionPipeline = StyleResolutionPipeline(
+            styleRegistry: styleRegistry,
+            frontmostAppMonitor: frontmostAppMonitor
+        )
+
+        self.styleOverrideController = StyleOverrideController(
+            availableStyles: Style.builtIn,
+            initialDetectedStyle: Style.casual
+        )
+
+        self.modeSwitcherCoordinator = ModeSwitcherCoordinator(
+            settings: settings,
+            overrides: overrides,
+            styleOverrideController: styleOverrideController
+        )
+
+        self.copyLatestCaptureHandler = CopyLatestCaptureHandler(
+            settings: settings,
+            transcriptionHistory: history,
+            recordingIndicator: recordingIndicator
+        )
+
+        // Create capture panel early so it's available for session initialization and delegate wiring
         let capturePanel = CapturePanel()
-        self.session = CaptureSession(
+
+        // Session initialization (comes after styleOverrideController due to delegate dependency)
+        // Note: styleProvider will be set after initialization to avoid circular reference
+        let captureSession = CaptureSession(
             settings: settings,
             history: history,
             deps: .init(
@@ -72,18 +112,90 @@ final class AppDependencies {
                 indicator: recordingIndicator,
                 panel: CapturePanelAdapter(capturePanel),
                 ai: AIProcessingAdapter(),
-                overrides: overrides
+                overrides: overrides,
+                styleProvider: { .casual }  // Temporary, will be updated after init
             )
         )
+        self.session = captureSession
 
-        self.copyLatestCaptureHandler = CopyLatestCaptureHandler(
-            settings: settings,
-            transcriptionHistory: history,
-            recordingIndicator: recordingIndicator
-        )
-
-        // Wire ModeSwitcherCoordinator → AppDependencies via delegate
+        // Wire up delegates (must happen after all properties are initialized for @Observable)
+        captureSession.delegate = self
         modeSwitcherCoordinator.delegate = self
+        setupStyleOverrideIntegration()
+        setupStyleResolutionCallbacks()
+
+        // Update the style provider now that self is fully initialized
+        captureSession.setStyleProvider { [weak self] in
+            self?.styleOverrideController.currentEffectiveStyle ?? .casual
+        }
+    }
+
+    // MARK: - Style Override Integration
+
+    private func setupStyleOverrideIntegration() {
+        // Wire StyleOverrideController to FrontmostAppMonitor
+        // Clear override when frontmost app changes
+        frontmostAppMonitor.onPermissionChanged = { [weak self] _ in
+            // Permission changes don't directly affect override
+        }
+
+        // Set up style change callback to update SessionOverrides
+        styleOverrideController.onStyleChanged = { [weak self] newStyle in
+            guard let self else { return }
+            // Update SessionOverrides to reflect the current effective style
+            if self.styleOverrideController.isOverridden {
+                self.session.overrides.styleOverride = newStyle.id
+            } else {
+                self.session.overrides.styleOverride = nil
+            }
+            Logger.styles.debug("Effective style updated: \(newStyle.name)")
+        }
+    }
+
+    // MARK: - Style Resolution Setup
+
+    private func setupStyleResolutionCallbacks() {
+        styleResolutionPipeline.onAccessibilityPermissionChanged = { [weak self] granted in
+            guard let self else { return }
+            if !granted {
+                Logger.app.warning("Accessibility permission denied for style resolution")
+            }
+        }
+
+        // Wire pipeline style changes to update the detected style in override controller
+        styleResolutionPipeline.onStyleChanged = { [weak self] newStyle in
+            guard let self else { return }
+            // Update the detected style in the override controller
+            // This will also clear any active override (per acceptance criteria)
+            self.styleOverrideController.updateDetectedStyle(newStyle)
+        }
+    }
+
+    /// Sets a temporary style override (from menu bar or style switcher).
+    /// Updates both SessionOverrides and the resolution pipeline.
+    /// - Parameter styleID: The style ID to override with, or nil to clear.
+    func setStyleOverride(_ styleID: UUID?) {
+        if let styleID {
+            // Find the style and activate override
+            Task {
+                if let style = await styleRegistry.style(withID: styleID) {
+                    await MainActor.run {
+                        self.styleOverrideController.activateOverride(style)
+                        self.session.overrides.styleOverride = styleID
+                        self.styleResolutionPipeline.setStyleOverride(styleID)
+                    }
+                }
+            }
+        } else {
+            styleOverrideController.clearOverride()
+            session.overrides.styleOverride = nil
+            styleResolutionPipeline.clearOverride()
+        }
+    }
+
+    /// Clears the active style override.
+    func clearStyleOverride() {
+        setStyleOverride(nil)
     }
 
     func initialize() async {
@@ -107,6 +219,9 @@ final class AppDependencies {
             modeSwitcherCoordinator.setupHotkey()
             copyLatestCaptureHandler.setupHotkey()
         }
+
+        // Start style resolution pipeline
+        await styleResolutionPipeline.start()
 
         do {
             // Poll the provider's init phase so the UI updates in real time
@@ -192,5 +307,26 @@ extension AppDependencies: ModeSwitcherCoordinatorDelegate {
 
     func modeSwitcherDidHide() {
         modeSwitcherSuspension = nil
+    }
+}
+
+// MARK: - CaptureSessionDelegate
+
+extension AppDependencies: CaptureSessionDelegate {
+
+    func captureSessionDidStartRecording(_ session: CaptureSession) {
+        // Recording started - no action needed for style override
+        Logger.recording.info("Capture session started recording")
+    }
+
+    func captureSessionDidStopRecording(_ session: CaptureSession) {
+        // Clear style override when recording stops (per acceptance criteria)
+        // This ensures the next recording session starts with fresh detection
+        if styleOverrideController.isOverridden {
+            styleOverrideController.clearOverride()
+            session.overrides.styleOverride = nil
+            styleResolutionPipeline.clearOverride()
+            Logger.styles.info("Style override cleared due to recording stop")
+        }
     }
 }

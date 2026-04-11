@@ -40,24 +40,44 @@ final class ModeSwitcherViewModel {
     /// Whether audio recording is in progress — drives the red recording dot in the view.
     var isRecording: Bool = false
 
+    // MARK: - Style Override State
+
+    /// The currently effective style name (detected or overridden).
+    var currentStyleName: String = Style.casual.name
+
+    /// Whether the current style is an override (not auto-detected).
+    var isStyleOverridden: Bool = false
+
+    /// Callback when TAB is pressed to cycle styles.
+    @ObservationIgnored var onCycleStyle: (() -> Void)?
+
+    /// Callback to notify when style override changes.
+    @ObservationIgnored var onStyleOverrideChanged: ((Style) -> Void)?
+
     init(
         modes: [Mode],
         highlightedIndex: Int,
         activeModeID: UUID? = nil,
         parameterOverrides: [UUID: String],
+        currentStyleName: String? = nil,
+        isStyleOverridden: Bool = false,
         onSelect: @escaping (UUID) -> Void,
         onActivate: @escaping (UUID) -> Void = { _ in },
         onParameterOverride: @escaping (UUID, String) -> Void,
-        onDismiss: @escaping () -> Void
+        onDismiss: @escaping () -> Void,
+        onCycleStyle: (() -> Void)? = nil
     ) {
         self.modes = modes
         self.highlightedIndex = highlightedIndex
         self.activeModeID = activeModeID
         self.parameterOverrides = parameterOverrides
+        self.currentStyleName = currentStyleName ?? Style.casual.name
+        self.isStyleOverridden = isStyleOverridden
         self.onSelect = onSelect
         self.onActivate = onActivate
         self.onParameterOverride = onParameterOverride
         self.onDismiss = onDismiss
+        self.onCycleStyle = onCycleStyle
     }
 
     /// Confirms mode selection and dismisses.
@@ -143,6 +163,10 @@ final class ModeSwitcherViewModel {
             return true
         case KeyCodeMap.returnKeyCode:
             confirmMode(modes[highlightedIndex].id)
+            return true
+        case KeyCodeMap.tabKeyCode:
+            // Cycle through styles: detected → Casual → Formal → detected
+            onCycleStyle?()
             return true
         default:
             // Number keys 1-9 for modes

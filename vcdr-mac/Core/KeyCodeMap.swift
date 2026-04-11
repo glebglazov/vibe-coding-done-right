@@ -19,6 +19,7 @@ enum KeyCodeMap {
 
     static let returnKeyCode: UInt16 = 36
     static let escapeKeyCode: UInt16 = 53
+    static let tabKeyCode: UInt16 = 48
     static let leftArrowKeyCode: UInt16 = 123
     static let rightArrowKeyCode: UInt16 = 124
     static let downArrowKeyCode: UInt16 = 125

@@ -6,6 +6,8 @@ struct MenuBarView: View {
 
     private static let previewLineLimit = 2
     @State private var showCopied = false
+    @State private var allStyles: [Style] = []
+    @State private var showStyleOverrideIndicator = false
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -53,6 +55,22 @@ struct MenuBarView: View {
             Text("Hotkey: \(hotkeyDisplay)")
                 .foregroundStyle(.secondary)
 
+            // Style section with current style and submenu
+            StyleSection(
+                currentStyle: dependencies.currentStyle,
+                hasOverride: dependencies.hasStyleOverride,
+                allStyles: allStyles,
+                onSelectStyle: { style in
+                    dependencies.setStyleOverride(style.id)
+                },
+                onClearOverride: {
+                    dependencies.clearStyleOverride()
+                }
+            )
+            .task {
+                await loadStyles()
+            }
+
             Divider()
 
             Button("Settings...") {
@@ -79,4 +97,66 @@ struct MenuBarView: View {
         guard binding.isAssigned else { return "Not set" }
         return binding.displayString
     }
+
+    private func loadStyles() async {
+        allStyles = await dependencies.styleRegistry.allStyles()
+    }
 }
+
+// MARK: - Style Section
+
+private struct StyleSection: View {
+    let currentStyle: Style
+    let hasOverride: Bool
+    let allStyles: [Style]
+    let onSelectStyle: (Style) -> Void
+    let onClearOverride: () -> Void
+
+    var body: some View {
+        Menu {
+            // Clear override option (only shown when override is active)
+            if hasOverride {
+                Button {
+                    onClearOverride()
+                } label: {
+                    Label("Reset to App Style", systemImage: "arrow.uturn.backward")
+                }
+
+                Divider()
+            }
+
+            // List all styles with checkmark on current
+            ForEach(allStyles) { style in
+                Button {
+                    onSelectStyle(style)
+                } label: {
+                    HStack {
+                        Text(style.name)
+                        Spacer()
+                        if style.id == currentStyle.id {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack {
+                Text("Style: \(styleDisplayText)")
+                    .foregroundStyle(.secondary)
+                if hasOverride {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(Color.accentColor)
+                        .font(.caption2)
+                }
+            }
+        }
+    }
+
+    private var styleDisplayText: String {
+        if hasOverride {
+            return "\(currentStyle.name) (Override)"
+        }
+        return currentStyle.name
+    }
+}
+

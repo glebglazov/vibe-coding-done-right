@@ -25,7 +25,8 @@ enum TextProcessingPipeline {
     /// Runs the three-stage text processing pipeline:
     /// 1. Algorithmic pre-processing — speech cleanup (filler word removal)
     /// 2. External processing — input structuring + content processing (none/AI/bash)
-    /// 3. Algorithmic post-processing — output formatting (terminator)
+    /// 3. Style transformation — capitalization, punctuation (always applied as final step)
+    /// 4. Algorithmic post-processing — output formatting (terminator)
     static func run(
         mode: Mode,
         text: String,
@@ -35,13 +36,14 @@ enum TextProcessingPipeline {
         removeFillerWords: Bool = false,
         terminatorTemplateEnabled: Bool = false,
         terminatorTemplate: String = "",
-        aiPort: any AIProcessingPort = AIProcessingAdapter()
+        aiPort: any AIProcessingPort = AIProcessingAdapter(),
+        style: Style = .casual
     ) async throws -> PipelineResult {
         // MARK: Algorithmic pre-processing — speech cleanup
         let cleanedText = removeFillerWords ? FillerWordRemover.remove(from: text) : text
 
         // MARK: External processing — content processing
-        let structured = structureInput(text: cleanedText, captures: captures, mode: mode)
+        let structured = structureInput(text: cleanedText, captures: captures, mode: mode, style: style)
         let result: PipelineResult
 
         switch mode.processingType {
@@ -98,10 +100,13 @@ enum TextProcessingPipeline {
             result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
         }
 
+        // MARK: Style transformation — capitalization, punctuation (final step before terminator)
+        let styledText = StyleTransformer.transform(result.text, using: style.staticRules)
+
         // MARK: Algorithmic post-processing — output formatting
         let finalText = terminatorTemplateEnabled
-            ? Mode.applyTerminator(result.text, terminator: terminatorTemplate)
-            : result.text
+            ? Mode.applyTerminator(styledText, terminator: terminatorTemplate)
+            : styledText
 
         return PipelineResult(
             text: finalText,
@@ -114,10 +119,12 @@ enum TextProcessingPipeline {
 
     /// Shared interface: each processing type structures input for its consumer.
     /// Dispatches to the appropriate implementation based on processing type.
+    /// For AI modes (cloudAI, localAgent), appends style.dynamicPrompt to the system prompt.
     private static func structureInput(
         text: String,
         captures: [CapturedContext],
-        mode: Mode
+        mode: Mode,
+        style: Style
     ) -> String {
         switch mode.processingType {
         case .none:
@@ -128,8 +135,10 @@ enum TextProcessingPipeline {
             return structureInputXML(text: text, captures: captures, systemPrompt: nil)
         case .localAgent:
             let prompt = AIProcessingAdapter.resolvePrompt(mode)
+            // Append style dynamic prompt for AI modes (macOS only)
+            let promptWithStyle = AIStylePromptAppender.appendStylePrompt(to: prompt, style: style)
             return structureInputXML(text: text, captures: captures,
-                                     systemPrompt: prompt.isEmpty ? nil : prompt)
+                                     systemPrompt: promptWithStyle.isEmpty ? nil : promptWithStyle)
         case .bashScript:
             let prompt = (mode.systemPromptEnabled && !mode.systemPrompt.isEmpty)
                 ? mode.systemPrompt : nil

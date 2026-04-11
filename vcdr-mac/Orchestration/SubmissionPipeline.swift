@@ -19,6 +19,8 @@ enum SubmissionPipeline {
         let removeFillerWords: Bool
         let terminatorTemplateEnabled: Bool
         let terminatorTemplate: String
+        // Style transformation settings
+        let style: Style
     }
 
     struct Result {
@@ -43,7 +45,8 @@ enum SubmissionPipeline {
             removeFillerWords: context.removeFillerWords,
             terminatorTemplateEnabled: context.terminatorTemplateEnabled,
             terminatorTemplate: context.terminatorTemplate,
-            aiPort: aiPort
+            aiPort: aiPort,
+            style: context.style
         )
         return Result(
             processedText: pipelineResult.text,

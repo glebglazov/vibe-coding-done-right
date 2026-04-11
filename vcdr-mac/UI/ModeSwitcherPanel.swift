@@ -5,7 +5,10 @@ final class ModeSwitcherPanel {
     private var panel: NSPanel?
     private var eventMonitor: Any?
     private let keyboardTap = EventTapManager()
-    private var viewModel: ModeSwitcherViewModel?
+    private var _viewModel: ModeSwitcherViewModel?
+
+    /// The current view model, exposed for external updates (e.g., style cycling).
+    var viewModel: ModeSwitcherViewModel? { _viewModel }
 
     // MARK: - Constants
 
@@ -54,7 +57,7 @@ final class ModeSwitcherPanel {
         // Keyboard events are captured via a CGEvent tap instead of a local event monitor.
         panel.orderFrontRegardless()
         self.panel = panel
-        self.viewModel = viewModel
+        self._viewModel = viewModel
 
         // Wire resize callback — recalculate height when navigation level changes
         viewModel.onResize = { [weak self, weak viewModel] in
@@ -82,7 +85,7 @@ final class ModeSwitcherPanel {
                     return Unmanaged.passUnretained(event)
                 }
                 return MainActor.assumeIsolated {
-                    guard let viewModel = panel.viewModel else { return Unmanaged.passUnretained(event) }
+                    guard let viewModel = panel._viewModel else { return Unmanaged.passUnretained(event) }
                     guard let nsEvent = NSEvent(cgEvent: event) else { return Unmanaged.passUnretained(event) }
                     if viewModel.handleKeyEvent(nsEvent) {
                         return nil // consumed
@@ -122,7 +125,7 @@ final class ModeSwitcherPanel {
     /// Confirms the currently highlighted mode and hides.
     /// If browsing parameters/options, applies the highlighted option first.
     func confirmAndHide() {
-        if let viewModel {
+        if let viewModel = _viewModel {
             // Apply the highlighted option if drilling into parameters
             switch viewModel.navigation.level {
             case .options(let modeIndex, let parameterIndex):
@@ -149,7 +152,7 @@ final class ModeSwitcherPanel {
         keyboardTap.uninstall()
         panel?.close()
         panel = nil
-        viewModel = nil
+        _viewModel = nil
     }
 
     var isVisible: Bool { panel != nil }

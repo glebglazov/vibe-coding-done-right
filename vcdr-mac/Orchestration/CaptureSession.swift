@@ -21,6 +21,18 @@ import OSLog
 /// - Preview skipping is expressed by one named predicate, `shouldSkipPreview(result:mode:)`,
 ///   whose test name IS the rule.
 /// - Hotkey registration is owned internally and is re-entrant against accessibility grants.
+
+// MARK: - CaptureSessionDelegate
+
+/// Delegate protocol for observing capture session lifecycle events.
+@MainActor
+protocol CaptureSessionDelegate: AnyObject {
+    /// Called when recording stops and transcription begins.
+    func captureSessionDidStopRecording(_ session: CaptureSession)
+    /// Called when a new recording session starts.
+    func captureSessionDidStartRecording(_ session: CaptureSession)
+}
+
 @Observable
 @MainActor
 final class CaptureSession {
@@ -102,6 +114,9 @@ final class CaptureSession {
         /// shared read/write access to parameter overrides — so the same
         /// instance is wired through dependencies rather than created here.
         let overrides: SessionOverrides
+        /// Provides the effective style for the current capture.
+        /// Returns the style to apply for text transformation.
+        let styleProvider: @MainActor @Sendable () -> Style
     }
 
     // MARK: - Constants
@@ -125,6 +140,7 @@ final class CaptureSession {
     let panel: any CapturePanelSurface
     let ai: any AIProcessingPort
     let overrides: SessionOverrides
+    var styleProvider: @MainActor @Sendable () -> Style
 
     // MARK: - Public observable
 
@@ -175,6 +191,10 @@ final class CaptureSession {
 
     @ObservationIgnored var recordingStartInstant: ContinuousClock.Instant?
 
+    // MARK: - Delegate
+
+    @ObservationIgnored weak var delegate: CaptureSessionDelegate?
+
     // MARK: - Test observation
 
     @ObservationIgnored private var lastOutcome: Outcome?
@@ -197,6 +217,7 @@ final class CaptureSession {
         self.panel = deps.panel
         self.ai = deps.ai
         self.overrides = deps.overrides
+        self.styleProvider = deps.styleProvider
         wirePanelCallbacks()
     }
 
@@ -205,6 +226,14 @@ final class CaptureSession {
         immediateActionTask?.cancel()
         autoDismissTask?.cancel()
         pillResetTask?.cancel()
+    }
+
+    // MARK: - Style Provider
+
+    /// Updates the style provider after initialization.
+    /// Used to break initialization circularity with AppDependencies.
+    func setStyleProvider(_ provider: @MainActor @Sendable @escaping () -> Style) {
+        self.styleProvider = provider
     }
 
     // MARK: - Public API

@@ -176,10 +176,9 @@ struct Mode: Identifiable, Codable, Equatable {
         }.joined(separator: "\n\n")
     }
 
-    /// Appends the mode's terminator to the transcription, separating punctuation
-    /// from spacing. If the text already ends with sentence-ending punctuation,
-    /// only the spacing portion of the terminator is appended (e.g. `"Hello."` with
-    /// terminator `<dot><space>` becomes `"Hello. "`, not `"Hello."`).
+    /// Appends spacing (terminator) to the text. If the text ends with
+    /// sentence-ending punctuation, a space is appended. Otherwise, the text
+    /// is returned as-is. Period handling is done by StyleTransformer based on style.
     static func applyTerminator(_ text: String, terminator: String) -> String {
         guard !terminator.isEmpty else { return text }
 
@@ -191,17 +190,17 @@ struct Mode: Identifiable, Codable, Equatable {
             .replacingOccurrences(of: "<space>", with: " ")
             .replacingOccurrences(of: "<newline>", with: "\n")
 
-        // Split resolved terminator into leading punctuation and trailing spacing.
-        // If text already ends with punctuation, skip the punctuation part but
-        // still append spacing so consecutive dictations are properly separated.
+        // Extract spacing portion of the terminator (everything after any leading punctuation).
+        // Periods are added/removed by StyleTransformer based on style.
         let punctuationPrefix = String(resolved.prefix(while: { sentenceEndingPunctuation.contains($0) }))
         let spacingSuffix = String(resolved.dropFirst(punctuationPrefix.count))
 
+        // Only add spacing if text already ends with punctuation.
         if sentenceEndingPunctuation.contains(lastChar) {
             return trimmed + spacingSuffix
         }
 
-        return trimmed + resolved
+        return trimmed
     }
 
     // MARK: - Parameter Mutation

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import CoreGraphics
 import OSLog
@@ -9,12 +10,18 @@ final class ModeSwitcherCoordinator {
     private let hotkeyManager = GlobalHotkeyManager()
     private let panel = ModeSwitcherPanel()
     private let overrides: SessionOverrides
+    private let styleOverrideController: StyleOverrideController
 
     @ObservationIgnored weak var delegate: ModeSwitcherCoordinatorDelegate?
 
-    init(settings: AppSettings, overrides: SessionOverrides) {
+    init(
+        settings: AppSettings,
+        overrides: SessionOverrides,
+        styleOverrideController: StyleOverrideController
+    ) {
         self.settings = settings
         self.overrides = overrides
+        self.styleOverrideController = styleOverrideController
     }
 
     func setupHotkey() {
@@ -46,11 +53,17 @@ final class ModeSwitcherCoordinator {
         let modes = settings.switcherModes
         let activeIndex = modes.firstIndex(where: { $0.id == settings.activeModeID }) ?? 0
 
+        // Get current style information from the override controller
+        let currentStyle = styleOverrideController.currentEffectiveStyle
+        let isStyleOverridden = styleOverrideController.isOverridden
+
         let vm = ModeSwitcherViewModel(
             modes: modes,
             highlightedIndex: activeIndex,
             activeModeID: settings.activeModeID,
             parameterOverrides: overrides.parameterOverrides,
+            currentStyleName: currentStyle.name,
+            isStyleOverridden: isStyleOverridden,
             onSelect: { [weak self] id in
                 guard let self else { return }
                 self.settings.activeModeID = id
@@ -63,7 +76,10 @@ final class ModeSwitcherCoordinator {
                 Logger.settings.info("Mode activated (no dismiss): \(id)")
             },
             onParameterOverride: { _ , _ in },
-            onDismiss: onDismiss
+            onDismiss: onDismiss,
+            onCycleStyle: { [weak self] in
+                self?.cycleStyle()
+            }
         )
 
         vm.onParameterOverride = { [weak self, weak vm] parameterID, value in
@@ -78,7 +94,35 @@ final class ModeSwitcherCoordinator {
             self.overrides.parameterOverrides[parameterID] = value
         }
 
+        // Set up callback to update view model when style changes
+        vm.onStyleOverrideChanged = { [weak vm] newStyle in
+            vm?.currentStyleName = newStyle.name
+            vm?.isStyleOverridden = (newStyle.id != self.styleOverrideController.detectedStyle.id)
+        }
+
         return vm
+    }
+
+    // MARK: - Style Cycling
+
+    /// Cycles to the next style in the rotation (called when TAB is pressed in mode switcher).
+    private func cycleStyle() {
+        let newStyle = styleOverrideController.cycleToNextStyle()
+
+        // Update SessionOverrides to reflect the new style override
+        if styleOverrideController.isOverridden {
+            overrides.styleOverride = newStyle.id
+        } else {
+            overrides.styleOverride = nil
+        }
+
+        // Update the view model if the panel is visible
+        if let viewModel = panel.viewModel {
+            viewModel.currentStyleName = newStyle.name
+            viewModel.isStyleOverridden = styleOverrideController.isOverridden
+        }
+
+        Logger.settings.info("Style cycled to: \(newStyle.name) (overridden: \(self.styleOverrideController.isOverridden))")
     }
 
     func showSwitcher() {

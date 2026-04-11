@@ -101,7 +101,8 @@ struct CaptureSessionTestEnvironment {
                 indicator: recordingIndicator,
                 panel: fakePanel,
                 ai: scriptedAI,
-                overrides: overrides
+                overrides: overrides,
+                styleProvider: { .casual }
             )
         )
     }

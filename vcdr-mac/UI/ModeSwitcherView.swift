@@ -38,6 +38,47 @@ struct ModeSwitcherView: View {
                 }
                 .onTapGesture { viewModel.confirmMode(mode.id) }
         }
+
+        styleIndicator
+    }
+
+    // MARK: - Style Indicator
+
+    @ViewBuilder
+    private var styleIndicator: some View {
+        Divider()
+            .padding(.vertical, 4)
+
+        HStack(spacing: 6) {
+            Image(systemName: viewModel.isStyleOverridden ? "wand.and.stars" : "sparkles")
+                .font(.caption2)
+                .foregroundStyle(viewModel.isStyleOverridden ? Color.accentColor : .secondary)
+
+            Text(viewModel.currentStyleName)
+                .font(.caption)
+                .foregroundStyle(viewModel.isStyleOverridden ? .primary : .secondary)
+
+            if viewModel.isStyleOverridden {
+                Text("(overridden)")
+                    .font(.caption2)
+                    .foregroundStyle(Color.accentColor)
+                    .fontWeight(.medium)
+            }
+
+            Spacer()
+
+            Text("TAB")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.secondary.opacity(0.1))
+                )
+        }
+        .padding(.horizontal, Self.rowHorizontalPadding)
+        .padding(.vertical, 4)
     }
 
     private func modeRow(index: Int, mode: Mode) -> some View {
