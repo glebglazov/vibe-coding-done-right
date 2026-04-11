@@ -36,17 +36,17 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E5D6B81C2F466C82002066AA /* vcdr-mac */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = vcdr-mac;
+			path = "vcdr-mac";
 			sourceTree = "<group>";
 		};
 		E5D6B82A2F466C83002066AA /* vcdr-macTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = vcdr-macTests;
+			path = "vcdr-macTests";
 			sourceTree = "<group>";
 		};
 		E5D6B8342F466C83002066AA /* vcdr-macUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = vcdr-macUITests;
+			path = "vcdr-macUITests";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
