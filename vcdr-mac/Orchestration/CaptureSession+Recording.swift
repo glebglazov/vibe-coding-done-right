@@ -202,7 +202,7 @@ extension CaptureSession {
         indicator.showCancelled()
 
         emit(.cancelled, finalText: nil, destinationID: nil, historyConversationID: nil)
-        Logger.app.info(wasTranscribing ? "Processing cancelled" : "Recording cancelled")
+        Logger.app.info("\(wasTranscribing ? "Processing cancelled" : "Recording cancelled")")
     }
 
     // MARK: - Preview / Capture cancellation
@@ -238,6 +238,8 @@ extension CaptureSession {
 
     /// Explicit cancel from the capture UI — removes the preview's conversation from history.
     func cancelCapture() {
+        cancelHotkey.isEnabled = false
+
         if let pending = pendingPreview,
            let conversation = history.conversations.first(where: { $0.id == pending.snapshot.conversationID }) {
             history.removeConversation(conversation)
@@ -245,6 +247,13 @@ extension CaptureSession {
         }
         dismissOverlay(saveToHistory: false)
         indicator.showCancelled()
+
+        // dismissOverlay only transitions to idle from .awaitingPreview.
+        // When cancelling from .executing, we must explicitly go idle.
+        if case .executing = status.phase {
+            setStatus(.idle)
+        }
+
         if case .idle = status.phase {
             emit(.cancelled, finalText: nil, destinationID: nil, historyConversationID: nil)
         }
