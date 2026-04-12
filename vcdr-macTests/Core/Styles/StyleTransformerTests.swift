@@ -428,3 +428,325 @@ struct StyleTransformerRealWorldTests {
         #expect(result == "run npm install. then check the README")
     }
 }
+
+// MARK: - Context-Aware Capitalization Tests
+
+@Suite("StyleTransformer - Context-Aware Capitalization")
+struct StyleTransformerContextAwareTests {
+    
+    // MARK: - Formal Mode with Context
+    
+    @Test("Formal: Capitalize after period")
+    func formalCapitalizeAfterPeriod() {
+        let context = CursorContext(beforeText: "hello.", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // Capitalizes and adds space since context ends with terminator
+        #expect(result == " How are you.")
+    }
+    
+    @Test("Formal: Capitalize after period with space")
+    func formalCapitalizeAfterPeriodWithSpace() {
+        let context = CursorContext(beforeText: "hello. ", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // Context already has space - no additional separator needed
+        #expect(result == "How are you.")
+    }
+    
+    @Test("Formal: Capitalize after exclamation (adds space)")
+    func formalCapitalizeAfterExclamation() {
+        let context = CursorContext(beforeText: "wow!", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("that was great", using: .formal, cursorContext: context)
+        // Adds space since context ends with terminator
+        #expect(result == " That was great.")
+    }
+    
+    @Test("Formal: Capitalize after question mark (adds space)")
+    func formalCapitalizeAfterQuestion() {
+        let context = CursorContext(beforeText: "really?", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("yes indeed", using: .formal, cursorContext: context)
+        // Adds space since context ends with terminator
+        #expect(result == " Yes indeed.")
+    }
+    
+    @Test("Formal: Capitalize in empty field")
+    func formalCapitalizeInEmptyField() {
+        let context = CursorContext(beforeText: "", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        #expect(result == "How are you.")
+    }
+    
+    @Test("Formal: Don't capitalize after comma")
+    func formalDontCapitalizeAfterComma() {
+        let context = CursorContext(beforeText: "hello,", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you", using: .formal, cursorContext: context)
+        // First char left untouched (already capitalized), internal sentence boundary still capitalized
+        #expect(result == "How are you.")
+    }
+    
+    @Test("Formal: Don't capitalize after comma with lowercase input")
+    func formalDontCapitalizeAfterCommaLowercaseInput() {
+        let context = CursorContext(beforeText: "hello,", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // First char left untouched (lowercase stays lowercase)
+        #expect(result == "how are you.")
+    }
+    
+    @Test("Formal: Don't capitalize after word with trailing space")
+    func formalDontCapitalizeAfterWordWithSpace() {
+        let context = CursorContext(beforeText: "hello ", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("world", using: .formal, cursorContext: context)
+        // First char left untouched (lowercase stays lowercase)
+        #expect(result == "world.")
+    }
+    
+    @Test("Formal: Don't capitalize after plain word (adds separator)")
+    func formalDontCapitalizeAfterPlainWord() {
+        let context = CursorContext(beforeText: "hello", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("world", using: .formal, cursorContext: context)
+        // First char left untouched, adds ". " separator since context doesn't end with whitespace
+        #expect(result == ". world.")
+    }
+    
+    @Test("Formal: Adds space only after terminator")
+    func formalAddsSpaceOnlyAfterTerminator() {
+        let context = CursorContext(beforeText: "hello.", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("world", using: .formal, cursorContext: context)
+        // Context ends with terminator - just add space, not another period
+        #expect(result == " World.")
+    }
+    
+    // MARK: - Casual Mode with Context
+    
+    @Test("Casual: Lowercase after period (adds space)")
+    func casualLowercaseAfterPeriod() {
+        let context = CursorContext(beforeText: "hello.", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you", using: .casual, cursorContext: context)
+        // Lowercases first char, adds space since context ends with terminator
+        #expect(result == " how are you")
+    }
+    
+    @Test("Casual: Lowercase in empty field")
+    func casualLowercaseInEmptyField() {
+        let context = CursorContext(beforeText: "", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you", using: .casual, cursorContext: context)
+        #expect(result == "how are you")
+    }
+    
+    @Test("Casual: Lowercase mid-sentence (always lowercases in casual)")
+    func casualLowercaseMidSentence() {
+        let context = CursorContext(beforeText: "hello,", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you", using: .casual, cursorContext: context)
+        // Casual mode always lowercases first character
+        #expect(result == "how are you")
+    }
+    
+    @Test("Casual: Lowercase after word without terminator (adds separator)")
+    func casualAddsSeparatorWhenNoTerminator() {
+        let context = CursorContext(beforeText: "hello", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you", using: .casual, cursorContext: context)
+        // Casual mode adds ". " separator when context doesn't end with whitespace or terminator
+        #expect(result == ". how are you")
+    }
+    
+    @Test("Casual: Adds space only after terminator")
+    func casualAddsSpaceOnlyAfterTerminator() {
+        let context = CursorContext(beforeText: "hello.", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you", using: .casual, cursorContext: context)
+        // Context ends with terminator - just add space, not another period
+        #expect(result == " how are you")
+    }
+    
+    @Test("Casual: No separator when context ends with space")
+    func casualNoSeparatorWhenContextHasSpace() {
+        let context = CursorContext(beforeText: "hello ", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you", using: .casual, cursorContext: context)
+        // Context already ends with space - no separator needed
+        #expect(result == "how are you")
+    }
+    
+    // MARK: - Nil Context Tests (Current Behavior)
+    
+    @Test("Nil context: Formal current behavior")
+    func nilContextFormal() {
+        let result = StyleTransformer.transform("hello world", using: .formal, cursorContext: nil)
+        #expect(result == "Hello world.")
+    }
+    
+    @Test("Nil context: Casual current behavior")
+    func nilContextCasual() {
+        let result = StyleTransformer.transform("Hello World", using: .casual, cursorContext: nil)
+        #expect(result == "hello World")
+    }
+    
+    @Test("Nil context: Formal single word")
+    func nilContextFormalSingleWord() {
+        let result = StyleTransformer.transform("hello", using: .formal, cursorContext: nil)
+        #expect(result == "Hello.")
+    }
+    
+    @Test("Nil context: Casual single word")
+    func nilContextCasualSingleWord() {
+        let result = StyleTransformer.transform("Hello", using: .casual, cursorContext: nil)
+        #expect(result == "hello")
+    }
+    
+    // MARK: - Edge Cases
+    
+    @Test("Context with Unicode first character - Formal")
+    func unicodeFirstCharacterFormal() {
+        let context = CursorContext(beforeText: "hello.", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("über", using: .formal, cursorContext: context)
+        #expect(result == "Über.")
+    }
+    
+    @Test("Context with Unicode first character - Casual")
+    func unicodeFirstCharacterCasual() {
+        let context = CursorContext(beforeText: "hello.", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("Über", using: .casual, cursorContext: context)
+        #expect(result == "über")
+    }
+    
+    @Test("Context with Unicode first character mid-sentence - leave untouched")
+    func unicodeFirstCharacterMidSentence() {
+        let context = CursorContext(beforeText: "hello,", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("über cool", using: .formal, cursorContext: context)
+        // First char left untouched
+        #expect(result == "über cool.")
+    }
+    
+    @Test("Context with emoji at end after terminator - emoji is whitespace? No, it's content")
+    func emojiAtEndNotWhitespace() {
+        // This test documents that emoji is treated as content, not whitespace
+        // So "hello!🎉" would NOT match the terminator pattern because there's no whitespace
+        // and the emoji is non-whitespace content after the !
+        let context = CursorContext(beforeText: "hello!🎉", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // No whitespace between ! and emoji, so not a sentence boundary
+        #expect(result == "how are you.")
+    }
+    
+    @Test("Context with emoji in beforeText - terminator before emoji leaves untouched")
+    func emojiInBeforeTextTerminatorBefore() {
+        let context = CursorContext(beforeText: "hello! 🎉", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // Ends with "! 🎉" - the emoji is non-whitespace content after the terminator,
+        // so the cursor is NOT at a sentence boundary. First char should be left untouched.
+        #expect(result == "how are you.")
+    }
+    
+    @Test("Context with multiple terminators")
+    func multipleTerminators() {
+        let context = CursorContext(beforeText: "really?!", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("yes indeed", using: .formal, cursorContext: context)
+        #expect(result == "Yes indeed.")
+    }
+    
+    @Test("Context with whitespace-only beforeText")
+    func whitespaceOnlyBeforeText() {
+        let context = CursorContext(beforeText: "   ", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("hello world", using: .formal, cursorContext: context)
+        #expect(result == "Hello world.")
+    }
+    
+    @Test("Context with newlines in beforeText")
+    func newlinesInBeforeText() {
+        let context = CursorContext(beforeText: "hello.\n\n", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("world", using: .formal, cursorContext: context)
+        // Ends with period followed by whitespace (including newlines)
+        #expect(result == "World.")
+    }
+    
+    @Test("Context with trailing whitespace in beforeText - period")
+    func trailingWhitespaceAfterPeriod() {
+        let context = CursorContext(beforeText: "hello.   ", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("world", using: .formal, cursorContext: context)
+        #expect(result == "World.")
+    }
+    
+    @Test("Context with trailing whitespace in beforeText - question")
+    func trailingWhitespaceAfterQuestion() {
+        let context = CursorContext(beforeText: "hello?  ", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("world", using: .formal, cursorContext: context)
+        #expect(result == "World.")
+    }
+    
+    @Test("Context with beforeText nil in CursorContext")
+    func beforeTextNilInContext() {
+        let context = CursorContext(beforeText: nil, afterText: "after", sourceBundleID: nil)
+        let result = StyleTransformer.transform("hello world", using: .formal, cursorContext: context)
+        // When beforeText is nil, treat as boundary (apply style rule)
+        #expect(result == "Hello world.")
+    }
+    
+    @Test("Internal sentence boundaries still work with context")
+    func internalBoundariesWithContext() {
+        let context = CursorContext(beforeText: "hello.", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you. i am fine", using: .formal, cursorContext: context)
+        // Leading edge capitalized (after period), internal boundary also capitalized
+        #expect(result == "How are you. I am fine.")
+    }
+    
+    @Test("Internal sentence boundaries with casual style")
+    func internalBoundariesWithCasual() {
+        let context = CursorContext(beforeText: "hello.", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you. I am fine", using: .casual, cursorContext: context)
+        // Leading edge lowercased (after period), internal boundary also lowercased
+        #expect(result == "how are you. i am fine")
+    }
+    
+    @Test("Mid-sentence context leaves first char untouched but internal boundaries still work")
+    func midSentenceInternalBoundaries() {
+        let context = CursorContext(beforeText: "hello,", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("How are you. I am fine", using: .casual, cursorContext: context)
+        // First char left untouched (already capitalized), internal boundary lowercased
+        #expect(result == "How are you. i am fine")
+    }
+    
+    @Test("Colon in beforeText - leave untouched")
+    func colonInBeforeText() {
+        let context = CursorContext(beforeText: "hello:", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // Colon is not a sentence terminator, first char left untouched
+        #expect(result == "how are you.")
+    }
+    
+    @Test("Semicolon in beforeText - leave untouched")
+    func semicolonInBeforeText() {
+        let context = CursorContext(beforeText: "hello;", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // Semicolon is not a sentence terminator, first char left untouched
+        #expect(result == "how are you.")
+    }
+    
+    @Test("Closing parenthesis in beforeText - leave untouched")
+    func closingParenInBeforeText() {
+        let context = CursorContext(beforeText: "hello)", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // Parenthesis is not a sentence terminator, first char left untouched
+        #expect(result == "how are you.")
+    }
+    
+    @Test("Quote in beforeText - leave untouched")
+    func quoteInBeforeText() {
+        let context = CursorContext(beforeText: "hello\"", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("how are you", using: .formal, cursorContext: context)
+        // Quote is not a sentence terminator, first char left untouched
+        #expect(result == "how are you.")
+    }
+    
+    @Test("Capitalize after period with tab whitespace")
+    func capitalizeAfterPeriodWithTab() {
+        let context = CursorContext(beforeText: "hello.\t", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("world", using: .formal, cursorContext: context)
+        #expect(result == "World.")
+    }
+    
+    @Test("Complex emoji in beforeText - not at boundary due to emoji content")
+    func complexEmojiInBeforeText() {
+        let context = CursorContext(beforeText: "hello! 👨‍👩‍👧‍👦", afterText: nil, sourceBundleID: nil)
+        let result = StyleTransformer.transform("world", using: .formal, cursorContext: context)
+        // The emoji is content between the terminator and cursor, so NOT at sentence boundary.
+        // First char should be left untouched.
+        #expect(result == "world.")
+    }
+}

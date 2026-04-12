@@ -162,10 +162,13 @@ final class CaptureSession {
     struct RunState {
         var previousActiveApp: NSRunningApplication?
         var captureTask: Task<CapturedContext?, Never>?
+        var cursorContext: CursorContext?
         var captures: [CapturedContext] = []
         var destinationOverrideID: UUID?
         var hadDestinationOverride: Bool = false
         var conversationID: UUID = UUID()
+        /// Observer for app activation changes during recording
+        var appSwitchObserver: NSObjectProtocol?
     }
 
     @ObservationIgnored var run: RunState?

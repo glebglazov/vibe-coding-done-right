@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import OSLog
 
 /// Stateless pipeline executor. Handles text processing and output routing.
@@ -21,6 +22,40 @@ enum SubmissionPipeline {
         let terminatorTemplate: String
         // Style transformation settings
         let style: Style
+        // Cursor context for context-aware formatting
+        let cursorContext: CursorContext?
+
+        init(
+            text: String,
+            mode: Mode,
+            captures: [CapturedContext],
+            conversationID: UUID,
+            parameterValues: [String: String],
+            variableEnvironment: [String: String],
+            destination: OutputDestination,
+            targetAppPID: pid_t?,
+            saveResultToClipboard: Bool,
+            removeFillerWords: Bool,
+            terminatorTemplateEnabled: Bool,
+            terminatorTemplate: String,
+            style: Style,
+            cursorContext: CursorContext? = nil
+        ) {
+            self.text = text
+            self.mode = mode
+            self.captures = captures
+            self.conversationID = conversationID
+            self.parameterValues = parameterValues
+            self.variableEnvironment = variableEnvironment
+            self.destination = destination
+            self.targetAppPID = targetAppPID
+            self.saveResultToClipboard = saveResultToClipboard
+            self.removeFillerWords = removeFillerWords
+            self.terminatorTemplateEnabled = terminatorTemplateEnabled
+            self.terminatorTemplate = terminatorTemplate
+            self.style = style
+            self.cursorContext = cursorContext
+        }
     }
 
     struct Result {
@@ -36,6 +71,18 @@ enum SubmissionPipeline {
         context: Context,
         aiPort: any AIProcessingPort = AIProcessingAdapter()
     ) async throws -> Result {
+        // Staleness check: discard context if source app no longer matches target app
+        let effectiveCursorContext: CursorContext? = {
+            guard let cursorContext = context.cursorContext,
+                  let sourceBundleID = cursorContext.sourceBundleID,
+                  let targetPID = context.targetAppPID,
+                  let targetApp = NSRunningApplication(processIdentifier: targetPID) else {
+                return context.cursorContext
+            }
+            // Compare bundle IDs - if they differ, user switched apps during recording
+            return sourceBundleID == targetApp.bundleIdentifier ? cursorContext : nil
+        }()
+
         let pipelineResult = try await TextProcessingPipeline.run(
             mode: context.mode,
             text: context.text,
@@ -46,7 +93,8 @@ enum SubmissionPipeline {
             terminatorTemplateEnabled: context.terminatorTemplateEnabled,
             terminatorTemplate: context.terminatorTemplate,
             aiPort: aiPort,
-            style: context.style
+            style: context.style,
+            cursorContext: effectiveCursorContext
         )
         return Result(
             processedText: pipelineResult.text,

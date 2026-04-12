@@ -46,6 +46,7 @@ protocol CapturePanelSurface: AnyObject {
     func setAIProcessingError(_ message: String)
     func signalClipboardCapture()
     func setSuspendedForModeSwitcher(_ suspended: Bool)
+    func setCursorContextAvailable(_ available: Bool)
 
     // Callbacks — the session assigns these and the panel fires them.
     var onFocusLost: (() -> Void)? { get set }
@@ -138,5 +139,9 @@ final class CapturePanelAdapter: CapturePanelSurface {
         } else if panel.isVisible {
             panel.orderBack()
         }
+    }
+
+    func setCursorContextAvailable(_ available: Bool) {
+        panel.viewModel?.cursorContextAvailable = available
     }
 }

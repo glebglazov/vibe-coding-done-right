@@ -4,6 +4,13 @@ import Foundation
 /// No side effects, fully testable.
 public enum StyleTransformer {
     
+    /// Regex to detect sentence terminators at the end of text (followed by optional whitespace).
+    /// Matches: ".", "!", "?" at end of string with optional trailing whitespace.
+    private static let sentenceTerminatorPattern = try! NSRegularExpression(
+        pattern: #"[.!?]\s*$"#,
+        options: []
+    )
+    
     /// Transforms the input text according to the provided static style rules.
     ///
     /// This function:
@@ -15,8 +22,9 @@ public enum StyleTransformer {
     /// - Parameters:
     ///   - text: The input text to transform
     ///   - rules: The static style rules to apply
+    ///   - cursorContext: Cursor context for context-aware formatting (optional)
     /// - Returns: The transformed text
-    public static func transform(_ text: String, using rules: StaticStyleRules) -> String {
+    public static func transform(_ text: String, using rules: StaticStyleRules, cursorContext: CursorContext? = nil) -> String {
         // Handle empty or whitespace-only input
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
@@ -27,11 +35,22 @@ public enum StyleTransformer {
         let trailingWhitespace = extractTrailingWhitespace(from: text)
         let contentWithoutTrailingWhitespace = String(text.dropLast(trailingWhitespace.count))
         
+        // Determine how to handle leading edge capitalization based on context and style
+        let leadingEdgeAction = determineLeadingEdgeAction(cursorContext: cursorContext, capitalizeSentences: rules.capitalizeSentences)
+        
         // Apply sentence boundary detection and capitalization
-        var result = applyCapitalization(to: trimmed, capitalizeSentences: rules.capitalizeSentences)
+        var result = applyCapitalization(
+            to: trimmed,
+            capitalizeSentences: rules.capitalizeSentences,
+            leadingEdgeAction: leadingEdgeAction
+        )
         
         // Apply ending punctuation rules
         result = applyEndingPunctuation(to: result, rule: rules.endingPunctuation)
+        
+        // Prepend separator (period + space) if context doesn't end with whitespace or terminator
+        // This handles separate dictations being joined together
+        result = prependSeparatorIfNeeded(result, cursorContext: cursorContext)
         
         // Re-attach trailing whitespace after any ending punctuation processing
         if !trailingWhitespace.isEmpty {
@@ -42,6 +61,84 @@ public enum StyleTransformer {
         }
         
         return result
+    }
+    
+    /// Prepends a separator (period + space) to the result if the context doesn't end
+    /// with whitespace or a sentence terminator. This handles separate dictations being
+    /// joined together without explicit punctuation.
+    private static func prependSeparatorIfNeeded(_ text: String, cursorContext: CursorContext?) -> String {
+        guard let context = cursorContext else {
+            return text
+        }
+        
+        guard let beforeText = context.beforeText, !beforeText.isEmpty else {
+            return text
+        }
+        
+        // Check if context already ends with whitespace
+        if beforeText.hasSuffix(" ") || beforeText.hasSuffix("\t") || beforeText.hasSuffix("\n") {
+            return text
+        }
+        
+        // Check if context ends with sentence terminator
+        let nsRange = NSRange(beforeText.startIndex..., in: beforeText)
+        if sentenceTerminatorPattern.firstMatch(in: beforeText, options: [], range: nsRange) != nil {
+            // Ends with terminator - add just a space
+            return " " + text
+        }
+        
+        // Context doesn't end with whitespace or terminator - add period + space
+        return ". " + text
+    }
+    
+    /// Determines how the leading edge (first character) should be handled.
+    enum LeadingEdgeAction {
+        /// Apply the style's capitalization rule (capitalize or lowercase)
+        case applyStyleRule
+        /// Leave the first character untouched
+        case leaveUntouched
+    }
+    
+    /// Determines the leading edge action based on cursor context and style.
+    /// - Parameters:
+    ///   - cursorContext: The cursor context (may be nil)
+    ///   - capitalizeSentences: Whether the style capitalizes sentences (true=formal, false=casual)
+    /// - Returns: The action to take for the leading edge character
+    private static func determineLeadingEdgeAction(cursorContext: CursorContext?, capitalizeSentences: Bool) -> LeadingEdgeAction {
+        guard let context = cursorContext else {
+            // No context available - use current behavior (apply style rule)
+            return .applyStyleRule
+        }
+        
+        guard let beforeText = context.beforeText else {
+            // Context exists but beforeText is nil - treat as boundary (apply style rule)
+            return .applyStyleRule
+        }
+        
+        // Check if beforeText is empty or whitespace-only
+        let trimmedBefore = beforeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedBefore.isEmpty {
+            // Empty field or whitespace-only - this is a sentence boundary
+            return .applyStyleRule
+        }
+        
+        // Check if beforeText ends with sentence terminator (+ optional whitespace)
+        let nsRange = NSRange(beforeText.startIndex..., in: beforeText)
+        if sentenceTerminatorPattern.firstMatch(in: beforeText, options: [], range: nsRange) != nil {
+            // Ends with . ! or ? followed by optional whitespace - this is a sentence boundary
+            return .applyStyleRule
+        }
+        
+        // For casual mode (capitalizeSentences: false), always apply style rule to lowercase
+        // the first character, since casual mode should be consistently lowercase regardless
+        // of context. This also handles the case where casual mode removed a period from
+        // a previous dictation - we still want to lowercase subsequent dictations.
+        if !capitalizeSentences {
+            return .applyStyleRule
+        }
+        
+        // Formal mode: mid-sentence context (comma, word, etc.) - leave first character untouched
+        return .leaveUntouched
     }
     
     /// Extracts trailing whitespace from the text.
@@ -65,8 +162,13 @@ public enum StyleTransformer {
     /// - Parameters:
     ///   - text: The input text
     ///   - capitalizeSentences: true to capitalize, false to lowercase
+    ///   - leadingEdgeAction: How to handle the first character (context-aware)
     /// - Returns: Text with capitalization applied to sentence starts
-    private static func applyCapitalization(to text: String, capitalizeSentences: Bool) -> String {
+    private static func applyCapitalization(
+        to text: String,
+        capitalizeSentences: Bool,
+        leadingEdgeAction: LeadingEdgeAction = .applyStyleRule
+    ) -> String {
         guard !text.isEmpty else { return text }
         
         var result = text
@@ -75,8 +177,12 @@ public enum StyleTransformer {
         // Find all sentence boundaries and collect the positions where we need to transform
         var sentenceStarts: [String.Index] = []
         
-        // The first character is always a sentence start
-        sentenceStarts.append(result.startIndex)
+        // The first character is a sentence start only if we should apply the style rule
+        // If leadingEdgeAction is .leaveUntouched, we skip the first character
+        let shouldTransformLeadingEdge = leadingEdgeAction == .applyStyleRule
+        if shouldTransformLeadingEdge {
+            sentenceStarts.append(result.startIndex)
+        }
         
         // Find subsequent sentence starts using regex
         let matches = sentenceBoundaryPattern.matches(in: result, options: [], range: nsRange)

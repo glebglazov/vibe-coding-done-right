@@ -293,7 +293,7 @@ final class RecordingFlowCoordinator {
             let styledText = StyleTransformer.transform(processedText, using: currentTextStyle.style.staticRules)
             
             // Stage 4: Apply terminator (spacing)
-            let resultText = TextPostProcessor.applyTerminator(to: styledText)
+            let resultText = TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style)
 
             state = .complete(resultText)
             transcribingMessage = ""
@@ -470,7 +470,7 @@ final class RecordingFlowCoordinator {
             guard !Task.isCancelled else { return }
             // Re-apply style transformation and terminator on retry
             let styledText = StyleTransformer.transform(aiResult, using: currentTextStyle.style.staticRules)
-            state = .complete(TextPostProcessor.applyTerminator(to: styledText))
+            state = .complete(TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style))
         }
     }
 

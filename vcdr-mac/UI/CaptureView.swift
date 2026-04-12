@@ -25,6 +25,7 @@ struct CaptureView: View {
     private static let pillSpacing: CGFloat = 6
     private static let captureBadgeSize: CGFloat = 12
     private static let captureCountFontSize: CGFloat = 9
+    private static let cursorContextIconSize: CGFloat = 10
     var body: some View {
         if viewModel.isMinimized {
             minimizedPillView
@@ -37,6 +38,9 @@ struct CaptureView: View {
 
     private var minimizedPillView: some View {
         HStack(spacing: Self.pillSpacing) {
+            // Cursor context indicator (left-most)
+            cursorContextIndicator
+
             switch viewModel.phaseState.phase {
             case .idle:
                 Image(systemName: "text.cursor")
@@ -70,6 +74,26 @@ struct CaptureView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onTapGesture {
             viewModel.onPillTapped()
+        }
+    }
+
+    /// Shows whether cursor context capture is available for the current app.
+    /// Green checkmark = context capture available; Gray slash = not available.
+    @ViewBuilder
+    private var cursorContextIndicator: some View {
+        if viewModel.phaseState.phase == .recording {
+            Image(systemName: viewModel.cursorContextAvailable ? "checkmark.circle.fill" : "slash.circle")
+                .font(.system(size: Self.cursorContextIconSize))
+                .foregroundStyle(viewModel.cursorContextAvailable ? .green : .secondary)
+                .help(cursorContextTooltip)
+        }
+    }
+
+    private var cursorContextTooltip: String {
+        if viewModel.cursorContextAvailable {
+            return "Cursor context capture is active. The app will use surrounding text for smart formatting."
+        } else {
+            return "Cursor context capture is unavailable for this app. Smart formatting will use default behavior."
         }
     }
 

@@ -96,6 +96,9 @@ enum BuiltInPrompts {
         **CAPTURE TAGS:**
         - Preserve <capture id="N">...</capture> blocks byte-for-byte
 
+        **CURSOR CONTEXT:**
+        - When <cursor_context> is present, use it to ensure the dictated text flows naturally with the surrounding text (capitalization, punctuation, grammar).
+
         **OUTPUT:**
         - Return ONLY the cleaned text. No preamble, no explanation.
         - Works in any language.

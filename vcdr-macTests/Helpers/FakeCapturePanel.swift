@@ -27,6 +27,7 @@ final class FakeCapturePanel: CapturePanelSurface {
         case setAIProcessingError(String)
         case signalClipboardCapture
         case setSuspendedForModeSwitcher(Bool)
+        case setCursorContextAvailable(Bool)
     }
 
     private(set) var calls: [Call] = []
@@ -94,6 +95,10 @@ final class FakeCapturePanel: CapturePanelSurface {
 
     func setSuspendedForModeSwitcher(_ suspended: Bool) {
         calls.append(.setSuspendedForModeSwitcher(suspended))
+    }
+
+    func setCursorContextAvailable(_ available: Bool) {
+        calls.append(.setCursorContextAvailable(available))
     }
 
     // MARK: - Callbacks (set by CaptureSession, fired by tests)

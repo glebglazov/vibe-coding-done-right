@@ -11,20 +11,26 @@ enum TextPostProcessor {
         FillerWordRemover.remove(from: text)
     }
 
-    /// Appends spacing (terminator) to the text. If the text ends
-    /// with sentence-ending punctuation, a space is appended. Otherwise,
-    /// the text is returned as-is. Period handling is done by StyleTransformer.
-    static func applyTerminator(to text: String) -> String {
+    /// Appends spacing (terminator) to the text.
+    /// Always adds a trailing space so the user can continue typing/dictating.
+    /// If the text doesn't end with punctuation, adds ". " for formal style compatibility.
+    static func applyTerminator(to text: String, style: Style? = nil) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let last = trimmed.last else { return text }
 
-        // Only add spacing if text already ends with punctuation.
-        // Periods are added/removed by StyleTransformer based on style.
+        // If text already ends with sentence-ending punctuation, just add space
         if sentenceEndingPunctuation.contains(last) {
             return trimmed + " "
         }
 
-        return trimmed
+        // For formal style, add period + space since StyleTransformer would have added period
+        // For casual style, just add space (no period)
+        if let style = style, style.staticRules.endingPunctuation == .addIfAbsent {
+            return trimmed + ". "
+        }
+
+        // Casual style or no style specified - just add space
+        return trimmed + " "
     }
 
     /// Full pipeline: filler removal + terminator. Convenience for callers

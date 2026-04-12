@@ -211,6 +211,11 @@ extension CaptureSession {
         immediateActionTask = nil
 
         panel.dismiss()
+
+        // Set status to idle BEFORE showing success indicator so user can
+        // immediately start a new recording while the indicator is visible
+        setStatus(.idle)
+
         indicator.showSuccess(destinationName: snapshot.destination.name.lowercased())
 
         finalizeHistory(
@@ -219,7 +224,6 @@ extension CaptureSession {
             hadExternalProcessing: hadExternalProcessing
         )
         overrides.markPipelineCompleted()
-        setStatus(.idle)
         emit(
             .executed,
             finalText: processedText,
@@ -276,7 +280,8 @@ extension CaptureSession {
             removeFillerWords: original.pipelineContext.removeFillerWords,
             terminatorTemplateEnabled: original.pipelineContext.terminatorTemplateEnabled,
             terminatorTemplate: original.pipelineContext.terminatorTemplate,
-            style: original.pipelineContext.style
+            style: original.pipelineContext.style,
+            cursorContext: original.pipelineContext.cursorContext
         )
         let overriddenSnapshot = SubmissionSnapshot(
             pipelineContext: overriddenContext,
@@ -323,7 +328,8 @@ extension CaptureSession {
                 // Apply style transformation after AI processing (before terminator)
                 processedText = StyleTransformer.transform(
                     processedText,
-                    using: snapshot.pipelineContext.style.staticRules
+                    using: snapshot.pipelineContext.style.staticRules,
+                    cursorContext: snapshot.pipelineContext.cursorContext
                 )
 
                 if snapshot.pipelineContext.terminatorTemplateEnabled {
@@ -409,7 +415,8 @@ extension CaptureSession {
                 removeFillerWords: settings.removeFillerWords,
                 terminatorTemplateEnabled: settings.terminatorTemplateEnabled,
                 terminatorTemplate: settings.terminatorTemplate,
-                style: effectiveStyle
+                style: effectiveStyle,
+                cursorContext: runState.cursorContext
             ),
             mode: mode,
             inputSegments: segments,

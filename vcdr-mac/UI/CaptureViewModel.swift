@@ -42,6 +42,10 @@ final class CaptureViewModel {
     /// the CapturePanel from auto-dismissing when it loses focus to the mode switcher.
     @ObservationIgnored var isSuspendedForModeSwitcher: Bool = false
 
+    /// Indicates whether cursor context capture is available for the current app.
+    /// Updated when recording starts based on frontmost app's AX support.
+    var cursorContextAvailable: Bool = false
+
     /// Convenience forwarders
     var isRecording: Bool { phaseState.isRecording }
     var isProcessing: Bool { phaseState.isProcessing }

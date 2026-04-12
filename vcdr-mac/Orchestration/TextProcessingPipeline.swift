@@ -37,13 +37,14 @@ enum TextProcessingPipeline {
         terminatorTemplateEnabled: Bool = false,
         terminatorTemplate: String = "",
         aiPort: any AIProcessingPort = AIProcessingAdapter(),
-        style: Style = .casual
+        style: Style = .casual,
+        cursorContext: CursorContext? = nil
     ) async throws -> PipelineResult {
         // MARK: Algorithmic pre-processing — speech cleanup
         let cleanedText = removeFillerWords ? FillerWordRemover.remove(from: text) : text
 
         // MARK: External processing — content processing
-        let structured = structureInput(text: cleanedText, captures: captures, mode: mode, style: style)
+        let structured = structureInput(text: cleanedText, captures: captures, mode: mode, style: style, cursorContext: cursorContext)
         let result: PipelineResult
 
         switch mode.processingType {
@@ -101,7 +102,7 @@ enum TextProcessingPipeline {
         }
 
         // MARK: Style transformation — capitalization, punctuation (final step before terminator)
-        let styledText = StyleTransformer.transform(result.text, using: style.staticRules)
+        let styledText = StyleTransformer.transform(result.text, using: style.staticRules, cursorContext: cursorContext)
 
         // MARK: Algorithmic post-processing — output formatting
         let finalText = terminatorTemplateEnabled
@@ -124,7 +125,8 @@ enum TextProcessingPipeline {
         text: String,
         captures: [CapturedContext],
         mode: Mode,
-        style: Style
+        style: Style,
+        cursorContext: CursorContext?
     ) -> String {
         switch mode.processingType {
         case .none:
@@ -132,17 +134,18 @@ enum TextProcessingPipeline {
         case .cloudAI:
             // Cloud AI: XML structure WITHOUT system prompt in the text
             // (system prompt is sent as a separate API parameter)
-            return structureInputXML(text: text, captures: captures, systemPrompt: nil)
+            return structureInputXML(text: text, captures: captures, systemPrompt: nil, cursorContext: cursorContext)
         case .localAgent:
             let prompt = AIProcessingAdapter.resolvePrompt(mode)
             // Append style dynamic prompt for AI modes (macOS only)
             let promptWithStyle = AIStylePromptAppender.appendStylePrompt(to: prompt, style: style)
             return structureInputXML(text: text, captures: captures,
-                                     systemPrompt: promptWithStyle.isEmpty ? nil : promptWithStyle)
+                                     systemPrompt: promptWithStyle.isEmpty ? nil : promptWithStyle,
+                                     cursorContext: cursorContext)
         case .bashScript:
             let prompt = (mode.systemPromptEnabled && !mode.systemPrompt.isEmpty)
                 ? mode.systemPrompt : nil
-            return structureInputXML(text: text, captures: captures, systemPrompt: prompt)
+            return structureInputXML(text: text, captures: captures, systemPrompt: prompt, cursorContext: cursorContext)
         }
     }
 
@@ -162,13 +165,23 @@ enum TextProcessingPipeline {
     }
 
     /// XML input structuring for .cloudAI/.localAgent/.bashScript — <dictation> wrapping,
-    /// optional system prompt, and XML capture tags for machine-parseable input.
+    /// optional system prompt, cursor context, and XML capture tags for machine-parseable input.
     private static func structureInputXML(
         text: String,
         captures: [CapturedContext],
-        systemPrompt: String?
+        systemPrompt: String?,
+        cursorContext: CursorContext?
     ) -> String {
-        var result = "<dictation>\(text)</dictation>"
+        var result = ""
+
+        // Add cursor context if available
+        if let context = cursorContext {
+            result += formatCursorContextXML(context)
+            result += "\n"
+        }
+
+        result += "<dictation>\(text)</dictation>"
+
         if let prompt = systemPrompt, !prompt.isEmpty {
             result = prompt + "\n\n" + result
         }
@@ -176,5 +189,31 @@ enum TextProcessingPipeline {
             result += "\n\n" + Mode.formatCaptures(captures)
         }
         return result
+    }
+
+    /// Formats cursor context as XML, escaping special characters.
+    /// Only includes child tags when their values are non-nil.
+    private static func formatCursorContextXML(_ context: CursorContext) -> String {
+        var xml = "<cursor_context>"
+
+        if let before = context.beforeText {
+            xml += "\n  <before>\(escapeXML(before))</before>"
+        }
+        if let after = context.afterText {
+            xml += "\n  <after>\(escapeXML(after))</after>"
+        }
+
+        xml += "\n</cursor_context>"
+        return xml
+    }
+
+    /// Escapes special XML characters: &, <, >, ", '
+    private static func escapeXML(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
     }
 }

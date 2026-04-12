@@ -68,8 +68,22 @@ extension CaptureSession {
         let capturer = selectionCapturer
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
-        run?.captureTask = Task {
-            guard let text = await capturer.capture(bundleIdentifier: bundleID, pid: pid) else {
+        run?.captureTask = Task { [weak self] in
+            let result = await capturer.capture(bundleIdentifier: bundleID, pid: pid)
+
+            // Store cursor context immediately (will be nil if unavailable)
+            await MainActor.run {
+                self?.run?.cursorContext = result.cursorContext
+                // Report availability to the panel for UI indicator
+                let isAvailable = result.cursorContext != nil
+                self?.panel.setCursorContextAvailable(isAvailable)
+                Logger.recording.info("Cursor context capture: \(isAvailable ? "available" : "unavailable")")
+
+                // Set up observer for app switches during recording
+                self?.setupAppSwitchObserver(initialBundleID: bundleID)
+            }
+
+            guard let text = result.selectedText else {
                 Logger.recording.info("Toggle-record: no selection captured")
                 return nil
             }
@@ -305,6 +319,47 @@ extension CaptureSession {
         switch status.phase {
         case .preparingToRecord, .transcribing: true
         default: false
+        }
+    }
+
+    // MARK: - App Switch Observer
+
+    /// Sets up an observer to detect when user switches apps during recording.
+    /// If the app changes, cursor context becomes stale and the indicator updates.
+    private func setupAppSwitchObserver(initialBundleID: String?) {
+        guard initialBundleID != nil else {
+            // If we didn't get a bundle ID initially, don't bother observing
+            return
+        }
+
+        let observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self,
+                  let run = self.run,
+                  let currentApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  let currentBundleID = currentApp.bundleIdentifier else {
+                return
+            }
+
+            // Check if app changed from the one we captured context from
+            if currentBundleID != initialBundleID {
+                // User switched apps - context is now stale
+                self.panel.setCursorContextAvailable(false)
+                Logger.recording.info("User switched apps during recording - cursor context is now stale")
+            }
+        }
+
+        run?.appSwitchObserver = observer
+    }
+
+    /// Removes the app switch observer if one was set up.
+    private func removeAppSwitchObserver() {
+        if let observer = run?.appSwitchObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            run?.appSwitchObserver = nil
         }
     }
 }
