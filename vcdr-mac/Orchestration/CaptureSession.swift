@@ -108,7 +108,7 @@ final class CaptureSession {
         let clipboardMonitor: ClipboardMonitor
         let indicator: RecordingIndicatorPanel
         let panel: any CapturePanelSurface
-        let ai: any AIProcessingPort
+        let textProcessor: TextProcessor
         /// The session owns destination overrides per-run, but
         /// `ModeSwitcherCoordinator` + `RecordingIndicatorPanel` still need
         /// shared read/write access to parameter overrides — so the same
@@ -138,7 +138,7 @@ final class CaptureSession {
     let clipboardMonitor: ClipboardMonitor
     let indicator: RecordingIndicatorPanel
     let panel: any CapturePanelSurface
-    let ai: any AIProcessingPort
+    let textProcessor: TextProcessor
     let overrides: SessionOverrides
     var styleProvider: @MainActor @Sendable () -> Style
 
@@ -174,16 +174,8 @@ final class CaptureSession {
     @ObservationIgnored var run: RunState?
     @ObservationIgnored var accumulatedClipboardCaptures: [CapturedContext] = []
 
-    /// Pending preview state — populated when we show a preview and wait for user confirmation.
-    struct PendingPreview {
-        var snapshot: SubmissionSnapshot
-        var processedText: String
-        /// The exact structured text passed to the AI port on the failed attempt —
-        /// non-nil only when the preview is showing because AI processing failed.
-        /// The retry replays this string through the same port call.
-        var aiRetryStructuredText: String?
-    }
-    @ObservationIgnored var pendingPreview: PendingPreview?
+    /// Opaque handle from TextProcessor — stored while awaiting preview confirmation.
+    @ObservationIgnored var pendingPreview: PreviewHandle?
 
     // MARK: - Cancellable tasks (all torn down in deinit)
 
@@ -218,7 +210,7 @@ final class CaptureSession {
         self.clipboardMonitor = deps.clipboardMonitor
         self.indicator = deps.indicator
         self.panel = deps.panel
-        self.ai = deps.ai
+        self.textProcessor = deps.textProcessor
         self.overrides = deps.overrides
         self.styleProvider = deps.styleProvider
         wirePanelCallbacks()

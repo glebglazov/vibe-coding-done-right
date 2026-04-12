@@ -236,12 +236,8 @@ extension CaptureSession {
         immediateActionTask?.cancel()
         immediateActionTask = nil
 
-        if saveToHistory, let pending = pendingPreview {
-            finalizeHistory(
-                snapshot: pending.snapshot,
-                processedText: pending.processedText,
-                hadExternalProcessing: pending.snapshot.mode.processingType != .none
-            )
+        if saveToHistory, let handle = pendingPreview {
+            textProcessor.recordDismissedPreview(handle)
         }
 
         pendingPreview = nil
@@ -261,7 +257,7 @@ extension CaptureSession {
         cancelHotkey.isEnabled = false
 
         if let pending = pendingPreview,
-           let conversation = history.conversations.first(where: { $0.id == pending.snapshot.conversationID }) {
+           let conversation = history.conversations.first(where: { $0.id == pending.input.conversationID }) {
             history.removeConversation(conversation)
             Logger.app.info("Capture cancelled and removed from history")
         }

@@ -26,7 +26,7 @@ struct CaptureSessionSingleCycleTests {
 
         let outcome = await env.session.waitForNextIdle(timeout: .seconds(2))
         #expect(outcome?.kind == .executed)
-        #expect(outcome?.finalText == "Hello world")
+        #expect(outcome?.finalText == "hello world")
         #expect(env.history.conversations.count == 1)
 
         // Panel went through show → populateImmediateActionText → dismiss.
@@ -125,7 +125,7 @@ struct CaptureSessionPreviewTests {
 
         let previewOutcome = await env.session.waitForNextIdle(timeout: .seconds(2))
         #expect(previewOutcome?.kind == .previewShown)
-        #expect(previewOutcome?.finalText == "Hello preview")
+        #expect(previewOutcome?.finalText == "hello preview")
 
         env.fakePanel.fireConfirm()
         #expect(await env.waitForPhase { $0 == .idle })

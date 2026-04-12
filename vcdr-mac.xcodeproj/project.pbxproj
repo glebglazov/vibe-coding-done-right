@@ -28,7 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		E5D6B81A2F466C82002066AA /* vcdr-mac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "vcdr-mac.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5D6B81A2F466C82002066AA /* vcdr-mac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "vcdr-mac.app"; path = VCDR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E5D6B8272F466C83002066AA /* vcdr-macTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "vcdr-macTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E5D6B8312F466C83002066AA /* vcdr-macUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "vcdr-macUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -432,6 +432,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = glebglazov.vcdr;
+				PRODUCT_MODULE_NAME = vcdr_mac;
 				PRODUCT_NAME = VCDR;
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -462,6 +463,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = glebglazov.vcdr;
+				PRODUCT_MODULE_NAME = vcdr_mac;
 				PRODUCT_NAME = VCDR;
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -492,7 +494,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vcdr-mac.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vcdr-mac";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VCDR.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VCDR";
 			};
 			name = Debug;
 		};
@@ -514,7 +516,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/vcdr-mac.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/vcdr-mac";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VCDR.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/VCDR";
 			};
 			name = Release;
 		};

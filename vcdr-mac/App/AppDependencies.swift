@@ -98,6 +98,16 @@ final class AppDependencies {
         // Create capture panel early so it's available for session initialization and delegate wiring
         let capturePanel = CapturePanel()
 
+        // TextProcessor owns the processing pipeline — injected into the session.
+        // styleProvider will be updated after init to break the circular reference.
+        let textProcessor = TextProcessor(
+            aiPort: AIProcessingAdapter(),
+            history: history,
+            settings: settings,
+            overrides: overrides,
+            styleProvider: { .casual }  // Temporary, will be updated after init
+        )
+
         // Session initialization (comes after styleOverrideController due to delegate dependency)
         // Note: styleProvider will be set after initialization to avoid circular reference
         let captureSession = CaptureSession(
@@ -111,7 +121,7 @@ final class AppDependencies {
                 clipboardMonitor: clipboardMonitor,
                 indicator: recordingIndicator,
                 panel: CapturePanelAdapter(capturePanel),
-                ai: AIProcessingAdapter(),
+                textProcessor: textProcessor,
                 overrides: overrides,
                 styleProvider: { .casual }  // Temporary, will be updated after init
             )
@@ -125,9 +135,11 @@ final class AppDependencies {
         setupStyleResolutionCallbacks()
 
         // Update the style provider now that self is fully initialized
-        captureSession.setStyleProvider { [weak self] in
+        let styleProviderClosure: @MainActor @Sendable () -> Style = { [weak self] in
             self?.styleOverrideController.currentEffectiveStyle ?? .casual
         }
+        captureSession.setStyleProvider(styleProviderClosure)
+        textProcessor.setStyleProvider(styleProviderClosure)
     }
 
     // MARK: - Style Override Integration

@@ -22,6 +22,7 @@ struct CaptureSessionTestEnvironment {
     let scriptedAI: ScriptedAIProcessing
     let mockProvider: MockTranscriptionProvider
     let audioRecorder: AudioRecorder
+    let textProcessor: TextProcessor
 
     private let userDefaultsSuiteName: String
 
@@ -77,7 +78,9 @@ struct CaptureSessionTestEnvironment {
         #endif
         self.audioRecorder = audioRecorder
 
-        let history = TranscriptionHistory()
+        let historyDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vcdr-test-\(UUID().uuidString)")
+        let history = TranscriptionHistory(directory: historyDir)
         self.history = history
 
         let overrides = SessionOverrides()
@@ -88,6 +91,15 @@ struct CaptureSessionTestEnvironment {
         )
         let fakePanel = FakeCapturePanel()
         self.fakePanel = fakePanel
+
+        let textProcessor = TextProcessor(
+            aiPort: scriptedAI,
+            history: history,
+            settings: settings,
+            overrides: overrides,
+            styleProvider: { .casual }
+        )
+        self.textProcessor = textProcessor
 
         self.session = CaptureSession(
             settings: settings,
@@ -100,7 +112,7 @@ struct CaptureSessionTestEnvironment {
                 clipboardMonitor: ClipboardMonitor(),
                 indicator: recordingIndicator,
                 panel: fakePanel,
-                ai: scriptedAI,
+                textProcessor: textProcessor,
                 overrides: overrides,
                 styleProvider: { .casual }
             )
