@@ -9,8 +9,16 @@ VCDR is a minimal macOS menu bar voice transcription app. Toggle a global hotkey
 ## Build
 
 ```bash
-xcodebuild -scheme vcdr -destination 'platform=macOS' build
+xcodebuild -scheme vcdr-mac -destination 'platform=macOS' build
 ```
+
+## Test
+
+```bash
+xcodebuild test -scheme vcdr-mac -destination 'platform=macOS' -parallel-testing-enabled NO -quiet
+```
+
+`-parallel-testing-enabled NO` is required. CaptureSession tests use audio devices, AX, and clipboard — system-wide singletons that crash under concurrent access when Xcode spawns multiple test runner processes.
 
 ## Project Structure
 
