@@ -13,4 +13,5 @@ extension Logger {
     static let ui = Logger(subsystem: subsystem, category: "ui")
     static let consistency = Logger(subsystem: subsystem, category: "consistency")
     static let styles = Logger(subsystem: subsystem, category: "styles")
+    static let textTransform = Logger(subsystem: subsystem, category: "textTransform")
 }

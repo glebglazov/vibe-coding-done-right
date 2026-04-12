@@ -43,12 +43,24 @@ enum TextProcessingPipeline {
         // MARK: Algorithmic pre-processing — speech cleanup
         let cleanedText = removeFillerWords ? FillerWordRemover.remove(from: text) : text
 
+        Logger.textTransform.info("Pipeline input: \"\(text)\"")
+        if removeFillerWords && cleanedText != text {
+            Logger.textTransform.info("After filler removal: \"\(cleanedText)\"")
+        }
+        if let ctx = cursorContext {
+            Logger.textTransform.info("Cursor context — before: \"\(ctx.beforeText ?? "<nil>")\", after: \"\(ctx.afterText ?? "<nil>")\"")
+        } else {
+            Logger.textTransform.info("Cursor context: nil")
+        }
+
         // MARK: External processing — content processing
         let structured = structureInput(text: cleanedText, captures: captures, mode: mode, style: style, cursorContext: cursorContext)
+        Logger.textTransform.debug("Structured input for \(mode.processingType.rawValue):\n\(structured)")
         let result: PipelineResult
 
         switch mode.processingType {
         case .none:
+            Logger.textTransform.debug("Processing type: none (passthrough)")
             result = PipelineResult(text: structured, hadExternalProcessing: false, aiProcessingFallback: nil)
 
         case .cloudAI:
@@ -58,6 +70,7 @@ enum TextProcessingPipeline {
                     mode: mode,
                     variableEnvironment: variableEnvironment
                 )
+                Logger.textTransform.info("AI output: \"\(processedText)\"")
                 result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
             } catch {
                 Logger.app.warning("AI processing failed, falling back to raw text: \(error)")
@@ -85,6 +98,7 @@ enum TextProcessingPipeline {
                 text: structured,
                 extraEnvironment: combinedEnv
             )
+            Logger.textTransform.info("Local agent output: \"\(processedText)\"")
             result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
 
         case .bashScript:
@@ -98,16 +112,24 @@ enum TextProcessingPipeline {
                 text: structured,
                 extraEnvironment: combinedEnv
             )
+            Logger.textTransform.info("Bash script output: \"\(processedText)\"")
             result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
         }
 
         // MARK: Style transformation — capitalization, punctuation (final step before terminator)
         let styledText = StyleTransformer.transform(result.text, using: style.staticRules, cursorContext: cursorContext)
+        if styledText != result.text {
+            Logger.textTransform.info("After style transform: \"\(styledText)\"")
+        } else {
+            Logger.textTransform.debug("Style transform: no change")
+        }
 
         // MARK: Algorithmic post-processing — output formatting
         let finalText = terminatorTemplateEnabled
             ? Mode.applyTerminator(styledText, terminator: terminatorTemplate)
             : styledText
+
+        Logger.textTransform.info("Pipeline final output: \"\(finalText)\"")
 
         return PipelineResult(
             text: finalText,

@@ -77,10 +77,17 @@ enum SubmissionPipeline {
                   let sourceBundleID = cursorContext.sourceBundleID,
                   let targetPID = context.targetAppPID,
                   let targetApp = NSRunningApplication(processIdentifier: targetPID) else {
+                Logger.textTransform.debug("Cursor context staleness check: skipped (missing context/bundleID/targetApp)")
                 return context.cursorContext
             }
             // Compare bundle IDs - if they differ, user switched apps during recording
-            return sourceBundleID == targetApp.bundleIdentifier ? cursorContext : nil
+            if sourceBundleID == targetApp.bundleIdentifier {
+                Logger.textTransform.debug("Cursor context staleness check: passed (source=\(sourceBundleID))")
+                return cursorContext
+            } else {
+                Logger.textTransform.info("Cursor context discarded: stale (source=\(sourceBundleID), target=\(targetApp.bundleIdentifier ?? "nil"))")
+                return nil
+            }
         }()
 
         let pipelineResult = try await TextProcessingPipeline.run(

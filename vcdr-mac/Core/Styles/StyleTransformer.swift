@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Pure function module for transforming text according to style rules.
 /// No side effects, fully testable.
@@ -37,7 +38,8 @@ public enum StyleTransformer {
         
         // Determine how to handle leading edge capitalization based on context and style
         let leadingEdgeAction = determineLeadingEdgeAction(cursorContext: cursorContext, capitalizeSentences: rules.capitalizeSentences)
-        
+        Logger.textTransform.debug("StyleTransformer — input: \"\(text)\", capitalize: \(rules.capitalizeSentences), punctuation: \(String(describing: rules.endingPunctuation)), leadingEdge: \(String(describing: leadingEdgeAction))")
+
         // Apply sentence boundary detection and capitalization
         var result = applyCapitalization(
             to: trimmed,
@@ -45,12 +47,16 @@ public enum StyleTransformer {
             leadingEdgeAction: leadingEdgeAction
         )
         
+        Logger.textTransform.debug("StyleTransformer — after capitalization: \"\(result)\"")
+
         // Apply ending punctuation rules
         result = applyEndingPunctuation(to: result, rule: rules.endingPunctuation)
-        
+        Logger.textTransform.debug("StyleTransformer — after punctuation: \"\(result)\"")
+
         // Prepend separator (period + space) if context doesn't end with whitespace or terminator
         // This handles separate dictations being joined together
         result = prependSeparatorIfNeeded(result, cursorContext: cursorContext)
+        Logger.textTransform.debug("StyleTransformer — after separator: \"\(result)\"")
         
         // Re-attach trailing whitespace after any ending punctuation processing
         if !trailingWhitespace.isEmpty {
@@ -68,26 +74,30 @@ public enum StyleTransformer {
     /// joined together without explicit punctuation.
     private static func prependSeparatorIfNeeded(_ text: String, cursorContext: CursorContext?) -> String {
         guard let context = cursorContext else {
+            Logger.textTransform.debug("Separator: none (no cursor context)")
             return text
         }
-        
+
         guard let beforeText = context.beforeText, !beforeText.isEmpty else {
+            Logger.textTransform.debug("Separator: none (empty/nil beforeText)")
             return text
         }
-        
+
         // Check if context already ends with whitespace
         if beforeText.hasSuffix(" ") || beforeText.hasSuffix("\t") || beforeText.hasSuffix("\n") {
+            Logger.textTransform.debug("Separator: none (before ends with whitespace)")
             return text
         }
-        
+
         // Check if context ends with sentence terminator
         let nsRange = NSRange(beforeText.startIndex..., in: beforeText)
         if sentenceTerminatorPattern.firstMatch(in: beforeText, options: [], range: nsRange) != nil {
-            // Ends with terminator - add just a space
+            Logger.textTransform.debug("Separator: space (before ends with terminator)")
             return " " + text
         }
-        
+
         // Context doesn't end with whitespace or terminator - add period + space
+        Logger.textTransform.debug("Separator: \". \" (before ends mid-sentence)")
         return ". " + text
     }
     
@@ -106,38 +116,40 @@ public enum StyleTransformer {
     /// - Returns: The action to take for the leading edge character
     private static func determineLeadingEdgeAction(cursorContext: CursorContext?, capitalizeSentences: Bool) -> LeadingEdgeAction {
         guard let context = cursorContext else {
-            // No context available - use current behavior (apply style rule)
+            Logger.textTransform.debug("Leading edge: applyStyleRule (no cursor context)")
             return .applyStyleRule
         }
-        
+
         guard let beforeText = context.beforeText else {
-            // Context exists but beforeText is nil - treat as boundary (apply style rule)
+            Logger.textTransform.debug("Leading edge: applyStyleRule (beforeText nil)")
             return .applyStyleRule
         }
-        
+
         // Check if beforeText is empty or whitespace-only
         let trimmedBefore = beforeText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedBefore.isEmpty {
-            // Empty field or whitespace-only - this is a sentence boundary
+            Logger.textTransform.debug("Leading edge: applyStyleRule (empty/whitespace before)")
             return .applyStyleRule
         }
-        
+
         // Check if beforeText ends with sentence terminator (+ optional whitespace)
         let nsRange = NSRange(beforeText.startIndex..., in: beforeText)
         if sentenceTerminatorPattern.firstMatch(in: beforeText, options: [], range: nsRange) != nil {
-            // Ends with . ! or ? followed by optional whitespace - this is a sentence boundary
+            Logger.textTransform.debug("Leading edge: applyStyleRule (sentence terminator before)")
             return .applyStyleRule
         }
-        
+
         // For casual mode (capitalizeSentences: false), always apply style rule to lowercase
         // the first character, since casual mode should be consistently lowercase regardless
         // of context. This also handles the case where casual mode removed a period from
         // a previous dictation - we still want to lowercase subsequent dictations.
         if !capitalizeSentences {
+            Logger.textTransform.debug("Leading edge: applyStyleRule (casual mode)")
             return .applyStyleRule
         }
-        
+
         // Formal mode: mid-sentence context (comma, word, etc.) - leave first character untouched
+        Logger.textTransform.debug("Leading edge: leaveUntouched (formal, mid-sentence)")
         return .leaveUntouched
     }
     
