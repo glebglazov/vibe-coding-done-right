@@ -11,7 +11,6 @@ private func makeProcessor(
 ) -> (TextProcessor, TranscriptionHistory, ScriptedAIProcessing, AppSettings) {
     let defaults = UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
     let s = settings ?? AppSettings(userDefaults: defaults)
-    s.terminatorTemplateEnabled = false
     s.removeFillerWords = false
     let historyDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("vcdr-test-\(UUID().uuidString)")
@@ -35,9 +34,7 @@ private func makeInput(
     processingType: ProcessingType = .none,
     showPreview: Bool = false,
     hadDestinationOverride: Bool = false,
-    style: Style = .casual,
-    terminatorTemplateEnabled: Bool = false,
-    terminatorTemplate: String = ""
+    style: Style = .casual
 ) -> TranscriptionInput {
     let m = mode ?? Mode(
         id: UUID(),
@@ -58,8 +55,6 @@ private func makeInput(
         inputSegments: [InputSegment(text: text)],
         hadDestinationOverride: hadDestinationOverride,
         removeFillerWords: false,
-        terminatorTemplateEnabled: terminatorTemplateEnabled,
-        terminatorTemplate: terminatorTemplate,
         style: style,
         saveResultToClipboard: false
     )
@@ -95,8 +90,8 @@ struct TextProcessorHappyPathTests {
             Issue.record("Expected .execute, got \(disposition)")
             return
         }
-        // Casual style lowercases
-        #expect(result.text == "hello world")
+        // Casual style: lowercase + trailing space
+        #expect(result.text == "hello world ")
         #expect(result.destinationName == "copy")
         #expect(history.conversations.count == 1)
     }
@@ -112,7 +107,7 @@ struct TextProcessorHappyPathTests {
             Issue.record("Expected .preview, got \(disposition)")
             return
         }
-        #expect(handle.displayText == "hello world")
+        #expect(handle.displayText == "hello world ")
         #expect(handle.aiErrorMessage == nil)
         // History not recorded until confirm
         #expect(history.conversations.isEmpty)
@@ -188,19 +183,14 @@ struct TextProcessorAITests {
         #expect(callsAfter[0].structuredText == callsAfter[1].structuredText)
     }
 
-    @Test("Style transform + terminator applied on retry path (no drift)")
+    @Test("Style transform applied on retry path (no drift)")
     @MainActor
     func retryAppliesPostProcessing() async throws {
         struct TestError: Error { }
         let (processor, _, _, _) = makeProcessor(
             aiResults: [.failure(TestError()), .success("hello world")]
         )
-        let input = makeInput(
-            processingType: .cloudAI,
-            style: .casual,
-            terminatorTemplateEnabled: true,
-            terminatorTemplate: "<newline>"
-        )
+        let input = makeInput(processingType: .cloudAI, style: .casual)
 
         let firstDisposition = try await processor.process(input)
         guard case .preview(let handle) = firstDisposition else {
@@ -213,10 +203,8 @@ struct TextProcessorAITests {
             Issue.record("Expected .preview after retry")
             return
         }
-        // Casual style lowercases, casual removeFinalDot leaves no trailing period,
-        // and terminator only fires when text ends with punctuation — so no newline.
-        // The key assertion: retry applied the SAME transforms as initial path.
-        #expect(newHandle.displayText == "hello world")
+        // Casual style: lowercase + trailing space
+        #expect(newHandle.displayText == "hello world ")
     }
 }
 

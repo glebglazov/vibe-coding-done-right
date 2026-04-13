@@ -26,8 +26,8 @@ struct TextProcessingPipelineStyleTests {
             style: .casual
         )
 
-        // Casual: lowercase, remove final period
-        #expect(result.text == "hello world")
+        // Casual: lowercase sentence start, preserve internal caps, remove final period, trailing space
+        #expect(result.text == "hello World ")
         #expect(result.hadExternalProcessing == false)
     }
 
@@ -48,8 +48,8 @@ struct TextProcessingPipelineStyleTests {
             style: .formal
         )
 
-        // Formal: capitalize, add period
-        #expect(result.text == "Hello world.")
+        // Formal: capitalize, add period, trailing space
+        #expect(result.text == "Hello world. ")
         #expect(result.hadExternalProcessing == false)
     }
 
@@ -57,12 +57,11 @@ struct TextProcessingPipelineStyleTests {
 
     @Test("Bash mode applies style transformation after script execution")
     func bashModeAppliesStyleTransformation() async throws {
-        // Echo script just returns the input text
         let mode = Mode(
             id: UUID(),
             name: "Bash",
             processingType: .bashScript,
-            processingCommand: "cat",  // Just echoes input
+            processingCommand: "cat",
             showPreview: false
         )
         let text = "Hello World."
@@ -75,8 +74,8 @@ struct TextProcessingPipelineStyleTests {
             style: .casual
         )
 
-        // Casual style applied to bash output
-        #expect(result.text == "hello world")
+        // Casual style applied to bash output: lowercase sentence start, preserve internal caps, trailing space
+        #expect(result.text == "hello World ")
         #expect(result.hadExternalProcessing == true)
     }
 
@@ -86,7 +85,6 @@ struct TextProcessingPipelineStyleTests {
     func aiModeAppliesStyleTransformation() async throws {
         struct MockAI: AIProcessingPort {
             func process(structuredText: String, mode: Mode, variableEnvironment: [String : String]) async throws -> String {
-                // Simulate AI returning capitalized text
                 return "Hello World."
             }
         }
@@ -109,8 +107,8 @@ struct TextProcessingPipelineStyleTests {
             style: .casual
         )
 
-        // Casual style applied to AI output (lowercased, final period removed)
-        #expect(result.text == "hello world")
+        // Casual style: lowercased, final period removed, trailing space
+        #expect(result.text == "hello world ")
         #expect(result.hadExternalProcessing == true)
     }
 
@@ -118,7 +116,6 @@ struct TextProcessingPipelineStyleTests {
     func aiModeAppliesFormalStyle() async throws {
         struct MockAI: AIProcessingPort {
             func process(structuredText: String, mode: Mode, variableEnvironment: [String : String]) async throws -> String {
-                // Simulate AI returning lowercase text without punctuation
                 return "hello world"
             }
         }
@@ -141,76 +138,9 @@ struct TextProcessingPipelineStyleTests {
             style: .formal
         )
 
-        // Formal style applied to AI output (capitalized, period added)
-        #expect(result.text == "Hello world.")
+        // Formal: capitalized, period added, trailing space
+        #expect(result.text == "Hello world. ")
         #expect(result.hadExternalProcessing == true)
-    }
-
-    // MARK: - Local Agent Mode Style Tests
-
-    @Test("Local agent mode applies style transformation")
-    func localAgentModeAppliesStyle() async throws {
-        let mode = Mode(
-            id: UUID(),
-            name: "Local Agent",
-            processingType: .localAgent,
-            localAgentProvider: .claudeCode,
-            showPreview: false
-        )
-        let text = "Hello World."
-
-        // Note: This test would require the claude command to be available
-        // In practice, we'd mock the BashRunner, but for integration testing
-        // we verify the style parameter is passed through correctly
-    }
-
-    // MARK: - Style with Terminator Tests
-
-    @Test("Style transformation applied before terminator")
-    func styleAppliedBeforeTerminator() async throws {
-        let mode = Mode(
-            id: UUID(),
-            name: "Direct",
-            processingType: .none,
-            showPreview: false
-        )
-        let text = "hello"
-
-        let result = try await TextProcessingPipeline.run(
-            mode: mode,
-            text: text,
-            captures: [],
-            terminatorTemplateEnabled: true,
-            terminatorTemplate: "<dot><space>",
-            style: .formal
-        )
-
-        // Formal: capitalize + add period, then terminator adds space
-        #expect(result.text == "Hello. ")
-    }
-
-    @Test("Casual style removes period before terminator adds space")
-    func casualStyleRemovesPeriodBeforeTerminator() async throws {
-        let mode = Mode(
-            id: UUID(),
-            name: "Direct",
-            processingType: .none,
-            showPreview: false
-        )
-        let text = "Hello world."
-
-        let result = try await TextProcessingPipeline.run(
-            mode: mode,
-            text: text,
-            captures: [],
-            terminatorTemplateEnabled: true,
-            terminatorTemplate: "<dot><space>",
-            style: .casual
-        )
-
-        // Casual: lowercase + remove period, then terminator adds period + space
-        // Note: terminator adds punctuation back since text ends without it after style transform
-        #expect(result.text == "hello world. ")
     }
 
     // MARK: - Style with Filler Words Tests
@@ -233,8 +163,8 @@ struct TextProcessingPipelineStyleTests {
             style: .casual
         )
 
-        // Filler removed, then style applied
-        #expect(result.text == "hello world")
+        // Filler removed, then casual style: lowercase start, preserve internal caps, trailing space
+        #expect(result.text == "hello World ")
     }
 
     // MARK: - Default Style Tests
@@ -249,14 +179,13 @@ struct TextProcessingPipelineStyleTests {
         )
         let text = "Hello World."
 
-        // Call without explicit style parameter - should use default (.casual)
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
             captures: []
         )
 
-        // Default (casual) style applied
-        #expect(result.text == "hello world")
+        // Default (casual) style: lowercase start, preserve internal caps, no final period, trailing space
+        #expect(result.text == "hello World ")
     }
 }

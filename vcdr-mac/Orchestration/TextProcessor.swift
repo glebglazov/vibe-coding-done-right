@@ -19,8 +19,6 @@ struct TranscriptionInput: Sendable {
     let inputSegments: [InputSegment]
     let hadDestinationOverride: Bool
     let removeFillerWords: Bool
-    let terminatorTemplateEnabled: Bool
-    let terminatorTemplate: String
     let style: Style
     let saveResultToClipboard: Bool
 }
@@ -212,9 +210,7 @@ final class TextProcessor {
             processedText = applyPostProcessing(
                 processedText,
                 style: handle.input.style,
-                cursorContext: handle.input.cursorContext,
-                terminatorTemplateEnabled: handle.input.terminatorTemplateEnabled,
-                terminatorTemplate: handle.input.terminatorTemplate
+                cursorContext: handle.input.cursorContext
             )
 
             let newHandle = PreviewHandle(
@@ -252,20 +248,14 @@ final class TextProcessor {
 
     // MARK: - Internals
 
-    /// Shared post-processing: style transform + terminator.
+    /// Shared post-processing: style transform.
     /// Used by both the initial pipeline (via TextProcessingPipeline) and the retry path.
     private func applyPostProcessing(
         _ text: String,
         style: Style,
-        cursorContext: CursorContext?,
-        terminatorTemplateEnabled: Bool,
-        terminatorTemplate: String
+        cursorContext: CursorContext?
     ) -> String {
-        var result = StyleTransformer.transform(text, using: style.staticRules, cursorContext: cursorContext)
-        if terminatorTemplateEnabled {
-            result = Mode.applyTerminator(result, terminator: terminatorTemplate)
-        }
-        return result
+        StyleTransformer.transform(text, using: style.staticRules, cursorContext: cursorContext)
     }
 
     private func makeContext(from input: TranscriptionInput) -> SubmissionPipeline.Context {
@@ -280,8 +270,6 @@ final class TextProcessor {
             targetAppPID: input.targetAppPID,
             saveResultToClipboard: input.saveResultToClipboard,
             removeFillerWords: input.removeFillerWords,
-            terminatorTemplateEnabled: input.terminatorTemplateEnabled,
-            terminatorTemplate: input.terminatorTemplate,
             style: input.style,
             cursorContext: input.cursorContext
         )
@@ -325,8 +313,6 @@ extension TranscriptionInput {
             inputSegments: inputSegments,
             hadDestinationOverride: hadDestinationOverride,
             removeFillerWords: removeFillerWords,
-            terminatorTemplateEnabled: terminatorTemplateEnabled,
-            terminatorTemplate: terminatorTemplate,
             style: style,
             saveResultToClipboard: saveResultToClipboard
         )

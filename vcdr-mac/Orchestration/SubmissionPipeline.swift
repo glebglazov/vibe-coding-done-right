@@ -18,8 +18,6 @@ enum SubmissionPipeline {
         let saveResultToClipboard: Bool
         // Algorithmic processing settings
         let removeFillerWords: Bool
-        let terminatorTemplateEnabled: Bool
-        let terminatorTemplate: String
         // Style transformation settings
         let style: Style
         // Cursor context for context-aware formatting
@@ -36,8 +34,6 @@ enum SubmissionPipeline {
             targetAppPID: pid_t?,
             saveResultToClipboard: Bool,
             removeFillerWords: Bool,
-            terminatorTemplateEnabled: Bool,
-            terminatorTemplate: String,
             style: Style,
             cursorContext: CursorContext? = nil
         ) {
@@ -51,8 +47,6 @@ enum SubmissionPipeline {
             self.targetAppPID = targetAppPID
             self.saveResultToClipboard = saveResultToClipboard
             self.removeFillerWords = removeFillerWords
-            self.terminatorTemplateEnabled = terminatorTemplateEnabled
-            self.terminatorTemplate = terminatorTemplate
             self.style = style
             self.cursorContext = cursorContext
         }
@@ -97,8 +91,6 @@ enum SubmissionPipeline {
             parameterValues: context.parameterValues,
             variableEnvironment: context.variableEnvironment,
             removeFillerWords: context.removeFillerWords,
-            terminatorTemplateEnabled: context.terminatorTemplateEnabled,
-            terminatorTemplate: context.terminatorTemplate,
             aiPort: aiPort,
             style: context.style,
             cursorContext: effectiveCursorContext

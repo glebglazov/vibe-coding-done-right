@@ -130,8 +130,6 @@ final class AppSettings {
 
         static let variables = "variables"
         static let removeFillerWords = "removeFillerWords"
-        static let terminatorTemplateEnabled = "terminatorTemplateEnabled"
-        static let terminatorTemplate = "terminatorTemplate"
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         static let legacyPushToTalkHotkey = "pushToTalkHotkey"
         static let legacyKeyCode = "hotkeyKeyCode"
@@ -193,11 +191,7 @@ final class AppSettings {
 
         // Load transcription settings
         self.transcriptionSettings = TranscriptionSettings(
-            removeFillerWords: Self.boolSetting(from: userDefaults, forKey: Keys.removeFillerWords, default: true),
-            terminatorTemplateEnabled: Self.boolSetting(
-                from: userDefaults, forKey: Keys.terminatorTemplateEnabled, default: true
-            ),
-            terminatorTemplate: userDefaults.string(forKey: Keys.terminatorTemplate) ?? Mode.defaultTerminatorTemplate
+            removeFillerWords: Self.boolSetting(from: userDefaults, forKey: Keys.removeFillerWords, default: true)
         )
 
         // Load modes (with legacy migration)
@@ -287,8 +281,6 @@ final class AppSettings {
         encode(audioSettings, forKey: Keys.audioSettings)
         encode(variables, forKey: Keys.variables)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
-        userDefaults.set(transcriptionSettings.terminatorTemplateEnabled, forKey: Keys.terminatorTemplateEnabled)
-        userDefaults.set(transcriptionSettings.terminatorTemplate, forKey: Keys.terminatorTemplate)
         Logger.settings.info("Settings saved")
     }
 

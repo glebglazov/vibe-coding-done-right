@@ -158,11 +158,6 @@ struct Mode: Identifiable, Codable, Equatable {
         return labels.isEmpty ? nil : labels.joined(separator: ", ")
     }
 
-    // MARK: - Constants
-
-    static let defaultTerminatorTemplate = "<dot><space>"
-    private static let sentenceEndingPunctuation: Set<Character> = [".", "?", "!"]
-
     // MARK: - Text Pipeline
 
     /// Formats captures for inclusion in pipeline text using `<capture id="N">` tags.
@@ -174,33 +169,6 @@ struct Mode: Identifiable, Codable, Equatable {
         return captures.enumerated().map { index, capture in
             "<capture id=\"\(index + 1)\">\(capture.text)</capture>"
         }.joined(separator: "\n\n")
-    }
-
-    /// Appends spacing (terminator) to the text. If the text ends with
-    /// sentence-ending punctuation, a space is appended. Otherwise, the text
-    /// is returned as-is. Period handling is done by StyleTransformer based on style.
-    static func applyTerminator(_ text: String, terminator: String) -> String {
-        guard !terminator.isEmpty else { return text }
-
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let lastChar = trimmed.last else { return text }
-
-        let resolved = terminator
-            .replacingOccurrences(of: "<dot>", with: ".")
-            .replacingOccurrences(of: "<space>", with: " ")
-            .replacingOccurrences(of: "<newline>", with: "\n")
-
-        // Extract spacing portion of the terminator (everything after any leading punctuation).
-        // Periods are added/removed by StyleTransformer based on style.
-        let punctuationPrefix = String(resolved.prefix(while: { sentenceEndingPunctuation.contains($0) }))
-        let spacingSuffix = String(resolved.dropFirst(punctuationPrefix.count))
-
-        // Only add spacing if text already ends with punctuation.
-        if sentenceEndingPunctuation.contains(lastChar) {
-            return trimmed + spacingSuffix
-        }
-
-        return trimmed
     }
 
     // MARK: - Parameter Mutation

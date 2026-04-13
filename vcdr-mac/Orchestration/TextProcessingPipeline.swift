@@ -34,8 +34,6 @@ enum TextProcessingPipeline {
         parameterValues: [String: String] = [:],
         variableEnvironment: [String: String] = [:],
         removeFillerWords: Bool = false,
-        terminatorTemplateEnabled: Bool = false,
-        terminatorTemplate: String = "",
         aiPort: any AIProcessingPort = AIProcessingAdapter(),
         style: Style = .casual,
         cursorContext: CursorContext? = nil
@@ -124,15 +122,10 @@ enum TextProcessingPipeline {
             Logger.textTransform.debug("Style transform: no change")
         }
 
-        // MARK: Algorithmic post-processing — output formatting
-        let finalText = terminatorTemplateEnabled
-            ? Mode.applyTerminator(styledText, terminator: terminatorTemplate)
-            : styledText
-
-        Logger.textTransform.info("Pipeline final output: \"\(finalText)\"")
+        Logger.textTransform.info("Pipeline final output: \"\(styledText)\"")
 
         return PipelineResult(
-            text: finalText,
+            text: styledText,
             hadExternalProcessing: result.hadExternalProcessing,
             aiProcessingFallback: result.aiProcessingFallback
         )

@@ -58,14 +58,10 @@ public enum StyleTransformer {
         result = prependSeparatorIfNeeded(result, cursorContext: cursorContext)
         Logger.textTransform.debug("StyleTransformer — after separator: \"\(result)\"")
         
-        // Re-attach trailing whitespace after any ending punctuation processing
-        if !trailingWhitespace.isEmpty {
-            // Remove any trailing whitespace that was added from trimmed text
-            result = result.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Add the original trailing whitespace
-            result += trailingWhitespace
-        }
-        
+        // Always append a trailing space so the next word doesn't collide.
+        // This replaces the old terminator system — style owns trailing output.
+        result += " "
+
         return result
     }
     

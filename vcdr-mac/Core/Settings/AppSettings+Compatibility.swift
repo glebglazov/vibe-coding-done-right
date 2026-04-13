@@ -44,16 +44,6 @@ extension AppSettings {
         set { transcriptionSettings.removeFillerWords = newValue }
     }
 
-    var terminatorTemplateEnabled: Bool {
-        get { transcriptionSettings.terminatorTemplateEnabled }
-        set { transcriptionSettings.terminatorTemplateEnabled = newValue }
-    }
-
-    var terminatorTemplate: String {
-        get { transcriptionSettings.terminatorTemplate }
-        set { transcriptionSettings.terminatorTemplate = newValue }
-    }
-
     // MARK: - Mode Management
 
     /// Disables or enables a mode; if the active mode is disabled, switches to the first visible mode.

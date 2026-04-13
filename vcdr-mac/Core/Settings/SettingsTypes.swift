@@ -16,13 +16,9 @@ struct HotkeySettings: Codable, Equatable {
 
 struct TranscriptionSettings: Codable, Equatable {
     var removeFillerWords: Bool
-    var terminatorTemplateEnabled: Bool
-    var terminatorTemplate: String
 
     static let `default` = TranscriptionSettings(
-        removeFillerWords: true,
-        terminatorTemplateEnabled: true,
-        terminatorTemplate: Mode.defaultTerminatorTemplate
+        removeFillerWords: true
     )
 }
 

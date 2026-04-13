@@ -298,8 +298,6 @@ extension CaptureSession {
             inputSegments: segments,
             hadDestinationOverride: runState.hadDestinationOverride,
             removeFillerWords: settings.removeFillerWords,
-            terminatorTemplateEnabled: settings.terminatorTemplateEnabled,
-            terminatorTemplate: settings.terminatorTemplate,
             style: effectiveStyle,
             saveResultToClipboard: mode.saveResultToClipboard
         )

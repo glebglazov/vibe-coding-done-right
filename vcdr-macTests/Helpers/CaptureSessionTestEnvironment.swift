@@ -44,8 +44,6 @@ struct CaptureSessionTestEnvironment {
         let settings = AppSettings(userDefaults: defaults)
         // Disable media pause to avoid hanging on MediaRemoteClient resolution in tests.
         settings.audioSettings = AudioSettings(preferredInputDeviceID: nil, pauseMediaDuringRecording: false)
-        // Disable terminator so test assertions can match exact transcription output.
-        settings.terminatorTemplateEnabled = false
         // Disable filler word removal so raw mock text comes through unchanged.
         settings.removeFillerWords = false
 
