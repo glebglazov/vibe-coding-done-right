@@ -63,6 +63,7 @@ struct VCDRKeyboardView: View {
                 .padding(.bottom, 6)
             }
         )
+        .keyboardToolbarStyle(.init(height: 44))
     }
 }
 
