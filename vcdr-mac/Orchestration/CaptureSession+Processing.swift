@@ -99,6 +99,14 @@ extension CaptureSession {
                 self.setStatus(.idle)
                 self.emit(.failed, finalText: nil, destinationID: nil, historyConversationID: nil)
 
+            case .noInstruction:
+                self.cancelHotkey.isEnabled = false
+                self.panel.setError("No instruction detected")
+                self.scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
+                self.processingTask = nil
+                self.setStatus(.idle)
+                self.emit(.failed, finalText: nil, destinationID: nil, historyConversationID: nil)
+
             case .preview(let handle):
                 self.panel.showPreview(text: handle.displayText, modeName: handle.modeName)
                 if let err = handle.aiErrorMessage {
@@ -247,7 +255,7 @@ extension CaptureSession {
                         Logger.app.info("AI processing retry succeeded")
                     }
 
-                case .execute, .empty:
+                case .execute, .empty, .noInstruction:
                     break // Retry always returns preview
                 }
             } catch {

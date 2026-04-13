@@ -34,6 +34,8 @@ enum ProcessingDisposition {
     case preview(PreviewHandle)
     /// No speech detected.
     case empty
+    /// AI could not identify an actionable instruction in the dictation.
+    case noInstruction
 }
 
 struct ProcessedResult {
@@ -123,6 +125,11 @@ final class TextProcessor {
             )
         } catch {
             throw error
+        }
+
+        // AI returned sentinel — no actionable instruction found.
+        if pipelineResult.processedText == TextProcessingPipeline.Constants.noInstructionSentinel {
+            return .noInstruction
         }
 
         // AI processing failed — return preview with fallback text and retry info.

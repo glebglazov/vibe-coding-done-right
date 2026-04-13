@@ -22,6 +22,11 @@ struct AIProcessingFallback {
 
 enum TextProcessingPipeline {
 
+    enum Constants {
+        /// Sentinel AI output meaning the dictation contained no actionable instruction.
+        static let noInstructionSentinel = "[NO_INSTRUCTION]"
+    }
+
     /// Runs the three-stage text processing pipeline:
     /// 1. Algorithmic pre-processing — speech cleanup (filler word removal)
     /// 2. External processing — input structuring + content processing (none/AI/bash)
@@ -112,6 +117,13 @@ enum TextProcessingPipeline {
             )
             Logger.textTransform.info("Bash script output: \"\(processedText)\"")
             result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
+        }
+
+        // MARK: Sentinel detection — AI returned [NO_INSTRUCTION]
+        if result.hadExternalProcessing
+            && result.text.trimmingCharacters(in: .whitespacesAndNewlines) == Constants.noInstructionSentinel {
+            Logger.textTransform.info("No instruction detected in input")
+            return PipelineResult(text: Constants.noInstructionSentinel, hadExternalProcessing: true, aiProcessingFallback: nil)
         }
 
         // MARK: Style transformation — capitalization, punctuation (final step before terminator)

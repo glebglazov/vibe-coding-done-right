@@ -44,6 +44,7 @@ enum BuiltInPrompts {
         3. Separate meta-context from content. If the user explains WHY they need something ("I need to send this to colleagues", "I'm writing a review for a dental clinic"), that's context — not content to process. Only process the actual content portion.
         4. Match the language of the instruction for your response, unless the instruction specifies a target language.
         5. If the instruction is ambiguous, choose the most helpful interpretation and execute it.
+        6. If the dictation contains NO actionable instruction — just a standalone statement, quote, or random text with nothing to execute — respond with exactly: [NO_INSTRUCTION]
 
         OUTPUT: Return ONLY the result. No greetings, no "here's your...", no "let me know if...", no explanations, no changelogs, no formatting beyond what the task requires. If asked to fix something, return the fixed version — not a list of what you fixed.
 

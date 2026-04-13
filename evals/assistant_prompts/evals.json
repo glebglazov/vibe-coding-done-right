@@ -150,6 +150,18 @@
       "category": "capture_instruction",
       "input": "proofread this and fix any issues\n\n<capture id=\"1\">Their going to the store to buy there supplies for they're project. Its important that the team completes it's tasks on time. The data shows that less people are using the old system then expected, which effects our revenue projections.</capture>",
       "expected_output": "They're going to the store to buy their supplies for their project. It's important that the team completes its tasks on time. The data shows that fewer people are using the old system than expected, which affects our revenue projections."
+    },
+    {
+      "id": "no_instruction_random_statement",
+      "category": "no_instruction",
+      "input": "потому что нельзя быть просто таким красивым",
+      "expected_output": "[NO_INSTRUCTION]"
+    },
+    {
+      "id": "no_instruction_quote",
+      "category": "no_instruction",
+      "input": "the quick brown fox jumps over the lazy dog",
+      "expected_output": "[NO_INSTRUCTION]"
     }
   ]
 }
