@@ -153,9 +153,32 @@ struct RecordingView: View {
                 }
                 .padding(.bottom, 32)
 
-                WaveformView(levels: coordinator.audioLevels)
-                    .frame(height: 120)
-                    .padding(.horizontal, 8)
+                // Waveform with transcript overlay
+                ZStack {
+                    WaveformView(levels: coordinator.audioLevels)
+                        .frame(height: 120)
+                        .padding(.horizontal, 8)
+
+                    if !coordinator.liveTranscript.isEmpty {
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                Text(coordinator.liveTranscript)
+                                    .font(.system(size: Self.transcriptFontSize, weight: .light))
+                                    .foregroundStyle(theme.onSurface.opacity(0.7))
+                                    .lineSpacing(6)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 32)
+                                    .id("transcript")
+                            }
+                            .onChange(of: coordinator.liveTranscript) {
+                                withAnimation {
+                                    proxy.scrollTo("transcript", anchor: .bottom)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(height: 120)
 
                 aiSessionToggle
                     .padding(.top, 20)
@@ -174,30 +197,9 @@ struct RecordingView: View {
                 Spacer()
             }
 
-            // Bottom-pinned content — transcript and stop button
+            // Bottom-pinned content — stop button
             VStack(spacing: 0) {
                 Spacer()
-
-                if !coordinator.liveTranscript.isEmpty {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            Text(coordinator.liveTranscript)
-                                .font(.system(size: Self.transcriptFontSize, weight: .light))
-                                .foregroundStyle(theme.onSurface.opacity(0.7))
-                                .lineSpacing(6)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 32)
-                                .id("transcript")
-                        }
-                        .frame(maxHeight: Self.transcriptMaxHeight)
-                        .onChange(of: coordinator.liveTranscript) {
-                            withAnimation {
-                                proxy.scrollTo("transcript", anchor: .bottom)
-                            }
-                        }
-                    }
-                    .padding(.bottom, 16)
-                }
 
                 actionCircle(
                     icon: {
@@ -271,20 +273,6 @@ struct RecordingView: View {
         VStack(spacing: 28) {
             heroTitle("DONE")
 
-            ScrollView {
-                HStack(alignment: .top, spacing: 16) {
-                    Rectangle()
-                        .fill(theme.primary)
-                        .frame(width: 2)
-                    Text(text)
-                        .font(.system(size: 18, weight: .light))
-                        .foregroundStyle(theme.onSurface)
-                        .lineSpacing(6)
-                }
-            }
-            .frame(maxHeight: 200)
-            .padding(.horizontal, 32)
-
             aiStatusView
 
             HStack(spacing: 16) {
@@ -300,6 +288,20 @@ struct RecordingView: View {
                     Task { await coordinator.startRecording() }
                 }
             }
+
+            ScrollView {
+                HStack(alignment: .top, spacing: 16) {
+                    Rectangle()
+                        .fill(theme.primary)
+                        .frame(width: 2)
+                    Text(text)
+                        .font(.system(size: 18, weight: .light))
+                        .foregroundStyle(theme.onSurface)
+                        .lineSpacing(6)
+                }
+            }
+            .frame(maxHeight: 200)
+            .padding(.horizontal, 32)
         }
     }
 
