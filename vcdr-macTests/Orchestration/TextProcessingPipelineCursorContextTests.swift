@@ -308,7 +308,7 @@ struct TextProcessingPipelineCursorContextTests {
             id: UUID(),
             name: "Bash",
             processingType: .bashScript,
-            processingCommand: "cat",
+            processingCommand: "echo -n \"$VCDR_TEXT\"",
             systemPromptEnabled: true,
             systemPrompt: "Test prompt",
             showPreview: false
@@ -338,7 +338,7 @@ struct TextProcessingPipelineCursorContextTests {
             id: UUID(),
             name: "Bash",
             processingType: .bashScript,
-            processingCommand: "cat",
+            processingCommand: "echo -n \"$VCDR_TEXT\"",
             systemPromptEnabled: false,
             showPreview: false
         )

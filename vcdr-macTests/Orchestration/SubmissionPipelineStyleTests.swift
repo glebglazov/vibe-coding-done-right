@@ -97,7 +97,7 @@ struct SubmissionPipelineStyleTests {
                 id: UUID(),
                 name: "Bash Test",
                 processingType: .bashScript,
-                processingCommand: "cat",
+                processingCommand: "echo -n \"$VCDR_TEXT\" | sed 's/<[^>]*>//g'",
                 showPreview: false
             ),
             captures: [],

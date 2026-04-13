@@ -64,6 +64,7 @@ enum BashRunner {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
+        process.standardInput = FileHandle.nullDevice
 
         let terminationStatus: Int32
         do {

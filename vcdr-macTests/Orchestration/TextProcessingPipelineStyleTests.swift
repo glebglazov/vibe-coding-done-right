@@ -61,7 +61,7 @@ struct TextProcessingPipelineStyleTests {
             id: UUID(),
             name: "Bash",
             processingType: .bashScript,
-            processingCommand: "cat",
+            processingCommand: "echo -n \"$VCDR_TEXT\" | sed 's/<[^>]*>//g'",
             showPreview: false
         )
         let text = "Hello World."
