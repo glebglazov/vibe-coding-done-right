@@ -67,7 +67,7 @@ final class AppDependencies {
         )
         let selectionCapturer = SelectionCapturer()
         let clipboardMonitor = ClipboardMonitor()
-        self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings)
+        self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings, skipHardware: vcdrApp.isTestHost)
         self.inputLevelMonitor = InputLevelMonitor()
 
         // Initialize style-related components first

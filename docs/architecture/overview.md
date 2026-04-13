@@ -15,10 +15,12 @@ xcodebuild -scheme vcdr-mac -destination 'platform=macOS' build
 ## Test
 
 ```bash
-xcodebuild test -scheme vcdr-mac -destination 'platform=macOS' -parallel-testing-enabled NO -quiet
+xcodebuild test -scheme vcdr-mac -destination 'platform=macOS' -quiet
 ```
 
-`-parallel-testing-enabled NO` is required. CaptureSession tests use audio devices, AX, and clipboard — system-wide singletons that crash under concurrent access when Xcode spawns multiple test runner processes.
+Tests run as a hosted unit test bundle inside the app process (`BUNDLE_LOADER`). The app detects `XCTestBundlePath` and skips heavy initialization (CoreML model loading, audio device enumeration, CGEvent taps) so the test host launches fast.
+
+Parallel testing is disabled in the scheme — tests share `UserDefaults` state via `StyleRegistry` and other components.
 
 ## Project Structure
 

@@ -51,6 +51,8 @@ struct vcdrApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var dependencies = AppDependencies()
 
+    static let isTestHost = ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+
     var body: some Scene {
         MenuBarExtra {
             MenuBarView(dependencies: dependencies)
@@ -64,6 +66,7 @@ struct vcdrApp: App {
         Window("VCDR", id: "main") {
             MainWindowView(dependencies: dependencies)
                 .task {
+                    guard !Self.isTestHost else { return }
                     await dependencies.initialize()
                 }
         }

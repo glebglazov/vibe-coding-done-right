@@ -18,8 +18,9 @@ final class AudioDeviceMonitor {
     private nonisolated(unsafe) var connectObserver: (any NSObjectProtocol)?
     private nonisolated(unsafe) var disconnectObserver: (any NSObjectProtocol)?
 
-    init(settings: AppSettings) {
+    init(settings: AppSettings, skipHardware: Bool = false) {
         self.settings = settings
+        guard !skipHardware else { return }
         refreshDevices()
         startObserving()
     }
