@@ -72,20 +72,28 @@ final class AudioRecorder {
 
     /// Pre-configures the AVAudioSession so it's ready when recording starts.
     /// Safe to call multiple times — skipped if already configured.
-    func prepareAudioSession() {
+    /// Blocking AVAudioSession calls run off the main thread to avoid stalling the UI.
+    func prepareAudioSession() async {
         guard !audioSessionConfigured else { return }
-        let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-            try session.setActive(true)
-            audioSessionConfigured = true
-            applyPreferredInput()
-            setupInterruptionObservers()
-            Logger.recording.info("Audio session pre-configured")
-        } catch {
-            Logger.recording.warning("Failed to pre-configure audio session: \(error)")
-            // Not fatal — startRecording() will retry
-        }
+        // AVAudioSession configuration is thread-safe — run off main thread
+        // to avoid blocking UI during setCategory/setActive (~50-200ms).
+        let success = await Task.detached {
+            let session = AVAudioSession.sharedInstance()
+            do {
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+                try session.setActive(true)
+                return true
+            } catch {
+                Logger.recording.warning("Failed to pre-configure audio session: \(error)")
+                return false
+            }
+        }.value
+
+        guard success else { return }
+        audioSessionConfigured = true
+        applyPreferredInput()
+        setupInterruptionObservers()
+        Logger.recording.info("Audio session pre-configured")
     }
 
     /// Starts recording via AVAudioEngine. Buffers are forwarded to `onBuffer` on the audio thread.

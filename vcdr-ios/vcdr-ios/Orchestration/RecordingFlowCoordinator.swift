@@ -80,10 +80,6 @@ final class RecordingFlowCoordinator {
         // If recording already started, model init is handled by streamingSetupTask
         guard state != .recording else { return }
 
-        // Pre-warm the audio session so it's ready when the user taps record.
-        // This runs concurrently with model download/compilation.
-        audioRecorder.prepareAudioSession()
-
         state = .initializing
         initProgress = "Downloading model..."
 
@@ -101,7 +97,13 @@ final class RecordingFlowCoordinator {
         }
 
         do {
+            // Pre-warm audio session concurrently with model initialization.
+            // Audio prep (~50-200ms) runs off the main thread; model init runs
+            // on the ParakeetProvider actor. Both proceed in parallel.
+            async let audioPrep: Void = audioRecorder.prepareAudioSession()
             try await transcriptionProvider.initialize()
+            await audioPrep
+
             pollTask.cancel()
             // Don't overwrite state if recording started while we were initializing
             if state == .initializing {

@@ -17,9 +17,8 @@ enum SharedConstants {
     /// Shared UserDefaults for App Group IPC between main app and keyboard extension.
     /// Falls back to `.standard` if the App Group is unavailable (e.g. unit tests,
     /// misconfigured signing) — prevents a crash at the cost of IPC not working.
-    static var sharedDefaults: UserDefaults {
+    static let sharedDefaults: UserDefaults =
         UserDefaults(suiteName: appGroupID) ?? .standard
-    }
 }
 
 /// Commands the keyboard extension sends to the main app
