@@ -57,8 +57,6 @@ struct vcdrApp: App {
         } label: {
             MenuBarLabel(
                 iconName: dependencies.session.status.menuBarIcon,
-                styleName: dependencies.currentStyle.name,
-                hasStyleOverride: dependencies.hasStyleOverride,
                 appDelegate: appDelegate
             )
         }
@@ -80,31 +78,15 @@ struct vcdrApp: App {
 /// (dock clicks, launch).
 private struct MenuBarLabel: View {
     let iconName: String
-    let styleName: String
-    let hasStyleOverride: Bool
     let appDelegate: AppDelegate
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: iconName)
-            // Show style name in menu bar when space allows
-            // Format: "VCDR — Casual" or "VCDR — Casual (Override)"
-            if !styleName.isEmpty {
-                Text("—")
-                    .foregroundStyle(.secondary)
-                Text(styleName)
-                if hasStyleOverride {
-                    Image(systemName: "pin.fill")
-                        .font(.caption2)
-                        .foregroundStyle(Color.accentColor)
+        Image(systemName: iconName)
+            .onAppear {
+                appDelegate.openMainWindow = { [openWindow] in
+                    openWindow(id: "main")
                 }
             }
-        }
-        .onAppear {
-            appDelegate.openMainWindow = { [openWindow] in
-                openWindow(id: "main")
-            }
-        }
     }
 }
