@@ -41,17 +41,6 @@
                ReferencedContainer = "container:vcdr-mac.xcodeproj">
             </BuildableReference>
          </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "E5D6B8302F466C83002066AA"
-               BuildableName = "vcdr-macUITests.xctest"
-               BlueprintName = "vcdr-macUITests"
-               ReferencedContainer = "container:vcdr-mac.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
