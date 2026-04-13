@@ -25,17 +25,19 @@ actor ClipboardMonitor {
         pollingTask = Task { [weak self] in
             let pasteboard = NSPasteboard.general
             var lastChangeCount = baselineChangeCount ?? pasteboard.changeCount
-            var lastContent = pasteboard.string(forType: .string)
+            var lastContent = await MainActor.run { pasteboard.string(forType: .string) }
 
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.pollInterval)
                 guard !Task.isCancelled else { break }
 
-                let currentChangeCount = pasteboard.changeCount
+                let (currentChangeCount, currentContent) = await MainActor.run {
+                    (pasteboard.changeCount, pasteboard.string(forType: .string))
+                }
                 guard currentChangeCount != lastChangeCount else { continue }
                 lastChangeCount = currentChangeCount
 
-                guard let newContent = pasteboard.string(forType: .string),
+                guard let newContent = currentContent,
                       !newContent.isEmpty,
                       newContent != lastContent else { continue }
 
