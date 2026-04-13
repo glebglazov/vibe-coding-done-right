@@ -167,6 +167,17 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 return
             }
 
+            // App already idle with no bundled text — recording finished before
+            // the keyboard sent stop. Treat as empty result (brief flash, then reset).
+            if raw == RecordingState.idle.rawValue {
+                dictationState = .emptyResult
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
+                    guard self?.dictationState == .emptyResult else { return }
+                    self?.dictationState = .idle
+                }
+                return
+            }
+
             guard raw.hasPrefix(idlePrefix) else { continue }
 
             let text = String(raw.dropFirst(idlePrefix.count))
