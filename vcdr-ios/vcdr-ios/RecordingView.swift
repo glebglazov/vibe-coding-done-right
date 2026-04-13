@@ -275,6 +275,8 @@ struct RecordingView: View {
 
             aiStatusView
 
+            sessionInfoView
+
             HStack(spacing: 16) {
                 brutalistButton(showCopiedConfirmation ? "COPIED" : "COPY") {
                     UIPasteboard.general.string = text
@@ -347,6 +349,28 @@ struct RecordingView: View {
                 }
             }
         }
+    }
+
+    private var sessionInfoView: some View {
+        HStack(spacing: 12) {
+            if coordinator.aiActiveThisSession {
+                sessionInfoPill(coordinator.selectedPromptMode.displayName.uppercased())
+            }
+            sessionInfoPill(coordinator.currentTextStyle.displayName.uppercased())
+        }
+    }
+
+    private func sessionInfoPill(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 10, weight: .bold))
+            .tracking(1.5)
+            .foregroundStyle(theme.onSurfaceVariant)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(theme.onSurfaceVariant.opacity(0.3), lineWidth: 1)
+            )
     }
 
     @ViewBuilder
