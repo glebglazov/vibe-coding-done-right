@@ -36,16 +36,21 @@ actor ParakeetProvider: TranscriptionProvider {
         Logger.transcription.info("Initializing Parakeet v3 CoreML model...")
 
         do {
-            // Download + compile CoreML models in one step (cached after first run)
+            // Phase 1: Download models if not cached (typically instant when cached)
             initPhase = .downloading
-            let loadStart = ContinuousClock.now
-            let models = try await AsrModels.downloadAndLoad(version: .v3)
+            let downloadStart = ContinuousClock.now
+            let modelDir = try await AsrModels.download(version: .v3)
+            Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
+
+            // Phase 2: Compile CoreML models for Neural Engine (the slow part)
             initPhase = .compiling
-            Logger.transcription.info("Models downloaded and compiled in \(self.elapsedMs(since: loadStart))")
+            let compileStart = ContinuousClock.now
+            let models = try await AsrModels.load(from: modelDir, version: .v3)
+            Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: compileStart))")
 
             let initStart = ContinuousClock.now
             let manager = AsrManager(config: .default)
-            try await manager.loadModels(models)
+            try await manager.initialize(models: models)
             Logger.transcription.info("ASR manager initialized in \(self.elapsedMs(since: initStart))")
 
             self.asr = manager
