@@ -6,11 +6,11 @@
 set -e  # Exit on any error
 
 echo "🔨 Building VCDR in Release mode..."
-xcodebuild -scheme vcdr -configuration Release build
+xcodebuild -scheme vcdr-mac -configuration Release build
 
 echo ""
 echo "📦 Finding built app..."
-BUILT_APP=$(find ~/Library/Developer/Xcode/DerivedData/vcdr-*/Build/Products/Release/vcdr.app -maxdepth 0 2>/dev/null | head -1)
+BUILT_APP=$(find ~/Library/Developer/Xcode/DerivedData/vcdr-mac-*/Build/Products/Release/VCDR.app -maxdepth 0 2>/dev/null | head -1)
 
 if [ -z "$BUILT_APP" ]; then
     echo "❌ Error: Could not find built app"
