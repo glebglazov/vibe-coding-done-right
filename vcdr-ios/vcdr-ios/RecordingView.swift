@@ -271,16 +271,18 @@ struct RecordingView: View {
         VStack(spacing: 28) {
             heroTitle("DONE")
 
-            HStack(alignment: .top, spacing: 16) {
-                Rectangle()
-                    .fill(theme.primary)
-                    .frame(width: 2)
-                Text(text)
-                    .font(.system(size: 18, weight: .light))
-                    .foregroundStyle(theme.onSurface)
-                    .lineSpacing(6)
+            ScrollView {
+                HStack(alignment: .top, spacing: 16) {
+                    Rectangle()
+                        .fill(theme.primary)
+                        .frame(width: 2)
+                    Text(text)
+                        .font(.system(size: 18, weight: .light))
+                        .foregroundStyle(theme.onSurface)
+                        .lineSpacing(6)
+                }
             }
-            .frame(maxHeight: 140)
+            .frame(maxHeight: 200)
             .padding(.horizontal, 32)
 
             aiStatusView
