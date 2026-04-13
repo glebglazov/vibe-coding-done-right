@@ -11,6 +11,7 @@ struct VCDRiOSApp: App {
             RecordingView(coordinator: coordinator)
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
+                    SharedSettingsSync.syncAll()
                     coordinator.cleanupStaleResults()
                     coordinator.setupCommandListener()
                     await coordinator.initializeModel()

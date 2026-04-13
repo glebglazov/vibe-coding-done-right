@@ -353,7 +353,7 @@ struct RecordingView: View {
     private var aiSessionToggle: some View {
         HStack(spacing: 8) {
             // AI toggle pill (only show if AI is configured)
-            if AIProcessingSettings.isConfigured {
+            if AIProcessingSettings.hasAICapability {
                 Button {
                     coordinator.aiActiveThisSession.toggle()
                 } label: {
@@ -408,7 +408,7 @@ struct RecordingView: View {
                 .foregroundStyle(theme.onSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            brutalistButton("TRY AGAIN") { coordinator.reset() }
+            brutalistButton("TRY AGAIN") { Task { await coordinator.startRecording() } }
         }
     }
 

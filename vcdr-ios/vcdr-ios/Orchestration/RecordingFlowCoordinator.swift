@@ -37,12 +37,16 @@ final class RecordingFlowCoordinator {
     /// Status of the AI post-processing request
     private(set) var aiProcessingStatus: AIProcessingStatus = .idle
     /// Per-session override — allows disabling AI processing without changing global settings.
-    /// Initialized from `AIProcessingSettings.activeInDictation` at session start.
-    var aiActiveThisSession: Bool = AIProcessingSettings.activeInDictation
-    /// Per-session prompt mode — initialized from settings default, changeable during recording.
-    var selectedPromptMode: AIPromptMode = AIProcessingSettings.defaultMode
-    /// Per-session text style — initialized from settings default, changeable during recording.
-    var currentTextStyle: TextStyle = StyleSettings.defaultStyle
+    /// Initialized from shared defaults (keyboard may have changed them).
+    var aiActiveThisSession: Bool = SharedConstants.sharedDefaults.bool(forKey: SharedConstants.aiActiveKey)
+    /// Per-session prompt mode — initialized from shared defaults, changeable during recording.
+    var selectedPromptMode: AIPromptMode = AIPromptMode(
+        rawValue: SharedConstants.sharedDefaults.string(forKey: SharedConstants.aiModeKey) ?? ""
+    ) ?? .dictation
+    /// Per-session text style — initialized from shared defaults, changeable during recording.
+    var currentTextStyle: TextStyle = TextStyle(
+        rawValue: SharedConstants.sharedDefaults.string(forKey: SharedConstants.textStyleKey) ?? ""
+    ) ?? .casual
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
@@ -60,6 +64,7 @@ final class RecordingFlowCoordinator {
     /// Token for the keyboard command NotificationCenter observer, stored so we can
     /// remove it before re-registering to prevent observer accumulation on scene re-entry.
     private var commandObserverToken: (any NSObjectProtocol)?
+    private var settingsObserverToken: (any NSObjectProtocol)?
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
@@ -156,9 +161,14 @@ final class RecordingFlowCoordinator {
         guard !audioRecorder.isRecording else { return }
 
         launchedViaDeepLink = fromDeepLink
-        aiActiveThisSession = AIProcessingSettings.activeInDictation
-        selectedPromptMode = AIProcessingSettings.defaultMode
-        currentTextStyle = StyleSettings.defaultStyle
+        let sd = SharedConstants.sharedDefaults
+        aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
+        selectedPromptMode = AIPromptMode(
+            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
+        ) ?? .dictation
+        currentTextStyle = TextStyle(
+            rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
+        ) ?? .casual
         aiProcessingStatus = .idle
 
         // Show "LISTENING" immediately — before any async work.
@@ -329,9 +339,14 @@ final class RecordingFlowCoordinator {
         liveTranscript = ""
         launchedViaDeepLink = false
         aiProcessingStatus = .idle
-        aiActiveThisSession = AIProcessingSettings.activeInDictation
-        selectedPromptMode = AIProcessingSettings.defaultMode
-        currentTextStyle = StyleSettings.defaultStyle
+        let sd = SharedConstants.sharedDefaults
+        aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
+        selectedPromptMode = AIPromptMode(
+            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
+        ) ?? .dictation
+        currentTextStyle = TextStyle(
+            rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
+        ) ?? .casual
         aiInputText = ""
         updateTask?.cancel()
         streamingSetupTask?.cancel()
@@ -547,6 +562,38 @@ final class RecordingFlowCoordinator {
                 await self.handleCommand()
             }
         }
+
+        // Listen for settings changes from the keyboard extension
+        if let token = settingsObserverToken {
+            NotificationCenter.default.removeObserver(token)
+            settingsObserverToken = nil
+        }
+        DarwinNotificationCenter.observe(
+            SharedConstants.settingsNotificationName,
+            localName: .darwinSettingsChanged
+        )
+        settingsObserverToken = NotificationCenter.default.addObserver(
+            forName: .darwinSettingsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.handleSettingsChanged()
+            }
+        }
+    }
+
+    private func handleSettingsChanged() {
+        let sd = SharedConstants.sharedDefaults
+        sd.synchronize()
+        aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
+        selectedPromptMode = AIPromptMode(
+            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
+        ) ?? .dictation
+        currentTextStyle = TextStyle(
+            rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
+        ) ?? .casual
     }
 
     private func handleCommand() async {

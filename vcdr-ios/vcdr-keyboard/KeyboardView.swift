@@ -44,73 +44,126 @@ struct VCDRKeyboardView: View {
             buttonView: { $0.view },
             collapsedView: { $0.view },
             emojiKeyboard: { $0.view },
-            toolbar: { params in
-                HStack(spacing: 0) {
-                    params.view
-                    DictateBarView(
+            toolbar: { _ in
+                HStack {
+                    // Left: settings pills
+                    DictateSettingsPills(controller: controller)
+                        .padding(.leading, 10)
+
+                    Spacer()
+
+                    // Right: action button
+                    DictateActionButton(
                         dictationState: controller.dictationState,
                         onStop: { controller.stopAndWaitForResult() },
                         onInsert: { controller.insertPendingText() }
                     )
+                    .padding(.trailing, 10)
                 }
+                .padding(.bottom, 6)
             }
         )
     }
 }
 
-/// State-aware dictation button displayed on the right side of the autocomplete toolbar.
-/// - Idle: blue mic — opens VCDR via deep link to start recording
-/// - Recording: red stop — sends stop command to the main app
-/// - Transcribing: pulsing indicator while the app processes
-/// - Ready: green checkmark — tap inserts transcription text (WisprFlow pattern)
-struct DictateBarView: View {
-    // MARK: - Constants
-    private static let iconSize: CGFloat = 20
-    private static let tapTargetSize: CGFloat = 44
-    private static let circleSize: CGFloat = 40
+/// Settings pills displayed on the left side of the toolbar.
+struct DictateSettingsPills: View {
+    private static let pillHeight: CGFloat = 38
+    private static let pillFont: CGFloat = 13
+
+    @ObservedObject var controller: KeyboardViewController
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if controller.aiConfigured {
+                Button { controller.toggleAI() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 13))
+                        Text(controller.aiActive ? "ON" : "OFF")
+                            .font(.system(size: Self.pillFont, weight: .bold))
+                    }
+                    .foregroundStyle(controller.aiActive ? .blue : .gray)
+                    .padding(.horizontal, 10)
+                    .frame(height: Self.pillHeight)
+                    .background(Capsule().fill(Color(.systemGray5)))
+                    .contentShape(Capsule())
+                }
+
+                if controller.aiActive {
+                    Button { controller.cycleAIMode() } label: {
+                        Text(controller.aiMode.displayName.uppercased())
+                            .font(.system(size: Self.pillFont, weight: .bold))
+                            .foregroundStyle(.blue)
+                            .padding(.horizontal, 8)
+                            .frame(height: Self.pillHeight)
+                            .background(Capsule().fill(Color(.systemGray5)))
+                            .contentShape(Capsule())
+                    }
+                }
+            }
+
+            Button { controller.toggleTextStyle() } label: {
+                Text(controller.textStyle.displayName.uppercased())
+                    .font(.system(size: Self.pillFont, weight: .bold))
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 8)
+                    .frame(height: Self.pillHeight)
+                    .background(Capsule().fill(Color(.systemGray5)))
+                    .contentShape(Capsule())
+            }
+        }
+    }
+}
+
+/// Action button (Start/Stop/transcribing/ready) in the toolbar.
+struct DictateActionButton: View {
+    private static let pillHeight: CGFloat = 38
+    private static let pillFont: CGFloat = 13
 
     var dictationState: DictationState
     var onStop: () -> Void
     var onInsert: () -> Void
 
     var body: some View {
-        Group {
-            switch dictationState {
-            case .idle:
-                Link(destination: SharedConstants.recordDeepLinkURL) {
-                    circleButton(icon: "mic.fill", color: .blue)
+        switch dictationState {
+        case .idle:
+            Link(destination: SharedConstants.recordDeepLinkURL) {
+                actionPill("Start", icon: "mic.fill", color: .blue)
+            }
+        case .recording:
+            Button(action: onStop) {
+                actionPill("Stop", icon: "stop.fill", color: .red)
+            }
+        case .transcribing:
+            actionPill("Processing", icon: "ellipsis", color: .orange)
+                .phaseAnimator([false, true]) { content, phase in
+                    content.opacity(phase ? 0.4 : 1.0)
+                } animation: { _ in
+                    .easeInOut(duration: 0.6)
                 }
-            case .recording:
-                Button(action: onStop) {
-                    circleButton(icon: "stop.fill", color: .red)
-                }
-            case .transcribing:
-                circleButton(icon: "ellipsis", color: .orange)
-                    .phaseAnimator([false, true]) { content, phase in
-                        content.opacity(phase ? 0.4 : 1.0)
-                    } animation: { _ in
-                        .easeInOut(duration: 0.6)
-                    }
-            case .ready:
-                Button(action: onInsert) {
-                    circleButton(icon: "checkmark", color: .green)
-                }
-            case .emptyResult:
-                Link(destination: SharedConstants.recordDeepLinkURL) {
-                    circleButton(icon: "mic.fill", color: .yellow)
-                }
+        case .ready:
+            Button(action: onInsert) {
+                actionPill("Insert", icon: "checkmark", color: .green)
+            }
+        case .emptyResult:
+            Link(destination: SharedConstants.recordDeepLinkURL) {
+                actionPill("Start", icon: "mic.fill", color: .yellow)
             }
         }
-        .padding(.trailing, 4)
     }
 
-    private func circleButton(icon: String, color: Color) -> some View {
-        Image(systemName: icon)
-            .font(.system(size: Self.iconSize))
-            .foregroundStyle(.white)
-            .frame(width: Self.circleSize, height: Self.circleSize)
-            .background(Circle().fill(color))
-            .frame(width: Self.tapTargetSize, height: Self.tapTargetSize)
-            .contentShape(Circle())
+    private func actionPill(_ text: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+            Text(text.uppercased())
+                .font(.system(size: Self.pillFont, weight: .bold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .frame(height: Self.pillHeight)
+        .background(Capsule().fill(color))
+        .contentShape(Capsule())
     }
 }

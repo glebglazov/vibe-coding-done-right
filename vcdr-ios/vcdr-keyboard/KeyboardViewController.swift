@@ -19,6 +19,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Current dictation state — drives the DictateBarView appearance.
     @Published var dictationState: DictationState = .idle
 
+    // MARK: - Shared Settings (keyboard ↔ app)
+    @Published var aiConfigured: Bool = false
+    @Published var aiActive: Bool = false
+    @Published var aiMode: SharedAIMode = .dictation
+    @Published var textStyle: SharedTextStyle = .casual
+
     /// Text waiting to be inserted via tap-to-paste.
     private var pendingText: String?
 
@@ -52,6 +58,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         // (e.g. reading "recording" from a previous session before sync completes)
         SharedConstants.sharedDefaults.synchronize()
         refreshState()
+        refreshSettings()
         // viewWillAppear provides a fresh textDocumentProxy connection —
         // auto-insert if text is pending (handles the case where the keyboard
         // wasn't visible when the transcription arrived).
@@ -194,6 +201,38 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
         // Timeout — show ready button as fallback for manual tap-to-insert
         refreshState()
+    }
+
+    // MARK: - Settings
+
+    private func refreshSettings() {
+        let sd = SharedConstants.sharedDefaults
+        aiConfigured = sd.bool(forKey: SharedConstants.aiConfiguredKey)
+        aiActive = sd.bool(forKey: SharedConstants.aiActiveKey)
+        aiMode = SharedAIMode(rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? "") ?? .dictation
+        textStyle = SharedTextStyle(rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? "") ?? .casual
+    }
+
+    func toggleAI() {
+        aiActive.toggle()
+        SharedConstants.sharedDefaults.set(aiActive, forKey: SharedConstants.aiActiveKey)
+        notifySettingsChanged()
+    }
+
+    func cycleAIMode() {
+        aiMode = aiMode.next
+        SharedConstants.sharedDefaults.set(aiMode.rawValue, forKey: SharedConstants.aiModeKey)
+        notifySettingsChanged()
+    }
+
+    func toggleTextStyle() {
+        textStyle = textStyle.toggled
+        SharedConstants.sharedDefaults.set(textStyle.rawValue, forKey: SharedConstants.textStyleKey)
+        notifySettingsChanged()
+    }
+
+    private func notifySettingsChanged() {
+        DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
     }
 
     // MARK: - Keyboard View Setup

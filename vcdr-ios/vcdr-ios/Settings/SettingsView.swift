@@ -44,7 +44,28 @@ struct SettingsView: View {
                 }
             }
             .toolbarColorScheme(.dark, for: .navigationBar)
+            // Mirror settings to shared defaults for keyboard extension
+            .onChange(of: aiActiveInDictation) { _, val in
+                SharedConstants.sharedDefaults.set(val, forKey: SharedConstants.aiActiveKey)
+            }
+            .onChange(of: defaultModeRaw) { _, val in
+                SharedConstants.sharedDefaults.set(val, forKey: SharedConstants.aiModeKey)
+            }
+            .onChange(of: defaultStyleRaw) { _, val in
+                SharedConstants.sharedDefaults.set(val, forKey: SharedConstants.textStyleKey)
+            }
+            .onChange(of: aiEnabled) { _, _ in syncAIConfigured() }
+            .onChange(of: aiProviderRaw) { _, _ in syncAIConfigured() }
+            .onChange(of: anthropicApiKey) { _, _ in syncAIConfigured() }
+            .onChange(of: openaiApiKey) { _, _ in syncAIConfigured() }
         }
+    }
+
+    private func syncAIConfigured() {
+        SharedConstants.sharedDefaults.set(
+            AIProcessingSettings.hasAICapability,
+            forKey: SharedConstants.aiConfiguredKey
+        )
     }
 
     // MARK: - Text Style
