@@ -45,13 +45,11 @@ final class RecordingFlowCoordinator {
     var currentTextStyle: TextStyle = StyleSettings.defaultStyle
 
     private let audioRecorder = AudioRecorder()
-    private let transcriptionProvider = ParakeetProvider()
 
-    private var streamingManager: StreamingAsrManager?
-    private var updateTask: Task<Void, Never>?
-    /// Background task that waits for model initialization and starts the streaming
-    /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
-    /// until this task completes and the recognition task begins consuming them.
+    private var streamingManager: (any StreamingAsrManager)?
+    /// Background task that waits for model loading so the streaming engine is ready
+    /// to process audio. Buffers are appended immediately; processing begins once
+    /// loadModels() completes.
     private var streamingSetupTask: Task<Void, Error>?
     /// Text sent to AI processing — needed for retry
     private var aiInputText: String = ""
@@ -81,38 +79,26 @@ final class RecordingFlowCoordinator {
         guard state != .recording else { return }
 
         state = .initializing
-        initProgress = "Downloading model..."
-
-        let pollTask = Task {
-            while !Task.isCancelled {
-                let phase = await transcriptionProvider.initPhase
-                switch phase {
-                case .notStarted: initProgress = "Preparing..."
-                case .downloading: initProgress = "Downloading model..."
-                case .compiling: initProgress = "Compiling model..."
-                case .ready: return
-                }
-                try? await Task.sleep(for: Self.initPollInterval)
-            }
-        }
+        initProgress = "Loading model..."
 
         do {
-            // Pre-warm audio session concurrently with model initialization.
-            // Audio prep (~50-200ms) runs off the main thread; model init runs
-            // on the ParakeetProvider actor. Both proceed in parallel.
+            // Pre-warm audio session concurrently with streaming model loading.
+            // Audio prep (~50-200ms) runs off the main thread; model loading
+            // downloads + compiles CoreML models on first launch, cached thereafter.
             async let audioPrep: Void = audioRecorder.prepareAudioSession()
-            try await transcriptionProvider.initialize()
+
+            let manager = StreamingModelVariant.parakeetEou160ms.createManager()
+            self.streamingManager = manager
+            try await manager.loadModels()
             await audioPrep
 
-            pollTask.cancel()
             // Don't overwrite state if recording started while we were initializing
             if state == .initializing {
                 state = .ready
             }
             initProgress = "Ready"
-            Logger.app.info("Parakeet model initialized")
+            Logger.app.info("Streaming model initialized")
         } catch {
-            pollTask.cancel()
             if state == .initializing {
                 state = .error("Model initialization failed: \(error.localizedDescription)")
             }
@@ -167,34 +153,41 @@ final class RecordingFlowCoordinator {
         writeState(.recording)
         setIdleTimerDisabled(true)
 
-        // Create streaming manager immediately — no models needed for construction.
-        // Its internal AsyncStream buffers audio until start() begins consuming.
-        let streaming = StreamingAsrManager(config: .streaming)
-        self.streamingManager = streaming
-
-        // Start consuming transcription updates (sets updateContinuation on the actor)
-        liveTranscript = ""
-        startConsumingUpdates(from: streaming)
-
-        // Begin model init + streaming setup NOW — overlaps with audio engine startup.
-        // Audio buffers accumulate in the AsyncStream until start() launches
-        // the recognition task, which then drains all queued buffers.
-        streamingSetupTask = Task { @MainActor in
-            try await self.transcriptionProvider.initialize()
-            guard let models = await self.transcriptionProvider.loadedModels else {
-                throw TranscriptionError.providerUnavailable
-            }
-            try await streaming.start(models: models, source: .microphone)
+        // Reuse pre-warmed manager from initializeModel(), or create a fresh one.
+        let streaming: any StreamingAsrManager
+        if let existing = streamingManager {
+            streaming = existing
+        } else {
+            let manager = StreamingModelVariant.parakeetEou160ms.createManager()
+            self.streamingManager = manager
+            streaming = manager
         }
 
-        // Start audio engine — buffers forward to the streaming manager
+        // Set up live transcript callback — fires during processBufferedAudio().
+        liveTranscript = ""
+        await streaming.setPartialTranscriptCallback { [weak self] text in
+            Task { @MainActor [weak self] in
+                self?.liveTranscript = text.trimmingCharacters(in: .whitespaces)
+            }
+        }
+
+        // Ensure models are loaded — instant if pre-warmed, otherwise downloads + compiles.
+        // Overlaps with audio engine startup below.
+        streamingSetupTask = Task {
+            try await streaming.loadModels()
+        }
+
+        // Start audio engine — buffers forward to the streaming manager.
+        // appendAudio queues the buffer; processBufferedAudio runs inference.
         let started = await audioRecorder.startRecording { buffer in
-            Task { await streaming.streamAudio(buffer) }
+            Task {
+                try? await streaming.appendAudio(buffer)
+                try? await streaming.processBufferedAudio()
+            }
         }
 
         guard started else {
             self.streamingManager = nil
-            updateTask?.cancel()
             streamingSetupTask?.cancel()
             streamingSetupTask = nil
             state = .error("Failed to start recording — check microphone permission")
@@ -208,7 +201,6 @@ final class RecordingFlowCoordinator {
     func stopAndTranscribe(sendToKeyboard: Bool = false) async {
         audioRecorder.stopRecording()
         setIdleTimerDisabled(false)
-        updateTask?.cancel()
 
         guard let streaming = streamingManager else {
             streamingSetupTask?.cancel()
@@ -218,17 +210,17 @@ final class RecordingFlowCoordinator {
             return
         }
 
-        // Wait for model init + streaming start if still in progress.
-        // Audio has stopped, so no new buffers arrive — the recognition task
-        // will process all queued buffers once it starts.
+        // Wait for model loading if still in progress.
+        // Audio has stopped, so no new buffers arrive — processing will
+        // drain all queued buffers once loadModels() completes.
         if let task = streamingSetupTask {
-            transcribingMessage = "Compiling model — your recording will be processed shortly"
+            transcribingMessage = "Loading model — your recording will be processed shortly"
             state = .transcribing
             writeState(.transcribing)
             do {
                 try await task.value
             } catch {
-                await streaming.cancel()
+                try? await streaming.reset()
                 state = .error("Transcription unavailable: \(error.localizedDescription)")
                 writeState(.idle)
                 streamingManager = nil
@@ -279,7 +271,7 @@ final class RecordingFlowCoordinator {
                 if bgTaskID != .invalid {
                     UIApplication.shared.endBackgroundTask(bgTaskID)
                 }
-                streamingManager = nil
+                try? await streaming.reset()
                 return
             }
 
@@ -316,10 +308,12 @@ final class RecordingFlowCoordinator {
             Logger.app.error("Streaming transcription failed: \(error)")
         }
 
+        // Reset manager for next recording (keeps models loaded)
+        try? await streaming.reset()
+
         if bgTaskID != .invalid {
             UIApplication.shared.endBackgroundTask(bgTaskID)
         }
-        streamingManager = nil
     }
 
     func reset() {
@@ -333,10 +327,11 @@ final class RecordingFlowCoordinator {
         selectedPromptMode = AIProcessingSettings.defaultMode
         currentTextStyle = StyleSettings.defaultStyle
         aiInputText = ""
-        updateTask?.cancel()
         streamingSetupTask?.cancel()
         streamingSetupTask = nil
-        streamingManager = nil
+        if let streaming = streamingManager {
+            Task { try? await streaming.reset() }
+        }
         aiRetryTask?.cancel()
         aiRetryTask = nil
     }
@@ -479,22 +474,6 @@ final class RecordingFlowCoordinator {
     func cleanupStaleResults() {
         SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
         writeState(.idle)
-    }
-
-    // MARK: - Streaming Updates
-
-    private func startConsumingUpdates(from streaming: StreamingAsrManager) {
-        updateTask?.cancel()
-        updateTask = Task {
-            let updates = await streaming.transcriptionUpdates
-            for await _ in updates {
-                guard !Task.isCancelled else { break }
-                let confirmed = await streaming.confirmedTranscript
-                let volatile = await streaming.volatileTranscript
-                let full = confirmed.isEmpty ? volatile : "\(confirmed) \(volatile)"
-                liveTranscript = full.trimmingCharacters(in: .whitespaces)
-            }
-        }
     }
 
     // MARK: - Idle Timer
