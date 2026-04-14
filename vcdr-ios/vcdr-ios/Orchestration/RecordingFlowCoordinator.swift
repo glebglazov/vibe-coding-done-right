@@ -257,6 +257,23 @@ final class RecordingFlowCoordinator {
         setIdleTimerDisabled(false)
         updateTask?.cancel()
 
+        // Re-read selected text the keyboard may have captured on stop.
+        // Replaces start-time capture if present, otherwise supplements it.
+        if sendToKeyboard {
+            let sd = SharedConstants.sharedDefaults
+            sd.synchronize()
+            if let stopSelection = sd.string(forKey: SharedConstants.selectedTextKey),
+               !stopSelection.isEmpty {
+                if capturedSelectedText == nil {
+                    Logger.ai.info("Selected text captured on stop (\(stopSelection.count) chars)")
+                } else {
+                    Logger.ai.info("Stop-time selection replaces start-time selection (\(stopSelection.count) chars)")
+                }
+                capturedSelectedText = stopSelection
+                sd.removeObject(forKey: SharedConstants.selectedTextKey)
+            }
+        }
+
         guard let streaming = streamingManager else {
             streamingSetupTask?.cancel()
             streamingSetupTask = nil

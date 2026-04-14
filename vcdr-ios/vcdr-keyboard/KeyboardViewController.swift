@@ -182,6 +182,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Falls back to `.ready` state if the result doesn't arrive within the timeout.
     func stopAndWaitForResult() {
         let sd = SharedConstants.sharedDefaults
+        // Capture current selection so the app can use it as context
+        // (supplements or replaces the selection captured on start).
+        if aiActive, aiMode == .assistant,
+           let selected = textDocumentProxy.selectedText, !selected.isEmpty {
+            sd.set(selected, forKey: SharedConstants.selectedTextKey)
+        }
         sd.set(
             RecordingCommand.stopRecording.rawValue,
             forKey: SharedConstants.commandKey
