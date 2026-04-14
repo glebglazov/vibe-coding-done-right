@@ -1,5 +1,6 @@
 import KeyboardKit
 import SwiftUI
+import UIKit
 
 /// Custom keyboard view that fixes iPad bottom row layout
 /// (globe and symbols buttons are swapped in KeyboardKit's default iPad layout)
@@ -77,7 +78,10 @@ struct DictateSettingsPills: View {
     var body: some View {
         HStack(spacing: 4) {
             if controller.aiConfigured {
-                Button { controller.toggleAI() } label: {
+                Button {
+                    KeyboardHaptics.light()
+                    controller.toggleAI()
+                } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 13))
@@ -92,7 +96,10 @@ struct DictateSettingsPills: View {
                 }
 
                 if controller.aiActive {
-                    Button { controller.cycleAIMode() } label: {
+                    Button {
+                        KeyboardHaptics.light()
+                        controller.cycleAIMode()
+                    } label: {
                         Text(controller.aiMode.displayName.uppercased())
                             .font(.system(size: Self.pillFont, weight: .bold))
                             .foregroundStyle(.blue)
@@ -104,7 +111,10 @@ struct DictateSettingsPills: View {
                 }
             }
 
-            Button { controller.toggleTextStyle() } label: {
+            Button {
+                KeyboardHaptics.light()
+                controller.toggleTextStyle()
+            } label: {
                 Text(controller.textStyle.displayName.uppercased())
                     .font(.system(size: Self.pillFont, weight: .bold))
                     .foregroundStyle(.blue)
@@ -132,8 +142,12 @@ struct DictateActionButton: View {
             Link(destination: SharedConstants.recordDeepLinkURL) {
                 actionPill("Start", icon: "mic.fill", color: .blue)
             }
+            .simultaneousGesture(TapGesture().onEnded { KeyboardHaptics.medium() })
         case .recording:
-            Button(action: onStop) {
+            Button {
+                KeyboardHaptics.medium()
+                onStop()
+            } label: {
                 actionPill("Stop", icon: "stop.fill", color: .red)
             }
         case .transcribing:
@@ -144,13 +158,17 @@ struct DictateActionButton: View {
                     .easeInOut(duration: 0.6)
                 }
         case .ready:
-            Button(action: onInsert) {
+            Button {
+                KeyboardHaptics.medium()
+                onInsert()
+            } label: {
                 actionPill("Insert", icon: "checkmark", color: .green)
             }
         case .emptyResult:
             Link(destination: SharedConstants.recordDeepLinkURL) {
                 actionPill("Start", icon: "mic.fill", color: .yellow)
             }
+            .simultaneousGesture(TapGesture().onEnded { KeyboardHaptics.medium() })
         }
     }
 
@@ -166,5 +184,18 @@ struct DictateActionButton: View {
         .frame(height: Self.pillHeight)
         .background(Capsule().fill(color))
         .contentShape(Capsule())
+    }
+}
+
+// MARK: - Haptic Feedback
+
+/// Lightweight haptic feedback for keyboard extension buttons.
+enum KeyboardHaptics {
+    static func light() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    static func medium() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 }

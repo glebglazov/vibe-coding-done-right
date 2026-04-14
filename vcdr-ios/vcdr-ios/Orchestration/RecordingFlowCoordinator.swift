@@ -159,6 +159,7 @@ final class RecordingFlowCoordinator {
         // sets state = .recording synchronously in prepareForDeepLinkRecording()
         // before this method runs — blocking on state would prevent actual startup.
         guard !audioRecorder.isRecording else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         launchedViaDeepLink = fromDeepLink
         let sd = SharedConstants.sharedDefaults
@@ -216,6 +217,7 @@ final class RecordingFlowCoordinator {
     /// Finalizes streaming in the background and updates the result if it differs.
     /// - Parameter sendToKeyboard: When true, the transcription result is delivered to the keyboard extension via state bundling.
     func stopAndTranscribe(sendToKeyboard: Bool = false) async {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         audioRecorder.stopRecording()
         setIdleTimerDisabled(false)
         updateTask?.cancel()
