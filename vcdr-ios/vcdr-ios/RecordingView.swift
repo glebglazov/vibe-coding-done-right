@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
@@ -432,7 +433,10 @@ struct RecordingView: View {
                 .foregroundStyle(theme.onSurfaceVariant)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            brutalistButton("TRY AGAIN") { Task { await coordinator.startRecording() } }
+            brutalistButton("TRY AGAIN") {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Task { await coordinator.startRecording() }
+            }
         }
     }
 
