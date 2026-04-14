@@ -102,5 +102,6 @@ enum SharedSettingsSync {
             AIProcessingSettings.hasAICapability,
             forKey: SharedConstants.aiConfiguredKey
         )
+        sd.synchronize()
     }
 }

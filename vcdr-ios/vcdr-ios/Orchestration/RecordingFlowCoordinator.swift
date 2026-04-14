@@ -70,6 +70,7 @@ final class RecordingFlowCoordinator {
         sd.set(aiActiveThisSession, forKey: SharedConstants.aiActiveKey)
         sd.set(selectedPromptMode.rawValue, forKey: SharedConstants.aiModeKey)
         sd.set(currentTextStyle.rawValue, forKey: SharedConstants.textStyleKey)
+        sd.synchronize()
         DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
     }
 
@@ -599,7 +600,9 @@ final class RecordingFlowCoordinator {
         } else {
             value = recordingState.rawValue
         }
-        SharedConstants.sharedDefaults.set(value, forKey: SharedConstants.stateKey)
+        let sd = SharedConstants.sharedDefaults
+        sd.set(value, forKey: SharedConstants.stateKey)
+        sd.synchronize()
         DarwinNotificationCenter.post(SharedConstants.stateNotificationName)
     }
 
