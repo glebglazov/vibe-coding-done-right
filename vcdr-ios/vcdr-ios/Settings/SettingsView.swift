@@ -2,7 +2,6 @@ import SwiftUI
 import AVFoundation
 
 struct SettingsView: View {
-    @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance: Appearance = .system
     @AppStorage(AudioRecorder.preferredInputUIDKey) private var preferredInputUID = ""
@@ -21,29 +20,20 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                theme.surfaceLowest.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 32) {
-                        themeSection
-                        textStyleSection
-                        microphoneSection
-                        aiProcessingSection
-                    }
-                    .padding(24)
-                }
-                .onAppear { refreshAvailableInputs() }
+            Form {
+                appearanceSection
+                textStyleSection
+                microphoneSection
+                aiProcessingSection
             }
+            .onAppear { refreshAvailableInputs() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .foregroundStyle(theme.primary)
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
             // Mirror settings to shared defaults for keyboard extension
             .onChange(of: aiActiveInDictation) { _, val in
                 SharedConstants.sharedDefaults.set(val, forKey: SharedConstants.aiActiveKey)
@@ -68,105 +58,55 @@ struct SettingsView: View {
         )
     }
 
-    // MARK: - Text Style
+    // MARK: - Appearance
 
-    private var textStyleSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionTitle("TEXT STYLE")
-
-            HStack(spacing: 0) {
-                ForEach(TextStyle.allCases, id: \.self) { style in
-                    Button {
-                        defaultStyleRaw = style.rawValue
-                    } label: {
-                        Text(style.displayName.uppercased())
-                            .font(.system(size: 11, weight: .bold))
-                            .tracking(2)
-                            .foregroundStyle(defaultStyleRaw == style.rawValue ? theme.onSurface : theme.onSurfaceVariant)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(defaultStyleRaw == style.rawValue ? theme.surfaceHigh : .clear)
-                    }
+    private var appearanceSection: some View {
+        Section {
+            Picker("Appearance", selection: $appearance) {
+                ForEach(Appearance.allCases, id: \.self) { option in
+                    Text(option.label).tag(option)
                 }
             }
-            .background(theme.surfaceContainer)
-
-            Text("Default formatting for all captures")
-                .font(.system(size: 12))
-                .foregroundStyle(theme.onSurfaceVariant)
+            .pickerStyle(.segmented)
         }
     }
 
-    // MARK: - Theme
+    // MARK: - Text Style
 
-    private var themeSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionTitle("APPEARANCE")
-
-            HStack(spacing: 0) {
-                ForEach(Appearance.allCases, id: \.self) { option in
-                    Button {
-                        appearance = option
-                    } label: {
-                        Text(option.label.uppercased())
-                            .font(.system(size: 11, weight: .bold))
-                            .tracking(2)
-                            .foregroundStyle(appearance == option ? theme.onSurface : theme.onSurfaceVariant)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(appearance == option ? theme.surfaceHigh : .clear)
-                    }
+    private var textStyleSection: some View {
+        Section {
+            Picker("Default Style", selection: $defaultStyleRaw) {
+                ForEach(TextStyle.allCases, id: \.self) { style in
+                    Text(style.displayName).tag(style.rawValue)
                 }
             }
-            .background(theme.surfaceContainer)
+            .pickerStyle(.segmented)
+        } header: {
+            Text("Text Style")
+        } footer: {
+            Text("Default formatting for all captures.")
         }
     }
 
     // MARK: - Microphone
 
     private var microphoneSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionTitle("MICROPHONE")
-
+        Section {
             if availableInputs.isEmpty {
                 Text("No audio inputs available")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(theme.onSurfaceVariant)
+                    .foregroundStyle(.secondary)
             } else {
-                VStack(spacing: 0) {
-                    // "Automatic" option — uses system default
-                    microphoneRow(name: "Automatic", uid: "", isSelected: preferredInputUID.isEmpty)
-
+                Picker("Microphone", selection: $preferredInputUID) {
+                    Text("Automatic").tag("")
                     ForEach(availableInputs, id: \.uid) { input in
-                        microphoneRow(name: input.portName, uid: input.uid, isSelected: preferredInputUID == input.uid)
+                        Text(input.portName).tag(input.uid)
                     }
                 }
-                .background(theme.surfaceContainer)
             }
-
+        } header: {
+            Text("Microphone")
+        } footer: {
             Text("Choose which microphone to use for recording. \"Automatic\" uses the system default.")
-                .font(.system(size: 12))
-                .foregroundStyle(theme.onSurfaceVariant)
-        }
-    }
-
-    private func microphoneRow(name: String, uid: String, isSelected: Bool) -> some View {
-        Button {
-            preferredInputUID = uid
-        } label: {
-            HStack {
-                Text(name)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(theme.onSurface)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(theme.primary)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
     }
 
@@ -195,98 +135,28 @@ struct SettingsView: View {
     // MARK: - AI Processing
 
     private var aiProcessingSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            sectionTitle("AI PROCESSING")
+        Section {
+            Toggle("Enabled", isOn: $aiEnabled)
 
-            Toggle(isOn: $aiEnabled) {
-                Text("Enabled")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(theme.onSurface)
-            }
-            .tint(theme.primary)
+            Toggle("Active by Default", isOn: $aiActiveInDictation)
 
-            Toggle(isOn: $aiActiveInDictation) {
-                Text("Active by default")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(theme.onSurface)
-            }
-            .tint(theme.primary)
-
-            // Default processing mode
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Default processing mode")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(theme.onSurfaceVariant)
-                Button {
-                    let current = AIProcessingSettings.defaultMode
-                    defaultModeRaw = current.next.rawValue
-                } label: {
-                    HStack {
-                        Text(AIProcessingSettings.defaultMode.displayName)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(theme.onSurface)
-                        Spacer()
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 12))
-                            .foregroundStyle(theme.onSurfaceVariant)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(theme.surfaceContainer)
+            Picker("Default Mode", selection: $defaultModeRaw) {
+                ForEach(AIPromptMode.availableModes, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode.rawValue)
                 }
             }
 
-            // Provider picker
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Provider")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(theme.onSurfaceVariant)
-                HStack(spacing: 0) {
-                    ForEach(AIProvider.allCases, id: \.self) { provider in
-                        let isAvailable = provider != .apple || AIProcessingSettings.isAFMAvailable
-                        Button {
-                            let oldProvider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
-                            aiProviderRaw = provider.rawValue
+            providerPicker
 
-                            // When switching TO Apple: remember fallback state, force it off
-                            if provider == .apple && oldProvider != .apple {
-                                afmFallbackRemembered = afmFallbackEnabled
-                                afmFallbackEnabled = false
-                            }
-                            // When switching AWAY from Apple: restore remembered fallback state
-                            if provider != .apple && oldProvider == .apple {
-                                afmFallbackEnabled = afmFallbackRemembered
-                            }
-                        } label: {
-                            Text(provider.displayName.uppercased())
-                                .font(.system(size: 11, weight: .bold))
-                                .tracking(2)
-                                .foregroundStyle(
-                                    !isAvailable ? theme.onSurfaceVariant.opacity(0.4) :
-                                    aiProviderRaw == provider.rawValue ? theme.onSurface : theme.onSurfaceVariant
-                                )
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(aiProviderRaw == provider.rawValue ? theme.surfaceHigh : .clear)
-                        }
-                        .disabled(!isAvailable)
-                    }
-                }
-                .background(theme.surfaceContainer)
-            }
-
-            // AFM fallback toggle
             afmFallbackToggle
 
-            // Anthropic API Key
-            maskedApiKeyField(
+            apiKeyRow(
                 label: "Anthropic API Key",
                 key: $anthropicApiKey,
                 isEditing: $isEditingAnthropicKey
             )
 
-            // OpenAI API Key
-            maskedApiKeyField(
+            apiKeyRow(
                 label: "OpenAI API Key",
                 key: $openaiApiKey,
                 isEditing: $isEditingOpenAIKey
@@ -296,13 +166,39 @@ struct SettingsView: View {
             let currentProvider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
             if aiEnabled && currentProvider.requiresAPIKey && AIProcessingSettings.activeApiKey.isEmpty {
                 Text("Enter your \(currentProvider.displayName) API key to enable AI processing.")
-                    .font(.system(size: 12))
                     .foregroundStyle(.yellow)
             }
-
+        } header: {
+            Text("AI Processing")
+        } footer: {
             Text("Enhances transcriptions using AI. Enter your API key for the selected provider.")
-                .font(.system(size: 12))
-                .foregroundStyle(theme.onSurfaceVariant)
+        }
+    }
+
+    private var providerPicker: some View {
+        Picker("Provider", selection: Binding(
+            get: { AIProvider(rawValue: aiProviderRaw) ?? .anthropic },
+            set: { newProvider in
+                let oldProvider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
+
+                // When switching TO Apple: remember fallback state, force it off
+                if newProvider == .apple && oldProvider != .apple {
+                    afmFallbackRemembered = afmFallbackEnabled
+                    afmFallbackEnabled = false
+                }
+                // When switching AWAY from Apple: restore remembered fallback state
+                if newProvider != .apple && oldProvider == .apple {
+                    afmFallbackEnabled = afmFallbackRemembered
+                }
+
+                aiProviderRaw = newProvider.rawValue
+            }
+        )) {
+            ForEach(AIProvider.allCases, id: \.self) { provider in
+                if provider != .apple || AIProcessingSettings.isAFMAvailable {
+                    Text(provider.displayName).tag(provider)
+                }
+            }
         }
     }
 
@@ -310,39 +206,24 @@ struct SettingsView: View {
         let isDisabled = !AIProcessingSettings.isAFMAvailable
             || (AIProvider(rawValue: aiProviderRaw) ?? .anthropic) == .apple
 
-        return Toggle(isOn: $afmFallbackEnabled) {
-            Text("Use Apple as fallback")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(isDisabled ? theme.onSurfaceVariant.opacity(0.4) : theme.onSurface)
-        }
-        .tint(theme.primary)
-        .disabled(isDisabled)
+        return Toggle("Use Apple as Fallback", isOn: $afmFallbackEnabled)
+            .disabled(isDisabled)
     }
 
-    // MARK: - Components
+    // MARK: - API Key Row
 
-    private func maskedApiKeyField(
+    private func apiKeyRow(
         label: String,
         key: Binding<String>,
         isEditing: Binding<Bool>
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(theme.onSurfaceVariant)
+        LabeledContent(label) {
             if isEditing.wrappedValue {
                 ApiKeyTextField(text: key, onSubmit: { isEditing.wrappedValue = false })
-                    .font(.system(size: 14))
-                    .foregroundStyle(theme.onSurface)
-                    .padding(12)
-                    .background(theme.surfaceContainer)
+                    .multilineTextAlignment(.trailing)
             } else {
                 Text(maskedKey(key.wrappedValue))
-                    .font(.system(size: 14))
-                    .foregroundStyle(key.wrappedValue.isEmpty ? theme.onSurfaceVariant : theme.onSurface)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(theme.surfaceContainer)
+                    .foregroundStyle(key.wrappedValue.isEmpty ? .secondary : .primary)
                     .onTapGesture { isEditing.wrappedValue = true }
             }
         }
@@ -353,13 +234,6 @@ struct SettingsView: View {
             return key.isEmpty ? "Not set" : String(repeating: "\u{2022}", count: key.count)
         }
         return "\(key.prefix(3))\u{2022}\u{2022}\u{2022}\(key.suffix(3))"
-    }
-
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .bold))
-            .tracking(3)
-            .foregroundStyle(theme.onSurfaceVariant)
     }
 }
 

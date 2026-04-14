@@ -76,7 +76,6 @@ struct RecordingView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .preferredColorScheme(appearance.colorScheme)
-                .environment(\.theme, theme)
         }
     }
 
