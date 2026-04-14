@@ -86,7 +86,9 @@ final class RecordingFlowCoordinator {
     /// Text sent to AI processing — needed for retry
     private var aiInputText: String = ""
     /// Selected text captured by the keyboard extension at recording start (assistant mode only).
-    private var capturedSelectedText: String?
+    private var capturedSelectedTextOnStart: String?
+    /// Selected text captured by the keyboard extension at recording stop (assistant mode only).
+    private var capturedSelectedTextOnStop: String?
     /// Tracks the in-flight AI retry so rapid taps cancel the previous attempt.
     private var aiRetryTask: Task<Void, Never>?
     /// Token for the keyboard command NotificationCenter observer, stored so we can
@@ -200,10 +202,11 @@ final class RecordingFlowCoordinator {
         ) ?? .casual
         // Read and clear selected text captured by the keyboard extension.
         // Only used in assistant mode — keyboard only writes it when assistant is active.
-        capturedSelectedText = sd.string(forKey: SharedConstants.selectedTextKey)
+        capturedSelectedTextOnStart = sd.string(forKey: SharedConstants.selectedTextKey)
         sd.removeObject(forKey: SharedConstants.selectedTextKey)
-        if let captured = capturedSelectedText {
-            Logger.ai.info("Captured selected text from keyboard (\(captured.count) chars): \(captured.prefix(100))")
+        capturedSelectedTextOnStop = nil
+        if let captured = capturedSelectedTextOnStart {
+            Logger.ai.info("Captured selected text on start (\(captured.count) chars): \(captured.prefix(100))")
         }
         aiProcessingStatus = .idle
 
@@ -258,18 +261,14 @@ final class RecordingFlowCoordinator {
         updateTask?.cancel()
 
         // Re-read selected text the keyboard may have captured on stop.
-        // Replaces start-time capture if present, otherwise supplements it.
+        // Kept as independent capture (id=2) alongside start-time capture (id=1).
         if sendToKeyboard {
             let sd = SharedConstants.sharedDefaults
             sd.synchronize()
             if let stopSelection = sd.string(forKey: SharedConstants.selectedTextKey),
                !stopSelection.isEmpty {
-                if capturedSelectedText == nil {
-                    Logger.ai.info("Selected text captured on stop (\(stopSelection.count) chars)")
-                } else {
-                    Logger.ai.info("Stop-time selection replaces start-time selection (\(stopSelection.count) chars)")
-                }
-                capturedSelectedText = stopSelection
+                Logger.ai.info("Selected text captured on stop (\(stopSelection.count) chars)")
+                capturedSelectedTextOnStop = stopSelection
                 sd.removeObject(forKey: SharedConstants.selectedTextKey)
             }
         }
@@ -405,7 +404,8 @@ final class RecordingFlowCoordinator {
             rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
         ) ?? .casual
         aiInputText = ""
-        capturedSelectedText = nil
+        capturedSelectedTextOnStart = nil
+        capturedSelectedTextOnStop = nil
         updateTask?.cancel()
         streamingSetupTask?.cancel()
         streamingSetupTask = nil
@@ -424,12 +424,20 @@ final class RecordingFlowCoordinator {
         let apiKey = AIProcessingSettings.activeApiKey
         let systemPrompt = BuiltInPrompts.prompt(for: selectedPromptMode)
         var wrappedText = "<dictation>\(localText)</dictation>"
-        // Append captured selection as <capture> context for assistant mode,
+        // Append captured selections as <capture> context for assistant mode,
         // matching the macOS XML format the assistant prompt already expects.
-        if selectedPromptMode == .assistant,
-           let selection = capturedSelectedText, !selection.isEmpty {
-            wrappedText += "\n\n<capture id=\"1\">\(selection)</capture>"
-            Logger.ai.info("Selected text included in AI input (\(selection.count) chars)")
+        // Start-time capture = id 1, stop-time capture = id 2.
+        if selectedPromptMode == .assistant {
+            var captureId = 1
+            if let startSelection = capturedSelectedTextOnStart, !startSelection.isEmpty {
+                wrappedText += "\n\n<capture id=\"\(captureId)\">\(startSelection)</capture>"
+                Logger.ai.info("Start-time selection included in AI input (\(startSelection.count) chars)")
+                captureId += 1
+            }
+            if let stopSelection = capturedSelectedTextOnStop, !stopSelection.isEmpty {
+                wrappedText += "\n\n<capture id=\"\(captureId)\">\(stopSelection)</capture>"
+                Logger.ai.info("Stop-time selection included in AI input (\(stopSelection.count) chars)")
+            }
         }
 
         Logger.ai.info("AI input [mode=\(self.selectedPromptMode.rawValue), style=\(self.currentTextStyle.rawValue), provider=\(provider.displayName)]: \(wrappedText)")
