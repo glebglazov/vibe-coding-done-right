@@ -8,22 +8,15 @@ struct TranscriptionTabView: View {
     var body: some View {
         Form {
             Section("Models") {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("Parakeet v3")
-                            .font(.headline)
-                        Text("Multilingual speech-to-text (CoreML)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
+                LabeledContent {
                     ModelStatusBadge(
                         status: isTranscriptionReady ? .ready
                             : initializationStatus.hasPrefix("Failed") ? .failed
                             : .loading(initializationStatus)
                     )
+                } label: {
+                    Text("Parakeet v3")
+                    Text("Multilingual speech-to-text (CoreML)")
                 }
             }
 

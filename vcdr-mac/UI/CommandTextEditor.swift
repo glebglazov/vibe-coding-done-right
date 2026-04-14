@@ -53,7 +53,7 @@ struct CommandTextEditor: NSViewRepresentable {
         let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
-        scrollView.borderType = .bezelBorder
+        scrollView.borderType = .noBorder
 
         context.coordinator.scrollView = scrollView
         context.coordinator.applyHighlighting(textView)

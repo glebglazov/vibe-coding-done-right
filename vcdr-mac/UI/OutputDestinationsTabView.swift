@@ -113,17 +113,10 @@ struct OutputDestinationDetailView: View {
     var body: some View {
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Name")
-                        .foregroundStyle(.secondary)
-                    TextField("Name", text: $destination.name)
-                        .labelsHidden()
-                        .focused($isNameFieldFocused)
-                }
+                TextField("Name", text: $destination.name)
+                    .focused($isNameFieldFocused)
 
                 if !destination.isBuiltIn {
-                    // Type is not editable for built-in destinations
-                    // Currently only shows "Bash Script" since that's the only user-creatable type
                     Picker("Type", selection: $destination.type) {
                         ForEach(OutputDestinationType.userCreatable, id: \.self) { type in
                             Text(type.displayName).tag(type)
@@ -131,13 +124,8 @@ struct OutputDestinationDetailView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Symbol")
-                        .foregroundStyle(.secondary)
-                    TextField("Symbol", text: $destination.symbol)
-                        .labelsHidden()
-                        .help("Displayed in the mode switcher to identify this destination")
-                }
+                TextField("Symbol", text: $destination.symbol)
+                    .help("Displayed in the mode switcher to identify this destination")
 
                 ShortcutRecorderRow(
                     label: "Activation Hotkey",
@@ -146,12 +134,8 @@ struct OutputDestinationDetailView: View {
                 )
 
                 if destination.type == .bashScript {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Command")
-                            .foregroundStyle(.secondary)
-                        CommandTextEditor(text: $destination.bashCommand, definedVariableNames: definedVariableNames)
-                            .help("The script receives text via $VCDR_TEXT. Use {} as placeholder.")
-                    }
+                    CommandTextEditor(text: $destination.bashCommand, definedVariableNames: definedVariableNames)
+                        .help("The script receives text via $VCDR_TEXT. Use {} as placeholder.")
                 }
             }
         }

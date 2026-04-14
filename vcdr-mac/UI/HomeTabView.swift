@@ -22,35 +22,25 @@ struct HomeTabView: View {
             if needsPermissionAttention {
                 Section {
                     if !hasMicrophonePermission {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("Microphone")
-                                    .fontWeight(.medium)
-                                Text("Required to record your voice for transcription.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
+                        LabeledContent {
                             Button("Grant Access") {
                                 AVCaptureDevice.requestAccess(for: .audio) { _ in }
                             }
                             .controlSize(.small)
+                        } label: {
+                            Text("Microphone")
+                            Text("Required to record your voice for transcription.")
                         }
                     }
                     if !hasAccessibilityPermission {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("Accessibility")
-                                    .fontWeight(.medium)
-                                Text("Required to paste transcribed text into active apps.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
+                        LabeledContent {
                             Button("Open Settings") {
                                 NSWorkspace.shared.open(Self.accessibilitySettingsURL)
                             }
                             .controlSize(.small)
+                        } label: {
+                            Text("Accessibility")
+                            Text("Required to paste transcribed text into active apps.")
                         }
                     }
                 } header: {
