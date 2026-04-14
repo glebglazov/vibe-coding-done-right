@@ -381,7 +381,7 @@ struct RecordingView: View {
             // AI toggle pill (only show if AI is configured)
             if AIProcessingSettings.hasAICapability {
                 Button {
-                    coordinator.aiActiveThisSession.toggle()
+                    coordinator.toggleAIActive()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "sparkles")
@@ -398,7 +398,7 @@ struct RecordingView: View {
 
                 if coordinator.aiActiveThisSession {
                     Button {
-                        coordinator.selectedPromptMode = coordinator.selectedPromptMode.next
+                        coordinator.cyclePromptMode()
                     } label: {
                         Text(coordinator.selectedPromptMode.displayName.uppercased())
                             .font(.system(size: 11, weight: .bold))
@@ -413,7 +413,7 @@ struct RecordingView: View {
 
             // Style toggle pill
             Button {
-                coordinator.currentTextStyle = coordinator.currentTextStyle == .casual ? .formal : .casual
+                coordinator.cycleTextStyle()
             } label: {
                 Text(coordinator.currentTextStyle.displayName.uppercased())
                     .font(.system(size: 11, weight: .bold))

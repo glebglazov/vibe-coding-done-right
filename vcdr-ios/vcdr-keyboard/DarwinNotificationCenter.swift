@@ -47,4 +47,5 @@ enum DarwinNotificationCenter {
 extension Notification.Name {
     static let darwinCommand = Notification.Name("darwinCommand")
     static let darwinStateChanged = Notification.Name("darwinStateChanged")
+    static let darwinSettingsChanged = Notification.Name("darwinSettingsChanged")
 }
