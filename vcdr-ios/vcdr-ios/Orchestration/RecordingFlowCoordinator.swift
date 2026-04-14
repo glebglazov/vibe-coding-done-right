@@ -48,6 +48,31 @@ final class RecordingFlowCoordinator {
         rawValue: SharedConstants.sharedDefaults.string(forKey: SharedConstants.textStyleKey) ?? ""
     ) ?? .casual
 
+    // MARK: - In-Session Settings (sync back to keyboard)
+
+    func toggleAIActive() {
+        aiActiveThisSession.toggle()
+        syncSettingsToKeyboard()
+    }
+
+    func cyclePromptMode() {
+        selectedPromptMode = selectedPromptMode.next
+        syncSettingsToKeyboard()
+    }
+
+    func cycleTextStyle() {
+        currentTextStyle = currentTextStyle == .casual ? .formal : .casual
+        syncSettingsToKeyboard()
+    }
+
+    private func syncSettingsToKeyboard() {
+        let sd = SharedConstants.sharedDefaults
+        sd.set(aiActiveThisSession, forKey: SharedConstants.aiActiveKey)
+        sd.set(selectedPromptMode.rawValue, forKey: SharedConstants.aiModeKey)
+        sd.set(currentTextStyle.rawValue, forKey: SharedConstants.textStyleKey)
+        DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
+    }
+
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
 
@@ -176,6 +201,9 @@ final class RecordingFlowCoordinator {
         // Only used in assistant mode — keyboard only writes it when assistant is active.
         capturedSelectedText = sd.string(forKey: SharedConstants.selectedTextKey)
         sd.removeObject(forKey: SharedConstants.selectedTextKey)
+        if let captured = capturedSelectedText {
+            Logger.ai.info("Captured selected text from keyboard (\(captured.count) chars): \(captured.prefix(100))")
+        }
         aiProcessingStatus = .idle
 
         // Show "LISTENING" immediately — before any async work.
@@ -383,7 +411,12 @@ final class RecordingFlowCoordinator {
         if selectedPromptMode == .assistant,
            let selection = capturedSelectedText, !selection.isEmpty {
             wrappedText += "\n\n<capture id=\"1\">\(selection)</capture>"
+            Logger.ai.info("Selected text included in AI input (\(selection.count) chars)")
         }
+
+        Logger.ai.info("AI input [mode=\(self.selectedPromptMode.rawValue), style=\(self.currentTextStyle.rawValue), provider=\(provider.displayName)]: \(wrappedText)")
+        Logger.ai.debug("AI system prompt: \(systemPrompt.prefix(100))...")
+
         let deadline = ContinuousClock.now + Self.aiProcessingTimeout
         let startTime = ContinuousClock.now
 
@@ -397,7 +430,7 @@ final class RecordingFlowCoordinator {
         if let result = primaryResult {
             let elapsed = ContinuousClock.now - startTime
             aiProcessingStatus = .completed
-            Logger.app.info("AI processing completed in \(elapsed)")
+            Logger.ai.info("AI output [\(elapsed)]: \(result)")
             return result
         }
 
@@ -409,7 +442,7 @@ final class RecordingFlowCoordinator {
             if let result = fallbackResult {
                 let elapsed = ContinuousClock.now - startTime
                 aiProcessingStatus = .completed
-                Logger.app.info("AFM fallback completed in \(elapsed)")
+                Logger.ai.info("AFM fallback output [\(elapsed)]: \(result)")
                 return result
             }
         }

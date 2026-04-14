@@ -47,6 +47,16 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
             self, selector: #selector(handleStateChanged),
             name: .darwinStateChanged, object: nil
         )
+
+        // Listen for settings changes from the main app (mode/style toggled in-session).
+        DarwinNotificationCenter.observe(
+            SharedConstants.settingsNotificationName,
+            localName: .darwinSettingsChanged
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleSettingsChanged),
+            name: .darwinSettingsChanged, object: nil
+        )
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -77,6 +87,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     @objc private func handleStateChanged() {
         refreshState()
+    }
+
+    @objc private func handleSettingsChanged() {
+        SharedConstants.sharedDefaults.synchronize()
+        refreshSettings()
+        refreshSelectedTextIndicator()
     }
 
     /// Reads the shared state key and updates `dictationState`.
