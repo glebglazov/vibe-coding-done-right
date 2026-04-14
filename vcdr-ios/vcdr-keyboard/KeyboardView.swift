@@ -56,6 +56,7 @@ struct VCDRKeyboardView: View {
                     // Right: action button
                     DictateActionButton(
                         dictationState: controller.dictationState,
+                        onStart: { controller.captureSelectedTextAndOpenRecord() },
                         onStop: { controller.stopAndWaitForResult() },
                         onInsert: { controller.insertPendingText() }
                     )
@@ -100,13 +101,19 @@ struct DictateSettingsPills: View {
                         KeyboardHaptics.light()
                         controller.cycleAIMode()
                     } label: {
-                        Text(controller.aiMode.displayName.uppercased())
-                            .font(.system(size: Self.pillFont, weight: .bold))
-                            .foregroundStyle(.blue)
-                            .padding(.horizontal, 8)
-                            .frame(height: Self.pillHeight)
-                            .background(Capsule().fill(Color(.systemGray5)))
-                            .contentShape(Capsule())
+                        HStack(spacing: 4) {
+                            Text(controller.aiMode.displayName.uppercased())
+                                .font(.system(size: Self.pillFont, weight: .bold))
+                            if controller.hasSelectedText {
+                                Image(systemName: "doc.on.clipboard")
+                                    .font(.system(size: 12))
+                            }
+                        }
+                        .foregroundStyle(.blue)
+                        .padding(.horizontal, 8)
+                        .frame(height: Self.pillHeight)
+                        .background(Capsule().fill(Color(.systemGray5)))
+                        .contentShape(Capsule())
                     }
                 }
             }
@@ -133,16 +140,19 @@ struct DictateActionButton: View {
     private static let pillFont: CGFloat = 13
 
     var dictationState: DictationState
+    var onStart: () -> Void
     var onStop: () -> Void
     var onInsert: () -> Void
 
     var body: some View {
         switch dictationState {
         case .idle:
-            Link(destination: SharedConstants.recordDeepLinkURL) {
+            Button {
+                KeyboardHaptics.medium()
+                onStart()
+            } label: {
                 actionPill("Start", icon: "mic.fill", color: .blue)
             }
-            .simultaneousGesture(TapGesture().onEnded { KeyboardHaptics.medium() })
         case .recording:
             Button {
                 KeyboardHaptics.medium()
@@ -165,10 +175,12 @@ struct DictateActionButton: View {
                 actionPill("Insert", icon: "checkmark", color: .green)
             }
         case .emptyResult:
-            Link(destination: SharedConstants.recordDeepLinkURL) {
+            Button {
+                KeyboardHaptics.medium()
+                onStart()
+            } label: {
                 actionPill("Start", icon: "mic.fill", color: .yellow)
             }
-            .simultaneousGesture(TapGesture().onEnded { KeyboardHaptics.medium() })
         }
     }
 
