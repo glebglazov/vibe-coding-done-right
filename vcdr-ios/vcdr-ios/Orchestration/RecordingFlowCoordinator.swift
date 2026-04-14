@@ -257,15 +257,18 @@ final class RecordingFlowCoordinator {
         // Stage 1: Filler removal only — terminator is applied after external processing
         let cleanedLive = TextPostProcessor.removeFillers(from: liveTranscript)
 
+        // Clear auxiliary properties BEFORE changing state so SwiftUI never
+        // renders the new view tree with stale values from the recording phase.
+        liveTranscript = ""
+
         // Show local result immediately unless AI processing will replace it
         if !useAI && !cleanedLive.isEmpty {
             state = .complete(TextPostProcessor.applyTerminator(to: cleanedLive))
         } else {
-            state = .transcribing
             transcribingMessage = useAI ? "Enhancing with AI..." : ""
+            state = .transcribing
         }
         writeState(.transcribing)
-        liveTranscript = ""
 
         // Request background execution time so the AI HTTP request isn't
         // throttled when the user has switched to the keyboard app.
@@ -281,8 +284,8 @@ final class RecordingFlowCoordinator {
             Logger.app.info("Streaming transcription complete: \(cleanedText.prefix(50))...")
 
             guard !cleanedText.isEmpty else {
-                state = .error("No speech detected")
                 transcribingMessage = ""
+                state = .error("No speech detected")
                 if sendToKeyboard {
                     writeState(.emptyResult)
                 } else {
@@ -309,8 +312,8 @@ final class RecordingFlowCoordinator {
             // Stage 4: Apply terminator (spacing)
             let resultText = TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style)
 
-            state = .complete(resultText)
             transcribingMessage = ""
+            state = .complete(resultText)
 
             if sendToKeyboard {
                 // Deliver text via state bundling — piggybacking on the stateKey
@@ -320,11 +323,11 @@ final class RecordingFlowCoordinator {
                 writeState(.idle)
             }
         } catch {
+            transcribingMessage = ""
             if cleanedLive.isEmpty {
                 state = .error("Transcription failed: \(error.localizedDescription)")
             }
             writeState(.idle)
-            transcribingMessage = ""
             Logger.app.error("Streaming transcription failed: \(error)")
         }
 
