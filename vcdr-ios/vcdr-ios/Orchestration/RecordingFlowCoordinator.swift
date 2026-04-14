@@ -85,10 +85,9 @@ final class RecordingFlowCoordinator {
     private var streamingSetupTask: Task<Void, Error>?
     /// Text sent to AI processing — needed for retry
     private var aiInputText: String = ""
-    /// Selected text captured by the keyboard extension at recording start (assistant mode only).
-    private var capturedSelectedTextOnStart: String?
-    /// Selected text captured by the keyboard extension at recording stop (assistant mode only).
-    private var capturedSelectedTextOnStop: String?
+    /// Text selections captured by the keyboard extension during recording (assistant mode only).
+    /// Populated from the JSON array in SharedConstants.capturedTextsKey.
+    private var capturedTexts: [String] = []
     /// Tracks the in-flight AI retry so rapid taps cancel the previous attempt.
     private var aiRetryTask: Task<Void, Never>?
     /// Token for the keyboard command NotificationCenter observer, stored so we can
@@ -200,14 +199,15 @@ final class RecordingFlowCoordinator {
         currentTextStyle = TextStyle(
             rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
         ) ?? .casual
-        // Read and clear selected text captured by the keyboard extension.
-        // Only used in assistant mode — keyboard only writes it when assistant is active.
-        capturedSelectedTextOnStart = sd.string(forKey: SharedConstants.selectedTextKey)
-        sd.removeObject(forKey: SharedConstants.selectedTextKey)
-        capturedSelectedTextOnStop = nil
-        if let captured = capturedSelectedTextOnStart {
-            Logger.ai.info("Captured selected text on start (\(captured.count) chars): \(captured.prefix(100))")
+        // Read initial captures written by the keyboard extension.
+        // The keyboard stores a JSON array; additional captures are appended during recording.
+        capturedTexts = []
+        if let data = sd.data(forKey: SharedConstants.capturedTextsKey),
+           let texts = try? JSONDecoder().decode([String].self, from: data) {
+            capturedTexts = texts
+            Logger.ai.info("Initial captures on start: \(texts.count) item(s)")
         }
+        sd.removeObject(forKey: SharedConstants.selectedTextKey)
         aiProcessingStatus = .idle
 
         // Show "LISTENING" immediately — before any async work.
@@ -260,17 +260,17 @@ final class RecordingFlowCoordinator {
         setIdleTimerDisabled(false)
         updateTask?.cancel()
 
-        // Re-read selected text the keyboard may have captured on stop.
-        // Kept as independent capture (id=2) alongside start-time capture (id=1).
+        // Re-read the captures array — the keyboard may have added more during recording.
         if sendToKeyboard {
             let sd = SharedConstants.sharedDefaults
             sd.synchronize()
-            if let stopSelection = sd.string(forKey: SharedConstants.selectedTextKey),
-               !stopSelection.isEmpty {
-                Logger.ai.info("Selected text captured on stop (\(stopSelection.count) chars)")
-                capturedSelectedTextOnStop = stopSelection
-                sd.removeObject(forKey: SharedConstants.selectedTextKey)
+            if let data = sd.data(forKey: SharedConstants.capturedTextsKey),
+               let texts = try? JSONDecoder().decode([String].self, from: data),
+               !texts.isEmpty {
+                capturedTexts = texts
+                Logger.ai.info("Final captures on stop: \(texts.count) item(s)")
             }
+            sd.removeObject(forKey: SharedConstants.capturedTextsKey)
         }
 
         guard let streaming = streamingManager else {
@@ -404,8 +404,7 @@ final class RecordingFlowCoordinator {
             rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
         ) ?? .casual
         aiInputText = ""
-        capturedSelectedTextOnStart = nil
-        capturedSelectedTextOnStop = nil
+        capturedTexts = []
         updateTask?.cancel()
         streamingSetupTask?.cancel()
         streamingSetupTask = nil
@@ -426,17 +425,10 @@ final class RecordingFlowCoordinator {
         var wrappedText = "<dictation>\(localText)</dictation>"
         // Append captured selections as <capture> context for assistant mode,
         // matching the macOS XML format the assistant prompt already expects.
-        // Start-time capture = id 1, stop-time capture = id 2.
         if selectedPromptMode == .assistant {
-            var captureId = 1
-            if let startSelection = capturedSelectedTextOnStart, !startSelection.isEmpty {
-                wrappedText += "\n\n<capture id=\"\(captureId)\">\(startSelection)</capture>"
-                Logger.ai.info("Start-time selection included in AI input (\(startSelection.count) chars)")
-                captureId += 1
-            }
-            if let stopSelection = capturedSelectedTextOnStop, !stopSelection.isEmpty {
-                wrappedText += "\n\n<capture id=\"\(captureId)\">\(stopSelection)</capture>"
-                Logger.ai.info("Stop-time selection included in AI input (\(stopSelection.count) chars)")
+            for (index, capture) in capturedTexts.enumerated() where !capture.isEmpty {
+                wrappedText += "\n\n<capture id=\"\(index + 1)\">\(capture)</capture>"
+                Logger.ai.info("Capture \(index + 1) included in AI input (\(capture.count) chars)")
             }
         }
 

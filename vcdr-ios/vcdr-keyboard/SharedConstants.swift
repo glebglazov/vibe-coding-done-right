@@ -24,6 +24,9 @@ enum SharedConstants {
     // Selected text capture (keyboard → app) — written before recording starts in assistant mode
     static let selectedTextKey = "shared_selected_text"
 
+    // Multi-capture (keyboard → app) — JSON array of captured text selections in assistant mode
+    static let capturedTextsKey = "shared_captured_texts"
+
     /// Shared UserDefaults for App Group IPC between main app and keyboard extension.
     /// Falls back to `.standard` if the App Group is unavailable (e.g. unit tests,
     /// misconfigured signing) — prevents a crash at the cost of IPC not working.

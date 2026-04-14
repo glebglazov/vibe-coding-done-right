@@ -53,12 +53,15 @@ struct VCDRKeyboardView: View {
 
                     Spacer()
 
-                    // Right: action button
+                    // Right: capture button (during recording in assistant mode) + action button
                     DictateActionButton(
                         dictationState: controller.dictationState,
+                        showCapture: controller.aiActive && controller.aiMode == .assistant,
+                        captureCount: controller.captureCount,
                         onStart: { controller.captureSelectedTextAndOpenRecord() },
                         onStop: { controller.stopAndWaitForResult() },
-                        onInsert: { controller.insertPendingText() }
+                        onInsert: { controller.insertPendingText() },
+                        onCapture: { controller.captureSelectedText() }
                     )
                     .padding(.trailing, 10)
                 }
@@ -101,19 +104,13 @@ struct DictateSettingsPills: View {
                         KeyboardHaptics.light()
                         controller.cycleAIMode()
                     } label: {
-                        HStack(spacing: 4) {
-                            Text(controller.aiMode.displayName.uppercased())
-                                .font(.system(size: Self.pillFont, weight: .bold))
-                            if controller.hasSelectedText {
-                                Image(systemName: "doc.on.clipboard")
-                                    .font(.system(size: 12))
-                            }
-                        }
-                        .foregroundStyle(.blue)
-                        .padding(.horizontal, 8)
-                        .frame(height: Self.pillHeight)
-                        .background(Capsule().fill(Color(.systemGray5)))
-                        .contentShape(Capsule())
+                        Text(controller.aiMode.displayName.uppercased())
+                            .font(.system(size: Self.pillFont, weight: .bold))
+                            .foregroundStyle(.blue)
+                            .padding(.horizontal, 8)
+                            .frame(height: Self.pillHeight)
+                            .background(Capsule().fill(Color(.systemGray5)))
+                            .contentShape(Capsule())
                     }
                 }
             }
@@ -134,54 +131,84 @@ struct DictateSettingsPills: View {
     }
 }
 
-/// Action button (Start/Stop/transcribing/ready) in the toolbar.
+/// Action button (Start/Stop/transcribing/ready) in the toolbar,
+/// with an optional Capture button shown during recording in assistant mode.
 struct DictateActionButton: View {
     private static let pillHeight: CGFloat = 38
     private static let pillFont: CGFloat = 13
 
     var dictationState: DictationState
+    var showCapture: Bool
+    var captureCount: Int
     var onStart: () -> Void
     var onStop: () -> Void
     var onInsert: () -> Void
+    var onCapture: () -> Void
 
     var body: some View {
-        switch dictationState {
-        case .idle:
-            Button {
-                KeyboardHaptics.medium()
-                onStart()
-            } label: {
-                actionPill("Start", icon: "mic.fill", color: .blue)
-            }
-        case .recording:
-            Button {
-                KeyboardHaptics.medium()
-                onStop()
-            } label: {
-                actionPill("Stop", icon: "stop.fill", color: .red)
-            }
-        case .transcribing:
-            actionPill("Processing", icon: "ellipsis", color: .orange)
-                .phaseAnimator([false, true]) { content, phase in
-                    content.opacity(phase ? 0.4 : 1.0)
-                } animation: { _ in
-                    .easeInOut(duration: 0.6)
+        HStack(spacing: 6) {
+            switch dictationState {
+            case .idle:
+                Button {
+                    KeyboardHaptics.medium()
+                    onStart()
+                } label: {
+                    actionPill("Start", icon: "mic.fill", color: .blue)
                 }
-        case .ready:
-            Button {
-                KeyboardHaptics.medium()
-                onInsert()
-            } label: {
-                actionPill("Insert", icon: "checkmark", color: .green)
-            }
-        case .emptyResult:
-            Button {
-                KeyboardHaptics.medium()
-                onStart()
-            } label: {
-                actionPill("Start", icon: "mic.fill", color: .yellow)
+            case .recording:
+                if showCapture {
+                    Button {
+                        onCapture()
+                    } label: {
+                        capturePill
+                    }
+                }
+                Button {
+                    KeyboardHaptics.medium()
+                    onStop()
+                } label: {
+                    actionPill("Stop", icon: "stop.fill", color: .red)
+                }
+            case .transcribing:
+                actionPill("Processing", icon: "ellipsis", color: .orange)
+                    .phaseAnimator([false, true]) { content, phase in
+                        content.opacity(phase ? 0.4 : 1.0)
+                    } animation: { _ in
+                        .easeInOut(duration: 0.6)
+                    }
+            case .ready:
+                Button {
+                    KeyboardHaptics.medium()
+                    onInsert()
+                } label: {
+                    actionPill("Insert", icon: "checkmark", color: .green)
+                }
+            case .emptyResult:
+                Button {
+                    KeyboardHaptics.medium()
+                    onStart()
+                } label: {
+                    actionPill("Start", icon: "mic.fill", color: .yellow)
+                }
             }
         }
+    }
+
+    /// Capture button: icon only for 1 capture, icon + ×N for 2+.
+    private var capturePill: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "doc.on.clipboard")
+                .font(.system(size: 13))
+            if captureCount >= 2 {
+                Text("×\(captureCount)")
+                    .font(.system(size: Self.pillFont, weight: .bold))
+            }
+        }
+        .foregroundStyle(captureCount > 0 ? .white : .white.opacity(0.7))
+        .padding(.horizontal, captureCount >= 2 ? 10 : 8)
+        .frame(height: Self.pillHeight)
+        .background(Capsule().fill(Color(.systemGray2)))
+        .contentShape(Capsule())
     }
 
     private func actionPill(_ text: String, icon: String, color: Color) -> some View {

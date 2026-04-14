@@ -30,6 +30,9 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Drives the selection indicator icon in the toolbar.
     @Published var hasSelectedText: Bool = false
 
+    /// Number of text selections captured in the current recording session (assistant mode).
+    @Published var captureCount: Int = 0
+
     /// Text waiting to be inserted via tap-to-paste.
     private var pendingText: String?
 
@@ -111,6 +114,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         guard let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey) else {
             dictationState = .idle
             pendingText = nil
+            captureCount = 0
             return
         }
 
@@ -160,6 +164,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         // Space is already added by TextPostProcessor.applyTerminator in the pipeline
         pendingText = nil
         dictationState = .idle
+        captureCount = 0
         // Clear the bundled text so it isn't re-inserted on next keyboard appearance
         SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
     }
@@ -182,12 +187,9 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Falls back to `.ready` state if the result doesn't arrive within the timeout.
     func stopAndWaitForResult() {
         let sd = SharedConstants.sharedDefaults
-        // Capture current selection so the app can use it as context
-        // (supplements or replaces the selection captured on start).
-        if aiActive, aiMode == .assistant,
-           let selected = textDocumentProxy.selectedText, !selected.isEmpty {
-            sd.set(selected, forKey: SharedConstants.selectedTextKey)
-        }
+        // Multi-capture: captures are accumulated explicitly via the Capture button.
+        // No implicit capture on stop — the cursor position at stop time determines
+        // where the result is inserted, independent of capture locations.
         sd.set(
             RecordingCommand.stopRecording.rawValue,
             forKey: SharedConstants.commandKey
@@ -283,21 +285,45 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     // MARK: - Selected Text Capture
 
-    /// Reads the current text selection and writes it to shared defaults
-    /// so the main app can include it as `<capture>` context in assistant mode.
-    /// Only captures when AI is active and mode is assistant — in dictation mode
-    /// selected text is irrelevant.
+    /// Starts recording and initializes the captures array.
+    /// If text is selected in assistant mode, it becomes the first capture.
     func captureSelectedTextAndOpenRecord() {
         let sd = SharedConstants.sharedDefaults
+        // Clear legacy single-capture key
+        sd.removeObject(forKey: SharedConstants.selectedTextKey)
+        // Initialize captures array — include current selection as first capture if available
+        var captures: [String] = []
         if aiActive, aiMode == .assistant,
            let selected = textDocumentProxy.selectedText, !selected.isEmpty {
-            sd.set(selected, forKey: SharedConstants.selectedTextKey)
-        } else {
-            sd.removeObject(forKey: SharedConstants.selectedTextKey)
+            captures.append(selected)
+        }
+        if let data = try? JSONEncoder().encode(captures) {
+            sd.set(data, forKey: SharedConstants.capturedTextsKey)
         }
         sd.synchronize()
+        captureCount = captures.count
         // Open the main app to start recording via deep link
         openURL(SharedConstants.recordDeepLinkURL)
+    }
+
+    /// Captures the currently selected text and appends it to the captures array.
+    /// Called via the Capture button during recording in assistant mode.
+    func captureSelectedText() {
+        guard aiActive, aiMode == .assistant,
+              let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
+        let sd = SharedConstants.sharedDefaults
+        sd.synchronize()
+        var captures: [String] = []
+        if let data = sd.data(forKey: SharedConstants.capturedTextsKey) {
+            captures = (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        }
+        captures.append(selected)
+        if let data = try? JSONEncoder().encode(captures) {
+            sd.set(data, forKey: SharedConstants.capturedTextsKey)
+        }
+        sd.synchronize()
+        captureCount = captures.count
+        KeyboardHaptics.light()
     }
 
     /// Refreshes the `hasSelectedText` flag based on current proxy state and mode.
