@@ -59,6 +59,16 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         )
     }
 
+    override func selectionDidChange(_ textInput: UITextInput?) {
+        super.selectionDidChange(textInput)
+        refreshSelectedTextIndicator()
+    }
+
+    override func textDidChange(_ textInput: UITextInput?) {
+        super.textDidChange(textInput)
+        refreshSelectedTextIndicator()
+    }
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         // Mitigate the brownish background flash on keyboard load.
@@ -171,10 +181,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// `RunLoop.main.run(until:)` keeps UI events processing (animations stay alive).
     /// Falls back to `.ready` state if the result doesn't arrive within the timeout.
     func stopAndWaitForResult() {
-        SharedConstants.sharedDefaults.set(
+        let sd = SharedConstants.sharedDefaults
+        sd.set(
             RecordingCommand.stopRecording.rawValue,
             forKey: SharedConstants.commandKey
         )
+        sd.synchronize()
         DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
         dictationState = .transcribing
 
@@ -239,21 +251,27 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     func toggleAI() {
         aiActive.toggle()
-        SharedConstants.sharedDefaults.set(aiActive, forKey: SharedConstants.aiActiveKey)
+        let sd = SharedConstants.sharedDefaults
+        sd.set(aiActive, forKey: SharedConstants.aiActiveKey)
+        sd.synchronize()
         notifySettingsChanged()
         refreshSelectedTextIndicator()
     }
 
     func cycleAIMode() {
         aiMode = aiMode.next
-        SharedConstants.sharedDefaults.set(aiMode.rawValue, forKey: SharedConstants.aiModeKey)
+        let sd = SharedConstants.sharedDefaults
+        sd.set(aiMode.rawValue, forKey: SharedConstants.aiModeKey)
+        sd.synchronize()
         notifySettingsChanged()
         refreshSelectedTextIndicator()
     }
 
     func toggleTextStyle() {
         textStyle = textStyle.toggled
-        SharedConstants.sharedDefaults.set(textStyle.rawValue, forKey: SharedConstants.textStyleKey)
+        let sd = SharedConstants.sharedDefaults
+        sd.set(textStyle.rawValue, forKey: SharedConstants.textStyleKey)
+        sd.synchronize()
         notifySettingsChanged()
     }
 
@@ -264,12 +282,14 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Only captures when AI is active and mode is assistant — in dictation mode
     /// selected text is irrelevant.
     func captureSelectedTextAndOpenRecord() {
+        let sd = SharedConstants.sharedDefaults
         if aiActive, aiMode == .assistant,
            let selected = textDocumentProxy.selectedText, !selected.isEmpty {
-            SharedConstants.sharedDefaults.set(selected, forKey: SharedConstants.selectedTextKey)
+            sd.set(selected, forKey: SharedConstants.selectedTextKey)
         } else {
-            SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.selectedTextKey)
+            sd.removeObject(forKey: SharedConstants.selectedTextKey)
         }
+        sd.synchronize()
         // Open the main app to start recording via deep link
         openURL(SharedConstants.recordDeepLinkURL)
     }
