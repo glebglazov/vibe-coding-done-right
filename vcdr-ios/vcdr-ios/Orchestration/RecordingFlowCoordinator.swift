@@ -59,6 +59,8 @@ final class RecordingFlowCoordinator {
     private var streamingSetupTask: Task<Void, Error>?
     /// Text sent to AI processing — needed for retry
     private var aiInputText: String = ""
+    /// Selected text captured by the keyboard extension at recording start (assistant mode only).
+    private var capturedSelectedText: String?
     /// Tracks the in-flight AI retry so rapid taps cancel the previous attempt.
     private var aiRetryTask: Task<Void, Never>?
     /// Token for the keyboard command NotificationCenter observer, stored so we can
@@ -170,6 +172,10 @@ final class RecordingFlowCoordinator {
         currentTextStyle = TextStyle(
             rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
         ) ?? .casual
+        // Read and clear selected text captured by the keyboard extension.
+        // Only used in assistant mode — keyboard only writes it when assistant is active.
+        capturedSelectedText = sd.string(forKey: SharedConstants.selectedTextKey)
+        sd.removeObject(forKey: SharedConstants.selectedTextKey)
         aiProcessingStatus = .idle
 
         // Show "LISTENING" immediately — before any async work.
@@ -353,6 +359,7 @@ final class RecordingFlowCoordinator {
             rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
         ) ?? .casual
         aiInputText = ""
+        capturedSelectedText = nil
         updateTask?.cancel()
         streamingSetupTask?.cancel()
         streamingSetupTask = nil
@@ -370,7 +377,13 @@ final class RecordingFlowCoordinator {
         let provider = AIProcessingSettings.provider
         let apiKey = AIProcessingSettings.activeApiKey
         let systemPrompt = BuiltInPrompts.prompt(for: selectedPromptMode)
-        let wrappedText = "<dictation>\(localText)</dictation>"
+        var wrappedText = "<dictation>\(localText)</dictation>"
+        // Append captured selection as <capture> context for assistant mode,
+        // matching the macOS XML format the assistant prompt already expects.
+        if selectedPromptMode == .assistant,
+           let selection = capturedSelectedText, !selection.isEmpty {
+            wrappedText += "\n\n<capture id=\"1\">\(selection)</capture>"
+        }
         let deadline = ContinuousClock.now + Self.aiProcessingTimeout
         let startTime = ContinuousClock.now
 

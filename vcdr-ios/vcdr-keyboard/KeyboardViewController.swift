@@ -26,6 +26,10 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     @Published var aiMode: SharedAIMode = .dictation
     @Published var textStyle: SharedTextStyle = .casual
 
+    /// True when the text field has a non-empty selection and assistant mode is active.
+    /// Drives the selection indicator icon in the toolbar.
+    @Published var hasSelectedText: Bool = false
+
     /// Text waiting to be inserted via tap-to-paste.
     private var pendingText: String?
 
@@ -60,6 +64,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         SharedConstants.sharedDefaults.synchronize()
         refreshState()
         refreshSettings()
+        refreshSelectedTextIndicator()
         // viewWillAppear provides a fresh textDocumentProxy connection —
         // auto-insert if text is pending (handles the case where the keyboard
         // wasn't visible when the transcription arrived).
@@ -220,18 +225,58 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         aiActive.toggle()
         SharedConstants.sharedDefaults.set(aiActive, forKey: SharedConstants.aiActiveKey)
         notifySettingsChanged()
+        refreshSelectedTextIndicator()
     }
 
     func cycleAIMode() {
         aiMode = aiMode.next
         SharedConstants.sharedDefaults.set(aiMode.rawValue, forKey: SharedConstants.aiModeKey)
         notifySettingsChanged()
+        refreshSelectedTextIndicator()
     }
 
     func toggleTextStyle() {
         textStyle = textStyle.toggled
         SharedConstants.sharedDefaults.set(textStyle.rawValue, forKey: SharedConstants.textStyleKey)
         notifySettingsChanged()
+    }
+
+    // MARK: - Selected Text Capture
+
+    /// Reads the current text selection and writes it to shared defaults
+    /// so the main app can include it as `<capture>` context in assistant mode.
+    /// Only captures when AI is active and mode is assistant — in dictation mode
+    /// selected text is irrelevant.
+    func captureSelectedTextAndOpenRecord() {
+        if aiActive, aiMode == .assistant,
+           let selected = textDocumentProxy.selectedText, !selected.isEmpty {
+            SharedConstants.sharedDefaults.set(selected, forKey: SharedConstants.selectedTextKey)
+        } else {
+            SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.selectedTextKey)
+        }
+        // Open the main app to start recording via deep link
+        openURL(SharedConstants.recordDeepLinkURL)
+    }
+
+    /// Refreshes the `hasSelectedText` flag based on current proxy state and mode.
+    func refreshSelectedTextIndicator() {
+        let selected = aiActive && aiMode == .assistant
+            && !(textDocumentProxy.selectedText ?? "").isEmpty
+        if hasSelectedText != selected {
+            hasSelectedText = selected
+        }
+    }
+
+    /// Opens a URL from the keyboard extension using the system responder chain.
+    private func openURL(_ url: URL) {
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let application = current as? UIApplication {
+                application.open(url)
+                return
+            }
+            responder = current.next
+        }
     }
 
     private func notifySettingsChanged() {
