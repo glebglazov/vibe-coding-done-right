@@ -172,9 +172,10 @@ struct RecordingView: View {
                                     .id("transcript")
                             }
                             .onChange(of: coordinator.liveTranscript) {
-                                withAnimation {
-                                    proxy.scrollTo("transcript", anchor: .bottom)
-                                }
+                                // Non-animated scroll — avoids queuing animation
+                                // transactions that compete with the waveform
+                                // for main-thread time during rapid updates.
+                                proxy.scrollTo("transcript", anchor: .bottom)
                             }
                         }
                     }
