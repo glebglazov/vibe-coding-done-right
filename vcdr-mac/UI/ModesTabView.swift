@@ -70,12 +70,10 @@ struct ModesListView: View {
             .onMove { source, destination in
                 moveDisplayedModes(from: source, to: destination)
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            Toggle("Show Disabled", isOn: $showDisabledModes)
-                .toggleStyle(.checkbox)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
+
+            Section {
+                Toggle("Show Disabled", isOn: $showDisabledModes)
+            }
         }
         .navigationTitle("Modes")
         .toolbar {

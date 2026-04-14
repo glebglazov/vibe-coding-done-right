@@ -29,13 +29,8 @@ struct ModeDetailView: View {
 
             // Name section
             Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Name")
-                        .foregroundStyle(.secondary)
-                    TextField("Name", text: $mode.name)
-                        .labelsHidden()
-                        .focused($isNameFieldFocused)
-                }
+                TextField("Name", text: $mode.name)
+                    .focused($isNameFieldFocused)
 
                 Toggle("Enabled", isOn: Binding(
                     get: { !mode.isDisabled },
@@ -45,15 +40,12 @@ struct ModeDetailView: View {
 
             // Processing section
             Section("Processing") {
-                Picker(selection: $mode.processingType) {
+                Picker("Type", selection: $mode.processingType) {
                     Text("None").tag(ProcessingType.none)
                     Text("Cloud AI").tag(ProcessingType.cloudAI)
                     Text("Local Agent").tag(ProcessingType.localAgent)
                     Text("Bash Script").tag(ProcessingType.bashScript)
-                } label: {
-                    EmptyView()
                 }
-                .pickerStyle(.radioGroup)
 
                 if mode.processingType == .cloudAI {
                     if !settings.isModeConfigured(mode) {
@@ -79,14 +71,9 @@ struct ModeDetailView: View {
                     }
 
                     if mode.promptType == .custom {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("System Prompt")
-                                .foregroundStyle(.secondary)
-                            TextEditor(text: $mode.systemPrompt)
-                                .font(.body)
-                                .frame(minHeight: 80)
-                                .border(Color.secondary.opacity(0.3))
-                        }
+                        TextEditor(text: $mode.systemPrompt)
+                            .font(.body)
+                            .frame(minHeight: 80)
                     }
                 }
 
@@ -109,22 +96,13 @@ struct ModeDetailView: View {
                     }
 
                     if mode.promptType == .custom {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("System Prompt")
-                                .foregroundStyle(.secondary)
-                            TextEditor(text: $mode.systemPrompt)
-                                .font(.body)
-                                .frame(minHeight: 80)
-                                .border(Color.secondary.opacity(0.3))
-                        }
+                        TextEditor(text: $mode.systemPrompt)
+                            .font(.body)
+                            .frame(minHeight: 80)
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Toggle("Pass environment variables from Variables section", isOn: $mode.localAgentPassVariables)
-                        Text("When off (default), the local agent uses its own subscription credentials. When on, variables like ANTHROPIC_API_KEY are passed to the agent process, which may cause it to use your API key with token-based billing instead of the subscription.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Toggle("Pass environment variables from Variables section", isOn: $mode.localAgentPassVariables)
+                        .help("When off (default), the local agent uses its own subscription credentials. When on, variables like ANTHROPIC_API_KEY are passed to the agent process, which may cause it to use your API key with token-based billing instead of the subscription.")
                 }
 
                 if mode.processingType == .bashScript {
@@ -140,23 +118,16 @@ struct ModeDetailView: View {
 
                     parametersSections
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Command")
-                            .foregroundStyle(.secondary)
-                        CommandTextEditor(text: $mode.processingCommand, definedVariableNames: definedVariableNames)
-                            .help("Use {} as placeholder for transcribed text. Text also available as $VCDR_TEXT.")
-                    }
+                    CommandTextEditor(text: $mode.processingCommand, definedVariableNames: definedVariableNames)
+                        .help("Use {} as placeholder for transcribed text. Text also available as $VCDR_TEXT.")
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Include system prompt in $VCDR_TEXT", isOn: $mode.systemPromptEnabled)
+                    Toggle("Include system prompt in $VCDR_TEXT", isOn: $mode.systemPromptEnabled)
 
-                        if mode.systemPromptEnabled {
-                            TextEditor(text: $mode.systemPrompt)
-                                .font(.body)
-                                .frame(minHeight: 80)
-                                .border(Color.secondary.opacity(0.3))
-                                .help("This text is prepended to $VCDR_TEXT before the transcribed text")
-                        }
+                    if mode.systemPromptEnabled {
+                        TextEditor(text: $mode.systemPrompt)
+                            .font(.body)
+                            .frame(minHeight: 80)
+                            .help("This text is prepended to $VCDR_TEXT before the transcribed text")
                     }
                 }
             }
@@ -170,19 +141,11 @@ struct ModeDetailView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Show Preview", isOn: $mode.showPreview)
-                    Text("When enabled, shows the transcription for editing before processing. When off, the result is immediately processed and sent to the output destination.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Toggle("Show Preview", isOn: $mode.showPreview)
+                    .help("When enabled, shows the transcription for editing before processing. When off, the result is immediately processed and sent to the output destination.")
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Save result to clipboard", isOn: $mode.saveResultToClipboard)
-                    Text("When enabled, the result is saved to your clipboard after the output action completes.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Toggle("Save result to clipboard", isOn: $mode.saveResultToClipboard)
+                    .help("When enabled, the result is saved to your clipboard after the output action completes.")
             }
         }
         .formStyle(.grouped)

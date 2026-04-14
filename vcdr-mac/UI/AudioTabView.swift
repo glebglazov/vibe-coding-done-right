@@ -19,21 +19,19 @@ struct AudioTabView: View {
                 }
 
                 if hasMicrophonePermission {
-                    HStack {
-                        Text("Sound Check")
-                        Spacer()
-                        if inputLevelMonitor.isMonitoring {
-                            AudioLevelMeter(level: inputLevelMonitor.level)
+                    LabeledContent("Sound Check") {
+                        HStack {
+                            if inputLevelMonitor.isMonitoring {
+                                AudioLevelMeter(level: inputLevelMonitor.level)
+                            }
+                            Button(inputLevelMonitor.isMonitoring ? "Stop" : "Test") {
+                                inputLevelMonitor.toggle(deviceUID: audioDeviceMonitor.selectedDeviceUID)
+                            }
+                            .controlSize(.small)
                         }
-                        Button(inputLevelMonitor.isMonitoring ? "Stop" : "Test") {
-                            inputLevelMonitor.toggle(deviceUID: audioDeviceMonitor.selectedDeviceUID)
-                        }
-                        .controlSize(.small)
                     }
                 } else {
-                    HStack {
-                        Text("Sound Check")
-                        Spacer()
+                    LabeledContent("Sound Check") {
                         Text("Microphone permission required")
                             .font(.caption)
                             .foregroundStyle(.secondary)

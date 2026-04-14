@@ -182,21 +182,10 @@ struct StyleDetailView: View {
 
             // Style info
             Section {
-                HStack {
-                    Text("Name")
-                    Spacer()
-                    Text(style.name)
-                        .foregroundStyle(.secondary)
-                }
+                LabeledContent("Name", value: style.name)
 
                 if style.isDefault {
-                    HStack {
-                        Text("Default")
-                        Spacer()
-                        Text("Used for unassigned apps")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    LabeledContent("Default", value: "Used for unassigned apps")
                 }
             }
 
