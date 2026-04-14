@@ -500,12 +500,27 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Streaming Updates
 
+    /// Minimum interval between UI updates for live transcript text.
+    /// Coalesces rapid bursts (e.g. after model init drains queued audio)
+    /// into at most one SwiftUI render per frame, keeping the waveform smooth.
+    private static let transcriptUpdateInterval: Duration = .milliseconds(16)
+
     private func startConsumingUpdates(from streaming: StreamingAsrManager) {
         updateTask?.cancel()
         updateTask = Task {
             let updates = await streaming.transcriptionUpdates
+            var lastUpdateTime: ContinuousClock.Instant = .now
             for await _ in updates {
                 guard !Task.isCancelled else { break }
+
+                // Throttle: skip intermediate updates that arrive faster than
+                // one per display frame. The next update will pick up the
+                // latest transcript, so no text is lost — only redundant
+                // renders are avoided.
+                let now = ContinuousClock.now
+                guard now - lastUpdateTime >= Self.transcriptUpdateInterval else { continue }
+                lastUpdateTime = now
+
                 let confirmed = await streaming.confirmedTranscript
                 let volatile = await streaming.volatileTranscript
                 let full = confirmed.isEmpty ? volatile : "\(confirmed) \(volatile)"
