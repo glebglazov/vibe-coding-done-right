@@ -144,20 +144,20 @@ struct RecordingView: View {
                 heroTitle("LISTENING")
                     .padding(.bottom, 8)
 
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let elapsed = recordingStart.map { context.date.timeIntervalSince($0) } ?? 0
-                    Text(formatDuration(elapsed))
-                        .font(.system(size: 12, weight: .bold))
-                        .tracking(3)
-                        .foregroundStyle(theme.primary.opacity(0.8))
-                }
-                .padding(.bottom, 32)
-
-                // Waveform with transcript overlay
+                // Waveform with timer and transcript overlay
                 ZStack {
                     WaveformView(levels: coordinator.audioLevels)
                         .frame(height: 120)
                         .padding(.horizontal, 8)
+
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(formatDuration(recordingStart.map { context.date.timeIntervalSince($0) } ?? 0))
+                            .font(.system(size: 32, weight: .heavy, design: .monospaced))
+                            .tracking(4)
+                            .foregroundStyle(theme.onSurface)
+                            .shadow(color: theme.background.opacity(0.9), radius: 8)
+                            .shadow(color: theme.background.opacity(0.7), radius: 16)
+                    }
 
                     if !coordinator.liveTranscript.isEmpty {
                         ScrollViewReader { proxy in
