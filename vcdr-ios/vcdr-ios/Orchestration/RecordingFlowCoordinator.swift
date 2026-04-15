@@ -114,6 +114,8 @@ final class RecordingFlowCoordinator {
         // If recording already started, model init is handled by streamingSetupTask
         guard state != .recording else { return }
 
+        let initStart = ContinuousClock.now
+        Logger.app.info("[InitTiming] initializeModel entered")
         state = .initializing
         initProgress = "Downloading model..."
 
@@ -136,7 +138,14 @@ final class RecordingFlowCoordinator {
             // on the ParakeetProvider actor. Both proceed in parallel.
             async let audioPrep: Void = audioRecorder.prepareAudioSession()
             try await transcriptionProvider.initialize()
+            Logger.app.info("[InitTiming] transcriptionProvider.initialize() done at +\(ContinuousClock.now - initStart)")
             await audioPrep
+            Logger.app.info("[InitTiming] audioPrep done at +\(ContinuousClock.now - initStart)")
+
+            // Pre-allocate audio engine resources so startRecording() is fast.
+            // prepare() allocates hardware buffers without activating the mic.
+            audioRecorder.prepareEngine()
+            Logger.app.info("[InitTiming] engine prepared at +\(ContinuousClock.now - initStart)")
 
             pollTask.cancel()
             // Don't overwrite state if recording started while we were initializing
@@ -144,7 +153,7 @@ final class RecordingFlowCoordinator {
                 state = .ready
             }
             initProgress = "Ready"
-            Logger.app.info("Parakeet model initialized")
+            Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
         } catch {
             pollTask.cancel()
             if state == .initializing {
@@ -188,7 +197,16 @@ final class RecordingFlowCoordinator {
         // sets state = .recording synchronously in prepareForDeepLinkRecording()
         // before this method runs — blocking on state would prevent actual startup.
         guard !audioRecorder.isRecording else { return }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        let recordStart = ContinuousClock.now
+        Logger.app.info("[RecordTiming] startRecording entered")
+
+        // Fire haptics AFTER state change (below) on a detached task.
+        // CHHapticEngine init can block for seconds when system services
+        // are strained by concurrent CoreML compilation.
+        // Fire haptics as a separate task so CHHapticEngine init (which connects
+        // to a system daemon) doesn't block recording start. Under heavy CoreML
+        // compilation load the daemon can take seconds to respond.
+        Task { @MainActor in UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
 
         launchedViaDeepLink = fromDeepLink
         let sd = SharedConstants.sharedDefaults
@@ -215,6 +233,7 @@ final class RecordingFlowCoordinator {
         state = .recording
         writeState(.recording)
         setIdleTimerDisabled(true)
+        Logger.app.info("[RecordTiming] state=recording set at +\(ContinuousClock.now - recordStart)")
 
         // Create streaming manager immediately — no models needed for construction.
         // Its internal AsyncStream buffers audio until start() begins consuming.
@@ -225,21 +244,24 @@ final class RecordingFlowCoordinator {
         liveTranscript = ""
         startConsumingUpdates(from: streaming)
 
-        // Begin model init + streaming setup NOW — overlaps with audio engine startup.
-        // Audio buffers accumulate in the AsyncStream until start() launches
-        // the recognition task, which then drains all queued buffers.
-        streamingSetupTask = Task { @MainActor in
-            try await self.transcriptionProvider.initialize()
-            guard let models = await self.transcriptionProvider.loadedModels else {
+        // Begin model init + streaming setup in a detached task to avoid
+        // competing with MainActor for scheduling. Audio buffers accumulate
+        // in the AsyncStream until start() launches the recognition task,
+        // which then drains all queued buffers.
+        streamingSetupTask = Task.detached { [transcriptionProvider] in
+            try await transcriptionProvider.initialize()
+            guard let models = await transcriptionProvider.loadedModels else {
                 throw TranscriptionError.providerUnavailable
             }
             try await streaming.start(models: models, source: .microphone)
         }
+        Logger.app.info("[RecordTiming] streamingSetupTask created at +\(ContinuousClock.now - recordStart)")
 
         // Start audio engine — buffers forward to the streaming manager
         let started = await audioRecorder.startRecording { buffer in
             Task { await streaming.streamAudio(buffer) }
         }
+        Logger.app.info("[RecordTiming] audioRecorder.startRecording returned at +\(ContinuousClock.now - recordStart)")
 
         guard started else {
             self.streamingManager = nil
@@ -255,7 +277,10 @@ final class RecordingFlowCoordinator {
     /// Finalizes streaming in the background and updates the result if it differs.
     /// - Parameter sendToKeyboard: When true, the transcription result is delivered to the keyboard extension via state bundling.
     func stopAndTranscribe(sendToKeyboard: Bool = false) async {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        // Fire haptics as a separate task so CHHapticEngine init (which connects
+        // to a system daemon) doesn't block recording start. Under heavy CoreML
+        // compilation load the daemon can take seconds to respond.
+        Task { @MainActor in UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
         audioRecorder.stopRecording()
         setIdleTimerDisabled(false)
         updateTask?.cancel()

@@ -9,6 +9,12 @@ actor ParakeetProvider: TranscriptionProvider {
     private(set) var isReady = false
     /// Loaded models — shared with StreamingAsrManager to avoid duplicate CoreML compilation
     private(set) var loadedModels: AsrModels?
+    /// Prevents duplicate initialization from actor reentrancy.
+    /// Swift actors interleave at await points, so two callers can both pass
+    /// `guard !isReady` before either sets it to true. This continuation-based
+    /// lock makes the second caller wait for the first to finish.
+    private var initInProgress: [CheckedContinuation<Void, Error>] = []
+    private var isInitializing = false
 
     enum InitPhase: Sendable {
         case notStarted
@@ -32,6 +38,18 @@ actor ParakeetProvider: TranscriptionProvider {
 
     func initialize() async throws {
         guard !isReady else { return }
+
+        // If another call is already initializing, wait for it instead of
+        // starting a duplicate compilation (actor reentrancy at await points).
+        if isInitializing {
+            Logger.transcription.info("Initialization already in progress, waiting...")
+            try await withCheckedThrowingContinuation { continuation in
+                initInProgress.append(continuation)
+            }
+            return
+        }
+
+        isInitializing = true
         let totalStart = ContinuousClock.now
         Logger.transcription.info("Initializing Parakeet v3 CoreML model...")
 
@@ -42,10 +60,14 @@ actor ParakeetProvider: TranscriptionProvider {
             let modelDir = try await AsrModels.download(version: .v3)
             Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
 
-            // Phase 2: Compile CoreML models for Neural Engine (the slow part)
+            // Phase 2: Compile CoreML models for Neural Engine (the slow part).
+            // Run at .utility priority so the CPU-intensive MLModel(contentsOf:)
+            // compilation doesn't starve the main thread and freeze the UI.
             initPhase = .compiling
             let compileStart = ContinuousClock.now
-            let models = try await AsrModels.load(from: modelDir, version: .v3)
+            let models = try await Task.detached(priority: .utility) {
+                try await AsrModels.load(from: modelDir, version: .v3)
+            }.value
             Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: compileStart))")
 
             let initStart = ContinuousClock.now
@@ -57,8 +79,21 @@ actor ParakeetProvider: TranscriptionProvider {
             self.loadedModels = models
             self.isReady = true
             initPhase = .ready
+            isInitializing = false
             Logger.transcription.info("Parakeet v3 ready (total: \(self.elapsedMs(since: totalStart)))")
+
+            // Resume any waiters
+            for continuation in initInProgress {
+                continuation.resume()
+            }
+            initInProgress.removeAll()
         } catch {
+            isInitializing = false
+            // Resume waiters with the error
+            for continuation in initInProgress {
+                continuation.resume(throwing: error)
+            }
+            initInProgress.removeAll()
             Logger.transcription.error("Failed to initialize Parakeet: \(error)")
             throw TranscriptionError.initializationFailed(error.localizedDescription)
         }

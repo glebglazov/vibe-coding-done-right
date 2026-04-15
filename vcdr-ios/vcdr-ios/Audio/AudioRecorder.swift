@@ -96,6 +96,34 @@ final class AudioRecorder {
         Logger.recording.info("Audio session pre-configured")
     }
 
+    /// Pre-allocates audio engine resources so that `startRecording` is fast.
+    /// Call after `prepareAudioSession()` completes. The engine is created and
+    /// prepared (resources allocated) but NOT started — no microphone indicator
+    /// appears until `startRecording` is called.
+    func prepareEngine() {
+        guard audioSessionConfigured, audioEngine == nil else { return }
+
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+        let format = inputNode.outputFormat(forBus: 0)
+
+        inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
+            [weak self] buffer, _ in
+            guard let self else { return }
+
+            let level = Self.computeLevel(from: buffer)
+            Task { @MainActor [weak self] in
+                self?.appendLevel(level)
+            }
+
+            self.bufferHandler?(buffer)
+        }
+
+        engine.prepare()
+        audioEngine = engine
+        Logger.recording.info("Audio engine prepared (format: \(format))")
+    }
+
     /// Starts recording via AVAudioEngine. Buffers are forwarded to `onBuffer` on the audio thread.
     /// - Parameter onBuffer: Called on the audio render thread with each captured buffer.
     ///   Must be lightweight — enqueue for processing elsewhere.
@@ -134,9 +162,26 @@ final class AudioRecorder {
 
     // MARK: - Engine Lifecycle
 
-    /// Creates a new AVAudioEngine, installs the buffer tap, and starts it.
+    /// Starts the audio engine. Reuses a pre-prepared engine if available,
+    /// otherwise creates one from scratch.
     /// Returns true on success. Assumes `bufferHandler` is already set.
     private func startEngine() -> Bool {
+        // Reuse pre-prepared engine — tap is already installed, resources allocated.
+        if let engine = audioEngine, !engine.isRunning {
+            do {
+                try engine.start()
+                isRecording = true
+                let format = engine.inputNode.outputFormat(forBus: 0)
+                Logger.recording.info("Audio engine started (pre-prepared, format: \(format))")
+                return true
+            } catch {
+                Logger.recording.warning("Pre-prepared engine failed to start: \(error), creating fresh engine")
+                engine.inputNode.removeTap(onBus: 0)
+                audioEngine = nil
+                // Fall through to create fresh engine
+            }
+        }
+
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
