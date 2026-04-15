@@ -200,21 +200,21 @@ struct DictateActionButton: View {
         }
     }
 
-    /// Capture button: icon only for 1 capture, icon + ×N for 2+.
+    /// Capture button: icon only for 0 captures, icon + ×N for 1+.
     private var capturePill: some View {
         HStack(spacing: 3) {
             Image(systemName: "doc.on.clipboard")
                 .font(.system(size: 12, weight: .black))
-            if captureCount >= 2 {
+            if captureCount >= 1 {
                 Text("×\(captureCount)")
                     .font(.system(size: Self.pillFont, weight: .black))
                     .tracking(1.5)
             }
         }
         .foregroundStyle(captureCount > 0 ? .white : .white.opacity(0.7))
-        .padding(.horizontal, captureCount >= 2 ? 10 : 8)
+        .padding(.horizontal, captureCount >= 1 ? 10 : 8)
         .frame(height: Self.pillHeight)
-        .background(Capsule().fill(Color(.systemGray2)))
+        .background(Capsule().fill(captureCount > 0 ? Color.blue : Color(.systemGray2)))
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
 
         .contentShape(Capsule())
