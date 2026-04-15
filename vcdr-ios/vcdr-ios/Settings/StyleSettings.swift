@@ -12,6 +12,13 @@ public enum TextStyle: String, Codable, CaseIterable, Sendable {
         case .formal: "Formal"
         }
     }
+
+    public var example: String {
+        switch self {
+        case .casual: "hey just wanted to check in about the meeting tomorrow"
+        case .formal: "I wanted to follow up regarding tomorrow's meeting."
+        }
+    }
     
     /// Returns the Style model associated with this text style.
     public var style: Style {

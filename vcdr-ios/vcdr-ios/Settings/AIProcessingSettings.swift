@@ -96,9 +96,13 @@ enum AIProcessingSettings {
     static let enabledKey = "ai_processing_enabled"
     static let activeInDictationKey = "ai_processing_active_in_dictation"
     static let providerKey = "ai_processing_provider"
+    static let dictationProviderKey = "ai_processing_dictation_provider"
+    static let assistantProviderKey = "ai_processing_assistant_provider"
     static let anthropicApiKeyKey = "ai_processing_anthropic_api_key"
     static let openaiApiKeyKey = "ai_processing_openai_api_key"
     static let afmFallbackEnabledKey = "ai_processing_afm_fallback_enabled"
+    static let dictationAfmFallbackKey = "ai_processing_dictation_afm_fallback"
+    static let assistantAfmFallbackKey = "ai_processing_assistant_afm_fallback"
     /// Remembers the user's fallback preference so it can be restored when
     /// switching away from Apple as primary provider.
     static let afmFallbackRememberedKey = "ai_processing_afm_fallback_remembered"
@@ -115,8 +119,18 @@ enum AIProcessingSettings {
         UserDefaults.standard.bool(forKey: activeInDictationKey)
     }
 
+    /// Provider for the current default mode. Used by hasAICapability / isConfigured checks.
     static var provider: AIProvider {
-        AIProvider(rawValue: UserDefaults.standard.string(forKey: providerKey) ?? "") ?? .anthropic
+        provider(for: defaultMode)
+    }
+
+    static func provider(for mode: AIPromptMode) -> AIProvider {
+        let key = mode == .dictation ? dictationProviderKey : assistantProviderKey
+        let raw = UserDefaults.standard.string(forKey: key) ?? ""
+        // Fall back to legacy global provider key for migration
+        return AIProvider(rawValue: raw)
+            ?? AIProvider(rawValue: UserDefaults.standard.string(forKey: providerKey) ?? "")
+            ?? .anthropic
     }
 
     static var anthropicApiKey: String {
@@ -131,6 +145,11 @@ enum AIProcessingSettings {
         UserDefaults.standard.bool(forKey: afmFallbackEnabledKey)
     }
 
+    static func afmFallbackEnabled(for mode: AIPromptMode) -> Bool {
+        let key = mode == .dictation ? dictationAfmFallbackKey : assistantAfmFallbackKey
+        return UserDefaults.standard.bool(forKey: key)
+    }
+
     /// Whether Apple Foundation Models are available on this device
     /// (Apple Intelligence enabled + supported hardware + model downloaded).
     static var isAFMAvailable: Bool {
@@ -139,6 +158,10 @@ enum AIProcessingSettings {
 
     /// The API key for the currently selected provider.
     static var activeApiKey: String {
+        apiKey(for: provider)
+    }
+
+    static func apiKey(for provider: AIProvider) -> String {
         switch provider {
         case .anthropic: anthropicApiKey
         case .openai: openaiApiKey

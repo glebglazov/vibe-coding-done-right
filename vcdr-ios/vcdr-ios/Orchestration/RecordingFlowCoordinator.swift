@@ -431,8 +431,8 @@ final class RecordingFlowCoordinator {
 
         aiInputText = localText
         aiProcessingStatus = .processing
-        let provider = AIProcessingSettings.provider
-        let apiKey = AIProcessingSettings.activeApiKey
+        let provider = AIProcessingSettings.provider(for: selectedPromptMode)
+        let apiKey = AIProcessingSettings.apiKey(for: provider)
         let systemPrompt = BuiltInPrompts.prompt(for: selectedPromptMode)
         var wrappedText = "<dictation>\(localText)</dictation>"
         // Append captured selections as <capture> context for assistant mode,
@@ -465,7 +465,7 @@ final class RecordingFlowCoordinator {
         }
 
         // --- AFM fallback (only when a cloud provider was primary) ---
-        if AIProcessingSettings.afmFallbackEnabled, provider != .apple {
+        if AIProcessingSettings.afmFallbackEnabled(for: selectedPromptMode), provider != .apple {
             let fallbackResult = await runAFMFallback(
                 text: wrappedText, systemPrompt: systemPrompt
             )

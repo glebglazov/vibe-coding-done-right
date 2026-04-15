@@ -6,20 +6,15 @@ struct SettingsView: View {
     @AppStorage("appearance") private var appearance: Appearance = .system
     @AppStorage(AudioRecorder.preferredInputUIDKey) private var preferredInputUID = ""
     @AppStorage(AIProcessingSettings.defaultModeKey) private var defaultModeRaw = AIPromptMode.dictation.rawValue
-    @AppStorage(AIProcessingSettings.enabledKey) private var aiEnabled = false
     @AppStorage(AIProcessingSettings.activeInDictationKey) private var aiActiveInDictation = false
-    @AppStorage(AIProcessingSettings.providerKey) private var aiProviderRaw = AIProvider.anthropic.rawValue
-    @AppStorage(AIProcessingSettings.afmFallbackEnabledKey) private var afmFallbackEnabled = false
-    @AppStorage(AIProcessingSettings.afmFallbackRememberedKey) private var afmFallbackRemembered = false
     @AppStorage(StyleSettings.defaultStyleKey) private var defaultStyleRaw = TextStyle.casual.rawValue
     @State private var availableInputs: [AVAudioSessionPortDescription] = []
 
     var body: some View {
         NavigationStack {
             Form {
-                defaultModeSection
-                aiProcessingSection
                 textStyleSection
+                aiProcessingSection
                 microphoneSection
                 appearanceSection
             }
@@ -41,29 +36,6 @@ struct SettingsView: View {
             .onChange(of: defaultStyleRaw) { _, val in
                 SharedConstants.sharedDefaults.set(val, forKey: SharedConstants.textStyleKey)
             }
-            .onChange(of: aiEnabled) { _, _ in syncAIConfigured() }
-            .onChange(of: aiProviderRaw) { _, _ in syncAIConfigured() }
-        }
-    }
-
-    private func syncAIConfigured() {
-        SharedConstants.sharedDefaults.set(
-            AIProcessingSettings.hasAICapability,
-            forKey: SharedConstants.aiConfiguredKey
-        )
-    }
-
-    // MARK: - Default Mode
-
-    private var defaultModeSection: some View {
-        Section {
-            Picker("Default Mode", selection: $defaultModeRaw) {
-                ForEach(AIPromptMode.availableModes, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode.rawValue)
-                }
-            }
-        } header: {
-            Text("Default Mode")
         }
     }
 
@@ -86,16 +58,28 @@ struct SettingsView: View {
 
     private var textStyleSection: some View {
         Section {
-            Picker("Default Style", selection: $defaultStyleRaw) {
-                ForEach(TextStyle.allCases, id: \.self) { style in
-                    Text(style.displayName).tag(style.rawValue)
+            ForEach(TextStyle.allCases, id: \.self) { style in
+                Button {
+                    defaultStyleRaw = style.rawValue
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(style.displayName)
+                                .foregroundStyle(.primary)
+                            Text(style.example)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if defaultStyleRaw == style.rawValue {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.blue)
+                        }
+                    }
                 }
             }
-            .pickerStyle(.segmented)
         } header: {
             Text("Default Dictation Style")
-        } footer: {
-            Text("Default formatting for all captures.")
         }
     }
 
@@ -147,63 +131,29 @@ struct SettingsView: View {
 
     private var aiProcessingSection: some View {
         Section {
-            Toggle("Enabled", isOn: $aiEnabled)
+            Toggle("Enabled by Default", isOn: $aiActiveInDictation)
 
-            Toggle("Active by Default", isOn: $aiActiveInDictation)
-
-            providerPicker
-
-            afmFallbackToggle
+            Picker("Default Mode", selection: $defaultModeRaw) {
+                ForEach(AIPromptMode.availableModes, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode.rawValue)
+                }
+            }
 
             NavigationLink("Configure Providers") {
                 ProvidersView()
             }
+
+            NavigationLink("Configure Modes") {
+                ModesView()
+            }
         } header: {
             Text("AI Processing")
         } footer: {
-            if configuredProviders.isEmpty {
+            if AIProvider.configuredProviders.isEmpty {
                 Text("No providers configured. Tap \"Configure Providers\" to add an API key.")
             } else {
                 Text("Enhances transcriptions using AI.")
             }
         }
-    }
-
-    private var configuredProviders: [AIProvider] {
-        AIProvider.configuredProviders
-    }
-
-    private var providerPicker: some View {
-        Picker("Provider", selection: Binding(
-            get: { AIProvider(rawValue: aiProviderRaw) ?? .anthropic },
-            set: { newProvider in
-                let oldProvider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
-
-                // When switching TO Apple: remember fallback state, force it off
-                if newProvider == .apple && oldProvider != .apple {
-                    afmFallbackRemembered = afmFallbackEnabled
-                    afmFallbackEnabled = false
-                }
-                // When switching AWAY from Apple: restore remembered fallback state
-                if newProvider != .apple && oldProvider == .apple {
-                    afmFallbackEnabled = afmFallbackRemembered
-                }
-
-                aiProviderRaw = newProvider.rawValue
-            }
-        )) {
-            ForEach(configuredProviders, id: \.self) { provider in
-                Text(provider.displayName).tag(provider)
-            }
-        }
-        .disabled(configuredProviders.isEmpty)
-    }
-
-    private var afmFallbackToggle: some View {
-        let isDisabled = !AIProcessingSettings.isAFMAvailable
-            || (AIProvider(rawValue: aiProviderRaw) ?? .anthropic) == .apple
-
-        return Toggle("Use Apple as Fallback", isOn: $afmFallbackEnabled)
-            .disabled(isDisabled)
     }
 }
