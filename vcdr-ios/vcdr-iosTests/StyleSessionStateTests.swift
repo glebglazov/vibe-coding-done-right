@@ -92,9 +92,21 @@ struct StyleSessionStateTests {
     @Test("Built-in array contains expected styles")
     func builtInArrayContents() {
         let builtIn = Style.builtIn
-        
+
         #expect(builtIn.count == 2)
         #expect(builtIn[0].id == Style.casualID)
         #expect(builtIn[1].id == Style.formalID)
+    }
+
+    // MARK: - appliesStyles Tests
+
+    @Test("Dictation mode applies styles")
+    func dictationModeAppliesStyles() {
+        #expect(AIPromptMode.dictation.appliesStyles == true)
+    }
+
+    @Test("Assistant mode does not apply styles")
+    func assistantModeDoesNotApplyStyles() {
+        #expect(AIPromptMode.assistant.appliesStyles == false)
     }
 }

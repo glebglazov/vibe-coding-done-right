@@ -147,6 +147,9 @@ struct Mode: Identifiable, Codable, Equatable {
     /// When false (default), executes the action immediately after transcription.
     var showPreview: Bool
     var saveResultToClipboard: Bool
+    /// When true, style transformations (capitalization, punctuation, dynamic prompts)
+    /// are applied to the output. Dictation modes typically enable this; assistant modes disable it.
+    var appliesStyles: Bool
 
     /// Joined labels from the first option of each parameter (the defaults, without overrides).
     /// Used in static UI contexts (settings, menu bar, quick actions) where there's no active session.
@@ -215,7 +218,8 @@ struct Mode: Identifiable, Codable, Equatable {
         defaultOutputDestinationID: UUID = OutputDestination.builtInPasteID,
         parameters: [ModeParameter] = [],
         showPreview: Bool = false,
-        saveResultToClipboard: Bool = false
+        saveResultToClipboard: Bool = false,
+        appliesStyles: Bool = true
     ) {
         self.id = id
         self.name = name
@@ -233,6 +237,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.parameters = parameters
         self.showPreview = showPreview
         self.saveResultToClipboard = saveResultToClipboard
+        self.appliesStyles = appliesStyles
     }
 
     // MARK: - Codable (backward-compatible)
@@ -249,6 +254,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case parameters
         case showPreview
         case saveResultToClipboard
+        case appliesStyles
         // Legacy key for migration (quickAction was inverted: true = skip preview)
         case quickAction
         // Legacy keys (read-only, for migration)
@@ -274,6 +280,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(parameters, forKey: .parameters)
         try container.encode(showPreview, forKey: .showPreview)
         try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
+        try container.encode(appliesStyles, forKey: .appliesStyles)
         // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
         // Once saved in new format, old keys are gone (one-way migration).
     }
@@ -298,6 +305,7 @@ struct Mode: Identifiable, Codable, Equatable {
             showPreview = false
         }
         saveResultToClipboard = try container.decodeIfPresent(Bool.self, forKey: .saveResultToClipboard) ?? false
+        appliesStyles = try container.decodeIfPresent(Bool.self, forKey: .appliesStyles) ?? true
 
         // New fields — with companion/aiProcessing → cloudAI migration
         if let rawType = try container.decodeIfPresent(String.self, forKey: .processingType) {

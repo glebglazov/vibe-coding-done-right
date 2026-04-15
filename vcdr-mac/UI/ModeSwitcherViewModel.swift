@@ -164,10 +164,6 @@ final class ModeSwitcherViewModel {
         case KeyCodeMap.returnKeyCode:
             confirmMode(modes[highlightedIndex].id)
             return true
-        case KeyCodeMap.tabKeyCode:
-            // Cycle through styles: detected → Casual → Formal → detected
-            onCycleStyle?()
-            return true
         default:
             // Number keys 1-9 for modes
             if let number = charsIgnoringModifiers.first?.wholeNumberValue,
