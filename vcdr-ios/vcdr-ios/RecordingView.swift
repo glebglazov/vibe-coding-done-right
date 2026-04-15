@@ -22,7 +22,9 @@ struct RecordingView: View {
     private static let transcriptMaxHeight: CGFloat = 200
     private static let hintFontSize: CGFloat = 13
     private static let returnPulseDuration: Double = 0.8
-    private static let aiPillHeight: CGFloat = 32
+    private static let aiPillHeight: CGFloat = 36
+    private static let pillBorder: CGFloat = 1.5
+    private static let pillFontSize: CGFloat = 12
 
     var body: some View {
         ZStack {
@@ -378,36 +380,27 @@ struct RecordingView: View {
 
     @ViewBuilder
     private var aiSessionToggle: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             // AI toggle pill (only show if AI is configured)
             if AIProcessingSettings.hasAICapability {
                 Button {
                     coordinator.toggleAIActive()
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 12))
-                        Text(coordinator.aiActiveThisSession ? "AI ON" : "AI OFF")
-                            .font(.system(size: 11, weight: .bold))
-                            .tracking(2)
-                    }
-                    .foregroundStyle(coordinator.aiActiveThisSession ? theme.primary : theme.onSurfaceVariant)
-                    .padding(.horizontal, 16)
-                    .frame(height: Self.aiPillHeight)
-                    .background(theme.surfaceHigh)
+                    sonicPill(
+                        icon: "sparkles",
+                        text: coordinator.aiActiveThisSession ? "AI ON" : "AI OFF",
+                        filled: coordinator.aiActiveThisSession
+                    )
                 }
 
                 if coordinator.aiActiveThisSession {
                     Button {
                         coordinator.cyclePromptMode()
                     } label: {
-                        Text(coordinator.selectedPromptMode.displayName.uppercased())
-                            .font(.system(size: 11, weight: .bold))
-                            .tracking(2)
-                            .foregroundStyle(theme.primary)
-                            .padding(.horizontal, 12)
-                            .frame(height: Self.aiPillHeight)
-                            .background(theme.surfaceHigh)
+                        sonicPill(
+                            text: coordinator.selectedPromptMode.displayName.uppercased(),
+                            filled: false
+                        )
                     }
                 }
             }
@@ -417,17 +410,36 @@ struct RecordingView: View {
                 Button {
                     coordinator.cycleTextStyle()
                 } label: {
-                    Text(coordinator.currentTextStyle.displayName.uppercased())
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(2)
-                        .foregroundStyle(theme.primary)
-                        .padding(.horizontal, 16)
-                        .frame(height: Self.aiPillHeight)
-                        .background(theme.surfaceHigh)
+                    sonicPill(
+                        text: coordinator.currentTextStyle.displayName.uppercased(),
+                        filled: false
+                    )
                 }
             }
-            }
         }
+    }
+
+    private func sonicPill(icon: String? = nil, text: String, filled: Bool) -> some View {
+        HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .black))
+            }
+            Text(text)
+                .font(.system(size: Self.pillFontSize, weight: .black))
+                .tracking(1.5)
+        }
+        .foregroundStyle(filled ? theme.surfaceLowest : theme.onSurface)
+        .padding(.horizontal, 14)
+        .frame(height: Self.aiPillHeight)
+        .background(
+            Capsule()
+                .fill(filled ? theme.primary : theme.surfaceHigh)
+        )
+        .overlay(
+            Capsule()
+                .stroke(theme.onSurface, lineWidth: Self.pillBorder)
+        )
     }
 
     private func errorContent(_ message: String) -> some View {
@@ -491,12 +503,19 @@ struct RecordingView: View {
     private func brutalistButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 12, weight: .black))
                 .tracking(2)
                 .foregroundStyle(theme.onSurface)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
-                .background(theme.surfaceHigh)
+                .background(
+                    Capsule()
+                        .fill(theme.surfaceHigh)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(theme.onSurface, lineWidth: Self.pillBorder)
+                )
         }
     }
 
