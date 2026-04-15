@@ -152,6 +152,42 @@
       "expected_output": "They're going to the store to buy their supplies for their project. It's important that the team completes its tasks on time. The data shows that fewer people are using the old system than expected, which affects our revenue projections."
     },
     {
+      "id": "style_preserve_bullets_rewrite",
+      "category": "style_preservation",
+      "input": "make this more concise\n\n<capture id=\"1\">- The authentication module needs to be completely rewritten from scratch because the current implementation has numerous security vulnerabilities\n- The database migration scripts should be updated to handle the new schema changes that were introduced in version 3.0\n- The CI/CD pipeline configuration needs to be modified to include the new integration test suite that was added last sprint\n- The API documentation should be regenerated to reflect the recent endpoint changes and deprecations</capture>",
+      "expected_output": "- Rewrite auth module due to security vulnerabilities\n- Update DB migration scripts for v3.0 schema changes\n- Add new integration test suite to CI/CD pipeline\n- Regenerate API docs for recent endpoint changes and deprecations"
+    },
+    {
+      "id": "style_preserve_numbered_translate",
+      "category": "style_preservation",
+      "input": "translate to English\n\n<capture id=\"1\">1. Склонируйте репозиторий с GitHub\n2. Установите зависимости командой npm install\n3. Создайте файл .env на основе .env.example\n4. Запустите миграции базы данных\n5. Запустите сервер командой npm run dev</capture>",
+      "expected_output": "1. Clone the repository from GitHub\n2. Install dependencies with npm install\n3. Create a .env file based on .env.example\n4. Run the database migrations\n5. Start the server with npm run dev"
+    },
+    {
+      "id": "style_preserve_code_comments",
+      "category": "style_preservation",
+      "input": "fix the grammar in these comments\n\n<capture id=\"1\">// This function are responsible for validating the user input\n// and makeing sure that all required fields is present\n// It return true if validation pass and false otherwize\nfunc validateInput(data: [String: Any]) -> Bool {</capture>",
+      "expected_output": "// This function is responsible for validating the user input\n// and making sure that all required fields are present\n// It returns true if validation passes and false otherwise\nfunc validateInput(data: [String: Any]) -> Bool {"
+    },
+    {
+      "id": "style_preserve_markdown_concise",
+      "category": "style_preservation",
+      "input": "make this shorter\n\n<capture id=\"1\">## Authentication\n\nThe authentication system currently supports three different methods for users to log in to the application:\n\n### OAuth 2.0\nUsers can authenticate using their Google or GitHub accounts through the OAuth 2.0 protocol, which provides a seamless single sign-on experience.\n\n### Email/Password\nTraditional email and password authentication is available for users who prefer not to use third-party providers.\n\n### API Keys\nFor programmatic access, users can generate API keys from their dashboard settings page.</capture>",
+      "expected_output": "## Authentication\n\nThree login methods:\n\n### OAuth 2.0\nSign in via Google or GitHub with single sign-on.\n\n### Email/Password\nTraditional login for users who prefer not to use third-party providers.\n\n### API Keys\nGenerate from dashboard settings for programmatic access."
+    },
+    {
+      "id": "style_preserve_caps_fix_typos",
+      "category": "style_preservation",
+      "input": "fix the typos\n\n<capture id=\"1\">WARNINNG: DO NOT MODFIY THIS FILE DIRECTLY. ALL CHAGNES MUST GO THROUGHT THE CONFIGRATION MANAGMENT SYSTEM. UNAUTHORISED EDITS WILL BE REVERTED AUTOMATICALY.</capture>",
+      "expected_output": "WARNING: DO NOT MODIFY THIS FILE DIRECTLY. ALL CHANGES MUST GO THROUGH THE CONFIGURATION MANAGEMENT SYSTEM. UNAUTHORISED EDITS WILL BE REVERTED AUTOMATICALLY."
+    },
+    {
+      "id": "style_preserve_nested_list",
+      "category": "style_preservation",
+      "input": "translate this to Spanish\n\n<capture id=\"1\">- Frontend\n  - React components\n  - TypeScript migration\n  - Unit tests\n- Backend\n  - API endpoints\n  - Database schema\n  - Integration tests\n- DevOps\n  - CI/CD pipeline\n  - Monitoring</capture>",
+      "expected_output": "- Frontend\n  - Componentes React\n  - Migración a TypeScript\n  - Pruebas unitarias\n- Backend\n  - Endpoints de API\n  - Esquema de base de datos\n  - Pruebas de integración\n- DevOps\n  - Pipeline de CI/CD\n  - Monitoreo"
+    },
+    {
       "id": "no_instruction_random_statement",
       "category": "no_instruction",
       "input": "потому что нельзя быть просто таким красивым",
