@@ -105,11 +105,13 @@ struct DictateSettingsPills: View {
                 }
             }
 
-            Button {
-                KeyboardHaptics.light()
-                controller.toggleTextStyle()
-            } label: {
-                sonicPill(text: controller.textStyle.displayName.uppercased())
+            if !controller.aiActive || controller.aiMode != .assistant {
+                Button {
+                    KeyboardHaptics.light()
+                    controller.toggleTextStyle()
+                } label: {
+                    sonicPill(text: controller.textStyle.displayName.uppercased())
+                }
             }
         }
     }
