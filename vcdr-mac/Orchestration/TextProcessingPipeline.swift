@@ -127,11 +127,17 @@ enum TextProcessingPipeline {
         }
 
         // MARK: Style transformation — capitalization, punctuation (final step before terminator)
-        let styledText = StyleTransformer.transform(result.text, using: style.staticRules, cursorContext: cursorContext)
-        if styledText != result.text {
-            Logger.textTransform.info("After style transform: \"\(styledText)\"")
+        let styledText: String
+        if mode.appliesStyles {
+            styledText = StyleTransformer.transform(result.text, using: style.staticRules, cursorContext: cursorContext)
+            if styledText != result.text {
+                Logger.textTransform.info("After style transform: \"\(styledText)\"")
+            } else {
+                Logger.textTransform.debug("Style transform: no change")
+            }
         } else {
-            Logger.textTransform.debug("Style transform: no change")
+            styledText = result.text
+            Logger.textTransform.debug("Style transform: skipped (mode.appliesStyles=false)")
         }
 
         Logger.textTransform.info("Pipeline final output: \"\(styledText)\"")
@@ -164,10 +170,12 @@ enum TextProcessingPipeline {
             return structureInputXML(text: text, captures: captures, systemPrompt: nil, cursorContext: cursorContext)
         case .localAgent:
             let prompt = AIProcessingAdapter.resolvePrompt(mode)
-            // Append style dynamic prompt for AI modes (macOS only)
-            let promptWithStyle = AIStylePromptAppender.appendStylePrompt(to: prompt, style: style)
+            // Append style dynamic prompt only when mode applies styles
+            let finalPrompt = mode.appliesStyles
+                ? AIStylePromptAppender.appendStylePrompt(to: prompt, style: style)
+                : prompt
             return structureInputXML(text: text, captures: captures,
-                                     systemPrompt: promptWithStyle.isEmpty ? nil : promptWithStyle,
+                                     systemPrompt: finalPrompt.isEmpty ? nil : finalPrompt,
                                      cursorContext: cursorContext)
         case .bashScript:
             let prompt = (mode.systemPromptEnabled && !mode.systemPrompt.isEmpty)

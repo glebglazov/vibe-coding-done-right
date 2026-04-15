@@ -16,6 +16,7 @@ struct ModeTemplate {
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
     let showPreview: Bool
+    let appliesStyles: Bool
 
     func makeMode() -> Mode {
         Mode(
@@ -33,7 +34,8 @@ struct ModeTemplate {
             localAgentPassVariables: localAgentPassVariables,
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
-            showPreview: showPreview
+            showPreview: showPreview,
+            appliesStyles: appliesStyles
         )
     }
 
@@ -51,6 +53,7 @@ struct ModeTemplate {
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.parameters = parameters
         mode.showPreview = showPreview
+        mode.appliesStyles = appliesStyles
     }
 
     /// Finds the template definition for a given template ID.
@@ -89,7 +92,8 @@ extension ModeTemplate {
         localAgentPassVariables: false,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
-        showPreview: false
+        showPreview: false,
+        appliesStyles: true
     )
 
     static let aiDictation = ModeTemplate(
@@ -106,7 +110,8 @@ extension ModeTemplate {
         localAgentPassVariables: false,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
-        showPreview: false
+        showPreview: false,
+        appliesStyles: true
     )
 
     static let claudeCode = ModeTemplate(
@@ -129,7 +134,8 @@ extension ModeTemplate {
             ]),
         ],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
-        showPreview: false
+        showPreview: false,
+        appliesStyles: false
     )
 
     static let ollama = ModeTemplate(
@@ -151,7 +157,8 @@ extension ModeTemplate {
             ]),
         ],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
-        showPreview: false
+        showPreview: false,
+        appliesStyles: false
     )
 
     static let all: [ModeTemplate] = [.plain, .aiDictation, .claudeCode, .ollama]

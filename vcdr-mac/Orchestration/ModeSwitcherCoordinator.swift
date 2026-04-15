@@ -105,7 +105,7 @@ final class ModeSwitcherCoordinator {
 
     // MARK: - Style Cycling
 
-    /// Cycles to the next style in the rotation (called when TAB is pressed in mode switcher).
+    /// Cycles to the next style in the rotation (called when the style pill is clicked).
     private func cycleStyle() {
         let newStyle = styleOverrideController.cycleToNextStyle()
 

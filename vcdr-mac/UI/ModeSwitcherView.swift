@@ -38,51 +38,11 @@ struct ModeSwitcherView: View {
                 }
                 .onTapGesture { viewModel.confirmMode(mode.id) }
         }
-
-        styleIndicator
-    }
-
-    // MARK: - Style Indicator
-
-    @ViewBuilder
-    private var styleIndicator: some View {
-        Divider()
-            .padding(.vertical, 4)
-
-        HStack(spacing: 6) {
-            Image(systemName: viewModel.isStyleOverridden ? "wand.and.stars" : "sparkles")
-                .font(.caption2)
-                .foregroundStyle(viewModel.isStyleOverridden ? Color.accentColor : .secondary)
-
-            Text(viewModel.currentStyleName)
-                .font(.caption)
-                .foregroundStyle(viewModel.isStyleOverridden ? .primary : .secondary)
-
-            if viewModel.isStyleOverridden {
-                Text("(overridden)")
-                    .font(.caption2)
-                    .foregroundStyle(Color.accentColor)
-                    .fontWeight(.medium)
-            }
-
-            Spacer()
-
-            Text("TAB")
-                .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.secondary.opacity(0.1))
-                )
-        }
-        .padding(.horizontal, Self.rowHorizontalPadding)
-        .padding(.vertical, 4)
     }
 
     private func modeRow(index: Int, mode: Mode) -> some View {
         let isHighlighted = index == viewModel.highlightedIndex
+        let isActive = mode.id == viewModel.activeModeID
 
         return HStack(spacing: 8) {
             Text("\(index + 1)")
@@ -93,11 +53,15 @@ struct ModeSwitcherView: View {
             Text(mode.name)
                 .lineLimit(1)
 
-            if mode.id == viewModel.activeModeID {
+            if isActive {
                 ActiveModeIndicator(color: viewModel.isRecording ? .red : .green)
             }
 
             Spacer()
+
+            if isActive && mode.appliesStyles {
+                stylePill
+            }
 
             if !mode.parameters.isEmpty {
                 parameterIndicator(for: mode)
@@ -110,6 +74,27 @@ struct ModeSwitcherView: View {
                 .fill(isHighlighted ? Color.accentColor.opacity(0.3) : Color.clear)
         )
         .contentShape(Rectangle())
+    }
+
+    // MARK: - Style Pill
+
+    private var stylePill: some View {
+        Button {
+            viewModel.onCycleStyle?()
+        } label: {
+            Text(viewModel.currentStyleName)
+                .font(.system(.caption2, weight: .medium))
+                .foregroundStyle(viewModel.isStyleOverridden ? .white : .secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(viewModel.isStyleOverridden ? Color.accentColor : Color.secondary.opacity(0.15))
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Text style: \(viewModel.currentStyleName)")
+        .accessibilityHint("Click to cycle through available styles")
     }
 
     // MARK: - Parameter Indicator

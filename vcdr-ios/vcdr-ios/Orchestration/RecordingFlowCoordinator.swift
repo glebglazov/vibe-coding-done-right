@@ -358,10 +358,15 @@ final class RecordingFlowCoordinator {
             }
             
             // Stage 3: Apply style transformation (capitalization, punctuation)
-            let styledText = StyleTransformer.transform(processedText, using: currentTextStyle.style.staticRules)
-            
             // Stage 4: Apply terminator (spacing)
-            let resultText = TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style)
+            // Skip style transformations for modes that don't apply styles (e.g., assistant)
+            let resultText: String
+            if selectedPromptMode.appliesStyles {
+                let styledText = StyleTransformer.transform(processedText, using: currentTextStyle.style.staticRules)
+                resultText = TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style)
+            } else {
+                resultText = TextPostProcessor.applyTerminator(to: processedText)
+            }
 
             transcribingMessage = ""
             state = .complete(resultText)
@@ -554,9 +559,13 @@ final class RecordingFlowCoordinator {
         aiRetryTask = Task {
             let aiResult = await waitForAIProcessing(localText: aiInputText)
             guard !Task.isCancelled else { return }
-            // Re-apply style transformation and terminator on retry
-            let styledText = StyleTransformer.transform(aiResult, using: currentTextStyle.style.staticRules)
-            state = .complete(TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style))
+            // Re-apply style transformation and terminator on retry (only for modes that apply styles)
+            if selectedPromptMode.appliesStyles {
+                let styledText = StyleTransformer.transform(aiResult, using: currentTextStyle.style.staticRules)
+                state = .complete(TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style))
+            } else {
+                state = .complete(TextPostProcessor.applyTerminator(to: aiResult))
+            }
         }
     }
 

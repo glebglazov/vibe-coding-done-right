@@ -357,7 +357,9 @@ struct RecordingView: View {
             if coordinator.aiActiveThisSession {
                 sessionInfoPill(coordinator.selectedPromptMode.displayName.uppercased())
             }
-            sessionInfoPill(coordinator.currentTextStyle.displayName.uppercased())
+            if coordinator.selectedPromptMode.appliesStyles {
+                sessionInfoPill(coordinator.currentTextStyle.displayName.uppercased())
+            }
         }
     }
 
@@ -410,17 +412,20 @@ struct RecordingView: View {
                 }
             }
 
-            // Style toggle pill
-            Button {
-                coordinator.cycleTextStyle()
-            } label: {
-                Text(coordinator.currentTextStyle.displayName.uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(2)
-                    .foregroundStyle(theme.primary)
-                    .padding(.horizontal, 16)
-                    .frame(height: Self.aiPillHeight)
-                    .background(theme.surfaceHigh)
+            // Style toggle pill (only for modes that apply styles)
+            if coordinator.selectedPromptMode.appliesStyles {
+                Button {
+                    coordinator.cycleTextStyle()
+                } label: {
+                    Text(coordinator.currentTextStyle.displayName.uppercased())
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(2)
+                        .foregroundStyle(theme.primary)
+                        .padding(.horizontal, 16)
+                        .frame(height: Self.aiPillHeight)
+                        .background(theme.surfaceHigh)
+                }
+            }
             }
         }
     }

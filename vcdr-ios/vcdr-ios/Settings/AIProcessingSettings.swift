@@ -28,6 +28,15 @@ enum AIPromptMode: String, CaseIterable, Codable {
         allCases.filter(\.isAvailable)
     }
 
+    /// Whether style transformations (capitalization, punctuation) should be applied for this mode.
+    /// Dictation modes produce user text that benefits from styling; assistant modes produce AI output that shouldn't be restyled.
+    var appliesStyles: Bool {
+        switch self {
+        case .dictation: true
+        case .assistant: false
+        }
+    }
+
     /// Cycles to the next available mode, wrapping around.
     var next: AIPromptMode {
         let modes = Self.availableModes

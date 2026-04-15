@@ -118,4 +118,31 @@ struct ModeCodableTests {
         #expect(decoded.systemPromptEnabled == false)
         #expect(decoded.systemPrompt == "")
     }
+
+    @Test("appliesStyles defaults to true when missing from JSON")
+    @MainActor func appliesStylesDefaultsToTrue() throws {
+        let json = """
+        {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "name": "Legacy",
+            "processingType": "none",
+            "processingCommand": ""
+        }
+        """
+        let decoded = try JSONDecoder().decode(Mode.self, from: Data(json.utf8))
+        #expect(decoded.appliesStyles == true)
+    }
+
+    @Test("appliesStyles round-trips through encode/decode")
+    @MainActor func appliesStylesRoundTrip() throws {
+        let original = Mode(
+            id: UUID(),
+            name: "No Style",
+            processingType: .none,
+            appliesStyles: false
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Mode.self, from: data)
+        #expect(decoded.appliesStyles == false)
+    }
 }
