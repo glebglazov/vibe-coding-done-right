@@ -417,6 +417,13 @@ final class RecordingFlowCoordinator {
 
     /// Runs the full AI processing chain: primary provider (with retries) → AFM fallback → local text.
     private func waitForAIProcessing(localText: String) async -> String {
+        // Re-read mode from shared defaults to guard against cross-process staleness.
+        let sd = SharedConstants.sharedDefaults
+        sd.synchronize()
+        selectedPromptMode = AIPromptMode(
+            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
+        ) ?? .dictation
+
         aiInputText = localText
         aiProcessingStatus = .processing
         let provider = AIProcessingSettings.provider
