@@ -9,22 +9,19 @@ struct SettingsView: View {
     @AppStorage(AIProcessingSettings.enabledKey) private var aiEnabled = false
     @AppStorage(AIProcessingSettings.activeInDictationKey) private var aiActiveInDictation = false
     @AppStorage(AIProcessingSettings.providerKey) private var aiProviderRaw = AIProvider.anthropic.rawValue
-    @AppStorage(AIProcessingSettings.anthropicApiKeyKey) private var anthropicApiKey = ""
-    @AppStorage(AIProcessingSettings.openaiApiKeyKey) private var openaiApiKey = ""
     @AppStorage(AIProcessingSettings.afmFallbackEnabledKey) private var afmFallbackEnabled = false
     @AppStorage(AIProcessingSettings.afmFallbackRememberedKey) private var afmFallbackRemembered = false
     @AppStorage(StyleSettings.defaultStyleKey) private var defaultStyleRaw = TextStyle.casual.rawValue
-    @State private var isEditingAnthropicKey = false
-    @State private var isEditingOpenAIKey = false
     @State private var availableInputs: [AVAudioSessionPortDescription] = []
 
     var body: some View {
         NavigationStack {
             Form {
-                appearanceSection
+                defaultModeSection
+                aiProcessingSection
                 textStyleSection
                 microphoneSection
-                aiProcessingSection
+                appearanceSection
             }
             .onAppear { refreshAvailableInputs() }
             .navigationTitle("Settings")
@@ -46,8 +43,6 @@ struct SettingsView: View {
             }
             .onChange(of: aiEnabled) { _, _ in syncAIConfigured() }
             .onChange(of: aiProviderRaw) { _, _ in syncAIConfigured() }
-            .onChange(of: anthropicApiKey) { _, _ in syncAIConfigured() }
-            .onChange(of: openaiApiKey) { _, _ in syncAIConfigured() }
         }
     }
 
@@ -56,6 +51,20 @@ struct SettingsView: View {
             AIProcessingSettings.hasAICapability,
             forKey: SharedConstants.aiConfiguredKey
         )
+    }
+
+    // MARK: - Default Mode
+
+    private var defaultModeSection: some View {
+        Section {
+            Picker("Default Mode", selection: $defaultModeRaw) {
+                ForEach(AIPromptMode.availableModes, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode.rawValue)
+                }
+            }
+        } header: {
+            Text("Default Mode")
+        }
     }
 
     // MARK: - Appearance
@@ -68,6 +77,8 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
+        } header: {
+            Text("Appearance")
         }
     }
 
@@ -82,7 +93,7 @@ struct SettingsView: View {
             }
             .pickerStyle(.segmented)
         } header: {
-            Text("Text Style")
+            Text("Default Dictation Style")
         } footer: {
             Text("Default formatting for all captures.")
         }
@@ -140,39 +151,26 @@ struct SettingsView: View {
 
             Toggle("Active by Default", isOn: $aiActiveInDictation)
 
-            Picker("Default Mode", selection: $defaultModeRaw) {
-                ForEach(AIPromptMode.availableModes, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode.rawValue)
-                }
-            }
-
             providerPicker
 
             afmFallbackToggle
 
-            apiKeyRow(
-                label: "Anthropic API Key",
-                key: $anthropicApiKey,
-                isEditing: $isEditingAnthropicKey
-            )
-
-            apiKeyRow(
-                label: "OpenAI API Key",
-                key: $openaiApiKey,
-                isEditing: $isEditingOpenAIKey
-            )
-
-            // Warning if selected cloud provider has no key
-            let currentProvider = AIProvider(rawValue: aiProviderRaw) ?? .anthropic
-            if aiEnabled && currentProvider.requiresAPIKey && AIProcessingSettings.activeApiKey.isEmpty {
-                Text("Enter your \(currentProvider.displayName) API key to enable AI processing.")
-                    .foregroundStyle(.yellow)
+            NavigationLink("Configure Providers") {
+                ProvidersView()
             }
         } header: {
             Text("AI Processing")
         } footer: {
-            Text("Enhances transcriptions using AI. Enter your API key for the selected provider.")
+            if configuredProviders.isEmpty {
+                Text("No providers configured. Tap \"Configure Providers\" to add an API key.")
+            } else {
+                Text("Enhances transcriptions using AI.")
+            }
         }
+    }
+
+    private var configuredProviders: [AIProvider] {
+        AIProvider.configuredProviders
     }
 
     private var providerPicker: some View {
@@ -194,12 +192,11 @@ struct SettingsView: View {
                 aiProviderRaw = newProvider.rawValue
             }
         )) {
-            ForEach(AIProvider.allCases, id: \.self) { provider in
-                if provider != .apple || AIProcessingSettings.isAFMAvailable {
-                    Text(provider.displayName).tag(provider)
-                }
+            ForEach(configuredProviders, id: \.self) { provider in
+                Text(provider.displayName).tag(provider)
             }
         }
+        .disabled(configuredProviders.isEmpty)
     }
 
     private var afmFallbackToggle: some View {
@@ -208,48 +205,5 @@ struct SettingsView: View {
 
         return Toggle("Use Apple as Fallback", isOn: $afmFallbackEnabled)
             .disabled(isDisabled)
-    }
-
-    // MARK: - API Key Row
-
-    private func apiKeyRow(
-        label: String,
-        key: Binding<String>,
-        isEditing: Binding<Bool>
-    ) -> some View {
-        LabeledContent(label) {
-            if isEditing.wrappedValue {
-                ApiKeyTextField(text: key, onSubmit: { isEditing.wrappedValue = false })
-                    .multilineTextAlignment(.trailing)
-            } else {
-                Text(maskedKey(key.wrappedValue))
-                    .foregroundStyle(key.wrappedValue.isEmpty ? .secondary : .primary)
-                    .onTapGesture { isEditing.wrappedValue = true }
-            }
-        }
-    }
-
-    private func maskedKey(_ key: String) -> String {
-        guard key.count > 6 else {
-            return key.isEmpty ? "Not set" : String(repeating: "\u{2022}", count: key.count)
-        }
-        return "\(key.prefix(3))\u{2022}\u{2022}\u{2022}\(key.suffix(3))"
-    }
-}
-
-/// A TextField that auto-focuses on appear and properly supports paste.
-private struct ApiKeyTextField: View {
-    @Binding var text: String
-    let onSubmit: () -> Void
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        TextField("Your API key", text: $text)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .textContentType(.password)
-            .focused($isFocused)
-            .onSubmit(onSubmit)
-            .onAppear { isFocused = true }
     }
 }

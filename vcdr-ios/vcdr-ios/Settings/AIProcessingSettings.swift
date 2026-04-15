@@ -73,6 +73,20 @@ enum AIProvider: String, Codable, CaseIterable {
         case .apple: ""
         }
     }
+
+    /// Whether this provider is ready to use (has API key or AFM available).
+    var isConfigured: Bool {
+        switch self {
+        case .anthropic: !AIProcessingSettings.anthropicApiKey.isEmpty
+        case .openai: !AIProcessingSettings.openaiApiKey.isEmpty
+        case .apple: AIProcessingSettings.isAFMAvailable
+        }
+    }
+
+    /// Providers that are configured and available for selection.
+    static var configuredProviders: [AIProvider] {
+        allCases.filter(\.isConfigured)
+    }
 }
 
 /// Reads AI processing settings from UserDefaults.
