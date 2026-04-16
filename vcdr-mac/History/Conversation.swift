@@ -13,14 +13,19 @@ struct Conversation: Identifiable, Equatable, Codable {
         output != nil
     }
 
-    /// Preview text for the history list.
-    var previewText: String {
+    /// Raw input text joined from all segments.
+    var inputText: String {
         inputSegments.map(\.text).joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Output text for copy actions, falling back to preview text.
+    /// Preview text for the history list — prefers processed output when available.
+    var previewText: String {
+        output ?? inputText
+    }
+
+    /// Output text for copy actions, falling back to input text.
     var copyableText: String {
-        output ?? previewText
+        output ?? inputText
     }
 
     // MARK: - Codable (backward-compatible with multi-turn format)
