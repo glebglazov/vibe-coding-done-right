@@ -144,6 +144,9 @@ struct ModeDetailView: View {
                 Toggle("Show Preview", isOn: $mode.showPreview)
                     .help("When enabled, shows the transcription for editing before processing. When off, the result is immediately processed and sent to the output destination.")
 
+                Toggle("Context-aware formatting", isOn: $mode.contextAware)
+                    .help("When enabled, uses text around the cursor to insert separators (e.g. \". \") between dictations and adjust leading capitalization.")
+
                 Toggle("Save result to clipboard", isOn: $mode.saveResultToClipboard)
                     .help("When enabled, the result is saved to your clipboard after the output action completes.")
             }

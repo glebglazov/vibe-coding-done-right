@@ -65,8 +65,13 @@ enum SubmissionPipeline {
         context: Context,
         aiPort: any AIProcessingPort = AIProcessingAdapter()
     ) async throws -> Result {
+        // Context-aware gate: discard context if mode doesn't use it
         // Staleness check: discard context if source app no longer matches target app
         let effectiveCursorContext: CursorContext? = {
+            guard context.mode.contextAware else {
+                Logger.textTransform.debug("Cursor context: disabled (mode.contextAware=false)")
+                return nil
+            }
             guard let cursorContext = context.cursorContext,
                   let sourceBundleID = cursorContext.sourceBundleID,
                   let targetPID = context.targetAppPID,

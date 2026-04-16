@@ -17,6 +17,7 @@ struct ModeTemplate {
     let defaultOutputDestinationID: UUID
     let showPreview: Bool
     let appliesStyles: Bool
+    let contextAware: Bool
 
     func makeMode() -> Mode {
         Mode(
@@ -35,7 +36,8 @@ struct ModeTemplate {
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
             showPreview: showPreview,
-            appliesStyles: appliesStyles
+            appliesStyles: appliesStyles,
+            contextAware: contextAware
         )
     }
 
@@ -54,6 +56,7 @@ struct ModeTemplate {
         mode.parameters = parameters
         mode.showPreview = showPreview
         mode.appliesStyles = appliesStyles
+        mode.contextAware = contextAware
     }
 
     /// Finds the template definition for a given template ID.
@@ -93,7 +96,8 @@ extension ModeTemplate {
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
-        appliesStyles: true
+        appliesStyles: true,
+        contextAware: false
     )
 
     static let aiDictation = ModeTemplate(
@@ -111,7 +115,8 @@ extension ModeTemplate {
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
-        appliesStyles: true
+        appliesStyles: true,
+        contextAware: false
     )
 
     static let claudeCode = ModeTemplate(
@@ -135,7 +140,8 @@ extension ModeTemplate {
         ],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
-        appliesStyles: false
+        appliesStyles: false,
+        contextAware: false
     )
 
     static let ollama = ModeTemplate(
@@ -158,7 +164,8 @@ extension ModeTemplate {
         ],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
-        appliesStyles: false
+        appliesStyles: false,
+        contextAware: false
     )
 
     static let all: [ModeTemplate] = [.plain, .aiDictation, .claudeCode, .ollama]

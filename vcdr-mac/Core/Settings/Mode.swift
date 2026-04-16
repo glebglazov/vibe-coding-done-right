@@ -150,6 +150,9 @@ struct Mode: Identifiable, Codable, Equatable {
     /// When true, style transformations (capitalization, punctuation, dynamic prompts)
     /// are applied to the output. Dictation modes typically enable this; assistant modes disable it.
     var appliesStyles: Bool
+    /// When true, cursor context (text before/after the cursor) is used for context-aware
+    /// formatting: separator insertion, leading-edge capitalization, and AI context XML.
+    var contextAware: Bool
 
     /// Joined labels from the first option of each parameter (the defaults, without overrides).
     /// Used in static UI contexts (settings, menu bar, quick actions) where there's no active session.
@@ -219,7 +222,8 @@ struct Mode: Identifiable, Codable, Equatable {
         parameters: [ModeParameter] = [],
         showPreview: Bool = false,
         saveResultToClipboard: Bool = false,
-        appliesStyles: Bool = true
+        appliesStyles: Bool = true,
+        contextAware: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -238,6 +242,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.showPreview = showPreview
         self.saveResultToClipboard = saveResultToClipboard
         self.appliesStyles = appliesStyles
+        self.contextAware = contextAware
     }
 
     // MARK: - Codable (backward-compatible)
@@ -255,6 +260,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case showPreview
         case saveResultToClipboard
         case appliesStyles
+        case contextAware
         // Legacy key for migration (quickAction was inverted: true = skip preview)
         case quickAction
         // Legacy keys (read-only, for migration)
@@ -281,6 +287,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(showPreview, forKey: .showPreview)
         try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
         try container.encode(appliesStyles, forKey: .appliesStyles)
+        try container.encode(contextAware, forKey: .contextAware)
         // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
         // Once saved in new format, old keys are gone (one-way migration).
     }
@@ -306,6 +313,7 @@ struct Mode: Identifiable, Codable, Equatable {
         }
         saveResultToClipboard = try container.decodeIfPresent(Bool.self, forKey: .saveResultToClipboard) ?? false
         appliesStyles = try container.decodeIfPresent(Bool.self, forKey: .appliesStyles) ?? true
+        contextAware = try container.decodeIfPresent(Bool.self, forKey: .contextAware) ?? false
 
         // New fields — with companion/aiProcessing → cloudAI migration
         if let rawType = try container.decodeIfPresent(String.self, forKey: .processingType) {

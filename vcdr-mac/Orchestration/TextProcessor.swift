@@ -214,10 +214,11 @@ final class TextProcessor {
             )
 
             // Apply the same post-processing as the initial pipeline path.
+            let effectiveContext = handle.input.mode.contextAware ? handle.input.cursorContext : nil
             processedText = applyPostProcessing(
                 processedText,
                 style: handle.input.style,
-                cursorContext: handle.input.cursorContext
+                cursorContext: effectiveContext
             )
 
             let newHandle = PreviewHandle(
