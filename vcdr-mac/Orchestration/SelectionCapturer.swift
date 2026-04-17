@@ -245,22 +245,14 @@ struct SelectionCapturer: Sendable {
             return nil
         }
 
-        // Extract cursor position from the range
-        var startValue: CFIndex = 0
-        var lengthValue: CFIndex = 0
-        let gotRange = AXValueGetValue(selectedRange as! AXValue, .cfRange, &startValue)
-        let gotLength = AXValueGetValue(selectedRange as! AXValue, .cfRange, &lengthValue)
-        
-        if !gotRange || !gotLength {
-            // Try to get range using direct CFRangeGetValues if needed
-            let range = selectedRange as! CFRange
-            startValue = range.location
-            lengthValue = range.length
+        // Non-Cocoa text surfaces (Electron, Chromium, custom NSTextInput) can return
+        // values that aren't AXValueRef. Unchecked `as!` here previously crashed VCDR
+        // on every recording in such apps; bail out instead.
+        guard let cfRange = Self.cfRange(fromAXAttributeValue: selectedRange) else {
+            Logger.actions.info("Cursor context PathA: selectedRange is not an AXValue/CFRange (bundle=\(bundleIdentifier ?? "nil"))")
+            return nil
         }
-
-        // When there's a selection, the cursor is at the end of the selection
-        // For context capture, we want the insertion point position
-        let cursorPosition = startValue + lengthValue
+        let cursorPosition = cfRange.location + cfRange.length
 
         // Read before text (up to contextWindowSize characters)
         let beforeText = readTextViaStringForRange(
@@ -307,6 +299,24 @@ struct SelectionCapturer: Sendable {
         }
 
         return text
+    }
+
+    /// Safely extracts a `CFRange` from a value returned by
+    /// `AXUIElementCopyAttributeValue(_, kAXSelectedTextRangeAttribute, _)`.
+    ///
+    /// Returns nil if the value is not an `AXValueRef` carrying a `.cfRange`.
+    /// Exposed at internal visibility so tests can exercise the type-check
+    /// without a real `AXUIElement`.
+    static func cfRange(fromAXAttributeValue value: AnyObject) -> CFRange? {
+        guard CFGetTypeID(value) == AXValueGetTypeID() else {
+            return nil
+        }
+        let axValue = value as! AXValue
+        var range = CFRange()
+        guard AXValueGetValue(axValue, .cfRange, &range) else {
+            return nil
+        }
+        return range
     }
 
     // MARK: - Path B: WebKit Text Markers
