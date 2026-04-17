@@ -199,15 +199,20 @@ final class RecordingFlowCoordinator {
         let recordStart = ContinuousClock.now
         Logger.app.info("[RecordTiming] startRecording entered")
 
-        // Fire haptics AFTER state change (below) on a detached task.
-        // CHHapticEngine init can block for seconds when system services
-        // are strained by concurrent CoreML compilation.
-        // Fire haptics as a separate task so CHHapticEngine init (which connects
-        // to a system daemon) doesn't block recording start. Under heavy CoreML
-        // compilation load the daemon can take seconds to respond.
+        // UI flip FIRST — nothing blocks it. Everything perceptually slow
+        // (haptics, UserDefaults reads, disk flushes, engine start) runs after.
+        launchedViaDeepLink = fromDeepLink
+        aiProcessingStatus = .idle
+        state = .recording
+        setIdleTimerDisabled(true)
+        Logger.app.info("[RecordTiming] state=recording set at +\(ContinuousClock.now - recordStart)")
+
+        // Haptics on detached task — CHHapticEngine daemon connect can block
+        // for seconds under concurrent CoreML load.
         Task { @MainActor in UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
 
-        launchedViaDeepLink = fromDeepLink
+        // Session snapshot from shared defaults. These fields are used later
+        // (on stop / AI processing), not for audio start — do them after UI flip.
         let sd = SharedConstants.sharedDefaults
         aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
         selectedPromptMode = AIPromptMode(
@@ -216,8 +221,6 @@ final class RecordingFlowCoordinator {
         currentTextStyle = TextStyle(
             rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
         ) ?? .casual
-        // Read initial captures written by the keyboard extension.
-        // The keyboard stores a JSON array; additional captures are appended during recording.
         capturedTexts = []
         if let data = sd.data(forKey: SharedConstants.capturedTextsKey),
            let texts = try? JSONDecoder().decode([String].self, from: data) {
@@ -225,14 +228,12 @@ final class RecordingFlowCoordinator {
             Logger.ai.info("Initial captures on start: \(texts.count) item(s)")
         }
         sd.removeObject(forKey: SharedConstants.selectedTextKey)
-        aiProcessingStatus = .idle
 
-        // Show "LISTENING" immediately — before any async work.
-        // If audio fails to start, state reverts to .error below.
-        state = .recording
-        writeState(.recording)
-        setIdleTimerDisabled(true)
-        Logger.app.info("[RecordTiming] state=recording set at +\(ContinuousClock.now - recordStart)")
+        // Shared-defaults write + Darwin post — off the critical path.
+        // Keyboard extension reads this asynchronously anyway.
+        Task.detached { [weak self] in
+            await self?.writeStateAsync(.recording)
+        }
 
         // Create streaming manager immediately — no models needed for construction.
         // Its internal AsyncStream buffers audio until start() begins consuming.
@@ -651,6 +652,17 @@ final class RecordingFlowCoordinator {
     /// When `bundledText` is provided, the value is written as `"idle|text"` so the
     /// keyboard can reliably receive the transcription via the same key that syncs state.
     private func writeState(_ recordingState: RecordingState, bundledText: String? = nil) {
+        Self.writeStateRaw(recordingState, bundledText: bundledText)
+    }
+
+    /// Non-MainActor version so callers can dispatch disk-flush + Darwin post
+    /// off the critical path. Shared UserDefaults + DarwinNotificationCenter
+    /// are thread-safe. Performs no instance state reads.
+    nonisolated func writeStateAsync(_ recordingState: RecordingState, bundledText: String? = nil) async {
+        Self.writeStateRaw(recordingState, bundledText: bundledText)
+    }
+
+    private nonisolated static func writeStateRaw(_ recordingState: RecordingState, bundledText: String? = nil) {
         let value: String
         if let bundledText, recordingState == .idle {
             value = "\(RecordingState.idle.rawValue)|\(bundledText)"

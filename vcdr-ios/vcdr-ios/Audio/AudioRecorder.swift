@@ -150,7 +150,7 @@ final class AudioRecorder {
 
         bufferHandler = onBuffer
 
-        guard startEngine() else {
+        guard await startEngine() else {
             // Engine failed to start — deactivate the session we just activated
             // so it doesn't interfere with other apps' audio.
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -163,23 +163,23 @@ final class AudioRecorder {
     // MARK: - Engine Lifecycle
 
     /// Starts the audio engine. Reuses a pre-prepared engine if available,
-    /// otherwise creates one from scratch.
+    /// otherwise creates one from scratch. The blocking `engine.start()` call
+    /// runs on a background QoS queue so it does not stall MainActor —
+    /// `engine.start()` can take 100-500ms, or several seconds under CoreML load.
     /// Returns true on success. Assumes `bufferHandler` is already set.
-    private func startEngine() -> Bool {
+    private func startEngine() async -> Bool {
         // Reuse pre-prepared engine — tap is already installed, resources allocated.
         if let engine = audioEngine, !engine.isRunning {
-            do {
-                try engine.start()
+            if await Self.startEngineOffMain(engine) {
                 isRecording = true
                 let format = engine.inputNode.outputFormat(forBus: 0)
                 Logger.recording.info("Audio engine started (pre-prepared, format: \(format))")
                 return true
-            } catch {
-                Logger.recording.warning("Pre-prepared engine failed to start: \(error), creating fresh engine")
-                engine.inputNode.removeTap(onBus: 0)
-                audioEngine = nil
-                // Fall through to create fresh engine
             }
+            Logger.recording.warning("Pre-prepared engine failed to start, creating fresh engine")
+            engine.inputNode.removeTap(onBus: 0)
+            audioEngine = nil
+            // Fall through to create fresh engine
         }
 
         let engine = AVAudioEngine()
@@ -198,22 +198,33 @@ final class AudioRecorder {
             self.bufferHandler?(buffer)
         }
 
-        do {
-            try engine.start()
+        if await Self.startEngineOffMain(engine) {
             audioEngine = engine
             isRecording = true
             Logger.recording.info("Audio engine started (format: \(format))")
             return true
-        } catch {
-            Logger.recording.error("Failed to start audio engine: \(error)")
-            inputNode.removeTap(onBus: 0)
-            return false
         }
+        inputNode.removeTap(onBus: 0)
+        return false
+    }
+
+    /// Runs `engine.start()` on a `.userInitiated` background task so MainActor
+    /// stays free. AVAudioEngine.start() is thread-safe per Apple's audio framework docs.
+    private nonisolated static func startEngineOffMain(_ engine: AVAudioEngine) async -> Bool {
+        await Task.detached(priority: .userInitiated) {
+            do {
+                try engine.start()
+                return true
+            } catch {
+                Logger.recording.error("engine.start failed: \(error)")
+                return false
+            }
+        }.value
     }
 
     /// Tears down the current engine and starts a fresh one on the new audio route.
     /// Called when the audio route changes mid-recording (e.g. AirPods connect/disconnect).
-    private func restartEngine() {
+    private func restartEngine() async {
         guard let oldEngine = audioEngine else { return }
 
         oldEngine.inputNode.removeTap(onBus: 0)
@@ -222,7 +233,7 @@ final class AudioRecorder {
 
         applyPreferredInput()
 
-        if startEngine() {
+        if await startEngine() {
             Logger.recording.info("Audio engine restarted after route change")
         } else {
             isRecording = false
@@ -369,17 +380,9 @@ final class AudioRecorder {
         guard isRecording else { return }
 
         switch reason {
-        case .newDeviceAvailable:
-            // New device connected (e.g. AirPods) — iOS auto-switches to it.
-            // Restart engine to re-apply preferred input and pick up the new format.
-            restartEngine()
-        case .oldDeviceUnavailable:
-            // Device disconnected (e.g. AirPods removed) — input node is stale.
-            // Restart engine so recording continues through the new route.
-            restartEngine()
-        case .override, .routeConfigurationChange:
-            // System or app changed the route — restart to stay in sync.
-            restartEngine()
+        case .newDeviceAvailable, .oldDeviceUnavailable, .override, .routeConfigurationChange:
+            // Device/route change — restart engine to re-apply input and pick up new format.
+            Task { await restartEngine() }
         default:
             break
         }
