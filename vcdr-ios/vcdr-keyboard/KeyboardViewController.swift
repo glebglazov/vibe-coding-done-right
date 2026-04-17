@@ -253,9 +253,30 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         let sd = SharedConstants.sharedDefaults
         aiConfigured = sd.bool(forKey: SharedConstants.aiConfiguredKey)
         aiActive = sd.bool(forKey: SharedConstants.aiActiveKey)
-        aiMode = SharedAIMode(rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? "") ?? .dictation
-        textStyle = SharedTextStyle(rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? "") ?? .casual
+
+        // Distinguish "key missing" (host app never wrote, or write hasn't
+        // propagated across processes) from a real user-chosen value. Silently
+        // falling back to .dictation hid a bug where returning to the keyboard
+        // after a scene transition appeared to reset the user's mode.
+        if let raw = sd.string(forKey: SharedConstants.aiModeKey),
+           let parsed = SharedAIMode(rawValue: raw) {
+            aiMode = parsed
+        } else {
+            Self.log.warning("aiModeKey missing or invalid — keeping previous mode \(self.aiMode.rawValue, privacy: .public)")
+        }
+
+        if let raw = sd.string(forKey: SharedConstants.textStyleKey),
+           let parsed = SharedTextStyle(rawValue: raw) {
+            textStyle = parsed
+        } else {
+            Self.log.warning("textStyleKey missing or invalid — keeping previous style \(self.textStyle.rawValue, privacy: .public)")
+        }
     }
+
+    private static let log = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "glebglazov.vcdr-ios.keyboard",
+        category: "settings"
+    )
 
     func toggleAI() {
         aiActive.toggle()

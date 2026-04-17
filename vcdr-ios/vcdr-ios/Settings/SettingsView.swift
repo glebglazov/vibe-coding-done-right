@@ -26,15 +26,17 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            // Mirror settings to shared defaults for keyboard extension
+            // Mirror settings to shared defaults for keyboard extension.
+            // SharedSettingsSync flushes + posts the Darwin notification so the
+            // extension sees the new value even after the app backgrounds.
             .onChange(of: aiActiveInDictation) { _, val in
-                SharedConstants.sharedDefaults.set(val, forKey: SharedConstants.aiActiveKey)
+                SharedSettingsSync.setAIActive(val)
             }
             .onChange(of: defaultModeRaw) { _, val in
-                SharedConstants.sharedDefaults.set(val, forKey: SharedConstants.aiModeKey)
+                SharedSettingsSync.setAIMode(val)
             }
             .onChange(of: defaultStyleRaw) { _, val in
-                SharedConstants.sharedDefaults.set(val, forKey: SharedConstants.textStyleKey)
+                SharedSettingsSync.setTextStyle(val)
             }
         }
     }

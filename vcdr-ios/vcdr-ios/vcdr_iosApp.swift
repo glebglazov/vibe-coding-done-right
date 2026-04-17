@@ -27,6 +27,12 @@ struct VCDRiOSApp: App {
                         let shouldDisable = coordinator.state == .recording
                         UIApplication.shared.isIdleTimerDisabled = shouldDisable
                     case .background:
+                        // Flush the latest AI/style settings to the App Group so the
+                        // keyboard extension sees them when it spawns. Settings writes
+                        // synchronize inline, but this defends against any missed write
+                        // (e.g. settings changed before this version shipped, or written
+                        // via a path that bypassed SharedSettingsSync).
+                        SharedSettingsSync.syncAll()
                         // Deactivate audio session so other apps can resume playback.
                         // Skip if recording is active (background audio mode keeps it alive).
                         if !coordinator.isRecording {

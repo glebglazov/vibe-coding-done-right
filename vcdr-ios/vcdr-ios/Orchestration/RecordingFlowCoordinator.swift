@@ -66,12 +66,11 @@ final class RecordingFlowCoordinator {
     }
 
     private func syncSettingsToKeyboard() {
-        let sd = SharedConstants.sharedDefaults
-        sd.set(aiActiveThisSession, forKey: SharedConstants.aiActiveKey)
-        sd.set(selectedPromptMode.rawValue, forKey: SharedConstants.aiModeKey)
-        sd.set(currentTextStyle.rawValue, forKey: SharedConstants.textStyleKey)
-        sd.synchronize()
-        DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
+        SharedSettingsSync.setAll(
+            aiActive: aiActiveThisSession,
+            aiMode: selectedPromptMode.rawValue,
+            textStyle: currentTextStyle.rawValue
+        )
     }
 
     private let audioRecorder = AudioRecorder()
