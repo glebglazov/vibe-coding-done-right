@@ -491,14 +491,18 @@ final class RecordingFlowCoordinator {
 
         // --- AFM fallback (only when a cloud provider was primary) ---
         if AIProcessingSettings.afmFallbackEnabled(for: selectedPromptMode), provider != .apple {
-            let fallbackResult = await runAFMFallback(
-                text: wrappedText, systemPrompt: systemPrompt
-            )
-            if let result = fallbackResult {
+            switch await runAFMFallback(text: wrappedText, systemPrompt: systemPrompt) {
+            case .success(let result):
                 let elapsed = ContinuousClock.now - startTime
                 aiProcessingStatus = .completed
                 Logger.ai.info("AFM fallback output [\(elapsed)]: \(result)")
                 return result
+            case .failure(let reason):
+                aiProcessingStatus = .error(reason)
+                Logger.app.warning("AFM fallback failed: \(reason)")
+                return localText
+            case .notAvailable:
+                break
             }
         }
 
@@ -555,20 +559,30 @@ final class RecordingFlowCoordinator {
             } catch {
                 Logger.app.error("AI attempt \(attempt)/\(maxAttempts) failed: \(error)")
                 if attempt == maxAttempts {
-                    aiProcessingStatus = .error(error.localizedDescription)
+                    let message = provider == .apple
+                        ? AFMClient.friendlyReason(for: error)
+                        : error.localizedDescription
+                    aiProcessingStatus = .error(message)
                 }
             }
         }
         return nil
     }
 
-    /// Tries Apple Foundation Models once as a fallback. Returns result text or nil.
-    /// On `unsupportedLanguageOrLocale`, returns nil silently (local text will be used).
-    private func runAFMFallback(text: String, systemPrompt: String) async -> String? {
-        guard AIProcessingSettings.isAFMAvailable else { return nil }
+    enum AFMFallbackOutcome {
+        case success(String)
+        case failure(reason: String)
+        case notAvailable
+    }
+
+    /// Tries Apple Foundation Models once as a fallback. Returns `.notAvailable`
+    /// when AFM isn't on this device, `.success` with the result text, or
+    /// `.failure` with a short user-facing reason (e.g. unsupported language).
+    private func runAFMFallback(text: String, systemPrompt: String) async -> AFMFallbackOutcome {
+        guard AIProcessingSettings.isAFMAvailable else { return .notAvailable }
 
         do {
-            return try await AFMClient.process(text: text, systemPrompt: systemPrompt)
+            return .success(try await AFMClient.process(text: text, systemPrompt: systemPrompt))
         } catch let error as LanguageModelSession.GenerationError {
             switch error {
             case .unsupportedLanguageOrLocale:
@@ -576,10 +590,10 @@ final class RecordingFlowCoordinator {
             default:
                 Logger.app.error("AFM fallback generation error: \(error)")
             }
-            return nil
+            return .failure(reason: AFMClient.friendlyReason(for: error))
         } catch {
             Logger.app.error("AFM fallback failed: \(error)")
-            return nil
+            return .failure(reason: AFMClient.friendlyReason(for: error))
         }
     }
 
