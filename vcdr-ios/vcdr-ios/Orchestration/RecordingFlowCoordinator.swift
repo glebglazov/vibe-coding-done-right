@@ -328,7 +328,7 @@ final class RecordingFlowCoordinator {
             transcribingMessage = ""
         }
 
-        let useAI = aiActiveThisSession && AIProcessingSettings.isConfigured
+        let useAI = aiActiveThisSession && AIProcessingSettings.hasAICapability
 
         // Stage 1: Filler removal only — terminator is applied after external processing
         let cleanedLive = TextPostProcessor.removeFillers(from: liveTranscript)
