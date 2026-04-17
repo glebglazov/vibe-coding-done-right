@@ -67,7 +67,6 @@ struct SettingsView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(style.displayName)
-                                .foregroundStyle(.primary)
                             Text(style.example)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -75,10 +74,11 @@ struct SettingsView: View {
                         Spacer()
                         if defaultStyleRaw == style.rawValue {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(.blue)
                         }
                     }
                 }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
             }
         } header: {
             Text("Default Dictation Style")
