@@ -86,25 +86,58 @@ enum SharedTextStyle: String {
 
 /// Syncs AI/style preferences from UserDefaults.standard to shared defaults
 /// so the keyboard extension can read them.
+///
+/// Every write goes through one of the `set…` helpers below so the contract is
+/// uniform: `set` on sharedDefaults, then `synchronize` to flush to the App
+/// Group container, then post the Darwin notification so a live keyboard
+/// extension can re-read. Any direct `sharedDefaults.set` call site is a bug —
+/// the flush and notify are not optional.
 enum SharedSettingsSync {
+    static func setAIMode(_ rawValue: String) {
+        writeAndNotify { $0.set(rawValue, forKey: SharedConstants.aiModeKey) }
+    }
+
+    static func setAIActive(_ active: Bool) {
+        writeAndNotify { $0.set(active, forKey: SharedConstants.aiActiveKey) }
+    }
+
+    static func setTextStyle(_ rawValue: String) {
+        writeAndNotify { $0.set(rawValue, forKey: SharedConstants.textStyleKey) }
+    }
+
+    static func setAll(aiActive: Bool, aiMode: String, textStyle: String) {
+        writeAndNotify { sd in
+            sd.set(aiActive, forKey: SharedConstants.aiActiveKey)
+            sd.set(aiMode, forKey: SharedConstants.aiModeKey)
+            sd.set(textStyle, forKey: SharedConstants.textStyleKey)
+        }
+    }
+
     static func syncAll() {
+        writeAndNotify { sd in
+            sd.set(
+                UserDefaults.standard.bool(forKey: AIProcessingSettings.activeInDictationKey),
+                forKey: SharedConstants.aiActiveKey
+            )
+            sd.set(
+                UserDefaults.standard.string(forKey: AIProcessingSettings.defaultModeKey) ?? AIPromptMode.dictation.rawValue,
+                forKey: SharedConstants.aiModeKey
+            )
+            sd.set(
+                UserDefaults.standard.string(forKey: StyleSettings.defaultStyleKey) ?? TextStyle.casual.rawValue,
+                forKey: SharedConstants.textStyleKey
+            )
+            sd.set(
+                AIProcessingSettings.hasAICapability,
+                forKey: SharedConstants.aiConfiguredKey
+            )
+        }
+    }
+
+    private static func writeAndNotify(_ write: (UserDefaults) -> Void) {
         let sd = SharedConstants.sharedDefaults
-        sd.set(
-            UserDefaults.standard.bool(forKey: AIProcessingSettings.activeInDictationKey),
-            forKey: SharedConstants.aiActiveKey
-        )
-        sd.set(
-            UserDefaults.standard.string(forKey: AIProcessingSettings.defaultModeKey) ?? AIPromptMode.dictation.rawValue,
-            forKey: SharedConstants.aiModeKey
-        )
-        sd.set(
-            UserDefaults.standard.string(forKey: StyleSettings.defaultStyleKey) ?? TextStyle.casual.rawValue,
-            forKey: SharedConstants.textStyleKey
-        )
-        sd.set(
-            AIProcessingSettings.hasAICapability,
-            forKey: SharedConstants.aiConfiguredKey
-        )
+        write(sd)
         sd.synchronize()
+        DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
     }
 }
