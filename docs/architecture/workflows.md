@@ -32,3 +32,9 @@
 - **Parakeet model is large (~1.2GB).** First launch downloads it. Don't assume the model is ready — always check initialization state.
 - **CGEvent tap requires accessibility.** The hotkey won't work until the user grants accessibility permissions. Handle this gracefully with polling.
 - **Audio recording at 16kHz mono.** This is Parakeet's native format. Don't change the sample rate — it avoids resampling overhead.
+
+## iOS Testing Policy
+
+- **Do not use iOS simulators.** Skip all `mcp__XcodeBuildMCP__*_sim` tools, `xcodebuild -destination 'platform=iOS Simulator...'`, and `simctl` for the iOS target. Simulators are disk-heavy and the maintainer tests on a physical device.
+- When iOS verification is needed, ask the maintainer to run on their real device and report results. Plain `xcodebuild build` (no simulator destination) is acceptable for compile-only checks.
+- macOS target is unaffected — build/run locally as normal.
