@@ -12,11 +12,6 @@ import OSLog
 @MainActor
 enum HistoryMigrator {
 
-    private static let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "vcdr.history",
-        category: "history.migrator"
-    )
-
     static func reconcileAtLaunch(syncEnabled: Bool) {
         let localRoot = FileHistoryStore.localStorageRoot
             .appendingPathComponent("conversations")
@@ -49,7 +44,7 @@ enum HistoryMigrator {
         do {
             try fm.createDirectory(at: destination, withIntermediateDirectories: true)
         } catch {
-            logger.error("Could not create migration destination \(destination.path): \(error)")
+            Logger.history.error("Could not create migration destination \(destination.path): \(error)")
             return
         }
 
@@ -58,7 +53,7 @@ enum HistoryMigrator {
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         ) else {
-            logger.error("Could not enumerate migration source \(source.path)")
+            Logger.history.error("Could not enumerate migration source \(source.path)")
             return
         }
 
@@ -74,11 +69,11 @@ enum HistoryMigrator {
                 moved += 1
             } catch {
                 failed += 1
-                logger.error("Migration failed for \(fileURL.lastPathComponent): \(error)")
+                Logger.history.error("Migration failed for \(fileURL.lastPathComponent): \(error)")
             }
         }
 
         let direction = makeUbiquitous ? "local → iCloud" : "iCloud → local"
-        logger.info("History migration \(direction, privacy: .public): moved \(moved, privacy: .public), failed \(failed, privacy: .public)")
+        Logger.history.info("History migration \(direction, privacy: .public): moved \(moved, privacy: .public), failed \(failed, privacy: .public)")
     }
 }

@@ -1,5 +1,4 @@
 import Foundation
-import OSLog
 
 /// iCloud Drive-backed history store. Composes over `FileHistoryStore`,
 /// pointing it at the ubiquity container's `Documents/VCDR` directory.
@@ -37,7 +36,6 @@ final class UbiquityHistoryStore: HistoryStore {
 
     enum SyncState: Equatable {
         case idle
-        case syncing
         /// New records were detected in the ubiquity container but not yet
         /// merged into `conversations` — user must tap the sync indicator or
         /// pull-to-refresh to apply them.
@@ -54,7 +52,6 @@ final class UbiquityHistoryStore: HistoryStore {
     let inner: FileHistoryStore
 
     private let metadataQuery: NSMetadataQuery
-    private var conflictResolutionInFlight: Set<URL> = []
     private var queryObserverTokens: [NSObjectProtocol] = []
     private var accountObserverToken: (any NSObjectProtocol)?
 
@@ -63,11 +60,6 @@ final class UbiquityHistoryStore: HistoryStore {
     /// immediately so the first view of the page isn't empty. After that,
     /// updates surface as `.pendingUpdates` and wait for the user.
     private var hasGatheredInitialSet = false
-
-    private static let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "vcdr.history",
-        category: "history.sync"
-    )
 
     // MARK: - Init
 
@@ -118,7 +110,7 @@ final class UbiquityHistoryStore: HistoryStore {
     /// the first page into `conversations`. Called when the user taps the
     /// sync indicator or pulls-to-refresh.
     func refresh() {
-        kickOffPlaceholderDownloadsAndResolveConflicts()
+        processMetadataResults()
         inner.rebuildIndexAndReloadFirstPage()
         // If the account-state observer has paused us, don't clobber that.
         if case .paused = syncState { return }
@@ -185,7 +177,7 @@ final class UbiquityHistoryStore: HistoryStore {
     /// First-load path: apply immediately so the history page isn't empty
     /// on the user's first visit after enabling sync.
     private func handleInitialGathering() {
-        kickOffPlaceholderDownloadsAndResolveConflicts()
+        processMetadataResults()
         inner.rebuildIndexAndReloadFirstPage()
         hasGatheredInitialSet = true
         if case .paused = syncState { return }
@@ -204,31 +196,28 @@ final class UbiquityHistoryStore: HistoryStore {
             return
         }
 
-        kickOffPlaceholderDownloadsAndResolveConflicts()
+        let newFilenames = processMetadataResults()
 
         // Account state always wins.
         if case .paused = syncState { return }
-
-        // Did any filename appear that we don't already know about?
-        let conversationsPath = inner.conversationsDir.path
-        let items = (metadataQuery.results as? [NSMetadataItem]) ?? []
-        let known = inner.indexedFilenames
-        let newFilenames: [String] = items.compactMap { item in
-            guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL,
-                  url.path.contains(conversationsPath) else { return nil }
-            return url.lastPathComponent
-        }.filter { !known.contains($0) }
-
         if !newFilenames.isEmpty {
             syncState = .pendingUpdates
         }
     }
 
-    /// Shared helper: iterate current metadata query results and kick off
-    /// downloads for any placeholder files + resolve conflict siblings.
-    private func kickOffPlaceholderDownloadsAndResolveConflicts() {
+    /// Walks the current `NSMetadataQuery` results: kicks off placeholder
+    /// downloads for missing files, dispatches conflict resolution to a
+    /// detached task (iCloud reads can block), and returns any filenames
+    /// not yet tracked by the inner index. `NSMetadataItem` access must
+    /// happen on the main thread, so the collection work stays here.
+    @discardableResult
+    private func processMetadataResults() -> [String] {
         let conversationsPath = inner.conversationsDir.path
         let items = (metadataQuery.results as? [NSMetadataItem]) ?? []
+        let known = inner.indexedFilenames
+        var conflictURLs: [URL] = []
+        var newFilenames: [String] = []
+
         for item in items {
             guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL,
                   url.path.contains(conversationsPath) else { continue }
@@ -239,44 +228,18 @@ final class UbiquityHistoryStore: HistoryStore {
             }
             if let hasConflict = item.value(forAttribute: NSMetadataUbiquitousItemHasUnresolvedConflictsKey) as? Bool,
                hasConflict {
-                resolveConflict(at: url)
+                conflictURLs.append(url)
+            }
+            let filename = url.lastPathComponent
+            if !known.contains(filename) {
+                newFilenames.append(filename)
             }
         }
-    }
 
-    // MARK: - Conflict resolution (LWW by Conversation.lastUpdated)
-
-    private func resolveConflict(at url: URL) {
-        guard !conflictResolutionInFlight.contains(url) else { return }
-        conflictResolutionInFlight.insert(url)
-        defer { conflictResolutionInFlight.remove(url) }
-
-        guard let current = NSFileVersion.currentVersionOfItem(at: url) else { return }
-        let others = NSFileVersion.otherVersionsOfItem(at: url) ?? []
-        let allVersions: [NSFileVersion] = [current] + others
-
-        let decoder = HistoryJSONCoders.makeDecoder()
-        let decoded: [(NSFileVersion, Conversation)] = allVersions.compactMap { version in
-            guard let data = try? Data(contentsOf: version.url),
-                  let convo = try? decoder.decode(Conversation.self, from: data) else {
-                return nil
-            }
-            return (version, convo)
+        if !conflictURLs.isEmpty {
+            HistoryConflictResolver.resolve(urls: conflictURLs)
         }
-
-        guard let winner = decoded.max(by: { $0.1.lastUpdated < $1.1.lastUpdated }) else {
-            Self.logger.error("Conflict at \(url.lastPathComponent) could not be decoded on any version")
-            return
-        }
-
-        do {
-            if winner.0 != current {
-                try winner.0.replaceItem(at: url)
-            }
-            try NSFileVersion.removeOtherVersionsOfItem(at: url)
-        } catch {
-            Self.logger.error("Conflict resolution failed for \(url.lastPathComponent): \(error)")
-        }
+        return newFilenames
     }
 
     // MARK: - Account-state observation

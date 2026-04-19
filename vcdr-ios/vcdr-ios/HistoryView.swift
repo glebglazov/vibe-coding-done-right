@@ -130,10 +130,6 @@ private struct SyncIndicator: View {
         case .idle:
             Image(systemName: "checkmark.icloud")
                 .foregroundStyle(theme.onSurfaceVariant)
-        case .syncing:
-            Image(systemName: "arrow.triangle.2.circlepath.icloud")
-                .symbolEffect(.pulse)
-                .foregroundStyle(theme.onSurfaceVariant)
         case .pendingUpdates:
             Image(systemName: "icloud.and.arrow.down")
                 .foregroundStyle(theme.primary)

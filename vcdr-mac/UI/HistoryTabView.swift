@@ -41,11 +41,9 @@ struct HistoryTabView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
                 SyncIndicator(history: history)
-            }
-            if !history.conversations.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
+                if !history.conversations.isEmpty {
                     Button("Clear All") {
                         history.clearAll()
                     }
@@ -77,10 +75,6 @@ private struct SyncIndicator: View {
             case .idle:
                 Image(systemName: "checkmark.icloud.fill")
                     .foregroundStyle(.secondary)
-            case .syncing:
-                Image(systemName: "arrow.triangle.2.circlepath.icloud.fill")
-                    .symbolEffect(.pulse)
-                    .foregroundStyle(.secondary)
             case .pendingUpdates:
                 Image(systemName: "icloud.and.arrow.down.fill")
                     .foregroundStyle(.tint)
@@ -96,7 +90,6 @@ private struct SyncIndicator: View {
     private func tooltip(for state: UbiquityHistoryStore.SyncState) -> String {
         switch state {
         case .idle: "Synced"
-        case .syncing: "Syncing…"
         case .pendingUpdates: "New entries available — click to load"
         case .paused(let reason): reason
         }
