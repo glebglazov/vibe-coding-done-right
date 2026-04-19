@@ -8,6 +8,7 @@ struct RecordingView: View {
     @AppStorage("appearance") private var appearance: Appearance = .system
     @State private var showCopiedConfirmation = false
     @State private var showSettings = false
+    @State private var showHistory = false
     @State private var recordingStart: Date?
 
     // MARK: - Constants
@@ -56,12 +57,29 @@ struct RecordingView: View {
         if case .recording = coordinator.state {
             EmptyView()
         } else {
-            HStack {
+            HStack(spacing: 0) {
                 Spacer()
+                historyButton
                 settingsButton
-                    .padding(.trailing, 20)
-                    .padding(.top, 12)
             }
+            .padding(.trailing, 12)
+            .padding(.top, 12)
+        }
+    }
+
+    private var historyButton: some View {
+        Button {
+            showHistory = true
+        } label: {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 18))
+                .foregroundStyle(theme.onSurfaceVariant)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .sheet(isPresented: $showHistory) {
+            HistoryView(history: coordinator.history)
+                .preferredColorScheme(appearance.colorScheme)
         }
     }
 
@@ -75,6 +93,7 @@ struct RecordingView: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
+        .padding(.leading, 4)
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .preferredColorScheme(appearance.colorScheme)

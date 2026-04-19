@@ -122,19 +122,17 @@ enum SubmissionPipeline {
     // MARK: - History Recording
 
     static func recordHistory(
-        history: TranscriptionHistory,
+        history: any HistoryStore,
         conversationID: UUID,
         inputSegments: [InputSegment],
         output: String?,
-        modeID: UUID,
-        modeName: String
+        label: String?
     ) {
         history.record(
             conversationID: conversationID,
             inputSegments: inputSegments,
             output: output,
-            modeID: modeID,
-            modeName: modeName
+            label: label
         )
     }
 }

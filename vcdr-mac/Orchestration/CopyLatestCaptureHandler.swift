@@ -4,13 +4,13 @@ import OSLog
 @MainActor
 final class CopyLatestCaptureHandler {
     private let settings: AppSettings
-    private let transcriptionHistory: TranscriptionHistory
+    private let transcriptionHistory: any HistoryStore
     private let recordingIndicator: RecordingIndicatorPanel
     private let hotkeyManager = GlobalHotkeyManager()
 
     init(
         settings: AppSettings,
-        transcriptionHistory: TranscriptionHistory,
+        transcriptionHistory: any HistoryStore,
         recordingIndicator: RecordingIndicatorPanel
     ) {
         self.settings = settings

@@ -130,7 +130,7 @@ final class CaptureSession {
     // MARK: - Injected state (stored for internal use)
 
     let settings: AppSettings
-    let history: TranscriptionHistory
+    let history: any HistoryStore
     let transcription: any TranscriptionProvider
     let audio: AudioRecorder
     let media: MediaPlaybackController
@@ -198,7 +198,7 @@ final class CaptureSession {
 
     init(
         settings: AppSettings,
-        history: TranscriptionHistory,
+        history: any HistoryStore,
         deps: Dependencies
     ) {
         self.settings = settings

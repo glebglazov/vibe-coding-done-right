@@ -8,13 +8,13 @@ import Testing
 private func makeProcessor(
     aiResults: [Result<String, Error>] = [],
     settings: AppSettings? = nil
-) -> (TextProcessor, TranscriptionHistory, ScriptedAIProcessing, AppSettings) {
+) -> (TextProcessor, FileHistoryStore, ScriptedAIProcessing, AppSettings) {
     let defaults = UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
     let s = settings ?? AppSettings(userDefaults: defaults)
     s.removeFillerWords = false
     let historyDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("vcdr-test-\(UUID().uuidString)")
-    let history = TranscriptionHistory(directory: historyDir)
+    let history = FileHistoryStore(storageRoot: historyDir)
     let ai = ScriptedAIProcessing(results: aiResults)
     let overrides = SessionOverrides()
     let processor = TextProcessor(

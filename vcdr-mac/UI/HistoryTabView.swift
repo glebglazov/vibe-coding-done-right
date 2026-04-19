@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HistoryTabView: View {
-    let history: TranscriptionHistory
+    let history: any HistoryStore
     let settings: AppSettings
 
     var body: some View {
@@ -58,7 +58,7 @@ private struct ConversationRowView: View {
             DisplayedTurnView(
                 turn: turn,
                 showLabels: showLabels,
-                modeName: conversation.hadExternalProcessing ? conversation.modeName : nil,
+                modeName: conversation.hadExternalProcessing ? conversation.label : nil,
                 isProcessing: false,
                 showCopyButton: true
             )

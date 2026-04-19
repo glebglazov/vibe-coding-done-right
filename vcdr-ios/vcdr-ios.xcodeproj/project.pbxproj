@@ -102,6 +102,12 @@
 			path = "vcdr-iosUITests";
 			sourceTree = "<group>";
 		};
+		E57289AB2F74745900E1C61C /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = Shared;
+			path = ../Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +148,7 @@
 		E57289782F74745700E1C61C = {
 			isa = PBXGroup;
 			children = (
+				E57289AB2F74745900E1C61C /* Shared */,
 				E57289832F74745800E1C61C /* vcdr-ios */,
 				AA0000022F74750000000001 /* vcdr-keyboard */,
 				E57289912F74745900E1C61C /* vcdr-iosTests */,
@@ -178,6 +185,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000022F74750000000001 /* vcdr-keyboard */,
+				E57289AB2F74745900E1C61C /* Shared */,
 			);
 			name = "vcdr-keyboard";
 			packageProductDependencies = (
@@ -203,6 +211,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				E57289832F74745800E1C61C /* vcdr-ios */,
+				E57289AB2F74745900E1C61C /* Shared */,
 			);
 			name = "vcdr-ios";
 			packageProductDependencies = (

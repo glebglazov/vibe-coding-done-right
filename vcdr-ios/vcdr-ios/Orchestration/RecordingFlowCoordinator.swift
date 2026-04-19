@@ -75,6 +75,9 @@ final class RecordingFlowCoordinator {
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
+    let history: any HistoryStore = FileHistoryStore()
+    /// UUID stamped at recording start; reused as the Conversation.id on record().
+    private var currentConversationID: UUID = UUID()
 
     private var streamingManager: StreamingAsrManager?
     private var updateTask: Task<Void, Never>?
@@ -203,6 +206,7 @@ final class RecordingFlowCoordinator {
         // (haptics, UserDefaults reads, disk flushes, engine start) runs after.
         launchedViaDeepLink = fromDeepLink
         aiProcessingStatus = .idle
+        currentConversationID = UUID()
         state = .recording
         setIdleTimerDisabled(true)
         Logger.app.info("[RecordTiming] state=recording set at +\(ContinuousClock.now - recordStart)")
@@ -328,6 +332,9 @@ final class RecordingFlowCoordinator {
             transcribingMessage = ""
         }
 
+        // Refresh mode/style from shared defaults — keyboard may have flipped
+        // mid-recording. Live-flip semantics: latest user intent wins.
+        resyncSettingsFromSharedDefaults()
         let useAI = aiActiveThisSession && AIProcessingSettings.hasAICapability
 
         // Stage 1: Filler removal only — terminator is applied after external processing
@@ -385,6 +392,9 @@ final class RecordingFlowCoordinator {
             // Stage 3: Apply style transformation (capitalization, punctuation)
             // Stage 4: Apply terminator (spacing)
             // Skip style transformations for modes that don't apply styles (e.g., assistant)
+            // Re-sync before styling — user may have flipped mode/style during
+            // the AI processing window.
+            resyncSettingsFromSharedDefaults()
             let resultText: String
             if selectedPromptMode.appliesStyles {
                 let styledText = StyleTransformer.transform(processedText, using: currentTextStyle.style.staticRules)
@@ -399,10 +409,19 @@ final class RecordingFlowCoordinator {
             if sendToKeyboard {
                 // Deliver text via state bundling — piggybacking on the stateKey
                 // is reliable cross-process whereas dedicated keys have sync delays.
+                // Must precede history disk I/O: keyboard polls stateKey on main
+                // runloop, any MainActor block here stalls cross-process delivery.
                 writeState(.idle, bundledText: resultText)
             } else {
                 writeState(.idle)
             }
+
+            recordHistory(
+                transcript: cleanedText,
+                processed: useAI ? processedText : nil,
+                finalText: resultText,
+                captures: capturedTexts
+            )
         } catch {
             transcribingMessage = ""
             if cleanedLive.isEmpty {
@@ -416,6 +435,61 @@ final class RecordingFlowCoordinator {
             UIApplication.shared.endBackgroundTask(bgTaskID)
         }
         streamingManager = nil
+    }
+
+    // MARK: - Cross-process settings sync
+
+    /// Re-reads mode/style/aiActive from shared defaults right before a
+    /// pipeline decision. Guards against cross-process staleness: the keyboard
+    /// may have flipped mode since the last Darwin `settingsChanged` notif
+    /// landed, and `handleSettingsChanged`'s MainActor task may still be
+    /// queued. `synchronize()` forces the current process to pull the latest
+    /// cross-process writes. Cheap (µs) — safe to call on hot paths.
+    private func resyncSettingsFromSharedDefaults() {
+        let sd = SharedConstants.sharedDefaults
+        sd.synchronize()
+        aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
+        selectedPromptMode = AIPromptMode(
+            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
+        ) ?? .dictation
+        currentTextStyle = TextStyle(
+            rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
+        ) ?? .casual
+    }
+
+    // MARK: - History
+
+    /// Records the completed conversation to shared history storage.
+    /// `processed` is nil when AI was not used; `finalText` is the styled/
+    /// terminated text actually delivered to the user.
+    private func recordHistory(
+        transcript: String,
+        processed: String?,
+        finalText: String,
+        captures: [String]
+    ) {
+        let primarySegment = InputSegment(text: transcript)
+        let captureSegments = captures
+            .filter { !$0.isEmpty }
+            .map { InputSegment(capture: CapturedContext(text: $0, source: .selection)) }
+        let segments = [primarySegment] + captureSegments
+        let label = historyLabel()
+        history.record(
+            conversationID: currentConversationID,
+            inputSegments: segments,
+            output: processed != nil ? finalText : nil,
+            label: label
+        )
+    }
+
+    /// Display label for the history entry — mirrors the current AI mode
+    /// and text style when the user enabled AI for this recording.
+    private func historyLabel() -> String? {
+        guard aiActiveThisSession else { return nil }
+        let mode = selectedPromptMode.rawValue.capitalized
+        return selectedPromptMode.appliesStyles
+            ? "\(mode) · \(currentTextStyle.rawValue.capitalized)"
+            : mode
     }
 
     func reset() {
@@ -447,12 +521,9 @@ final class RecordingFlowCoordinator {
 
     /// Runs the full AI processing chain: primary provider (with retries) → AFM fallback → local text.
     private func waitForAIProcessing(localText: String) async -> String {
-        // Re-read mode from shared defaults to guard against cross-process staleness.
-        let sd = SharedConstants.sharedDefaults
-        sd.synchronize()
-        selectedPromptMode = AIPromptMode(
-            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
-        ) ?? .dictation
+        // Cross-process staleness guard — pick up any keyboard-side flip that
+        // landed between stop-decision and AI dispatch.
+        resyncSettingsFromSharedDefaults()
 
         aiInputText = localText
         aiProcessingStatus = .processing
@@ -591,6 +662,8 @@ final class RecordingFlowCoordinator {
         aiRetryTask = Task {
             let aiResult = await waitForAIProcessing(localText: aiInputText)
             guard !Task.isCancelled else { return }
+            // Pick up any style/mode change the user made during the retry.
+            resyncSettingsFromSharedDefaults()
             // Re-apply style transformation and terminator on retry (only for modes that apply styles)
             if selectedPromptMode.appliesStyles {
                 let styledText = StyleTransformer.transform(aiResult, using: currentTextStyle.style.staticRules)

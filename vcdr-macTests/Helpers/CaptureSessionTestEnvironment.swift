@@ -17,7 +17,7 @@ struct CaptureSessionTestEnvironment {
 
     let session: CaptureSession
     let settings: AppSettings
-    let history: TranscriptionHistory
+    let history: FileHistoryStore
     let fakePanel: FakeCapturePanel
     let scriptedAI: ScriptedAIProcessing
     let mockProvider: MockTranscriptionProvider
@@ -78,7 +78,7 @@ struct CaptureSessionTestEnvironment {
 
         let historyDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("vcdr-test-\(UUID().uuidString)")
-        let history = TranscriptionHistory(directory: historyDir)
+        let history = FileHistoryStore(storageRoot: historyDir)
         self.history = history
 
         let overrides = SessionOverrides()

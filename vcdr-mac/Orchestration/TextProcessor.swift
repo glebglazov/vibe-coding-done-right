@@ -86,14 +86,14 @@ final class TextProcessor {
     // MARK: - Dependencies
 
     private let ai: any AIProcessingPort
-    private let history: TranscriptionHistory
+    private let history: any HistoryStore
     private let settings: AppSettings
     private let overrides: SessionOverrides
     private var styleProvider: @MainActor @Sendable () -> Style
 
     init(
         aiPort: any AIProcessingPort,
-        history: TranscriptionHistory,
+        history: any HistoryStore,
         settings: AppSettings,
         overrides: SessionOverrides,
         styleProvider: @MainActor @Sendable @escaping () -> Style
@@ -297,8 +297,7 @@ final class TextProcessor {
             conversationID: input.conversationID,
             inputSegments: input.inputSegments,
             output: output,
-            modeID: input.mode.id,
-            modeName: input.mode.name
+            label: input.mode.name
         )
     }
 }

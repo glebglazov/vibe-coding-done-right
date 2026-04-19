@@ -23,7 +23,6 @@
 /* Begin PBXFileReference section */
 		E5D6B81A2F466C82002066AA /* vcdr-mac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "vcdr-mac.app"; path = VCDR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E5D6B8272F466C83002066AA /* vcdr-macTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "vcdr-macTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
-
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -35,6 +34,11 @@
 		E5D6B82A2F466C83002066AA /* vcdr-macTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "vcdr-macTests";
+			sourceTree = "<group>";
+		};
+		E5D6B8602F466C83002066AA /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -61,6 +65,7 @@
 		E5D6B8112F466C82002066AA = {
 			isa = PBXGroup;
 			children = (
+				E5D6B8602F466C83002066AA /* Shared */,
 				E5D6B81C2F466C82002066AA /* vcdr-mac */,
 				E5D6B82A2F466C83002066AA /* vcdr-macTests */,
 				E5D6B81B2F466C82002066AA /* Products */,
@@ -94,6 +99,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				E5D6B81C2F466C82002066AA /* vcdr-mac */,
+				E5D6B8602F466C83002066AA /* Shared */,
 			);
 			name = "vcdr-mac";
 			packageProductDependencies = (
@@ -143,7 +149,7 @@
 						CreatedOnToolsVersion = 26.0;
 						TestTargetID = E5D6B8192F466C82002066AA;
 					};
-};
+				};
 			};
 			buildConfigurationList = E5D6B8152F466C82002066AA /* Build configuration list for PBXProject "vcdr-mac" */;
 			developmentRegion = en;

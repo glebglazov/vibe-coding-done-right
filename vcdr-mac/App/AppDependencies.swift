@@ -12,7 +12,7 @@ final class AppDependencies {
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
     let mediaPlaybackController: MediaPlaybackController
-    let transcriptionHistory: TranscriptionHistory
+    let transcriptionHistory: any HistoryStore
     let styleRegistry: StyleRegistry
     let frontmostAppMonitor: FrontmostAppMonitor
     let styleResolutionPipeline: StyleResolutionPipeline
@@ -53,7 +53,7 @@ final class AppDependencies {
         self.transcriptionProvider = provider
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
-        let history = TranscriptionHistory()
+        let history = FileHistoryStore()
         self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
         #if DEBUG
