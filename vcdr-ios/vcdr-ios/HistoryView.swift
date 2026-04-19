@@ -4,7 +4,6 @@ struct HistoryView: View {
     let history: any HistoryStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.scenePhase) private var scenePhase
     @State private var copiedConversationID: UUID?
     @State private var copyConfirmationTask: Task<Void, Never>?
 
@@ -36,14 +35,6 @@ struct HistoryView: View {
                         Button("Clear") { history.clearAll() }
                             .foregroundStyle(theme.onSurface)
                     }
-                }
-            }
-            .onAppear {
-                (history as? UbiquityHistoryStore)?.checkForPendingUpdates()
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    (history as? UbiquityHistoryStore)?.checkForPendingUpdates()
                 }
             }
         }

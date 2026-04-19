@@ -117,29 +117,6 @@ final class UbiquityHistoryStore: HistoryStore {
         syncState = .idle
     }
 
-    /// Detect-only scan: sets `.pendingUpdates` if new files are present on
-    /// disk but not yet in the in-memory index. Does NOT mutate
-    /// `conversations`. Used by history views on appear / app foreground so
-    /// the icon reflects pending state without auto-applying.
-    func checkForPendingUpdates() {
-        // Account state takes priority.
-        if case .paused = syncState { return }
-
-        guard let urls = try? FileManager.default.contentsOfDirectory(
-            at: inner.conversationsDir,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else { return }
-
-        let onDisk = Set(urls.map { $0.lastPathComponent })
-        let known = inner.indexedFilenames
-        let unknown = onDisk.subtracting(known)
-
-        if !unknown.isEmpty {
-            syncState = .pendingUpdates
-        }
-    }
-
     // MARK: - NSMetadataQuery watcher
 
     private func startWatchingContainer() {

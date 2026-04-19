@@ -4,8 +4,6 @@ struct HistoryTabView: View {
     let history: any HistoryStore
     let settings: AppSettings
 
-    @Environment(\.scenePhase) private var scenePhase
-
     var body: some View {
         Group {
             if history.conversations.isEmpty {
@@ -31,19 +29,15 @@ struct HistoryTabView: View {
                 .listStyle(.inset)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            SyncIndicator(history: history)
+                .padding(.trailing, 16)
+                .padding(.top, 8)
+        }
         .navigationTitle("History")
-        .onAppear {
-            (history as? UbiquityHistoryStore)?.checkForPendingUpdates()
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                (history as? UbiquityHistoryStore)?.checkForPendingUpdates()
-            }
-        }
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                SyncIndicator(history: history)
-                if !history.conversations.isEmpty {
+            if !history.conversations.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Clear All") {
                         history.clearAll()
                     }
