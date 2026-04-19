@@ -9,6 +9,7 @@
 *.tmp
 *.temp
 .cache/
+tmp/
 
 # Xcode user data
 xcuserdata/
