@@ -13,6 +13,10 @@
 # Xcode user data
 xcuserdata/
 
+# Xcode build output
+build/
+DerivedData/
+
 # IDEs
 .vscode/
 .vs/
