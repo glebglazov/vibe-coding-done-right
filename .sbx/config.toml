@@ -9,25 +9,41 @@ curl -fsSL https://mise.run | sh
 mkdir -p ~/.local/bin
 cat > ~/.local/bin/cy <<'EOF'
 #!/bin/bash
+if [ -n "${SBX_MCP_CONFIG:-}" ]; then
+exec claude --mcp-config "$SBX_MCP_CONFIG" --strict-mcp-config --dangerously-skip-permissions "$@"
+else
 exec claude --dangerously-skip-permissions "$@"
+fi
 EOF
 chmod +x ~/.local/bin/cy
 """
+
 env = [
 	"TMUX_PANE",
-	"REAL_PWD=$PWD",
-	"LOCAL_NETWORK_HOST=host.docker.internal"
+	"REAL_PWD=$PWD"
 ]
 
-mounts = [
-	{
-		source = "~/.pi",
-		destination = "/home/vscode/.pi",
-		read_only = false
-	},
-	{
-		source = "~/.claude",
-		destination = "/home/vscode/.claude",
-		read_only = false
-	}
-]
+[[sandbox.dev.mounts]]
+source = "~/.config/git/config"
+destination = "/home/vscode/.gitconfig"
+read_only = true
+
+[[sandbox.dev.mounts]]
+source = "~/.pi"
+destination = "/home/vscode/.pi"
+read_only = false
+
+[[sandbox.dev.mounts]]
+source = "~/.claude"
+destination = "/home/vscode/.claude"
+read_only = false
+
+[[sandbox.dev.mounts]]
+source = "{{sbxSandboxPath}}/claude.json"
+destination = "/home/vscode/.claude.json"
+read_only = false
+
+[sandbox.dev.mcp.vcdr]
+type = "stdio"
+command = "uv"
+args = ["run", "--script", "mcp/server.py"]
