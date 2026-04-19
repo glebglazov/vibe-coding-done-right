@@ -34,3 +34,6 @@ thoughts
 
 # Ralph autonomous agent loop
 scripts/ralph/
+
+# Local sbx config
+.sbx/config.toml.local
