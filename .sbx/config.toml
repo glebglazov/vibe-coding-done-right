@@ -1,0 +1,33 @@
+[sandbox.dev]
+init = """
+#!/bin/bash
+set -euo pipefail
+sudo apt-get update && sudo apt-get install -y netcat-openbsd
+curl -fsSL https://claude.ai/install.sh | bash
+curl -fsSL https://mise.run | sh
+~/.local/bin/mise use -g go@1.24.5
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/cy <<'EOF'
+#!/bin/bash
+exec claude --dangerously-skip-permissions "$@"
+EOF
+chmod +x ~/.local/bin/cy
+"""
+env = [
+	"TMUX_PANE",
+	"REAL_PWD=$PWD",
+	"LOCAL_NETWORK_HOST=host.docker.internal"
+]
+
+mounts = [
+	{
+		source = "~/.pi",
+		destination = "/home/vscode/.pi",
+		read_only = false
+	},
+	{
+		source = "~/.claude",
+		destination = "/home/vscode/.claude",
+		read_only = false
+	}
+]

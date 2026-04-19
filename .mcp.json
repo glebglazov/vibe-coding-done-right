@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "XcodeBuildMCP": {
+      "type": "sse",
+      "url": "http://${LOCAL_NETWORK_HOST:-127.0.0.1}:8765/servers/xcode/sse"
+    },
+    "vcdr": {
+      "type": "sse",
+      "url": "http://${LOCAL_NETWORK_HOST:-127.0.0.1}:8765/servers/vcdr/sse"
+    }
+  }
+}
