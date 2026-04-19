@@ -13,6 +13,8 @@ struct HomeTabView: View {
     let hasMicrophonePermission: Bool
     let hasAccessibilityPermission: Bool
     let isInitialized: Bool
+
+    @AppStorage(HistoryStoreFactory.syncEnabledDefaultsKey) private var syncHistoryViaICloud: Bool = true
     private var needsPermissionAttention: Bool {
         isInitialized && (!hasMicrophonePermission || !hasAccessibilityPermission)
     }
@@ -62,6 +64,14 @@ struct HomeTabView: View {
                     .buttonStyle(.plain)
                     Spacer()
                 }
+            }
+
+            Section {
+                Toggle("Sync history via iCloud", isOn: $syncHistoryViaICloud)
+            } header: {
+                Text("Sync")
+            } footer: {
+                Text("Share your transcription history with your iPhone via iCloud Drive. Requires an app restart to apply.")
             }
 
             Section("Shortcuts") {

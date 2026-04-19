@@ -4,6 +4,7 @@ struct HistoryView: View {
     let history: any HistoryStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var copiedConversationID: UUID?
     @State private var copyConfirmationTask: Task<Void, Never>?
 
@@ -27,11 +28,22 @@ struct HistoryView: View {
                     Button("Done") { dismiss() }
                         .foregroundStyle(theme.onSurface)
                 }
+                ToolbarItem(placement: .principal) {
+                    SyncIndicator(history: history, theme: theme)
+                }
                 if !history.conversations.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Clear") { history.clearAll() }
                             .foregroundStyle(theme.onSurface)
                     }
+                }
+            }
+            .onAppear {
+                (history as? UbiquityHistoryStore)?.checkForPendingUpdates()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    (history as? UbiquityHistoryStore)?.checkForPendingUpdates()
                 }
             }
         }
@@ -77,6 +89,9 @@ struct HistoryView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .refreshable {
+            (history as? UbiquityHistoryStore)?.refresh()
+        }
     }
 
     private func copy(_ conversation: Conversation) {
@@ -90,6 +105,42 @@ struct HistoryView: View {
             if copiedConversationID == conversation.id {
                 copiedConversationID = nil
             }
+        }
+    }
+}
+
+private struct SyncIndicator: View {
+    let history: any HistoryStore
+    let theme: Theme
+
+    var body: some View {
+        if let sync = history as? UbiquityHistoryStore {
+            Button {
+                sync.refresh()
+            } label: {
+                icon(for: sync.syncState)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func icon(for state: UbiquityHistoryStore.SyncState) -> some View {
+        switch state {
+        case .idle:
+            Image(systemName: "checkmark.icloud")
+                .foregroundStyle(theme.onSurfaceVariant)
+        case .syncing:
+            Image(systemName: "arrow.triangle.2.circlepath.icloud")
+                .symbolEffect(.pulse)
+                .foregroundStyle(theme.onSurfaceVariant)
+        case .pendingUpdates:
+            Image(systemName: "icloud.and.arrow.down")
+                .foregroundStyle(theme.primary)
+                .symbolEffect(.bounce, options: .nonRepeating)
+        case .paused:
+            Image(systemName: "exclamationmark.icloud")
+                .foregroundStyle(.orange)
         }
     }
 }

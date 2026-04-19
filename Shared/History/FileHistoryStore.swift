@@ -26,9 +26,12 @@ final class FileHistoryStore: HistoryStore {
     private(set) var conversations: [Conversation] = []
 
     var latestConversation: Conversation? { conversations.first }
-    var hasMorePages: Bool { cursor < index.count }
+    /// Paginate until the UI shows the latest `maxConversations`. Older
+    /// conversations remain on disk — never auto-deleted — but are invisible
+    /// until a future version exposes a "full history" view.
+    var hasMorePages: Bool { cursor < index.count && conversations.count < Self.maxConversations }
 
-    private let conversationsDir: URL
+    let conversationsDir: URL
     private let legacyFileURL: URL
     // nonisolated(unsafe) — JSONEncoder/Decoder are immutable after init
     // and thread-safe for concurrent encode/decode. Captured by detached
@@ -49,8 +52,8 @@ final class FileHistoryStore: HistoryStore {
     init(storageRoot: URL = FileHistoryStore.defaultStorageRoot) {
         self.conversationsDir = storageRoot.appendingPathComponent("conversations")
         self.legacyFileURL = storageRoot.appendingPathComponent("history.json")
-        self.encoder = Self.makeEncoder()
-        self.decoder = Self.makeDecoder()
+        self.encoder = HistoryJSONCoders.makeEncoder()
+        self.decoder = HistoryJSONCoders.makeDecoder()
 
         ensureDirectoryExists()
         migrateLegacyFileIfNeeded()
@@ -99,14 +102,10 @@ final class FileHistoryStore: HistoryStore {
         }
         conversations.insert(conversation, at: 0)
         refreshIndexEntry(id: conversationID, url: fileURL, modifiedAt: now)
-        let excessURLs = trimRetentionInMemory()
 
         let encoder = self.encoder
         Task.detached(priority: .utility) {
             Self.writeSnapshotOffMain(conversation, to: fileURL, encoder: encoder)
-            for url in excessURLs {
-                try? FileManager.default.removeItem(at: url)
-            }
         }
     }
 
@@ -146,7 +145,12 @@ final class FileHistoryStore: HistoryStore {
     }
 
     func loadNextPage() {
-        let upper = min(cursor + Self.pageSize, index.count)
+        guard hasMorePages else { return }
+        // Cap loading so `conversations` never grows past `maxConversations`.
+        // Index entries beyond that point stay on disk but are invisible
+        // until a future release exposes older history.
+        let displayCapSlack = Self.maxConversations - conversations.count
+        let upper = min(cursor + Self.pageSize, cursor + displayCapSlack, index.count)
         guard cursor < upper else { return }
         var loaded: [Conversation] = []
         for i in cursor..<upper {
@@ -156,6 +160,22 @@ final class FileHistoryStore: HistoryStore {
         }
         conversations.append(contentsOf: loaded)
         cursor = upper
+    }
+
+    /// Rescans the on-disk index and reloads the first page of conversations.
+    /// Called by `UbiquityHistoryStore` when `NSMetadataQuery` signals remote
+    /// changes so the UI picks up newly synced records without a restart.
+    func rebuildIndexAndReloadFirstPage() {
+        rebuildIndex()
+        conversations.removeAll()
+        loadNextPage()
+    }
+
+    /// Filenames currently tracked by the index. Used by `UbiquityHistoryStore`
+    /// to distinguish "new on disk but not yet applied" files from already-
+    /// known ones when probing for pending remote updates.
+    var indexedFilenames: Set<String> {
+        Set(index.map { $0.url.lastPathComponent })
     }
 
     // MARK: - Disk I/O
@@ -209,7 +229,7 @@ final class FileHistoryStore: HistoryStore {
 
     // MARK: - Index
 
-    private func rebuildIndex() {
+    func rebuildIndex() {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [.contentModificationDateKey]
         guard let urls = try? fm.contentsOfDirectory(
@@ -256,21 +276,6 @@ final class FileHistoryStore: HistoryStore {
         index.removeAll { $0.id == id }
         index.insert(IndexEntry(url: url, id: id, modifiedAt: modifiedAt), at: 0)
         cursor = min(cursor + 1, index.count)
-    }
-
-    /// Trims in-memory index + conversations to the retention cap and returns
-    /// the URLs that need to be deleted from disk. The caller performs the
-    /// `FileManager.removeItem` calls off MainActor.
-    private func trimRetentionInMemory() -> [URL] {
-        guard index.count > Self.maxConversations else { return [] }
-        let excess = index.count - Self.maxConversations
-        let toDrop = Array(index.suffix(excess))
-        index.removeLast(excess)
-        if conversations.count > Self.maxConversations {
-            conversations = Array(conversations.prefix(Self.maxConversations))
-        }
-        cursor = min(cursor, index.count)
-        return toDrop.map { $0.url }
     }
 
     // MARK: - Filenames
@@ -347,42 +352,17 @@ final class FileHistoryStore: HistoryStore {
         )
     }
 
-    private static func makeEncoder() -> JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.sortedKeys]
-        return encoder
-    }
+    // MARK: - Storage roots
 
-    private static func makeDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        // Accept either ISO 8601 strings (new format) or TimeInterval-since-
-        // reference-date doubles (legacy files written with the default
-        // JSONEncoder date strategy). The legacy fallback keeps pre-migration
-        // on-disk files readable without a one-shot rewrite.
-        decoder.dateDecodingStrategy = .custom { dec in
-            let container = try dec.singleValueContainer()
-            if let str = try? container.decode(String.self) {
-                if let date = iso.date(from: str) { return date }
-                let isoNoFraction = ISO8601DateFormatter()
-                if let date = isoNoFraction.date(from: str) { return date }
-            }
-            if let interval = try? container.decode(TimeInterval.self) {
-                return Date(timeIntervalSinceReferenceDate: interval)
-            }
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unrecognized date format"
-            )
-        }
-        return decoder
-    }
-
-    // MARK: - Default storage root
-
-    nonisolated static var defaultStorageRoot: URL {
+    /// The root used when sync is disabled or the iCloud container is
+    /// unavailable. On macOS: Application Support. On iOS: the App Group
+    /// container (falling back to Application Support if the group is missing).
+    ///
+    /// `UbiquityHistoryStore` uses a different root — the iCloud ubiquity
+    /// container — so `localStorageRoot` and `defaultStorageRoot` intentionally
+    /// coincide for now. If a separate app-private mirror is ever introduced,
+    /// `localStorageRoot` is the extension point.
+    nonisolated static var localStorageRoot: URL {
         #if os(macOS)
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("VCDR")
@@ -396,4 +376,6 @@ final class FileHistoryStore: HistoryStore {
             .appendingPathComponent("VCDR")
         #endif
     }
+
+    nonisolated static var defaultStorageRoot: URL { localStorageRoot }
 }

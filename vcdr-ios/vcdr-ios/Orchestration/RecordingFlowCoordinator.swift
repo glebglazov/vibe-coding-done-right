@@ -75,7 +75,12 @@ final class RecordingFlowCoordinator {
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
-    let history: any HistoryStore = FileHistoryStore()
+    let history: any HistoryStore = {
+        let defaults = SharedConstants.sharedDefaults
+        let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
+        return HistoryStoreFactory.make(defaults: defaults)
+    }()
     /// UUID stamped at recording start; reused as the Conversation.id on record().
     private var currentConversationID: UUID = UUID()
 

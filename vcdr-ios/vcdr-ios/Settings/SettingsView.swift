@@ -8,6 +8,10 @@ struct SettingsView: View {
     @AppStorage(AIProcessingSettings.defaultModeKey) private var defaultModeRaw = AIPromptMode.dictation.rawValue
     @AppStorage(AIProcessingSettings.activeInDictationKey) private var aiActiveInDictation = false
     @AppStorage(StyleSettings.defaultStyleKey) private var defaultStyleRaw = TextStyle.casual.rawValue
+    @AppStorage(
+        HistoryStoreFactory.syncEnabledDefaultsKey,
+        store: SharedConstants.sharedDefaults
+    ) private var syncHistoryViaICloud: Bool = true
     @State private var availableInputs: [AVAudioSessionPortDescription] = []
 
     var body: some View {
@@ -15,6 +19,7 @@ struct SettingsView: View {
             Form {
                 textStyleSection
                 aiProcessingSection
+                syncSection
                 microphoneSection
                 appearanceSection
             }
@@ -82,6 +87,18 @@ struct SettingsView: View {
             }
         } header: {
             Text("Default Dictation Style")
+        }
+    }
+
+    // MARK: - Sync
+
+    private var syncSection: some View {
+        Section {
+            Toggle("Sync history via iCloud", isOn: $syncHistoryViaICloud)
+        } header: {
+            Text("Sync")
+        } footer: {
+            Text("Share your transcription history with your Mac via iCloud Drive. Requires an app restart to apply.")
         }
     }
 

@@ -53,7 +53,10 @@ final class AppDependencies {
         self.transcriptionProvider = provider
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
-        let history = FileHistoryStore()
+        let defaults = UserDefaults.standard
+        let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
+        let history = HistoryStoreFactory.make(defaults: defaults)
         self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
         #if DEBUG
