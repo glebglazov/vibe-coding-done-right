@@ -301,12 +301,12 @@ final class AppSettings {
             Logger.settings.info("Migrated dictation template mode to plain")
         }
 
-        // Align plain-template mode names with the current default ("Transcription").
-        // Covers both legacy "Dictation" and the intermediate "Plain" renaming.
+        // Align plain-template mode names with the current default ("Verbatim").
+        // Covers legacy "Dictation", intermediate "Plain", and prior "Transcription".
         for i in modeConfig.modes.indices where modeConfig.modes[i].templateID == "plain" {
             let currentName = modeConfig.modes[i].name
-            if currentName == "Dictation" || currentName == "Plain" {
-                modeConfig.modes[i].name = "Transcription"
+            if currentName == "Dictation" || currentName == "Plain" || currentName == "Transcription" {
+                modeConfig.modes[i].name = "Verbatim"
             }
         }
 

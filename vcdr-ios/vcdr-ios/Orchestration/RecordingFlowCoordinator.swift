@@ -46,13 +46,17 @@ final class RecordingFlowCoordinator {
 
     // MARK: - In-Session Settings (written to session_* storage)
 
-    func toggleAIActive() {
-        aiActiveThisSession.toggle()
+    /// Cycles the AI state through Verbatim → Dictation → Assistant → Verbatim.
+    func cycleAIState() {
+        if !aiActiveThisSession {
+            aiActiveThisSession = true
+            selectedPromptMode = .dictation
+        } else if selectedPromptMode == .dictation {
+            selectedPromptMode = .assistant
+        } else {
+            aiActiveThisSession = false
+        }
         SessionSettings.setAIActive(aiActiveThisSession)
-    }
-
-    func cyclePromptMode() {
-        selectedPromptMode = selectedPromptMode.next
         SessionSettings.setAIMode(selectedPromptMode)
     }
 

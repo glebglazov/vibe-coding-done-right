@@ -397,56 +397,68 @@ struct RecordingView: View {
             )
     }
 
+    /// All three labels of the AI mode pill, used to reserve a fixed pill width
+    /// so cycling between states doesn't reflow the row.
+    private static let aiModeSizingLabels = ["VERBATIM", "DICTATION", "ASSISTANT"]
+    /// All three labels of the text style pill.
+    private static let styleSizingLabels = ["CASUAL", "MESSAGING", "FORMAL"]
+
     @ViewBuilder
     private var aiSessionToggle: some View {
         HStack(spacing: 10) {
-            // AI toggle pill (only show if AI is configured)
+            // AI mode pill: cycles Verbatim → Dictation → Assistant
             if AIProcessingSettings.hasAICapability {
                 Button {
-                    coordinator.toggleAIActive()
+                    coordinator.cycleAIState()
                 } label: {
                     sonicPill(
                         icon: "sparkles",
-                        text: coordinator.aiActiveThisSession ? "AI ON" : "AI OFF",
+                        text: coordinator.aiActiveThisSession
+                            ? coordinator.selectedPromptMode.displayName.uppercased()
+                            : "VERBATIM",
+                        sizingTexts: Self.aiModeSizingLabels,
                         filled: coordinator.aiActiveThisSession
                     )
                 }
-
-                if coordinator.aiActiveThisSession {
-                    Button {
-                        coordinator.cyclePromptMode()
-                    } label: {
-                        sonicPill(
-                            text: coordinator.selectedPromptMode.displayName.uppercased(),
-                            filled: false
-                        )
-                    }
-                }
             }
 
-            // Style toggle pill (only for modes that apply styles)
-            if coordinator.selectedPromptMode.appliesStyles {
-                Button {
-                    coordinator.cycleTextStyle()
-                } label: {
-                    sonicPill(
-                        text: coordinator.currentTextStyle.displayName.uppercased(),
-                        filled: false
-                    )
-                }
+            // Style toggle pill: visually hidden in Assistant mode but keeps its
+            // slot in the layout so the AI pill doesn't reflow horizontally.
+            let styleVisible = !coordinator.aiActiveThisSession || coordinator.selectedPromptMode.appliesStyles
+            Button {
+                coordinator.cycleTextStyle()
+            } label: {
+                sonicPill(
+                    text: coordinator.currentTextStyle.displayName.uppercased(),
+                    sizingTexts: Self.styleSizingLabels,
+                    filled: false
+                )
             }
+            .opacity(styleVisible ? 1 : 0)
+            .allowsHitTesting(styleVisible)
+            .accessibilityHidden(!styleVisible)
         }
     }
 
-    private func sonicPill(icon: String? = nil, text: String, filled: Bool) -> some View {
+    private func sonicPill(
+        icon: String? = nil,
+        text: String,
+        sizingTexts: [String]? = nil,
+        filled: Bool
+    ) -> some View {
         HStack(spacing: 6) {
             if let icon {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .black))
             }
-            Text(text)
-                .font(.system(size: Self.pillFontSize, weight: .black))
-                .tracking(1.5)
+            ZStack {
+                if let sizingTexts {
+                    ForEach(sizingTexts, id: \.self) { t in
+                        pillText(t).opacity(0)
+                    }
+                }
+                pillText(text)
+            }
         }
         .foregroundStyle(filled ? theme.surfaceLowest : theme.onSurface)
         .padding(.horizontal, 14)
@@ -459,6 +471,12 @@ struct RecordingView: View {
             Capsule()
                 .stroke(theme.onSurface, lineWidth: Self.pillBorder)
         )
+    }
+
+    private func pillText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: Self.pillFontSize, weight: .black))
+            .tracking(1.5)
     }
 
     private func errorContent(_ message: String) -> some View {

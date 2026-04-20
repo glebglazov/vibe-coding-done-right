@@ -83,7 +83,7 @@ extension ModeTemplate {
 
     static let plain = ModeTemplate(
         id: "plain",
-        defaultName: "Transcription",
+        defaultName: "Verbatim",
         availabilityCommand: nil,
         processingType: .none,
         processingCommand: "",

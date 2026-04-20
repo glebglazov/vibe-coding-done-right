@@ -255,14 +255,17 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         textStyle = SessionSettings.effectiveTextStyle()
     }
 
-    func toggleAI() {
-        aiActive.toggle()
+    /// Cycles the AI state through Off → Dictation → Assistant → Off.
+    func cycleAIState() {
+        if !aiActive {
+            aiActive = true
+            aiMode = .dictation
+        } else if aiMode == .dictation {
+            aiMode = .assistant
+        } else {
+            aiActive = false
+        }
         SessionSettings.setAIActive(aiActive)
-        refreshSelectedTextIndicator()
-    }
-
-    func cycleAIMode() {
-        aiMode = aiMode.next
         SessionSettings.setAIMode(aiMode)
         refreshSelectedTextIndicator()
     }

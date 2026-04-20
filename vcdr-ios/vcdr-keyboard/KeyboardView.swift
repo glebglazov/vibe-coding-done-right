@@ -69,39 +69,35 @@ struct VCDRKeyboardView: View {
                 .padding(.bottom, 6)
             }
         )
-        .keyboardToolbarStyle(.init(height: 50))
+        .keyboardToolbarStyle(.init(height: 44))
     }
 }
 
 /// Settings pills displayed on the left side of the toolbar.
 struct DictateSettingsPills: View {
-    private static let pillHeight: CGFloat = 36
-    private static let pillFont: CGFloat = 12
+    private static let pillHeight: CGFloat = 32
+    private static let pillFont: CGFloat = 11
     private static let pillBorder: CGFloat = 1.5
 
     @ObservedObject var controller: KeyboardViewController
+
+    /// All three labels of the AI mode pill, used to reserve a fixed pill width
+    /// so cycling between states doesn't reflow the toolbar.
+    private static let aiModeLabels = ["VERBATIM", "DICTATION", "ASSISTANT"]
 
     var body: some View {
         HStack(spacing: 8) {
             if controller.aiConfigured {
                 Button {
                     KeyboardHaptics.light()
-                    controller.toggleAI()
+                    controller.cycleAIState()
                 } label: {
                     sonicPill(
                         icon: "sparkles",
-                        text: controller.aiActive ? "ON" : "OFF",
+                        text: controller.aiActive ? controller.aiMode.displayName.uppercased() : "VERBATIM",
+                        sizingTexts: Self.aiModeLabels,
                         filled: controller.aiActive
                     )
-                }
-
-                if controller.aiActive {
-                    Button {
-                        KeyboardHaptics.light()
-                        controller.cycleAIMode()
-                    } label: {
-                        sonicPill(text: controller.aiMode.displayName.uppercased())
-                    }
                 }
             }
 
@@ -116,31 +112,47 @@ struct DictateSettingsPills: View {
         }
     }
 
-    private func sonicPill(icon: String? = nil, text: String, filled: Bool = false) -> some View {
+    private func sonicPill(
+        icon: String? = nil,
+        text: String,
+        sizingTexts: [String]? = nil,
+        filled: Bool = false
+    ) -> some View {
         HStack(spacing: 5) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .black))
+                    .font(.system(size: 11, weight: .black))
             }
-            Text(text)
-                .font(.system(size: Self.pillFont, weight: .black))
-                .tracking(1.5)
+            ZStack {
+                if let sizingTexts {
+                    ForEach(sizingTexts, id: \.self) { t in
+                        pillText(t).opacity(0)
+                    }
+                }
+                pillText(text)
+            }
         }
         .foregroundStyle(filled ? Color.white : Color(.label))
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 10)
         .frame(height: Self.pillHeight)
         .background(Capsule().fill(filled ? Color.blue : Color(.systemGray5)))
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
 
         .contentShape(Capsule())
     }
+
+    private func pillText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: Self.pillFont, weight: .black))
+            .tracking(0.5)
+    }
 }
 
 /// Action button (Start/Stop/transcribing/ready) in the toolbar,
 /// with an optional Capture button shown during recording in assistant mode.
 struct DictateActionButton: View {
-    private static let pillHeight: CGFloat = 36
-    private static let pillFont: CGFloat = 12
+    private static let pillHeight: CGFloat = 32
+    private static let pillFont: CGFloat = 11
     private static let pillBorder: CGFloat = 1.5
 
     var dictationState: DictationState
@@ -204,15 +216,15 @@ struct DictateActionButton: View {
     private var capturePill: some View {
         HStack(spacing: 3) {
             Image(systemName: "doc.on.clipboard")
-                .font(.system(size: 12, weight: .black))
+                .font(.system(size: 11, weight: .black))
             if captureCount >= 1 {
                 Text("×\(captureCount)")
                     .font(.system(size: Self.pillFont, weight: .black))
-                    .tracking(1.5)
+                    .tracking(0.5)
             }
         }
         .foregroundStyle(captureCount > 0 ? .white : .white.opacity(0.7))
-        .padding(.horizontal, captureCount >= 1 ? 10 : 8)
+        .padding(.horizontal, captureCount >= 1 ? 8 : 6)
         .frame(height: Self.pillHeight)
         .background(Capsule().fill(captureCount > 0 ? Color.blue : Color(.systemGray2)))
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
@@ -223,15 +235,15 @@ struct DictateActionButton: View {
     private func actionPill(_ text: String, icon: String, color: Color) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .black))
+                .font(.system(size: 11, weight: .black))
             if !text.isEmpty {
                 Text(text.uppercased())
                     .font(.system(size: Self.pillFont, weight: .black))
-                    .tracking(1.5)
+                    .tracking(0.5)
             }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 10)
         .frame(height: Self.pillHeight)
         .background(Capsule().fill(color))
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))

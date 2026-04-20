@@ -68,10 +68,6 @@ enum SharedAIMode: String {
         case .assistant: "Assistant"
         }
     }
-
-    var next: SharedAIMode {
-        self == .dictation ? .assistant : .dictation
-    }
 }
 
 /// Text style — keyboard-safe mirror of TextStyle.
