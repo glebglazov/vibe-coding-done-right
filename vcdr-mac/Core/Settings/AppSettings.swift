@@ -201,16 +201,23 @@ final class AppSettings {
            !decoded.isEmpty {
             loadedModes = decoded
         } else {
+            // Legacy migration: if an old user had a custom bash script configured,
+            // preserve it as a user mode so their workflow isn't lost.
             let oldActionType = PostTranscriptionActionType(
                 rawValue: userDefaults.string(forKey: "actionType") ?? ""
             ) ?? .paste
             let oldBashCommand = userDefaults.string(forKey: "bashCommand") ?? ""
-            let migratedProcessingType: ProcessingType = oldActionType == .bash ? .bashScript : .none
-            loadedModes = [Mode(
-                id: UUID(), name: "Default",
-                processingType: migratedProcessingType,
-                processingCommand: migratedProcessingType == .bashScript ? oldBashCommand : ""
-            )]
+            if oldActionType == .bash, !oldBashCommand.isEmpty {
+                loadedModes = [Mode(
+                    id: UUID(), name: "Bash Script",
+                    processingType: .bashScript,
+                    processingCommand: oldBashCommand
+                )]
+            } else {
+                // Fresh install: start empty; refreshTemplateAvailability() seeds
+                // the built-in templates (Transcription, Dictation, Assistant x2).
+                loadedModes = []
+            }
         }
         // Load active mode ID
         let loadedActiveModeID: UUID
@@ -291,10 +298,16 @@ final class AppSettings {
         // Migrate legacy "dictation" template to "plain"
         for i in modeConfig.modes.indices where modeConfig.modes[i].templateID == "dictation" {
             modeConfig.modes[i].templateID = "plain"
-            if modeConfig.modes[i].name == "Dictation" {
-                modeConfig.modes[i].name = "Plain"
-            }
             Logger.settings.info("Migrated dictation template mode to plain")
+        }
+
+        // Align plain-template mode names with the current default ("Transcription").
+        // Covers both legacy "Dictation" and the intermediate "Plain" renaming.
+        for i in modeConfig.modes.indices where modeConfig.modes[i].templateID == "plain" {
+            let currentName = modeConfig.modes[i].name
+            if currentName == "Dictation" || currentName == "Plain" {
+                modeConfig.modes[i].name = "Transcription"
+            }
         }
 
         // Create missing template modes for available tools

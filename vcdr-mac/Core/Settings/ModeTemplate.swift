@@ -153,7 +153,7 @@ extension ModeTemplate {
         systemPromptEnabled: true,
         systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
         aiProvider: .anthropic,
-        promptType: .dictation,
+        promptType: .assistant,
         localAgentProvider: .claudeCode,
         localAgentPassVariables: false,
         parameters: [
