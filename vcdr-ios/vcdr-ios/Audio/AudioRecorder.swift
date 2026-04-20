@@ -134,16 +134,13 @@ final class AudioRecorder {
             return false
         }
 
+        // Deep-link cold starts can reach here without prepareAudioSession
+        // having run yet. Go through the same off-main path to avoid a
+        // 50-200ms MainActor stall from setCategory/setActive.
         if !audioSessionConfigured {
-            let session = AVAudioSession.sharedInstance()
-            do {
-                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-                try session.setActive(true)
-                audioSessionConfigured = true
-                applyPreferredInput()
-                setupInterruptionObservers()
-            } catch {
-                Logger.recording.error("Failed to configure audio session: \(error)")
+            await prepareAudioSession()
+            guard audioSessionConfigured else {
+                Logger.recording.error("Failed to configure audio session on demand")
                 return false
             }
         }

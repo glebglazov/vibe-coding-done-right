@@ -235,6 +235,12 @@ final class AppDependencies {
             await PromptFetcher.refreshIfNeeded()
         }
 
+        // Pre-resolve the MediaRemote backend so the first recording doesn't
+        // pay the probe/IPC cost on the hot path.
+        Task { [mediaPlaybackController] in
+            await mediaPlaybackController.prewarmBackend()
+        }
+
         checkPermissions()
         isInitialized = true
         startPermissionPolling()

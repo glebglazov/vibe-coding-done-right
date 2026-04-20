@@ -84,9 +84,13 @@ final class AudioRecorder {
             return false
         }
 
-        // Route to the preferred input device before AVAudioRecorder activates
+        // Route to the preferred input device before AVAudioRecorder activates.
+        // CoreAudio device switching is thread-safe, so run it off MainActor
+        // to keep the UI responsive during recording start.
         if let deviceUID {
-            routeToPreferredInput(deviceUID: deviceUID)
+            if let previous = await Self.routeToPreferredInputOffMain(deviceUID: deviceUID) {
+                previousDefaultInputDevice = previous
+            }
         }
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -211,32 +215,35 @@ final class AudioRecorder {
 
     // MARK: - Input Device Routing
 
-    /// Saves the current system default input device, then sets it to the
-    /// requested device UID. AVAudioRecorder always uses the system default,
-    /// so this is the only way to force a specific mic on macOS.
-    private func routeToPreferredInput(deviceUID: String) {
-        guard let targetDeviceID = CoreAudioHelpers.deviceID(forUID: deviceUID) else {
-            Logger.recording.warning("Could not resolve preferred device UID: \(deviceUID)")
-            return
-        }
-
-        let currentDefault = getSystemDefaultInputDevice()
-        if currentDefault != targetDeviceID {
-            previousDefaultInputDevice = currentDefault
-            setSystemDefaultInputDevice(targetDeviceID)
+    /// Resolves the UID, reads the current default, and switches the system default
+    /// input device — all on a background thread. Returns the previous default so the
+    /// caller can stash it for `restorePreviousInputDevice()`. All CoreAudio property
+    /// calls used here are thread-safe.
+    private nonisolated static func routeToPreferredInputOffMain(deviceUID: String) async -> AudioDeviceID? {
+        await Task.detached(priority: .userInitiated) {
+            guard let targetDeviceID = CoreAudioHelpers.deviceID(forUID: deviceUID) else {
+                Logger.recording.warning("Could not resolve preferred device UID: \(deviceUID)")
+                return AudioDeviceID?.none
+            }
+            let currentDefault = Self.getSystemDefaultInputDevice()
+            guard currentDefault != targetDeviceID else {
+                return AudioDeviceID?.none
+            }
+            Self.setSystemDefaultInputDevice(targetDeviceID)
             Logger.recording.info("Switched system input to preferred device (UID: \(deviceUID))")
-        }
+            return currentDefault
+        }.value
     }
 
     /// Restores the system default input device that was active before recording.
     private func restorePreviousInputDevice() {
         guard let previousDevice = previousDefaultInputDevice else { return }
-        setSystemDefaultInputDevice(previousDevice)
+        Self.setSystemDefaultInputDevice(previousDevice)
         previousDefaultInputDevice = nil
         Logger.recording.info("Restored previous system input device")
     }
 
-    private func getSystemDefaultInputDevice() -> AudioDeviceID {
+    private nonisolated static func getSystemDefaultInputDevice() -> AudioDeviceID {
         var deviceID = AudioDeviceID(0)
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultInputDevice,
@@ -251,7 +258,7 @@ final class AudioRecorder {
         return deviceID
     }
 
-    private func setSystemDefaultInputDevice(_ deviceID: AudioDeviceID) {
+    private nonisolated static func setSystemDefaultInputDevice(_ deviceID: AudioDeviceID) {
         var mutableID = deviceID
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultInputDevice,

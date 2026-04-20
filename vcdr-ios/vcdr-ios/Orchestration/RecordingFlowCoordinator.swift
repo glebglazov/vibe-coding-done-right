@@ -222,23 +222,29 @@ final class RecordingFlowCoordinator {
         // for seconds under concurrent CoreML load.
         Task { @MainActor in UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
 
-        // Session snapshot from shared defaults. These fields are used later
-        // (on stop / AI processing), not for audio start — do them after UI flip.
-        let sd = SharedConstants.sharedDefaults
-        aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
-        selectedPromptMode = AIPromptMode(
-            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
-        ) ?? .dictation
-        currentTextStyle = TextStyle(
-            rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
-        ) ?? .casual
+        // Session snapshot from shared defaults — fields are only consumed on stop /
+        // AI processing, so schedule them after the audio start rather than blocking
+        // the hot path. UserDefaults reads + JSON decode can cost 5-50ms on MainActor
+        // under I/O contention; the stop-time re-read catches anything the keyboard
+        // writes while recording.
         capturedTexts = []
-        if let data = sd.data(forKey: SharedConstants.capturedTextsKey),
-           let texts = try? JSONDecoder().decode([String].self, from: data) {
-            capturedTexts = texts
-            Logger.ai.info("Initial captures on start: \(texts.count) item(s)")
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let sd = SharedConstants.sharedDefaults
+            self.aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
+            self.selectedPromptMode = AIPromptMode(
+                rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
+            ) ?? .dictation
+            self.currentTextStyle = TextStyle(
+                rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
+            ) ?? .casual
+            if let data = sd.data(forKey: SharedConstants.capturedTextsKey),
+               let texts = try? JSONDecoder().decode([String].self, from: data) {
+                self.capturedTexts = texts
+                Logger.ai.info("Initial captures on start: \(texts.count) item(s)")
+            }
+            sd.removeObject(forKey: SharedConstants.selectedTextKey)
         }
-        sd.removeObject(forKey: SharedConstants.selectedTextKey)
 
         // Shared-defaults write + Darwin post — off the critical path.
         // Keyboard extension reads this asynchronously anyway.
