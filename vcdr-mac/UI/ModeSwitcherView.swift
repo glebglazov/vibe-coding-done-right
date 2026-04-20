@@ -84,6 +84,8 @@ struct ModeSwitcherView: View {
         } label: {
             Text(viewModel.currentStyleName)
                 .font(.system(.caption2, weight: .medium))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(viewModel.isStyleOverridden ? .white : .secondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)

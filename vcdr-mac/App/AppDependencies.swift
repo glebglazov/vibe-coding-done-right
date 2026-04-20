@@ -354,13 +354,7 @@ extension AppDependencies: CaptureSessionDelegate {
     }
 
     func captureSessionDidStopRecording(_ session: CaptureSession) {
-        // Clear style override when recording stops (per acceptance criteria)
-        // This ensures the next recording session starts with fresh detection
-        if styleOverrideController.isOverridden {
-            styleOverrideController.clearOverride()
-            session.overrides.styleOverride = nil
-            styleResolutionPipeline.clearOverride()
-            Logger.styles.info("Style override cleared due to recording stop")
-        }
+        // Style override persists for the whole VCDR session — it is only cleared
+        // when the user cycles back to the detected style or the app restarts.
     }
 }

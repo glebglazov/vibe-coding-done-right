@@ -148,7 +148,8 @@ public final class StyleOverrideController: StyleOverrideControlling {
     /// Updates the detected style based on frontmost app.
     ///
     /// Called by the frontmost app monitor when the active app changes.
-    /// Automatically clears any active override.
+    /// An active override is preserved — it persists for the whole VCDR session
+    /// until the user cycles back to the detected style or the app restarts.
     /// - Parameter style: The auto-detected style.
     public func updateDetectedStyle(_ style: Style) {
         guard style.id != detectedStyle.id else { return }
@@ -156,15 +157,9 @@ public final class StyleOverrideController: StyleOverrideControlling {
         let previousStyle = currentEffectiveStyle
         detectedStyle = style
 
-        // Clear override when frontmost app changes (per acceptance criteria)
-        if activeOverride != nil {
-            activeOverride = nil
-            Logger.styles.info("Cleared style override due to frontmost app change")
-        }
-
         Logger.styles.debug("Detected style updated to: \(style.name)")
 
-        // Only notify if effective style changed
+        // Only notify if effective style changed (override masks detected changes).
         if currentEffectiveStyle.id != previousStyle.id {
             notifyStyleChanged()
         }

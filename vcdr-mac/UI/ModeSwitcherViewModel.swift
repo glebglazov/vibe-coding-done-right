@@ -126,6 +126,17 @@ final class ModeSwitcherViewModel {
             return true
         }
 
+        if keyCode == KeyCodeMap.tabKeyCode {
+            // Cycle styles only when the active mode actually applies a style —
+            // mirrors the gate on the visible style pill.
+            if let activeID = activeModeID,
+               let activeMode = modes.first(where: { $0.id == activeID }),
+               activeMode.appliesStyles {
+                onCycleStyle?()
+            }
+            return true
+        }
+
         switch navigation.level {
         case .modes:
             return handleModesKeyEvent(keyCode: keyCode, charsIgnoringModifiers: charsIgnoringModifiers)
