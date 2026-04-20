@@ -63,11 +63,15 @@ extension Style {
     /// Stable UUID for the Casual built-in style.
     /// Do not change — used for persistence and migration.
     public static let casualID = UUID(uuidString: "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D")!
-    
+
+    /// Stable UUID for the Messaging built-in style.
+    /// Do not change — used for persistence and migration.
+    public static let messagingID = UUID(uuidString: "C3D4E5F6-A7B8-4C9D-AE1F-2A3B4C5D6E7F")!
+
     /// Stable UUID for the Formal built-in style.
     /// Do not change — used for persistence and migration.
     public static let formalID = UUID(uuidString: "B2C3D4E5-F6A7-4B8C-9D0E-1F2A3B4C5D6E")!
-    
+
     /// The Casual style: lowercase sentences, remove final period.
     /// Best for informal contexts like Terminal, Slack, or quick notes.
     public static let casual = Style(
@@ -79,7 +83,20 @@ extension Style {
         dynamicPrompt: nil,
         associatedAppBundleIDs: []
     )
-    
+
+    /// The Messaging style: capitalize sentences, drop the final period.
+    /// Best for chat and DM contexts like Messages, WhatsApp, or Telegram,
+    /// where a trailing dot can read as cold or passive-aggressive.
+    public static let messaging = Style(
+        id: messagingID,
+        name: "Messaging",
+        isBuiltIn: true,
+        isDefault: false,
+        staticRules: .messaging,
+        dynamicPrompt: nil,
+        associatedAppBundleIDs: []
+    )
+
     /// The Formal style: capitalize sentences, ensure ending punctuation.
     /// Best for professional contexts like Email, Documents, or Presentations.
     public static let formal = Style(
@@ -91,8 +108,8 @@ extension Style {
         dynamicPrompt: nil,
         associatedAppBundleIDs: []
     )
-    
+
     /// All built-in styles in their default order.
     /// The first style is the default.
-    public static let builtIn: [Style] = [.casual, .formal]
+    public static let builtIn: [Style] = [.casual, .messaging, .formal]
 }

@@ -47,15 +47,17 @@ struct StyleRegistryInitializationTests {
     func firstLaunchCreatesBuiltInStyles() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }
-        
+
         let registry = StyleRegistry(userDefaults: defaults)
         let styles = await registry.allStyles()
-        
-        #expect(styles.count == 2)
+
+        #expect(styles.count == 3)
         #expect(styles[0].id == Style.casualID)
-        #expect(styles[1].id == Style.formalID)
+        #expect(styles[1].id == Style.messagingID)
+        #expect(styles[2].id == Style.formalID)
         #expect(styles[0].isDefault == true)
         #expect(styles[1].isDefault == false)
+        #expect(styles[2].isDefault == false)
     }
     
     @Test("Casual is default on fresh install")
@@ -74,20 +76,22 @@ struct StyleRegistryInitializationTests {
     func loadsExistingStyles() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }
-        
+
         // First, create and modify a registry
         let registry1 = StyleRegistry(userDefaults: defaults)
-        await registry1.reorderStyles(from: IndexSet(integer: 1), to: 0)
+        // Move Formal (index 2) to position 0
+        await registry1.reorderStyles(from: IndexSet(integer: 2), to: 0)
         await registry1.moveApp(bundleID: "com.test.app", toStyle: Style.casual)
-        
+
         // Create a new registry with same defaults - should load persisted state
         let registry2 = StyleRegistry(userDefaults: defaults)
         let styles = await registry2.allStyles()
-        
-        // Should have Formal first (we reordered)
+
+        // Should have Formal first (we reordered), then Casual, Messaging
         #expect(styles[0].id == Style.formalID)
         #expect(styles[1].id == Style.casualID)
-        
+        #expect(styles[2].id == Style.messagingID)
+
         // Should have the app assignment
         let style = await registry2.style(forBundleID: "com.test.app")
         #expect(style.id == Style.casualID)
@@ -103,16 +107,18 @@ struct StyleRegistryPersistenceTests {
     func persistsOrderChanges() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }
-        
+
         let registry1 = StyleRegistry(userDefaults: defaults)
-        await registry1.reorderStyles(from: IndexSet(integer: 1), to: 0)
-        
+        // Move Formal (index 2) to position 0
+        await registry1.reorderStyles(from: IndexSet(integer: 2), to: 0)
+
         // Create new registry instance
         let registry2 = StyleRegistry(userDefaults: defaults)
         let styles = await registry2.allStyles()
-        
+
         #expect(styles[0].id == Style.formalID)
         #expect(styles[1].id == Style.casualID)
+        #expect(styles[2].id == Style.messagingID)
     }
     
     @Test("Persists app assignments")
@@ -208,16 +214,17 @@ struct StyleRegistryDefaultTests {
     func reorderingUpdatesDefault() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }
-        
+
         let registry = StyleRegistry(userDefaults: defaults)
-        
-        // Move Formal to position 0 (making it default)
-        await registry.reorderStyles(from: IndexSet(integer: 1), to: 0)
-        
+
+        // Move Formal (index 2) to position 0 (making it default)
+        await registry.reorderStyles(from: IndexSet(integer: 2), to: 0)
+
         let styles = await registry.allStyles()
         #expect(styles[0].id == Style.formalID)
         #expect(styles[0].isDefault == true)
         #expect(styles[1].isDefault == false)
+        #expect(styles[2].isDefault == false)
     }
     
     @Test("Default style returns first style")
@@ -370,28 +377,30 @@ struct StyleRegistryReorderingTests {
     func reorderSingleItem() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }
-        
+
         let registry = StyleRegistry(userDefaults: defaults)
-        
+
+        // Move Messaging (index 1) to position 0
         await registry.reorderStyles(from: IndexSet(integer: 1), to: 0)
-        
+
         let styles = await registry.allStyles()
-        #expect(styles[0].id == Style.formalID)
+        #expect(styles[0].id == Style.messagingID)
         #expect(styles[1].id == Style.casualID)
+        #expect(styles[2].id == Style.formalID)
     }
-    
+
     @Test("ReorderStyles handles edge cases gracefully")
     func reorderHandlesEdgeCases() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }
-        
+
         let registry = StyleRegistry(userDefaults: defaults)
-        
+
         // Empty indices - should not crash
         await registry.reorderStyles(from: IndexSet(), to: 0)
-        
+
         let styles = await registry.allStyles()
-        #expect(styles.count == 2) // Still has both styles
+        #expect(styles.count == 3) // Still has all built-in styles
     }
     
     @Test("ReorderStyles updates isDefault flags")
@@ -417,21 +426,24 @@ struct StyleRegistryBuiltInTests {
     @Test("Built-in styles have stable UUIDs")
     func builtInStableUUIDs() {
         #expect(Style.casualID.uuidString == "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D")
+        #expect(Style.messagingID.uuidString == "C3D4E5F6-A7B8-4C9D-AE1F-2A3B4C5D6E7F")
         #expect(Style.formalID.uuidString == "B2C3D4E5-F6A7-4B8C-9D0E-1F2A3B4C5D6E")
     }
-    
+
     @Test("Built-in styles are auto-created on first launch with stable UUIDs")
     func builtInStylesCreatedOnFirstLaunch() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defer { defaults.removePersistentDomain(forName: #function) }
-        
+
         let registry = StyleRegistry(userDefaults: defaults)
         let styles = await registry.allStyles()
-        
+
         let hasCasual = styles.contains { $0.id == Style.casualID }
+        let hasMessaging = styles.contains { $0.id == Style.messagingID }
         let hasFormal = styles.contains { $0.id == Style.formalID }
-        
+
         #expect(hasCasual == true)
+        #expect(hasMessaging == true)
         #expect(hasFormal == true)
     }
     

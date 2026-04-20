@@ -69,18 +69,23 @@ enum SharedAIMode: String {
 
 /// Text style — keyboard-safe mirror of TextStyle.
 /// Raw values must match TextStyle in the main app.
-enum SharedTextStyle: String {
+enum SharedTextStyle: String, CaseIterable {
     case casual
+    case messaging
     case formal
 
     var displayName: String {
         switch self {
         case .casual: "Casual"
+        case .messaging: "Messaging"
         case .formal: "Formal"
         }
     }
 
-    var toggled: SharedTextStyle {
-        self == .casual ? .formal : .casual
+    /// Next style in a circular cycle, in `allCases` order.
+    var next: SharedTextStyle {
+        let all = Self.allCases
+        let idx = all.firstIndex(of: self) ?? 0
+        return all[(idx + 1) % all.count]
     }
 }

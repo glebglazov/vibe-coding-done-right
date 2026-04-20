@@ -15,6 +15,12 @@ struct StyleModelTests {
         #expect(casualID1 == casualID2)
         #expect(casualID1.uuidString == "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D")
 
+        // Messaging ID should be stable
+        let messagingID1 = Style.messagingID
+        let messagingID2 = Style.messaging.id
+        #expect(messagingID1 == messagingID2)
+        #expect(messagingID1.uuidString == "C3D4E5F6-A7B8-4C9D-AE1F-2A3B4C5D6E7F")
+
         // Formal ID should be stable
         let formalID1 = Style.formalID
         let formalID2 = Style.formal.id
@@ -31,12 +37,27 @@ struct StyleModelTests {
         #expect(Style.casual.staticRules.capitalizeSentences == false)
         #expect(Style.casual.staticRules.endingPunctuation == .removeFinalDot)
 
+        // Messaging style
+        #expect(Style.messaging.name == "Messaging")
+        #expect(Style.messaging.isBuiltIn == true)
+        #expect(Style.messaging.isDefault == false)
+        #expect(Style.messaging.staticRules.capitalizeSentences == true)
+        #expect(Style.messaging.staticRules.endingPunctuation == .removeFinalDot)
+
         // Formal style
         #expect(Style.formal.name == "Formal")
         #expect(Style.formal.isBuiltIn == true)
         #expect(Style.formal.isDefault == false)
         #expect(Style.formal.staticRules.capitalizeSentences == true)
         #expect(Style.formal.staticRules.endingPunctuation == .addIfAbsent)
+    }
+
+    @Test("Built-in styles are ordered: casual, messaging, formal")
+    func builtInOrdering() {
+        #expect(Style.builtIn.count == 3)
+        #expect(Style.builtIn[0].id == Style.casualID)
+        #expect(Style.builtIn[1].id == Style.messagingID)
+        #expect(Style.builtIn[2].id == Style.formalID)
     }
 
     @Test("Style round-trips through Codable")
@@ -293,6 +314,38 @@ struct StyleTransformerEndingPunctuationTests {
     func formalPreservesExclamation() {
         let result = StyleTransformer.transform("Hello world!", using: .formal)
         #expect(result == "Hello world! ")
+    }
+
+    // Messaging: capitalizeSentences + removeFinalDot
+
+    @Test("Messaging capitalizes and strips final period")
+    func messagingCapitalizesAndStripsDot() {
+        let result = StyleTransformer.transform("hello world.", using: .messaging)
+        #expect(result == "Hello world ")
+    }
+
+    @Test("Messaging does not add a period when absent")
+    func messagingDoesNotAddPeriod() {
+        let result = StyleTransformer.transform("hello world", using: .messaging)
+        #expect(result == "Hello world ")
+    }
+
+    @Test("Messaging preserves question mark")
+    func messagingPreservesQuestion() {
+        let result = StyleTransformer.transform("how are you?", using: .messaging)
+        #expect(result == "How are you? ")
+    }
+
+    @Test("Messaging preserves exclamation")
+    func messagingPreservesExclamation() {
+        let result = StyleTransformer.transform("great job!", using: .messaging)
+        #expect(result == "Great job! ")
+    }
+
+    @Test("Messaging capitalizes across sentences, drops trailing dot")
+    func messagingMultipleSentences() {
+        let result = StyleTransformer.transform("hello world. how are you? i am fine.", using: .messaging)
+        #expect(result == "Hello world. How are you? I am fine ")
     }
 
     // Preserve: no changes

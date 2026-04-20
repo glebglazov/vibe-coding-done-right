@@ -149,8 +149,59 @@ struct StyleTransformerTests {
         #expect(result == "Hello.")
     }
     
+    // MARK: - Messaging Style Tests
+
+    @Test("Messaging style capitalizes first letter")
+    func messagingCapitalizesFirstLetter() {
+        let rules = StaticStyleRules.messaging
+        let result = StyleTransformer.transform("hello world", using: rules)
+        #expect(result == "Hello world")
+    }
+
+    @Test("Messaging style does not add period if absent")
+    func messagingDoesNotAddPeriod() {
+        let rules = StaticStyleRules.messaging
+        let result = StyleTransformer.transform("hello", using: rules)
+        #expect(result == "Hello")
+    }
+
+    @Test("Messaging style removes final period")
+    func messagingRemovesFinalPeriod() {
+        let rules = StaticStyleRules.messaging
+        let result = StyleTransformer.transform("hello world.", using: rules)
+        #expect(result == "Hello world")
+    }
+
+    @Test("Messaging style preserves question mark at end")
+    func messagingPreservesQuestion() {
+        let rules = StaticStyleRules.messaging
+        let result = StyleTransformer.transform("how are you?", using: rules)
+        #expect(result == "How are you?")
+    }
+
+    @Test("Messaging style preserves exclamation at end")
+    func messagingPreservesExclamation() {
+        let rules = StaticStyleRules.messaging
+        let result = StyleTransformer.transform("great job!", using: rules)
+        #expect(result == "Great job!")
+    }
+
+    @Test("Messaging style capitalizes across sentences and drops final dot")
+    func messagingMultipleSentences() {
+        let rules = StaticStyleRules.messaging
+        let result = StyleTransformer.transform("hello. how are you? i'm fine.", using: rules)
+        #expect(result == "Hello. How are you? I'm fine")
+    }
+
+    @Test("Messaging style preserves internal capitalization")
+    func messagingPreservesInternalCaps() {
+        let rules = StaticStyleRules.messaging
+        let result = StyleTransformer.transform("hello Gleb", using: rules)
+        #expect(result == "Hello Gleb")
+    }
+
     // MARK: - Edge Cases
-    
+
     @Test("Handles already correct casual text")
     func casualAlreadyCorrect() {
         let rules = StaticStyleRules.casual
