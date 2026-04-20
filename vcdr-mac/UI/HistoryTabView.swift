@@ -53,7 +53,7 @@ private struct SyncIndicator: View {
     var body: some View {
         if let sync = history as? UbiquityHistoryStore {
             Button {
-                sync.refresh()
+                Task { await sync.refresh() }
             } label: {
                 icon(for: sync.syncState)
             }
