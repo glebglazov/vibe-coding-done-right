@@ -4,11 +4,13 @@ import Foundation
 /// Raw values used for persistence.
 public enum TextStyle: String, Codable, CaseIterable, Sendable {
     case casual
+    case messaging
     case formal
-    
+
     public var displayName: String {
         switch self {
         case .casual: "Casual"
+        case .messaging: "Messaging"
         case .formal: "Formal"
         }
     }
@@ -16,23 +18,27 @@ public enum TextStyle: String, Codable, CaseIterable, Sendable {
     public var example: String {
         switch self {
         case .casual: "hey just wanted to check in about the meeting tomorrow"
+        case .messaging: "Hey just wanted to check in about tomorrow's meeting"
         case .formal: "I wanted to follow up regarding tomorrow's meeting."
         }
     }
-    
+
     /// Returns the Style model associated with this text style.
     public var style: Style {
         switch self {
         case .casual: .casual
+        case .messaging: .messaging
         case .formal: .formal
         }
     }
-    
+
     /// Creates a TextStyle from a Style model.
     /// Defaults to casual if the style ID doesn't match known styles.
     public init(style: Style) {
         if style.id == Style.casualID {
             self = .casual
+        } else if style.id == Style.messagingID {
+            self = .messaging
         } else if style.id == Style.formalID {
             self = .formal
         } else {

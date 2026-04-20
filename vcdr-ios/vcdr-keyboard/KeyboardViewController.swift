@@ -296,8 +296,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         refreshSelectedTextIndicator()
     }
 
-    func toggleTextStyle() {
-        textStyle = textStyle.toggled
+    func cycleTextStyle() {
+        textStyle = textStyle.next
         let sd = SharedConstants.sharedDefaults
         sd.set(textStyle.rawValue, forKey: SharedConstants.textStyleKey)
         sd.synchronize()

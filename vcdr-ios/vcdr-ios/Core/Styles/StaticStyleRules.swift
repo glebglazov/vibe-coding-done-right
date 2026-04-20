@@ -29,7 +29,15 @@ extension StaticStyleRules {
         capitalizeSentences: false,
         endingPunctuation: .removeFinalDot
     )
-    
+
+    /// Rules for the Messaging style: capitalize sentences, remove final period.
+    /// Matches how people write chats/DMs — proper sentence starts without the
+    /// chilly "final dot" that reads as passive-aggressive in messaging apps.
+    public static let messaging = StaticStyleRules(
+        capitalizeSentences: true,
+        endingPunctuation: .removeFinalDot
+    )
+
     /// Rules for the Formal style: capitalize sentences, add period if absent.
     public static let formal = StaticStyleRules(
         capitalizeSentences: true,

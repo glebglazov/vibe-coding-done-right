@@ -39,28 +39,36 @@ struct StyleSettingsTests {
     func defaultStyleModelReturnsCorrectStyle() {
         StyleSettings.defaultStyle = .casual
         #expect(StyleSettings.defaultStyleModel.id == Style.casualID)
-        
+
+        StyleSettings.defaultStyle = .messaging
+        #expect(StyleSettings.defaultStyleModel.id == Style.messagingID)
+
         StyleSettings.defaultStyle = .formal
         #expect(StyleSettings.defaultStyleModel.id == Style.formalID)
     }
-    
+
     @Test("TextStyle enum has correct display names")
     func textStyleDisplayNames() {
         #expect(TextStyle.casual.displayName == "Casual")
+        #expect(TextStyle.messaging.displayName == "Messaging")
         #expect(TextStyle.formal.displayName == "Formal")
     }
-    
+
     @Test("TextStyle returns correct Style model")
     func textStyleReturnsCorrectModel() {
         #expect(TextStyle.casual.style.id == Style.casualID)
+        #expect(TextStyle.messaging.style.id == Style.messagingID)
         #expect(TextStyle.formal.style.id == Style.formalID)
     }
-    
+
     @Test("TextStyle init from Style returns correct value")
     func textStyleInitFromStyle() {
         let casual = TextStyle(style: Style.casual)
         #expect(casual == .casual)
-        
+
+        let messaging = TextStyle(style: Style.messaging)
+        #expect(messaging == .messaging)
+
         let formal = TextStyle(style: Style.formal)
         #expect(formal == .formal)
     }

@@ -61,7 +61,9 @@ final class RecordingFlowCoordinator {
     }
 
     func cycleTextStyle() {
-        currentTextStyle = currentTextStyle == .casual ? .formal : .casual
+        let all = TextStyle.allCases
+        let idx = all.firstIndex(of: currentTextStyle) ?? 0
+        currentTextStyle = all[(idx + 1) % all.count]
         syncSettingsToKeyboard()
     }
 
