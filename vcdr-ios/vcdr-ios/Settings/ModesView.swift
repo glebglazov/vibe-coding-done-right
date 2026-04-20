@@ -59,9 +59,6 @@ struct ModesView: View {
     }
 
     private func syncAIConfigured() {
-        SharedConstants.sharedDefaults.set(
-            AIProcessingSettings.hasAICapability,
-            forKey: SharedConstants.aiConfiguredKey
-        )
+        DefaultSettings.setAIConfigured(AIProcessingSettings.hasAICapability)
     }
 }

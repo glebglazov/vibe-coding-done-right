@@ -14,11 +14,18 @@ enum SharedConstants {
     // Deep link URLs
     static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
 
-    // Shared AI/style preferences (keyboard ↔ app)
+    // Settings — two disjoint tiers. See the iOS SharedConstants for the full
+    // contract: default_* is written by the Settings UI via DefaultSettings,
+    // session_* is written by cycle paths via SessionSettings, and consumers
+    // read effective values from SessionSettings.
+    static let defaultTextStyleKey = "default_text_style"
+    static let defaultAIModeKey    = "default_ai_mode"
+    static let defaultAIActiveKey  = "default_ai_active"
+    static let sessionTextStyleKey = "session_text_style"
+    static let sessionAIModeKey    = "session_ai_mode"
+    static let sessionAIActiveKey  = "session_ai_active"
+
     static let settingsNotificationName = "glebglazov.vcdr-ios.settingsChanged"
-    static let aiActiveKey = "shared_ai_active"
-    static let aiModeKey = "shared_ai_mode"
-    static let textStyleKey = "shared_text_style"
     static let aiConfiguredKey = "shared_ai_configured"
 
     // Selected text capture (keyboard → app) — written before recording starts in assistant mode
@@ -87,5 +94,61 @@ enum SharedTextStyle: String, CaseIterable {
         let all = Self.allCases
         let idx = all.firstIndex(of: self) ?? 0
         return all[(idx + 1) % all.count]
+    }
+}
+
+/// Keyboard-side mirror of SessionSettings in the main app. Only touches
+/// `session_*` keys — there is intentionally no API here that can write
+/// `default_*`, so the keyboard can never overwrite the user's configured
+/// defaults from the Settings UI.
+enum SessionSettings {
+    // MARK: - Writers
+
+    static func setTextStyle(_ value: SharedTextStyle) {
+        write { $0.set(value.rawValue, forKey: SharedConstants.sessionTextStyleKey) }
+    }
+
+    static func setAIMode(_ value: SharedAIMode) {
+        write { $0.set(value.rawValue, forKey: SharedConstants.sessionAIModeKey) }
+    }
+
+    static func setAIActive(_ active: Bool) {
+        write { $0.set(active, forKey: SharedConstants.sessionAIActiveKey) }
+    }
+
+    // MARK: - Readers (effective: session ?? default ?? fallback)
+
+    static func effectiveTextStyle() -> SharedTextStyle {
+        let sd = SharedConstants.sharedDefaults
+        let raw = sd.string(forKey: SharedConstants.sessionTextStyleKey)
+            ?? sd.string(forKey: SharedConstants.defaultTextStyleKey)
+            ?? ""
+        return SharedTextStyle(rawValue: raw) ?? .casual
+    }
+
+    static func effectiveAIMode() -> SharedAIMode {
+        let sd = SharedConstants.sharedDefaults
+        let raw = sd.string(forKey: SharedConstants.sessionAIModeKey)
+            ?? sd.string(forKey: SharedConstants.defaultAIModeKey)
+            ?? ""
+        return SharedAIMode(rawValue: raw) ?? .dictation
+    }
+
+    static func effectiveAIActive() -> Bool {
+        let sd = SharedConstants.sharedDefaults
+        if sd.object(forKey: SharedConstants.sessionAIActiveKey) != nil {
+            return sd.bool(forKey: SharedConstants.sessionAIActiveKey)
+        }
+        if sd.object(forKey: SharedConstants.defaultAIActiveKey) != nil {
+            return sd.bool(forKey: SharedConstants.defaultAIActiveKey)
+        }
+        return false
+    }
+
+    private static func write(_ block: (UserDefaults) -> Void) {
+        let sd = SharedConstants.sharedDefaults
+        block(sd)
+        sd.synchronize()
+        DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
     }
 }

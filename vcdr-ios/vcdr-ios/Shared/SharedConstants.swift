@@ -14,11 +14,26 @@ enum SharedConstants {
     // Deep link URLs
     static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
 
-    // Shared AI/style preferences (keyboard ↔ app)
+    // Settings — two disjoint tiers. Never copy one tier into the other.
+    //
+    //   default_*  — user-configured defaults. Written by Settings UI only via
+    //                DefaultSettings. Survive across launches.
+    //   session_*  — per-session cycle overrides. Written by cycle paths via
+    //                SessionSettings. Cleared on cold launch.
+    //
+    // Consumers always read the effective value (session ?? default ?? fallback)
+    // via SessionSettings.effective…(). There is intentionally no API that can
+    // overwrite session state with default values — the bug that motivated this
+    // split ("app background resets cycled style to configured default") is
+    // unrepresentable when defaults and sessions live in different keys.
+    static let defaultTextStyleKey = "default_text_style"
+    static let defaultAIModeKey    = "default_ai_mode"
+    static let defaultAIActiveKey  = "default_ai_active"
+    static let sessionTextStyleKey = "session_text_style"
+    static let sessionAIModeKey    = "session_ai_mode"
+    static let sessionAIActiveKey  = "session_ai_active"
+
     static let settingsNotificationName = "glebglazov.vcdr-ios.settingsChanged"
-    static let aiActiveKey = "shared_ai_active"
-    static let aiModeKey = "shared_ai_mode"
-    static let textStyleKey = "shared_text_style"
     static let aiConfiguredKey = "shared_ai_configured"
 
     // Selected text capture (keyboard → app) — written before recording starts in assistant mode
@@ -89,60 +104,148 @@ enum SharedTextStyle: String, CaseIterable {
     }
 }
 
-/// Syncs AI/style preferences from UserDefaults.standard to shared defaults
-/// so the keyboard extension can read them.
+/// Writes user-configured defaults. The Settings UI is the only intended caller.
 ///
-/// Every write goes through one of the `set…` helpers below so the contract is
-/// uniform: `set` on sharedDefaults, then `synchronize` to flush to the App
-/// Group container, then post the Darwin notification so a live keyboard
-/// extension can re-read. Any direct `sharedDefaults.set` call site is a bug —
-/// the flush and notify are not optional.
-enum SharedSettingsSync {
-    static func setAIMode(_ rawValue: String) {
-        writeAndNotify { $0.set(rawValue, forKey: SharedConstants.aiModeKey) }
+/// Every write also clears the matching session override so the new default
+/// takes effect immediately for the live session.
+enum DefaultSettings {
+    static func setTextStyle(_ value: TextStyle) {
+        write { sd in
+            sd.set(value.rawValue, forKey: SharedConstants.defaultTextStyleKey)
+            sd.removeObject(forKey: SharedConstants.sessionTextStyleKey)
+        }
+    }
+
+    static func setAIMode(_ value: AIPromptMode) {
+        write { sd in
+            sd.set(value.rawValue, forKey: SharedConstants.defaultAIModeKey)
+            sd.removeObject(forKey: SharedConstants.sessionAIModeKey)
+        }
     }
 
     static func setAIActive(_ active: Bool) {
-        writeAndNotify { $0.set(active, forKey: SharedConstants.aiActiveKey) }
-    }
-
-    static func setTextStyle(_ rawValue: String) {
-        writeAndNotify { $0.set(rawValue, forKey: SharedConstants.textStyleKey) }
-    }
-
-    static func setAll(aiActive: Bool, aiMode: String, textStyle: String) {
-        writeAndNotify { sd in
-            sd.set(aiActive, forKey: SharedConstants.aiActiveKey)
-            sd.set(aiMode, forKey: SharedConstants.aiModeKey)
-            sd.set(textStyle, forKey: SharedConstants.textStyleKey)
+        write { sd in
+            sd.set(active, forKey: SharedConstants.defaultAIActiveKey)
+            sd.removeObject(forKey: SharedConstants.sessionAIActiveKey)
         }
     }
 
-    static func syncAll() {
-        writeAndNotify { sd in
-            sd.set(
-                UserDefaults.standard.bool(forKey: AIProcessingSettings.activeInDictationKey),
-                forKey: SharedConstants.aiActiveKey
-            )
-            sd.set(
-                UserDefaults.standard.string(forKey: AIProcessingSettings.defaultModeKey) ?? AIPromptMode.dictation.rawValue,
-                forKey: SharedConstants.aiModeKey
-            )
-            sd.set(
-                UserDefaults.standard.string(forKey: StyleSettings.defaultStyleKey) ?? TextStyle.casual.rawValue,
-                forKey: SharedConstants.textStyleKey
-            )
-            sd.set(
-                AIProcessingSettings.hasAICapability,
-                forKey: SharedConstants.aiConfiguredKey
-            )
-        }
+    static func setAIConfigured(_ configured: Bool) {
+        write { $0.set(configured, forKey: SharedConstants.aiConfiguredKey) }
     }
 
-    private static func writeAndNotify(_ write: (UserDefaults) -> Void) {
+    private static func write(_ block: (UserDefaults) -> Void) {
         let sd = SharedConstants.sharedDefaults
-        write(sd)
+        block(sd)
         sd.synchronize()
         DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
+    }
+}
+
+/// Writes per-session cycle overrides and reads the effective value that
+/// consumers should act on: `session ?? default ?? hardcoded fallback`.
+///
+/// Session keys are stored under `session_*` and never share storage with
+/// defaults (`default_*`), so no write path here can clobber a user's
+/// configured default, and no write path on `DefaultSettings` can clobber a
+/// live cycle choice (beyond the intentional clear-on-default-change).
+enum SessionSettings {
+    // MARK: - Writers
+
+    static func setTextStyle(_ value: TextStyle) {
+        write { $0.set(value.rawValue, forKey: SharedConstants.sessionTextStyleKey) }
+    }
+
+    static func setAIMode(_ value: AIPromptMode) {
+        write { $0.set(value.rawValue, forKey: SharedConstants.sessionAIModeKey) }
+    }
+
+    static func setAIActive(_ active: Bool) {
+        write { $0.set(active, forKey: SharedConstants.sessionAIActiveKey) }
+    }
+
+    /// Drops every per-session override. Call on cold launch so a new run
+    /// starts from configured defaults rather than the last run's overrides.
+    static func clearAll() {
+        write { sd in
+            sd.removeObject(forKey: SharedConstants.sessionTextStyleKey)
+            sd.removeObject(forKey: SharedConstants.sessionAIModeKey)
+            sd.removeObject(forKey: SharedConstants.sessionAIActiveKey)
+        }
+    }
+
+    // MARK: - Readers (effective: session ?? default ?? fallback)
+
+    static func effectiveTextStyle() -> TextStyle {
+        let sd = SharedConstants.sharedDefaults
+        let raw = sd.string(forKey: SharedConstants.sessionTextStyleKey)
+            ?? sd.string(forKey: SharedConstants.defaultTextStyleKey)
+            ?? ""
+        return TextStyle(rawValue: raw) ?? .casual
+    }
+
+    static func effectiveAIMode() -> AIPromptMode {
+        let sd = SharedConstants.sharedDefaults
+        let raw = sd.string(forKey: SharedConstants.sessionAIModeKey)
+            ?? sd.string(forKey: SharedConstants.defaultAIModeKey)
+            ?? ""
+        return AIPromptMode(rawValue: raw) ?? .dictation
+    }
+
+    static func effectiveAIActive() -> Bool {
+        let sd = SharedConstants.sharedDefaults
+        if sd.object(forKey: SharedConstants.sessionAIActiveKey) != nil {
+            return sd.bool(forKey: SharedConstants.sessionAIActiveKey)
+        }
+        if sd.object(forKey: SharedConstants.defaultAIActiveKey) != nil {
+            return sd.bool(forKey: SharedConstants.defaultAIActiveKey)
+        }
+        return false
+    }
+
+    private static func write(_ block: (UserDefaults) -> Void) {
+        let sd = SharedConstants.sharedDefaults
+        block(sd)
+        sd.synchronize()
+        DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
+    }
+}
+
+/// One-shot migration from the pre-split layout where defaults lived in
+/// `UserDefaults.standard` and live state lived in `sharedDefaults` under the
+/// same bucket of keys. Runs at app launch; idempotent after the first run.
+enum LegacySettingsMigrator {
+    private static let legacyDefaultStyleKey = "text_style_default"
+    private static let legacyDefaultModeKey = "ai_processing_default_mode"
+    private static let legacyActiveInDictationKey = "ai_processing_active_in_dictation"
+    private static let legacySharedAIActiveKey = "shared_ai_active"
+    private static let legacySharedAIModeKey = "shared_ai_mode"
+    private static let legacySharedTextStyleKey = "shared_text_style"
+
+    static func migrateIfNeeded() {
+        let sd = SharedConstants.sharedDefaults
+        let std = UserDefaults.standard
+
+        if sd.object(forKey: SharedConstants.defaultTextStyleKey) == nil,
+           let raw = std.string(forKey: legacyDefaultStyleKey) {
+            sd.set(raw, forKey: SharedConstants.defaultTextStyleKey)
+        }
+        if sd.object(forKey: SharedConstants.defaultAIModeKey) == nil,
+           let raw = std.string(forKey: legacyDefaultModeKey) {
+            sd.set(raw, forKey: SharedConstants.defaultAIModeKey)
+        }
+        if sd.object(forKey: SharedConstants.defaultAIActiveKey) == nil,
+           std.object(forKey: legacyActiveInDictationKey) != nil {
+            sd.set(std.bool(forKey: legacyActiveInDictationKey), forKey: SharedConstants.defaultAIActiveKey)
+        }
+
+        // The old "live" keys in sharedDefaults no longer mean anything —
+        // they were both the source of truth for cycles and the clobber
+        // target of `syncAll`. Drop them so stale values can't leak in.
+        sd.removeObject(forKey: legacySharedAIActiveKey)
+        sd.removeObject(forKey: legacySharedAIModeKey)
+        sd.removeObject(forKey: legacySharedTextStyleKey)
+
+        sd.synchronize()
     }
 }

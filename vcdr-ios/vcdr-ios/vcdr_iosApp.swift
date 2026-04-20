@@ -11,7 +11,18 @@ struct VCDRiOSApp: App {
             RecordingView(coordinator: coordinator)
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
-                    SharedSettingsSync.syncAll()
+                    // Cold-launch boot sequence:
+                    //   1. Migrate pre-split legacy keys (idempotent).
+                    //   2. Drop any leftover session overrides so the run
+                    //      starts from the user's configured defaults.
+                    //   3. Republish AI capability (keyboard gates its UI on it).
+                    LegacySettingsMigrator.migrateIfNeeded()
+                    SessionSettings.clearAll()
+                    DefaultSettings.setAIConfigured(AIProcessingSettings.hasAICapability)
+                    // The coordinator's @State init ran before migration, so
+                    // its cached settings may reflect pre-migration storage.
+                    // Refresh once the post-split state is authoritative.
+                    coordinator.refreshSettingsFromStorage()
                     coordinator.cleanupStaleResults()
                     coordinator.setupCommandListener()
                     await coordinator.initializeModel()
@@ -27,14 +38,12 @@ struct VCDRiOSApp: App {
                         let shouldDisable = coordinator.state == .recording
                         UIApplication.shared.isIdleTimerDisabled = shouldDisable
                     case .background:
-                        // Flush the latest AI/style settings to the App Group so the
-                        // keyboard extension sees them when it spawns. Settings writes
-                        // synchronize inline, but this defends against any missed write
-                        // (e.g. settings changed before this version shipped, or written
-                        // via a path that bypassed SharedSettingsSync).
-                        SharedSettingsSync.syncAll()
                         // Deactivate audio session so other apps can resume playback.
                         // Skip if recording is active (background audio mode keeps it alive).
+                        // Settings are NOT re-flushed here: doing so previously
+                        // clobbered in-session cycled overrides with the user's
+                        // configured defaults. The session/default split in
+                        // SharedConstants now makes that fix structural.
                         if !coordinator.isRecording {
                             coordinator.deactivateAudioSession()
                         }

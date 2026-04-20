@@ -2,48 +2,50 @@ import Testing
 import Foundation
 @testable import vcdr_ios
 
-/// Tests for StyleSettings — UserDefaults persistence
+/// Tests for the default/session split exposed via DefaultSettings +
+/// SessionSettings. StyleSettings.defaultStyle is a read-only convenience
+/// over the same storage.
 @Suite("StyleSettings Tests")
 struct StyleSettingsTests {
-    
-    let testDefaults = UserDefaults(suiteName: "test.style.settings")!
-    
-    init() {
-        // Clear test defaults before each test
-        testDefaults.removeObject(forKey: StyleSettings.defaultStyleKey)
+
+    /// Resets the style-related slots in `sharedDefaults` so tests start from
+    /// a known state. Restore afterwards to avoid leaking between suites.
+    private static func clearStyleSlots() {
+        let sd = SharedConstants.sharedDefaults
+        sd.removeObject(forKey: SharedConstants.defaultTextStyleKey)
+        sd.removeObject(forKey: SharedConstants.sessionTextStyleKey)
     }
-    
-    @Test("Default style is casual on fresh install")
+
+    @Test("Default style is casual when no value stored")
     func defaultStyleIsCasual() {
-        // Ensure no value is set
-        UserDefaults.standard.removeObject(forKey: StyleSettings.defaultStyleKey)
-        
-        let style = StyleSettings.defaultStyle
-        #expect(style == .casual)
+        let original = StyleSettings.defaultStyle
+        Self.clearStyleSlots()
+        defer { DefaultSettings.setTextStyle(original) }
+
+        #expect(StyleSettings.defaultStyle == .casual)
     }
-    
-    @Test("Can set and read formal as default")
+
+    @Test("DefaultSettings.setTextStyle persists")
     func canSetFormalAsDefault() {
         let original = StyleSettings.defaultStyle
-        
-        StyleSettings.defaultStyle = .formal
-        let result = StyleSettings.defaultStyle
-        
-        #expect(result == .formal)
-        
-        // Restore
-        StyleSettings.defaultStyle = original
+        defer { DefaultSettings.setTextStyle(original) }
+
+        DefaultSettings.setTextStyle(.formal)
+        #expect(StyleSettings.defaultStyle == .formal)
     }
-    
+
     @Test("Default style model returns correct style")
     func defaultStyleModelReturnsCorrectStyle() {
-        StyleSettings.defaultStyle = .casual
+        let original = StyleSettings.defaultStyle
+        defer { DefaultSettings.setTextStyle(original) }
+
+        DefaultSettings.setTextStyle(.casual)
         #expect(StyleSettings.defaultStyleModel.id == Style.casualID)
 
-        StyleSettings.defaultStyle = .messaging
+        DefaultSettings.setTextStyle(.messaging)
         #expect(StyleSettings.defaultStyleModel.id == Style.messagingID)
 
-        StyleSettings.defaultStyle = .formal
+        DefaultSettings.setTextStyle(.formal)
         #expect(StyleSettings.defaultStyleModel.id == Style.formalID)
     }
 
@@ -72,7 +74,7 @@ struct StyleSettingsTests {
         let formal = TextStyle(style: Style.formal)
         #expect(formal == .formal)
     }
-    
+
     @Test("TextStyle defaults to casual for unknown style")
     func textStyleDefaultsToCasualForUnknown() {
         let unknownStyle = Style(
@@ -82,24 +84,50 @@ struct StyleSettingsTests {
             isDefault: false,
             staticRules: .casual
         )
-        
+
         let result = TextStyle(style: unknownStyle)
         #expect(result == .casual)
     }
-    
-    @Test("Persistence across reads")
-    func persistenceAcrossReads() {
-        // Save original
+
+    @Test("Setting default clears session override")
+    func defaultClearsSession() {
         let original = StyleSettings.defaultStyle
-        
-        // Set to formal
-        StyleSettings.defaultStyle = .formal
-        
-        // Multiple reads should return the same value
-        #expect(StyleSettings.defaultStyle == .formal)
-        #expect(StyleSettings.defaultStyle == .formal)
-        
-        // Restore to original
-        StyleSettings.defaultStyle = original
+        defer { DefaultSettings.setTextStyle(original); SessionSettings.clearAll() }
+
+        // Establish a session override, then change the default — session
+        // should drop so the new default wins immediately.
+        DefaultSettings.setTextStyle(.casual)
+        SessionSettings.setTextStyle(.formal)
+        #expect(SessionSettings.effectiveTextStyle() == .formal)
+
+        DefaultSettings.setTextStyle(.messaging)
+        #expect(SessionSettings.effectiveTextStyle() == .messaging)
+    }
+
+    @Test("Session override wins over default")
+    func sessionBeatsDefault() {
+        let original = StyleSettings.defaultStyle
+        defer { DefaultSettings.setTextStyle(original); SessionSettings.clearAll() }
+
+        DefaultSettings.setTextStyle(.casual)
+        SessionSettings.setTextStyle(.formal)
+        #expect(SessionSettings.effectiveTextStyle() == .formal)
+
+        // Reading default directly still shows the configured default —
+        // confirms the two tiers are stored separately.
+        #expect(StyleSettings.defaultStyle == .casual)
+    }
+
+    @Test("SessionSettings.clearAll drops overrides")
+    func clearAllDropsSession() {
+        let original = StyleSettings.defaultStyle
+        defer { DefaultSettings.setTextStyle(original); SessionSettings.clearAll() }
+
+        DefaultSettings.setTextStyle(.messaging)
+        SessionSettings.setTextStyle(.formal)
+        #expect(SessionSettings.effectiveTextStyle() == .formal)
+
+        SessionSettings.clearAll()
+        #expect(SessionSettings.effectiveTextStyle() == .messaging)
     }
 }

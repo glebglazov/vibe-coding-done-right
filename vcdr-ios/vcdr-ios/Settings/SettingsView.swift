@@ -5,9 +5,18 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance: Appearance = .system
     @AppStorage(AudioRecorder.preferredInputUIDKey) private var preferredInputUID = ""
-    @AppStorage(AIProcessingSettings.defaultModeKey) private var defaultModeRaw = AIPromptMode.dictation.rawValue
-    @AppStorage(AIProcessingSettings.activeInDictationKey) private var aiActiveInDictation = false
-    @AppStorage(StyleSettings.defaultStyleKey) private var defaultStyleRaw = TextStyle.casual.rawValue
+    @AppStorage(
+        SharedConstants.defaultAIModeKey,
+        store: SharedConstants.sharedDefaults
+    ) private var defaultModeRaw = AIPromptMode.dictation.rawValue
+    @AppStorage(
+        SharedConstants.defaultAIActiveKey,
+        store: SharedConstants.sharedDefaults
+    ) private var aiActiveInDictation = false
+    @AppStorage(
+        SharedConstants.defaultTextStyleKey,
+        store: SharedConstants.sharedDefaults
+    ) private var defaultStyleRaw = TextStyle.casual.rawValue
     @AppStorage(
         HistoryStoreFactory.syncEnabledDefaultsKey,
         store: SharedConstants.sharedDefaults
@@ -31,17 +40,21 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            // Mirror settings to shared defaults for keyboard extension.
-            // SharedSettingsSync flushes + posts the Darwin notification so the
-            // extension sees the new value even after the app backgrounds.
+            // @AppStorage above writes directly to sharedDefaults; route each
+            // change through DefaultSettings so the matching session override
+            // is cleared and the keyboard extension is notified.
             .onChange(of: aiActiveInDictation) { _, val in
-                SharedSettingsSync.setAIActive(val)
+                DefaultSettings.setAIActive(val)
             }
             .onChange(of: defaultModeRaw) { _, val in
-                SharedSettingsSync.setAIMode(val)
+                if let mode = AIPromptMode(rawValue: val) {
+                    DefaultSettings.setAIMode(mode)
+                }
             }
             .onChange(of: defaultStyleRaw) { _, val in
-                SharedSettingsSync.setTextStyle(val)
+                if let style = TextStyle(rawValue: val) {
+                    DefaultSettings.setTextStyle(style)
+                }
             }
         }
     }

@@ -36,43 +36,31 @@ final class RecordingFlowCoordinator {
     private(set) var launchedViaDeepLink = false
     /// Status of the AI post-processing request
     private(set) var aiProcessingStatus: AIProcessingStatus = .idle
-    /// Per-session override — allows disabling AI processing without changing global settings.
-    /// Initialized from shared defaults (keyboard may have changed them).
-    var aiActiveThisSession: Bool = SharedConstants.sharedDefaults.bool(forKey: SharedConstants.aiActiveKey)
-    /// Per-session prompt mode — initialized from shared defaults, changeable during recording.
-    var selectedPromptMode: AIPromptMode = AIPromptMode(
-        rawValue: SharedConstants.sharedDefaults.string(forKey: SharedConstants.aiModeKey) ?? ""
-    ) ?? .dictation
-    /// Per-session text style — initialized from shared defaults, changeable during recording.
-    var currentTextStyle: TextStyle = TextStyle(
-        rawValue: SharedConstants.sharedDefaults.string(forKey: SharedConstants.textStyleKey) ?? ""
-    ) ?? .casual
+    /// Per-session AI-active override. Initialized from the current effective
+    /// setting (session override if any, otherwise the user's default).
+    var aiActiveThisSession: Bool = SessionSettings.effectiveAIActive()
+    /// Per-session prompt mode — initialized from the current effective setting.
+    var selectedPromptMode: AIPromptMode = SessionSettings.effectiveAIMode()
+    /// Per-session text style — initialized from the current effective setting.
+    var currentTextStyle: TextStyle = SessionSettings.effectiveTextStyle()
 
-    // MARK: - In-Session Settings (sync back to keyboard)
+    // MARK: - In-Session Settings (written to session_* storage)
 
     func toggleAIActive() {
         aiActiveThisSession.toggle()
-        syncSettingsToKeyboard()
+        SessionSettings.setAIActive(aiActiveThisSession)
     }
 
     func cyclePromptMode() {
         selectedPromptMode = selectedPromptMode.next
-        syncSettingsToKeyboard()
+        SessionSettings.setAIMode(selectedPromptMode)
     }
 
     func cycleTextStyle() {
         let all = TextStyle.allCases
         let idx = all.firstIndex(of: currentTextStyle) ?? 0
         currentTextStyle = all[(idx + 1) % all.count]
-        syncSettingsToKeyboard()
-    }
-
-    private func syncSettingsToKeyboard() {
-        SharedSettingsSync.setAll(
-            aiActive: aiActiveThisSession,
-            aiMode: selectedPromptMode.rawValue,
-            textStyle: currentTextStyle.rawValue
-        )
+        SessionSettings.setTextStyle(currentTextStyle)
     }
 
     private let audioRecorder = AudioRecorder()
@@ -230,14 +218,10 @@ final class RecordingFlowCoordinator {
         capturedTexts = []
         Task { @MainActor [weak self] in
             guard let self else { return }
+            self.aiActiveThisSession = SessionSettings.effectiveAIActive()
+            self.selectedPromptMode = SessionSettings.effectiveAIMode()
+            self.currentTextStyle = SessionSettings.effectiveTextStyle()
             let sd = SharedConstants.sharedDefaults
-            self.aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
-            self.selectedPromptMode = AIPromptMode(
-                rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
-            ) ?? .dictation
-            self.currentTextStyle = TextStyle(
-                rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
-            ) ?? .casual
             if let data = sd.data(forKey: SharedConstants.capturedTextsKey),
                let texts = try? JSONDecoder().decode([String].self, from: data) {
                 self.capturedTexts = texts
@@ -459,15 +443,10 @@ final class RecordingFlowCoordinator {
     /// queued. `synchronize()` forces the current process to pull the latest
     /// cross-process writes. Cheap (µs) — safe to call on hot paths.
     private func resyncSettingsFromSharedDefaults() {
-        let sd = SharedConstants.sharedDefaults
-        sd.synchronize()
-        aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
-        selectedPromptMode = AIPromptMode(
-            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
-        ) ?? .dictation
-        currentTextStyle = TextStyle(
-            rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
-        ) ?? .casual
+        SharedConstants.sharedDefaults.synchronize()
+        aiActiveThisSession = SessionSettings.effectiveAIActive()
+        selectedPromptMode = SessionSettings.effectiveAIMode()
+        currentTextStyle = SessionSettings.effectiveTextStyle()
     }
 
     // MARK: - History
@@ -512,14 +491,9 @@ final class RecordingFlowCoordinator {
         liveTranscript = ""
         launchedViaDeepLink = false
         aiProcessingStatus = .idle
-        let sd = SharedConstants.sharedDefaults
-        aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
-        selectedPromptMode = AIPromptMode(
-            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
-        ) ?? .dictation
-        currentTextStyle = TextStyle(
-            rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
-        ) ?? .casual
+        aiActiveThisSession = SessionSettings.effectiveAIActive()
+        selectedPromptMode = SessionSettings.effectiveAIMode()
+        currentTextStyle = SessionSettings.effectiveTextStyle()
         aiInputText = ""
         capturedTexts = []
         updateTask?.cancel()
@@ -809,15 +783,17 @@ final class RecordingFlowCoordinator {
     }
 
     private func handleSettingsChanged() {
-        let sd = SharedConstants.sharedDefaults
-        sd.synchronize()
-        aiActiveThisSession = sd.bool(forKey: SharedConstants.aiActiveKey)
-        selectedPromptMode = AIPromptMode(
-            rawValue: sd.string(forKey: SharedConstants.aiModeKey) ?? ""
-        ) ?? .dictation
-        currentTextStyle = TextStyle(
-            rawValue: sd.string(forKey: SharedConstants.textStyleKey) ?? ""
-        ) ?? .casual
+        SharedConstants.sharedDefaults.synchronize()
+        aiActiveThisSession = SessionSettings.effectiveAIActive()
+        selectedPromptMode = SessionSettings.effectiveAIMode()
+        currentTextStyle = SessionSettings.effectiveTextStyle()
+    }
+
+    /// Re-reads session/default state from shared storage. Called after the
+    /// cold-launch boot sequence runs (migration + session clear) so any state
+    /// that landed after `@State` initialized the coordinator is picked up.
+    func refreshSettingsFromStorage() {
+        handleSettingsChanged()
     }
 
     private func handleCommand() async {

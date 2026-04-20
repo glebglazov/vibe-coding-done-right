@@ -47,22 +47,21 @@ public enum TextStyle: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// Reads and writes style settings from UserDefaults.
-/// The settings view writes via @AppStorage; other code reads through these static properties.
+/// Reads the default text style as configured in Settings.
+///
+/// Backed by `sharedDefaults` under `SharedConstants.defaultTextStyleKey` so
+/// the keyboard extension sees the same value. Writes must go through
+/// `DefaultSettings.setTextStyle(_:)` — direct mutation is intentionally not
+/// exposed, which keeps the default/session split in `SharedConstants`
+/// structurally enforceable.
 public enum StyleSettings {
-    public static let defaultStyleKey = "text_style_default"
-    
     /// The default text style for new recording sessions.
     /// Defaults to .casual on fresh install.
     public static var defaultStyle: TextStyle {
-        get {
-            TextStyle(rawValue: UserDefaults.standard.string(forKey: defaultStyleKey) ?? "") ?? .casual
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: defaultStyleKey)
-        }
+        let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.defaultTextStyleKey) ?? ""
+        return TextStyle(rawValue: raw) ?? .casual
     }
-    
+
     /// The Style model for the default text style.
     public static var defaultStyleModel: Style {
         defaultStyle.style

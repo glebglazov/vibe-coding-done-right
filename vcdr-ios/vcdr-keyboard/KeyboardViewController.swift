@@ -1,6 +1,5 @@
 import Combine
 import KeyboardKit
-import OSLog
 import SwiftUI
 import UIKit
 
@@ -250,58 +249,27 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     // MARK: - Settings
 
     private func refreshSettings() {
-        let sd = SharedConstants.sharedDefaults
-        aiConfigured = sd.bool(forKey: SharedConstants.aiConfiguredKey)
-        aiActive = sd.bool(forKey: SharedConstants.aiActiveKey)
-
-        // Distinguish "key missing" (host app never wrote, or write hasn't
-        // propagated across processes) from a real user-chosen value. Silently
-        // falling back to .dictation hid a bug where returning to the keyboard
-        // after a scene transition appeared to reset the user's mode.
-        if let raw = sd.string(forKey: SharedConstants.aiModeKey),
-           let parsed = SharedAIMode(rawValue: raw) {
-            aiMode = parsed
-        } else {
-            Self.log.warning("aiModeKey missing or invalid — keeping previous mode \(self.aiMode.rawValue, privacy: .public)")
-        }
-
-        if let raw = sd.string(forKey: SharedConstants.textStyleKey),
-           let parsed = SharedTextStyle(rawValue: raw) {
-            textStyle = parsed
-        } else {
-            Self.log.warning("textStyleKey missing or invalid — keeping previous style \(self.textStyle.rawValue, privacy: .public)")
-        }
+        aiConfigured = SharedConstants.sharedDefaults.bool(forKey: SharedConstants.aiConfiguredKey)
+        aiActive = SessionSettings.effectiveAIActive()
+        aiMode = SessionSettings.effectiveAIMode()
+        textStyle = SessionSettings.effectiveTextStyle()
     }
-
-    private static let log = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "glebglazov.vcdr-ios.keyboard",
-        category: "settings"
-    )
 
     func toggleAI() {
         aiActive.toggle()
-        let sd = SharedConstants.sharedDefaults
-        sd.set(aiActive, forKey: SharedConstants.aiActiveKey)
-        sd.synchronize()
-        notifySettingsChanged()
+        SessionSettings.setAIActive(aiActive)
         refreshSelectedTextIndicator()
     }
 
     func cycleAIMode() {
         aiMode = aiMode.next
-        let sd = SharedConstants.sharedDefaults
-        sd.set(aiMode.rawValue, forKey: SharedConstants.aiModeKey)
-        sd.synchronize()
-        notifySettingsChanged()
+        SessionSettings.setAIMode(aiMode)
         refreshSelectedTextIndicator()
     }
 
     func cycleTextStyle() {
         textStyle = textStyle.next
-        let sd = SharedConstants.sharedDefaults
-        sd.set(textStyle.rawValue, forKey: SharedConstants.textStyleKey)
-        sd.synchronize()
-        notifySettingsChanged()
+        SessionSettings.setTextStyle(textStyle)
     }
 
     // MARK: - Selected Text Capture
@@ -366,10 +334,6 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
             }
             responder = current.next
         }
-    }
-
-    private func notifySettingsChanged() {
-        DarwinNotificationCenter.post(SharedConstants.settingsNotificationName)
     }
 
     // MARK: - Keyboard View Setup

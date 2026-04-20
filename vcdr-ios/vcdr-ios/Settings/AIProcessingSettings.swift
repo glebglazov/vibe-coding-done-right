@@ -92,9 +92,7 @@ enum AIProvider: String, Codable, CaseIterable {
 /// Reads AI processing settings from UserDefaults.
 /// The settings view writes via @AppStorage; other code reads through these static properties.
 enum AIProcessingSettings {
-    static let defaultModeKey = "ai_processing_default_mode"
     static let enabledKey = "ai_processing_enabled"
-    static let activeInDictationKey = "ai_processing_active_in_dictation"
     static let providerKey = "ai_processing_provider"
     static let dictationProviderKey = "ai_processing_dictation_provider"
     static let assistantProviderKey = "ai_processing_assistant_provider"
@@ -107,16 +105,22 @@ enum AIProcessingSettings {
     /// switching away from Apple as primary provider.
     static let afmFallbackRememberedKey = "ai_processing_afm_fallback_remembered"
 
+    /// Default mode as configured in Settings. Reads from `sharedDefaults` so
+    /// both the main app and keyboard extension see the same value; mutations
+    /// go through `DefaultSettings.setAIMode(_:)`.
     static var defaultMode: AIPromptMode {
-        AIPromptMode(rawValue: UserDefaults.standard.string(forKey: defaultModeKey) ?? "") ?? .dictation
+        let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.defaultAIModeKey) ?? ""
+        return AIPromptMode(rawValue: raw) ?? .dictation
     }
 
     static var enabled: Bool {
         UserDefaults.standard.bool(forKey: enabledKey)
     }
 
+    /// Whether AI is on by default for new dictation sessions. Reads from
+    /// `sharedDefaults`; mutations go through `DefaultSettings.setAIActive(_:)`.
     static var activeInDictation: Bool {
-        UserDefaults.standard.bool(forKey: activeInDictationKey)
+        SharedConstants.sharedDefaults.bool(forKey: SharedConstants.defaultAIActiveKey)
     }
 
     /// Provider for the current default mode. Used by hasAICapability / isConfigured checks.
