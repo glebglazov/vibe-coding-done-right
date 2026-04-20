@@ -2,10 +2,9 @@ import Foundation
 import OSLog
 
 /// Last-write-wins resolution for iCloud `NSFileVersion` siblings on history
-/// snapshots. Runs on the main actor to match the project-wide default
-/// isolation; conflict events are rare so the blocking cost of
-/// `Data(contentsOf:)` on MainActor is acceptable for now.
-@MainActor
+/// snapshots. Nonisolated so the file I/O (`Data(contentsOf:)`,
+/// `NSFileVersion.replaceItem`) can run off the main thread during an
+/// iCloud refresh without freezing the UI.
 enum HistoryConflictResolver {
 
     /// Picks the sibling with the greatest `Conversation.lastUpdated`,

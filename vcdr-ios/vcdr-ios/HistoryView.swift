@@ -81,7 +81,7 @@ struct HistoryView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .refreshable {
-            (history as? UbiquityHistoryStore)?.refresh()
+            await (history as? UbiquityHistoryStore)?.refresh()
         }
     }
 
@@ -107,7 +107,7 @@ private struct SyncIndicator: View {
     var body: some View {
         if let sync = history as? UbiquityHistoryStore {
             Button {
-                sync.refresh()
+                Task { await sync.refresh() }
             } label: {
                 icon(for: sync.syncState)
             }

@@ -39,7 +39,7 @@ final class FileHistoryStore: HistoryStore {
     nonisolated(unsafe) private let encoder: JSONEncoder
     nonisolated(unsafe) private let decoder: JSONDecoder
 
-    private struct IndexEntry: Equatable {
+    private struct IndexEntry: Equatable, Sendable {
         let url: URL
         let id: UUID
         let modifiedAt: Date
@@ -162,13 +162,46 @@ final class FileHistoryStore: HistoryStore {
         cursor = upper
     }
 
+    /// Async counterpart to `loadNextPage` that moves the synchronous
+    /// `Data(contentsOf:)` + JSON decode work onto a utility-priority
+    /// detached task. Safe to call from MainActor without stalling the UI,
+    /// especially when snapshot files live in an iCloud ubiquity container
+    /// where a read can block on placeholder materialization.
+    func loadNextPageAsync() async {
+        guard hasMorePages else { return }
+        let displayCapSlack = Self.maxConversations - conversations.count
+        let upper = min(cursor + Self.pageSize, cursor + displayCapSlack, index.count)
+        guard cursor < upper else { return }
+        let slice = Array(index[cursor..<upper])
+        let existingIDs = Set(conversations.map { $0.id })
+        let decoder = self.decoder
+        let loaded = await Task.detached(priority: .utility) {
+            slice.compactMap { entry -> Conversation? in
+                guard !existingIDs.contains(entry.id) else { return nil }
+                return Self.readConversationOffMain(at: entry.url, decoder: decoder)
+            }
+        }.value
+        conversations.append(contentsOf: loaded)
+        cursor = upper
+    }
+
     /// Rescans the on-disk index and reloads the first page of conversations.
     /// Called by `UbiquityHistoryStore` when `NSMetadataQuery` signals remote
     /// changes so the UI picks up newly synced records without a restart.
-    func rebuildIndexAndReloadFirstPage() {
-        rebuildIndex()
-        conversations.removeAll()
-        loadNextPage()
+    ///
+    /// The directory scan, per-file mtime lookups, and first-page decodes
+    /// all run on a detached utility task so the MainActor stays free while
+    /// iCloud resolves placeholders. MainActor state is mutated only on the
+    /// hop back at the end.
+    func rebuildIndexAndReloadFirstPageAsync() async {
+        let dir = conversationsDir
+        let newIndex = await Task.detached(priority: .utility) {
+            Self.scanIndexOffMain(conversationsDir: dir)
+        }.value
+        self.index = newIndex
+        self.cursor = 0
+        self.conversations.removeAll()
+        await loadNextPageAsync()
     }
 
     /// Filenames currently tracked by the index. Used by `UbiquityHistoryStore`
@@ -211,6 +244,16 @@ final class FileHistoryStore: HistoryStore {
     }
 
     private func readConversation(at url: URL) -> Conversation? {
+        Self.readConversationOffMain(at: url, decoder: decoder)
+    }
+
+    /// Nonisolated so it can run inside `Task.detached` during async
+    /// pagination — reads a snapshot file and decodes it without touching
+    /// instance state.
+    nonisolated private static func readConversationOffMain(
+        at url: URL,
+        decoder: JSONDecoder
+    ) -> Conversation? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? decoder.decode(Conversation.self, from: data)
     }
@@ -230,6 +273,15 @@ final class FileHistoryStore: HistoryStore {
     // MARK: - Index
 
     func rebuildIndex() {
+        index = Self.scanIndexOffMain(conversationsDir: conversationsDir)
+        cursor = 0
+    }
+
+    /// Nonisolated disk scan used by both the synchronous `rebuildIndex`
+    /// (called from `init`) and the async refresh path (called from a
+    /// detached task). Returns the index directly so callers decide how to
+    /// publish it to actor-isolated state.
+    nonisolated private static func scanIndexOffMain(conversationsDir: URL) -> [IndexEntry] {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [.contentModificationDateKey]
         guard let urls = try? fm.contentsOfDirectory(
@@ -237,8 +289,7 @@ final class FileHistoryStore: HistoryStore {
             includingPropertiesForKeys: keys,
             options: [.skipsHiddenFiles]
         ) else {
-            index = []
-            return
+            return []
         }
 
         var tombstones: [UUID: Date] = [:]
@@ -246,17 +297,17 @@ final class FileHistoryStore: HistoryStore {
 
         for url in urls {
             let name = url.lastPathComponent
-            guard let modifiedAt = mtime(for: url) else { continue }
+            guard let modifiedAt = mtimeOffMain(for: url) else { continue }
             if name.hasSuffix(".deleted.json") {
                 let base = String(name.dropLast(".deleted.json".count))
-                if let id = extractID(from: base) {
+                if let id = extractIDOffMain(from: base) {
                     if tombstones[id].map({ modifiedAt > $0 }) ?? true {
                         tombstones[id] = modifiedAt
                     }
                 }
             } else if name.hasSuffix(".json") {
                 let base = String(name.dropLast(".json".count))
-                if let id = extractID(from: base) {
+                if let id = extractIDOffMain(from: base) {
                     snapshots.append((url, id, modifiedAt))
                 }
             }
@@ -266,10 +317,9 @@ final class FileHistoryStore: HistoryStore {
             guard let tombstoneAt = tombstones[snap.id] else { return true }
             return snap.modifiedAt > tombstoneAt
         }
-        index = live
+        return live
             .sorted { $0.modifiedAt > $1.modifiedAt }
             .map { IndexEntry(url: $0.url, id: $0.id, modifiedAt: $0.modifiedAt) }
-        cursor = 0
     }
 
     private func refreshIndexEntry(id: UUID, url: URL, modifiedAt: Date) {
@@ -288,12 +338,12 @@ final class FileHistoryStore: HistoryStore {
         conversationsDir.appendingPathComponent("\(Self.filenameTimestamp(deletedAt))_\(id.uuidString).deleted.json")
     }
 
-    private func extractID(from base: String) -> UUID? {
+    nonisolated private static func extractIDOffMain(from base: String) -> UUID? {
         guard let underscore = base.range(of: "_", options: .backwards) else { return nil }
         return UUID(uuidString: String(base[underscore.upperBound...]))
     }
 
-    private func mtime(for url: URL) -> Date? {
+    nonisolated private static func mtimeOffMain(for url: URL) -> Date? {
         (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
     }
 

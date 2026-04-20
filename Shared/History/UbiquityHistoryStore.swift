@@ -61,6 +61,21 @@ final class UbiquityHistoryStore: HistoryStore {
     /// updates surface as `.pendingUpdates` and wait for the user.
     private var hasGatheredInitialSet = false
 
+    /// De-duplicates overlapping refreshes. A pull-to-refresh that arrives
+    /// while an NSMetadataQuery-driven refresh is still running would
+    /// otherwise double up on the directory scan and re-enter
+    /// `rebuildIndexAndReloadFirstPageAsync` before the first pass publishes.
+    private var refreshInFlight = false
+
+    /// Snapshot of per-item metadata facts captured on the main actor
+    /// (NSMetadataItem attribute reads must run on the query's queue) and
+    /// then shipped to a detached task for the blocking iCloud work.
+    private struct MetadataSnapshot: Sendable {
+        let toDownload: [URL]
+        let conflicts: [URL]
+        let newFilenames: [String]
+    }
+
     // MARK: - Init
 
     init?(storageRoot: URL? = UbiquityHistoryStore.resolveStorageRoot()) {
@@ -109,10 +124,23 @@ final class UbiquityHistoryStore: HistoryStore {
     /// resolves conflict siblings, then rescans the filesystem and reloads
     /// the first page into `conversations`. Called when the user taps the
     /// sync indicator or pulls-to-refresh.
-    func refresh() {
-        processMetadataResults()
-        inner.rebuildIndexAndReloadFirstPage()
-        // If the account-state observer has paused us, don't clobber that.
+    ///
+    /// Async because the heavy work (iCloud download requests, conflict
+    /// resolution, directory scan, first-page decode) runs on a detached
+    /// utility task. The MainActor is only held for the cheap NSMetadataItem
+    /// snapshot and the final state publish — so the sheet's "Done" button
+    /// stays responsive while a refresh is in flight.
+    func refresh() async {
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
+        defer { refreshInFlight = false }
+
+        let snapshot = collectMetadataSnapshot()
+        await Task.detached(priority: .utility) {
+            Self.applyMetadataSnapshotOffMain(snapshot)
+        }.value
+        await inner.rebuildIndexAndReloadFirstPageAsync()
+
         if case .paused = syncState { return }
         syncState = .idle
     }
@@ -138,13 +166,13 @@ final class UbiquityHistoryStore: HistoryStore {
             forName: .NSMetadataQueryDidFinishGathering,
             object: metadataQuery, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.handleInitialGathering() }
+            Task { @MainActor [weak self] in await self?.handleInitialGathering() }
         })
         queryObserverTokens.append(nc.addObserver(
             forName: .NSMetadataQueryDidUpdate,
             object: metadataQuery, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.handleIncrementalUpdate() }
+            Task { @MainActor [weak self] in await self?.handleIncrementalUpdate() }
         })
 
         metadataQuery.enableUpdates()
@@ -153,9 +181,16 @@ final class UbiquityHistoryStore: HistoryStore {
 
     /// First-load path: apply immediately so the history page isn't empty
     /// on the user's first visit after enabling sync.
-    private func handleInitialGathering() {
-        processMetadataResults()
-        inner.rebuildIndexAndReloadFirstPage()
+    private func handleInitialGathering() async {
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
+        defer { refreshInFlight = false }
+
+        let snapshot = collectMetadataSnapshot()
+        await Task.detached(priority: .utility) {
+            Self.applyMetadataSnapshotOffMain(snapshot)
+        }.value
+        await inner.rebuildIndexAndReloadFirstPageAsync()
         hasGatheredInitialSet = true
         if case .paused = syncState { return }
         syncState = .idle
@@ -165,34 +200,36 @@ final class UbiquityHistoryStore: HistoryStore {
     /// as `.pendingUpdates` so the user decides when to apply. Downloads
     /// are still kicked off in the background so the bytes are ready by
     /// the time the user taps refresh.
-    private func handleIncrementalUpdate() {
+    private func handleIncrementalUpdate() async {
         guard hasGatheredInitialSet else {
             // Shouldn't happen — DidUpdate fires after DidFinishGathering —
             // but defensively: treat as initial.
-            handleInitialGathering()
+            await handleInitialGathering()
             return
         }
 
-        let newFilenames = processMetadataResults()
+        let snapshot = collectMetadataSnapshot()
+        await Task.detached(priority: .utility) {
+            Self.applyMetadataSnapshotOffMain(snapshot)
+        }.value
 
         // Account state always wins.
         if case .paused = syncState { return }
-        if !newFilenames.isEmpty {
+        if !snapshot.newFilenames.isEmpty {
             syncState = .pendingUpdates
         }
     }
 
-    /// Walks the current `NSMetadataQuery` results: kicks off placeholder
-    /// downloads for missing files, dispatches conflict resolution to a
-    /// detached task (iCloud reads can block), and returns any filenames
-    /// not yet tracked by the inner index. `NSMetadataItem` access must
-    /// happen on the main thread, so the collection work stays here.
-    @discardableResult
-    private func processMetadataResults() -> [String] {
+    /// Reads the current `NSMetadataQuery` results on the main actor —
+    /// `NSMetadataItem` attribute access must happen on the query's queue —
+    /// and packages the work into a Sendable snapshot that can then be
+    /// applied from a detached task without touching any Objective-C state.
+    private func collectMetadataSnapshot() -> MetadataSnapshot {
         let conversationsPath = inner.conversationsDir.path
         let items = (metadataQuery.results as? [NSMetadataItem]) ?? []
         let known = inner.indexedFilenames
-        var conflictURLs: [URL] = []
+        var toDownload: [URL] = []
+        var conflicts: [URL] = []
         var newFilenames: [String] = []
 
         for item in items {
@@ -201,11 +238,11 @@ final class UbiquityHistoryStore: HistoryStore {
 
             if let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String,
                status == NSMetadataUbiquitousItemDownloadingStatusNotDownloaded {
-                try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+                toDownload.append(url)
             }
             if let hasConflict = item.value(forAttribute: NSMetadataUbiquitousItemHasUnresolvedConflictsKey) as? Bool,
                hasConflict {
-                conflictURLs.append(url)
+                conflicts.append(url)
             }
             let filename = url.lastPathComponent
             if !known.contains(filename) {
@@ -213,10 +250,24 @@ final class UbiquityHistoryStore: HistoryStore {
             }
         }
 
-        if !conflictURLs.isEmpty {
-            HistoryConflictResolver.resolve(urls: conflictURLs)
+        return MetadataSnapshot(
+            toDownload: toDownload,
+            conflicts: conflicts,
+            newFilenames: newFilenames
+        )
+    }
+
+    /// Applies the main-thread-collected snapshot: kicks off iCloud
+    /// placeholder downloads and resolves any conflict siblings. Both
+    /// operations can block on iCloud daemon IPC and must not run on the
+    /// main actor.
+    nonisolated private static func applyMetadataSnapshotOffMain(_ snapshot: MetadataSnapshot) {
+        for url in snapshot.toDownload {
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
         }
-        return newFilenames
+        if !snapshot.conflicts.isEmpty {
+            HistoryConflictResolver.resolve(urls: snapshot.conflicts)
+        }
     }
 
     // MARK: - Account-state observation
