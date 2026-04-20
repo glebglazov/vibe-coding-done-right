@@ -36,4 +36,4 @@ thoughts
 scripts/ralph/
 
 # Local sbx config
-.sbx/config.toml.local
+.sbx/config.local.toml
