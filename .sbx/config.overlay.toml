@@ -1,0 +1,4 @@
+[sandbox.dev.mcp.vcdr]
+type = "stdio"
+command = "uv"
+args = ["run", "--script", "mcp/server.py"]
