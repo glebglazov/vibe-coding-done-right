@@ -176,7 +176,7 @@ struct DictateActionButton: View {
                     actionPill("Stop", icon: "stop.fill", color: .red)
                 }
             case .transcribing:
-                actionPill("Processing", icon: "ellipsis", color: .orange)
+                actionPill("", icon: "ellipsis", color: .orange)
                     .phaseAnimator([false, true]) { content, phase in
                         content.opacity(phase ? 0.4 : 1.0)
                     } animation: { _ in
@@ -224,9 +224,11 @@ struct DictateActionButton: View {
         HStack(spacing: 5) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .black))
-            Text(text.uppercased())
-                .font(.system(size: Self.pillFont, weight: .black))
-                .tracking(1.5)
+            if !text.isEmpty {
+                Text(text.uppercased())
+                    .font(.system(size: Self.pillFont, weight: .black))
+                    .tracking(1.5)
+            }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 12)
