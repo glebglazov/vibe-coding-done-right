@@ -14,6 +14,11 @@ final class GlobalHotkeyManager {
     /// Key-up still resets `isHotkeyActive` to keep internal state consistent.
     var isEnabled: Bool = true
 
+    /// Orthogonal to `isEnabled`. Set while the user is recording a new shortcut
+    /// in the UI so the hotkey passes through unconsumed without disturbing the
+    /// managed `isEnabled` state.
+    var isSuppressed: Bool = false
+
     /// Called synchronously from the CGEvent tap callback (no GCD dispatch).
     /// This runs on the main thread during the run loop's event source processing,
     /// bypassing both DispatchQueue.main.async and MainActor Task scheduling — both
@@ -73,7 +78,7 @@ final class GlobalHotkeyManager {
                 if !keyStillDown {
                     Logger.hotkeys.warning("Recovering missed key-up after tap re-enable")
                     isHotkeyActive = false
-                    if isEnabled {
+                    if isEnabled && !isSuppressed {
                         onKeyUp?()
                     }
                 }
@@ -89,7 +94,7 @@ final class GlobalHotkeyManager {
             guard keyCode == targetKeyCode && flags == targetModifiers else {
                 return Unmanaged.passUnretained(event)
             }
-            guard isEnabled else { return Unmanaged.passUnretained(event) }
+            guard isEnabled && !isSuppressed else { return Unmanaged.passUnretained(event) }
             let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
             if !isRepeat {
                 isHotkeyActive = true
@@ -108,7 +113,7 @@ final class GlobalHotkeyManager {
             }
             // Must reset isHotkeyActive even when disabled to keep state consistent
             isHotkeyActive = false
-            guard isEnabled else { return Unmanaged.passUnretained(event) }
+            guard isEnabled && !isSuppressed else { return Unmanaged.passUnretained(event) }
             Logger.hotkeys.debug("[tap] keyUp fired, calling onKeyUp synchronously")
             // Call onKeyUp synchronously — NOT through DispatchQueue.main.async.
             // The CGEvent tap callback already runs on the main thread (main run loop).

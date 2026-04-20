@@ -213,6 +213,19 @@ final class AppDependencies {
         setStyleOverride(nil)
     }
 
+    /// Suppresses every app-owned hotkey (global CGEvent taps + destination bindings)
+    /// while the user is recording a new shortcut in the UI. Suppressed hotkeys
+    /// pass through unconsumed so the key press reaches the shortcut recorder
+    /// and nothing in the app reacts to it.
+    @MainActor
+    func setHotkeySuppression(_ suppressed: Bool) {
+        session.toggleHotkey.isSuppressed = suppressed
+        session.cancelHotkey.isSuppressed = suppressed
+        session.destinationHotkey.isSuppressed = suppressed
+        modeSwitcherCoordinator.setHotkeySuppressed(suppressed)
+        copyLatestCaptureHandler.setHotkeySuppressed(suppressed)
+    }
+
     func initialize() async {
         // Check tool availability and create template modes (async to avoid blocking main thread)
         await settings.refreshTemplateAvailability()

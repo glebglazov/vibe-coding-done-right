@@ -13,6 +13,11 @@ final class DestinationHotkeyManager {
     /// When false, matched key events pass through unconsumed.
     var isEnabled: Bool = false
 
+    /// Orthogonal to `isEnabled`. Set while the user is recording a new shortcut
+    /// in the UI so the hotkey passes through unconsumed without disturbing the
+    /// managed `isEnabled` state.
+    var isSuppressed: Bool = false
+
     /// Called when a destination hotkey is matched. Receives the destination UUID.
     var onDestinationMatched: ((UUID) -> Void)?
 
@@ -91,7 +96,7 @@ final class DestinationHotkeyManager {
             return Unmanaged.passUnretained(event)
         }
 
-        guard isEnabled, type == .keyDown else {
+        guard isEnabled && !isSuppressed, type == .keyDown else {
             return Unmanaged.passUnretained(event)
         }
 

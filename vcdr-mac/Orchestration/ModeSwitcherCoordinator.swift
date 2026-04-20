@@ -174,4 +174,10 @@ final class ModeSwitcherCoordinator {
         settings.modeSwitcherHotkey.modifiers = mods
         setupHotkey()
     }
+
+    /// Used while the user is recording a new shortcut in the UI so this hotkey
+    /// passes through unconsumed.
+    func setHotkeySuppressed(_ suppressed: Bool) {
+        hotkeyManager.isSuppressed = suppressed
+    }
 }

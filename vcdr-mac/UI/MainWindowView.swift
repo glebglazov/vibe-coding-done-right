@@ -161,6 +161,9 @@ struct MainWindowView: View {
             }
         }
         .frame(minWidth: Self.windowMinWidth, minHeight: Self.windowMinHeight)
+        .environment(\.hotkeySuppressionHandler) { suppressed in
+            dependencies.setHotkeySuppression(suppressed)
+        }
         .task {
             await dependencies.settings.refreshTemplateAvailability()
         }

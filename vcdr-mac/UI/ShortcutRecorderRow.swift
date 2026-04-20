@@ -1,6 +1,20 @@
 import SwiftUI
 import Carbon
 
+/// Environment handler that disables every app-owned hotkey while the user
+/// is recording a new shortcut. Installed by `MainWindowView`; consumed by
+/// `ShortcutRecorderRow`. Called with `true` on start and `false` on stop/cancel.
+private struct HotkeySuppressionKey: EnvironmentKey {
+    static let defaultValue: ((Bool) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var hotkeySuppressionHandler: ((Bool) -> Void)? {
+        get { self[HotkeySuppressionKey.self] }
+        set { self[HotkeySuppressionKey.self] = newValue }
+    }
+}
+
 /// Manages the lifecycle of an NSEvent monitor for recording keyboard shortcuts.
 /// Separates event system interaction from the SwiftUI view.
 private final class ShortcutEventMonitor {
@@ -43,6 +57,7 @@ struct ShortcutRecorderRow: View {
     @Binding var modifiers: UInt64
     @State private var isRecording = false
     @State private var eventMonitor = ShortcutEventMonitor()
+    @Environment(\.hotkeySuppressionHandler) private var hotkeySuppressionHandler
 
     // MARK: - Constants
 
@@ -115,7 +130,9 @@ struct ShortcutRecorderRow: View {
     }
 
     private func startRecording() {
+        guard !isRecording else { return }
         isRecording = true
+        hotkeySuppressionHandler?(true)
         eventMonitor.start { [self] capturedKeyCode, capturedModifiers in
             keyCode = capturedKeyCode
             modifiers = capturedModifiers
@@ -124,7 +141,9 @@ struct ShortcutRecorderRow: View {
     }
 
     private func stopRecording() {
+        guard isRecording else { return }
         isRecording = false
         eventMonitor.stop()
+        hotkeySuppressionHandler?(false)
     }
 }
