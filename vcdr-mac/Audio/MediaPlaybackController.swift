@@ -22,28 +22,44 @@ final class MediaPlaybackController {
     private var didPauseViaMediaRemote = false
     /// AppleScript backend: which specific apps we paused this session.
     private var pausedApps: Set<MediaApp> = []
+    /// In-flight pause task (if any). `resumeIfNeeded` awaits it before resuming
+    /// so a very short recording can't race pause/resume.
+    private var activePauseTask: Task<Void, Never>?
 
     // MARK: - Pause / Resume
 
-    /// Pauses the active media player if anything is currently playing.
-    /// On first call, detects whether the MediaRemote adapter is available
-    /// and caches the result for all subsequent calls.
-    func pauseIfNeeded() async {
-        let start = ContinuousClock.now
-        let backend = await resolveBackend()
-        Logger.audio.info("pauseIfNeeded: resolveBackend done (+\(start.duration(to: .now)))")
+    /// Kicks off pause in the background. Returns immediately so the caller
+    /// (recording start) is not blocked by backend resolution or IPC.
+    /// ``resumeIfNeeded`` awaits completion internally.
+    func pauseIfNeeded() {
+        activePauseTask = Task { [weak self] in
+            guard let self else { return }
+            let start = ContinuousClock.now
+            let backend = await self.resolveBackend()
+            Logger.audio.info("pauseIfNeeded: resolveBackend done (+\(start.duration(to: .now)))")
 
-        switch backend {
-        case .mediaRemote:
-            await pauseViaMediaRemote()
-        case .appleScript:
-            await pauseViaAppleScript()
+            switch backend {
+            case .mediaRemote:
+                await self.pauseViaMediaRemote()
+            case .appleScript:
+                await self.pauseViaAppleScript()
+            }
+            Logger.audio.info("pauseIfNeeded: complete (+\(start.duration(to: .now)))")
         }
-        Logger.audio.info("pauseIfNeeded: complete (+\(start.duration(to: .now)))")
+    }
+
+    /// Pre-warms backend resolution at app launch so the first pause call
+    /// doesn't pay the ~50-500ms MediaRemote probe on the hot path.
+    func prewarmBackend() async {
+        _ = await resolveBackend()
     }
 
     /// Resumes playback in any apps that were paused by ``pauseIfNeeded()``.
+    /// Awaits any still-in-flight pause first to avoid racing the commands.
     func resumeIfNeeded() async {
+        await activePauseTask?.value
+        activePauseTask = nil
+
         guard let backend else { return }
 
         switch backend {

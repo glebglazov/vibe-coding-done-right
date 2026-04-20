@@ -10,6 +10,17 @@ extension CaptureSession {
     /// and maps the resulting disposition to UI transitions. Cancellation-aware at every await.
     func processTranscription(audioURL: URL) async {
         do {
+            // If the user recorded before the model finished loading, wait for it
+            // here rather than blocking recording start. The panel already shows
+            // "Transcribing..." so the user gets feedback while we wait.
+            if !(await transcription.isReady) {
+                panel.setPhase(.processing)
+                while !(await transcription.isReady) {
+                    try Task.checkCancellation()
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+            }
+
             let transcriptionStart = ContinuousClock.now
             let rawText = try await transcription.transcribe(audioFileURL: audioURL)
             try Task.checkCancellation()

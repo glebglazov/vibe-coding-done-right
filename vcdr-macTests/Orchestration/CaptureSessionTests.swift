@@ -58,25 +58,20 @@ struct CaptureSessionSingleCycleTests {
         #expect(env.history.conversations.isEmpty)
     }
 
-    @Test("Provider not ready transitions to error state")
+    @Test("Provider not ready does not block recording start")
     @MainActor
-    func providerNotReady() async {
+    func providerNotReadyStartsRecording() async {
+        // Recording start must not gate on model readiness — audio capture is the
+        // hot path. If the model isn't ready by stop, processTranscription waits
+        // for it. The mock stays not-ready so we only assert the recording phase
+        // is reachable.
         let env = CaptureSessionTestEnvironment(
             mockProvider: MockTranscriptionProvider(isReady: false)
         )
         defer { env.cleanup() }
 
         env.session.toggle()
-        #expect(await env.waitForPhase { phase in
-            if case .error = phase { return true }
-            return false
-        })
-
-        if case .error(let msg) = env.session.status.phase {
-            #expect(msg.contains("Model still loading"))
-        } else {
-            Issue.record("Expected error phase")
-        }
+        #expect(await env.waitForPhase { $0 == .recording })
     }
 
     @Test("Transcription error transitions to error state")

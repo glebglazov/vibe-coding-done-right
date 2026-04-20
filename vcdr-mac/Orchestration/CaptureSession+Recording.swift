@@ -45,19 +45,9 @@ extension CaptureSession {
 
         run = RunState()
 
-        guard await transcription.isReady else {
-            Logger.app.warning("toggle pressed but transcription model not loaded yet")
-            setStatus(.error("Model still loading..."))
-            run = nil
-            indicator.show()
-            indicator.update(phase: .error, message: "Model still loading...")
-            indicator.dismissAfterDelay(Self.errorIndicatorDuration)
-            emit(.failed, finalText: nil, destinationID: nil, historyConversationID: nil)
-            resetErrorAfterDelay()
-            return
-        }
-
-        // Show the minimized capture pill immediately so the user sees feedback.
+        // Don't gate on model readiness — start audio immediately and let the
+        // model finish loading in the background. If it isn't ready by stop,
+        // `processTranscription` waits for it before calling transcribe.
         showPanelMinimized()
 
         let frontmostApp = NSWorkspace.shared.frontmostApplication
@@ -109,13 +99,8 @@ extension CaptureSession {
             }
         }
 
-        if settings.audioSettings.pauseMediaDuringRecording {
-            await media.pauseIfNeeded()
-        }
-
         let started = await audio.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID)
         guard started else {
-            await media.resumeIfNeeded()
             setStatus(.error("Failed to start recording"))
             panel.setError("Failed to start recording")
             scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
@@ -130,6 +115,13 @@ extension CaptureSession {
         recordingStartInstant = .now
         destinationHotkey.isEnabled = true
         updateCancelHotkey()
+
+        // Pause media in the background now that audio is capturing. The
+        // controller stores the in-flight task and resumeIfNeeded awaits it,
+        // so a very short recording can't race pause and resume.
+        if settings.audioSettings.pauseMediaDuringRecording {
+            media.pauseIfNeeded()
+        }
 
         // Notify delegate that recording started
         delegate?.captureSessionDidStartRecording(self)
