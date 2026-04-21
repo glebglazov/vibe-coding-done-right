@@ -140,10 +140,12 @@ final class RecordingFlowCoordinator {
     /// once hot. Pairs with `rescheduleHotSessionTimeout()` so the session
     /// ends automatically after the user-configured inactivity window.
     ///
-    /// Skipped while the model is still initializing or after an init failure,
-    /// because recording can't work in those states and lighting up the mic
-    /// indicator would confuse users. `.recording` / `.transcribing` are
-    /// no-ops because `isHot` is already true from the capture path.
+    /// Skipped while the model is still initializing or after an init failure
+    /// (recording can't work in those states; lighting the mic indicator
+    /// would confuse users). Also skipped when the user picked `.immediately`
+    /// — that mode means "no warm engine unless actually recording".
+    /// `.recording` / `.transcribing` are no-ops because `isHot` is already
+    /// true from the capture path.
     func startHotSessionIfNeeded() async {
         switch state {
         case .initializing, .error:
@@ -151,6 +153,7 @@ final class RecordingFlowCoordinator {
         default:
             break
         }
+        guard HotSessionTimeout.current() != .immediately else { return }
         _ = await audioRecorder.startHotSession()
         rescheduleHotSessionTimeout()
     }
@@ -159,11 +162,32 @@ final class RecordingFlowCoordinator {
     /// on hot-session start, and when the user changes the timeout setting.
     /// Mid-recording we intentionally leave any existing task cancelled —
     /// `stopAndTranscribe` reschedules once capture ends.
+    ///
+    /// Behavior per setting:
+    /// - `.immediately`: tear down now if idle (no task scheduled).
+    /// - `.never`: no task scheduled; hot session lives until backgrounding.
+    /// - finite: sleep N seconds, then tear down if still idle.
     private func rescheduleHotSessionTimeout() {
         hotSessionIdleTask?.cancel()
-        guard audioRecorder.isHot, !audioRecorder.isRecording else { return }
+        hotSessionIdleTask = nil
 
         let timeout = HotSessionTimeout.current()
+
+        switch timeout {
+        case .immediately:
+            if audioRecorder.isHot, !audioRecorder.isRecording {
+                audioRecorder.endHotSession()
+                Logger.app.info("Hot session ended immediately (timeout=\(timeout.displayName))")
+            }
+            return
+        case .never:
+            return
+        default:
+            break
+        }
+
+        guard audioRecorder.isHot, !audioRecorder.isRecording else { return }
+
         hotSessionIdleTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(timeout.rawValue))
             guard !Task.isCancelled, let self else { return }
