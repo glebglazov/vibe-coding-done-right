@@ -30,16 +30,23 @@ final class AudioRecorder {
         AVAudioSession.sharedInstance().availableInputs ?? []
     }
 
-    /// Applies the user's preferred audio input (stored in UserDefaults) to the audio session.
-    /// Falls back to the system default if the saved input is no longer available.
+    /// Returns the user's saved preferred input port if it's currently available,
+    /// or nil to mean "let iOS pick the default" (which is the built-in mic now
+    /// that the session category no longer permits Bluetooth HFP).
+    private nonisolated static func preferredInputPort(session: AVAudioSession) -> AVAudioSessionPortDescription? {
+        let savedUID = UserDefaults.standard.string(forKey: preferredInputUIDKey) ?? ""
+        guard !savedUID.isEmpty else { return nil }
+        return session.availableInputs?.first(where: { $0.uid == savedUID })
+    }
+
+    /// Applies the user's preferred audio input to an already-active session.
+    /// Used after route changes (e.g. a wired headset is plugged in mid-recording).
+    /// For the initial session setup the preferred input is set before `setActive`
+    /// inside ``prepareAudioSession`` — iOS treats post-activation calls as a
+    /// hint it may ignore.
     private func applyPreferredInput() {
         let session = AVAudioSession.sharedInstance()
-        guard let savedUID = UserDefaults.standard.string(forKey: Self.preferredInputUIDKey),
-              let match = session.availableInputs?.first(where: { $0.uid == savedUID })
-        else {
-            // No preference or saved device unavailable — use system default
-            return
-        }
+        guard let match = Self.preferredInputPort(session: session) else { return }
         do {
             try session.setPreferredInput(match)
             Logger.recording.info("Set preferred input to \(match.portName)")
@@ -73,6 +80,13 @@ final class AudioRecorder {
     /// Pre-configures the AVAudioSession so it's ready when recording starts.
     /// Safe to call multiple times — skipped if already configured.
     /// Blocking AVAudioSession calls run off the main thread to avoid stalling the UI.
+    ///
+    /// We deliberately do NOT pass `.allowBluetoothHFP`: HFP audio is 16 kHz
+    /// narrowband, which tanks Parakeet's accuracy. Without the option AirPods
+    /// simply don't appear as an input route, so iOS can't silently override
+    /// our preferred input to them in `.playAndRecord` mode — which it does
+    /// even when `setPreferredInput` points at the built-in mic, because the
+    /// HFP link is bidirectional and iOS routes input along with output.
     func prepareAudioSession() async {
         guard !audioSessionConfigured else { return }
         // AVAudioSession configuration is thread-safe — run off main thread
@@ -80,7 +94,13 @@ final class AudioRecorder {
         let success = await Task.detached {
             let session = AVAudioSession.sharedInstance()
             do {
-                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+                // Set the preferred input BEFORE setActive so iOS honours it
+                // while picking the initial route. A post-activation call is
+                // just a hint iOS may ignore.
+                if let preferred = Self.preferredInputPort(session: session) {
+                    try? session.setPreferredInput(preferred)
+                }
                 try session.setActive(true)
                 return true
             } catch {
@@ -91,7 +111,6 @@ final class AudioRecorder {
 
         guard success else { return }
         audioSessionConfigured = true
-        applyPreferredInput()
         setupInterruptionObservers()
         Logger.recording.info("Audio session pre-configured")
     }

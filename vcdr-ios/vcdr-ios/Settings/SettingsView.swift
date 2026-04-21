@@ -130,10 +130,18 @@ struct SettingsView: View {
                     }
                 }
             }
+            Label {
+                Text("Bluetooth mics (AirPods, etc.) aren't supported — their narrowband audio hurts transcription accuracy. Even when AirPods are connected, recording uses the built-in mic.")
+            } icon: {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         } header: {
             Text("Microphone")
         } footer: {
-            Text("Choose which microphone to use for recording. \"Automatic\" uses the system default.")
+            Text("Choose which microphone to use for recording.")
         }
     }
 
@@ -147,10 +155,12 @@ struct SettingsView: View {
             return
         }
 
-        // Temporarily activate the session to query available inputs,
-        // then deactivate so it doesn't interfere with other audio.
+        // Temporarily activate the session to query available inputs, then deactivate
+        // so it doesn't interfere with other audio. Match the recorder's category
+        // options so the list reflects what recording will actually see — notably,
+        // no `.allowBluetoothHFP`, which would otherwise show BT devices we don't use.
         do {
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
             try session.setActive(true)
             availableInputs = session.availableInputs ?? []
             try session.setActive(false, options: .notifyOthersOnDeactivation)
