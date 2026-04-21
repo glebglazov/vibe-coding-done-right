@@ -130,10 +130,18 @@ struct SettingsView: View {
                     }
                 }
             }
+            Label {
+                Text("Bluetooth mics (AirPods, etc.) aren't supported — their narrowband audio hurts transcription accuracy. Even when AirPods are connected, recording uses the built-in mic.")
+            } icon: {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         } header: {
             Text("Microphone")
         } footer: {
-            Text("Choose which microphone to use for recording. Bluetooth mics (AirPods, etc.) are not listed — their narrowband audio noticeably reduces transcription accuracy.")
+            Text("Choose which microphone to use for recording.")
         }
     }
 
