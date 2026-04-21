@@ -37,9 +37,15 @@ struct VCDRiOSApp: App {
                         // Re-apply idle timer state — iOS can reset it on scene transitions
                         let shouldDisable = coordinator.state == .recording
                         UIApplication.shared.isIdleTimerDisabled = shouldDisable
+                        // Re-hot the mic after a return from background so the
+                        // next recording is instant again. No-op while the
+                        // model init path is still bringing up the session.
+                        Task { await coordinator.startHotSessionIfNeeded() }
                     case .background:
-                        // Deactivate audio session so other apps can resume playback.
-                        // Skip if recording is active (background audio mode keeps it alive).
+                        // Tear down the hot session and deactivate the audio
+                        // session so other apps can resume playback and the
+                        // mic indicator drops. Skipped during a live recording
+                        // (the background audio entitlement keeps it alive).
                         // Settings are NOT re-flushed here: doing so previously
                         // clobbered in-session cycled overrides with the user's
                         // configured defaults. The session/default split in
