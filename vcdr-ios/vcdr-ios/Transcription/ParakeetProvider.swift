@@ -61,11 +61,12 @@ actor ParakeetProvider: TranscriptionProvider {
             Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
 
             // Phase 2: Compile CoreML models for Neural Engine (the slow part).
-            // Run at .utility priority so the CPU-intensive MLModel(contentsOf:)
-            // compilation doesn't starve the main thread and freeze the UI.
+            // .userInitiated (not .utility) because the user is actively staring
+            // at the "Compiling..." spinner — .utility gets preempted under
+            // thermal/CPU pressure and stretches the visible wait.
             initPhase = .compiling
             let compileStart = ContinuousClock.now
-            let models = try await Task.detached(priority: .utility) {
+            let models = try await Task.detached(priority: .userInitiated) {
                 try await AsrModels.load(from: modelDir, version: .v3)
             }.value
             Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: compileStart))")

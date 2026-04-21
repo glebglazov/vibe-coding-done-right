@@ -277,19 +277,15 @@ final class RecordingFlowCoordinator {
         }
 
         do {
-            // Pre-warm audio session concurrently with model initialization.
-            // Audio prep (~50-200ms) runs off the main thread; model init runs
-            // on the ParakeetProvider actor. Both proceed in parallel.
-            async let audioPrep: Void = audioRecorder.prepareAudioSession()
+            // Permission + session + engine all pre-warmed concurrently with
+            // model init. Without this, a record tap landing during init hits
+            // a cold engine.start() while CoreML compile has all the CPU —
+            // a multi-second stall that looks like the UI has frozen.
+            async let audioPrep: Void = prewarmAudioResources()
             try await transcriptionProvider.initialize()
             Logger.app.info("[InitTiming] transcriptionProvider.initialize() done at +\(ContinuousClock.now - initStart)")
             await audioPrep
-            Logger.app.info("[InitTiming] audioPrep done at +\(ContinuousClock.now - initStart)")
-
-            // Pre-allocate audio engine resources so startRecording() is fast.
-            // prepare() allocates hardware buffers without activating the mic.
-            audioRecorder.prepareEngine()
-            Logger.app.info("[InitTiming] engine prepared at +\(ContinuousClock.now - initStart)")
+            Logger.app.info("[InitTiming] audio prewarm done at +\(ContinuousClock.now - initStart)")
 
             pollTask.cancel()
             // Don't overwrite state if recording started while we were initializing
@@ -314,6 +310,16 @@ final class RecordingFlowCoordinator {
             }
             Logger.app.error("Model init failed: \(error)")
         }
+    }
+
+    /// Requests mic permission, configures the audio session, and pre-allocates
+    /// the engine. Resolving permission during init means the first record tap
+    /// never triggers the system permission prompt mid-flow, and the engine is
+    /// already hot so a tap during model compile doesn't pay a cold-start cost.
+    private func prewarmAudioResources() async {
+        _ = await audioRecorder.requestMicrophonePermission()
+        await audioRecorder.prepareAudioSession()
+        audioRecorder.prepareEngine()
     }
 
     /// Sets state to `.recording` synchronously so the view shows "LISTENING"
