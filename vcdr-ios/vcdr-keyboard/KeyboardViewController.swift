@@ -176,6 +176,15 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     private static let pollInterval: TimeInterval = 0.1
     /// Duration to show the yellow empty-result indicator before reverting to idle
     private static let emptyResultFlashDuration: TimeInterval = 2
+    /// Heartbeat-freshness window. If the app's heartbeat is within this many
+    /// seconds of now, we treat the app as alive and send a Darwin command
+    /// (stays in keyboard). Otherwise we go straight to URL. ~3x the app's
+    /// 5-second heartbeat cadence — covers propagation + clock skew.
+    private static let heartbeatFreshnessWindow: TimeInterval = 18
+    /// Window to wait for the app to confirm a `startRecording` command by
+    /// writing `state = .recording`. If nothing by then, fall back to URL.
+    /// Tuned for Darwin roundtrip + a MainActor hop under CoreML load.
+    private static let startCommandAckTimeout: TimeInterval = 0.4
 
     // MARK: - Commands
 
@@ -277,9 +286,21 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     // MARK: - Selected Text Capture
 
-    /// Starts recording and initializes the captures array.
-    /// If text is selected in assistant mode, it becomes the first capture.
-    func captureSelectedTextAndOpenRecord() {
+    /// Starts recording, picking the best transport based on the app's heartbeat.
+    ///
+    /// If the main app's heartbeat in shared defaults is recent, the app is
+    /// alive and reachable via Darwin command — we send one and wait briefly
+    /// for it to confirm by writing `state = .recording`. On confirmation the
+    /// existing `darwinStateChanged` observer flips `dictationState` and the
+    /// user never leaves the keyboard. If the heartbeat is stale or the
+    /// command isn't acknowledged in time, we fall back to the URL scheme,
+    /// which foregrounds the app and starts recording via the deep-link path.
+    ///
+    /// Critically there is NO optimistic UI flip — `dictationState` stays at
+    /// `.idle` until the app publishes `.recording`. An earlier attempt
+    /// optimistically flipped to `.recording` up front, which misled users
+    /// into tapping Stop before anything had actually started.
+    func startRecordingFromKeyboard() {
         let sd = SharedConstants.sharedDefaults
         // Clear legacy single-capture key
         sd.removeObject(forKey: SharedConstants.selectedTextKey)
@@ -294,8 +315,40 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         }
         sd.synchronize()
         captureCount = captures.count
-        // Open the main app to start recording via deep link
-        openURL(SharedConstants.recordDeepLinkURL)
+
+        if appLikelyAlive(in: sd) {
+            tryStartViaDarwinCommand(in: sd)
+        } else {
+            openURL(SharedConstants.recordDeepLinkURL)
+        }
+    }
+
+    /// Returns true if the main app has written a recent heartbeat. Stale or
+    /// missing → app is suspended/killed, skip Darwin entirely.
+    private func appLikelyAlive(in sd: UserDefaults) -> Bool {
+        let beat = sd.double(forKey: SharedConstants.appHeartbeatKey)
+        guard beat > 0 else { return false }
+        return Date().timeIntervalSince1970 - beat < Self.heartbeatFreshnessWindow
+    }
+
+    /// Writes the `startRecording` command, posts the Darwin notification, and
+    /// schedules a fallback to `openURL` if the app doesn't publish
+    /// `state = .recording` within the ack window.
+    private func tryStartViaDarwinCommand(in sd: UserDefaults) {
+        sd.set(RecordingCommand.startRecording.rawValue, forKey: SharedConstants.commandKey)
+        sd.synchronize()
+        DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.startCommandAckTimeout) { [weak self] in
+            guard let self else { return }
+            let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey)
+            if raw == RecordingState.recording.rawValue { return }
+            // App didn't ack — heartbeat lied (suspended between our read and the
+            // command firing) or Darwin was dropped. Wake it via URL; the command
+            // + captures we already wrote will be overwritten by the deep-link
+            // path, which calls its own `startRecording(fromDeepLink:)`.
+            self.openURL(SharedConstants.recordDeepLinkURL)
+        }
     }
 
     /// Captures the currently selected text and appends it to the captures array.

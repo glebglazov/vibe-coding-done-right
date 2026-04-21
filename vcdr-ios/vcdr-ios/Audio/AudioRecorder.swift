@@ -305,7 +305,8 @@ final class AudioRecorder {
     }
 
     /// Deactivates the audio session and cleans up observers.
-    /// Called when the app goes to background so other audio apps can resume.
+    /// Used by `restartEngine()` as a last resort when the new engine fails
+    /// to start after a route change, so the session isn't left half-alive.
     func deactivateSession() {
         guard audioSessionConfigured else { return }
         do {

@@ -4,26 +4,26 @@ import Foundation
 /// torn down. While hot, subsequent recordings start instantly because
 /// `engine.start()` (100–500ms, or seconds under CoreML load) is avoided.
 /// Raw value is seconds so UserDefaults can store it as an Int;
-/// `.immediately` (0) and `.never` (-1) are sentinels for the two corner cases.
+/// `.never` (0) and `.always` (-1) are sentinels for the two corner cases.
 enum HotSessionTimeout: Int, CaseIterable, Identifiable {
     case fiveMinutes = 300
     case tenMinutes = 600
     case twentyMinutes = 1200
     case thirtyMinutes = 1800
     case oneHour = 3600
-    /// Tear the engine down the moment recording stops. Also skips the
-    /// auto-hot on launch / foreground, so the mic indicator is only on
-    /// during actual recording.
-    case immediately = 0
-    /// Keep the engine hot as long as the app is foreground. Backgrounding
-    /// still tears it down (iOS suspends audio without the background-audio
-    /// entitlement).
-    case never = -1
+    /// Don't keep the mic hot at all: tear the engine down the moment
+    /// recording stops, and skip the auto-hot on launch / foreground. The
+    /// mic indicator is only on during an actual recording.
+    case never = 0
+    /// Keep the engine hot for the whole app lifetime. Backgrounding does
+    /// not tear it down — UIBackgroundModes=audio keeps the session alive
+    /// so the keyboard extension can drive recording without relaunching.
+    case always = -1
 
     var id: Int { rawValue }
 
     /// Seconds to wait before tearing down. Meaningful only for the finite
-    /// cases; callers must branch on `.immediately` / `.never` first.
+    /// cases; callers must branch on `.never` / `.always` first.
     var seconds: TimeInterval { TimeInterval(rawValue) }
 
     var displayName: String {
@@ -33,8 +33,8 @@ enum HotSessionTimeout: Int, CaseIterable, Identifiable {
         case .twentyMinutes: "20 minutes"
         case .thirtyMinutes: "30 minutes"
         case .oneHour:       "1 hour"
-        case .immediately:   "Immediately"
         case .never:         "Never"
+        case .always:        "Always"
         }
     }
 
@@ -50,9 +50,9 @@ enum HotSessionTimeout: Int, CaseIterable, Identifiable {
     static let didChangeNotification = Notification.Name("hotSessionTimeoutDidChange")
 
     static func current() -> HotSessionTimeout {
-        // Distinguish "unset" from "set to 0" (`.immediately`) —
+        // Distinguish "unset" from "set to 0" (`.never`) —
         // `integer(forKey:)` returns 0 for both, which would silently flip
-        // fresh installs into `.immediately`.
+        // fresh installs into `.never` when the user expected the 5-minute default.
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: storageKey) != nil else {
             return .defaultValue

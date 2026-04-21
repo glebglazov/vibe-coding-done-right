@@ -2,7 +2,19 @@ import SwiftUI
 
 @main
 struct VCDRiOSApp: App {
-    @State private var coordinator = RecordingFlowCoordinator()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var coordinator: RecordingFlowCoordinator = {
+        let coordinator = RecordingFlowCoordinator()
+        // Flip to `.recording` before the first frame renders when the app
+        // was cold-launched via the keyboard's record URL. Without this,
+        // `.task` and `.onOpenURL` race on cold launch and the user sees
+        // PREPARING for a beat before the view swaps to LISTENING.
+        if PendingLaunchIntent.recordRequested {
+            coordinator.prepareForDeepLinkRecording()
+            PendingLaunchIntent.recordRequested = false
+        }
+        return coordinator
+    }()
     @AppStorage("appearance") private var appearance: Appearance = .system
     @Environment(\.scenePhase) private var scenePhase
 
@@ -37,22 +49,18 @@ struct VCDRiOSApp: App {
                         // Re-apply idle timer state — iOS can reset it on scene transitions
                         let shouldDisable = coordinator.state == .recording
                         UIApplication.shared.isIdleTimerDisabled = shouldDisable
-                        // Re-hot the mic after a return from background so the
-                        // next recording is instant again. No-op while the
-                        // model init path is still bringing up the session.
+                        // Renew the hot session (no-op if already hot) and
+                        // restart the idle timer so each return to the app
+                        // counts as fresh activity.
                         Task { await coordinator.startHotSessionIfNeeded() }
                     case .background:
-                        // Tear down the hot session and deactivate the audio
-                        // session so other apps can resume playback and the
-                        // mic indicator drops. Skipped during a live recording
-                        // (the background audio entitlement keeps it alive).
-                        // Settings are NOT re-flushed here: doing so previously
-                        // clobbered in-session cycled overrides with the user's
-                        // configured defaults. The session/default split in
-                        // SharedConstants now makes that fix structural.
-                        if !coordinator.isRecording {
-                            coordinator.deactivateAudioSession()
-                        }
+                        // Intentionally NOT tearing down the hot session:
+                        // UIBackgroundModes=audio keeps the engine alive, so
+                        // the keyboard extension can drive recording via the
+                        // Darwin command channel without relaunching the app.
+                        // The idle timer (if finite) still ticks in background
+                        // and eventually tears the session down on its own.
+                        break
                     default:
                         break
                     }
