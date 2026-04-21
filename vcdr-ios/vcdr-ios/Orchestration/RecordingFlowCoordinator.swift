@@ -84,6 +84,13 @@ final class RecordingFlowCoordinator {
     /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
     /// until this task completes and the recognition task begins consuming them.
     private var streamingSetupTask: Task<Void, Error>?
+    /// Fires when the user has been idle for the configured hot-session
+    /// timeout, and tears down the mic engine. Cancelled while recording so
+    /// long recordings never time out, and re-armed after every stop.
+    private var hotSessionIdleTask: Task<Void, Never>?
+    /// Token for the UserDefaults-change observer that restarts the idle
+    /// timer immediately when the user picks a different timeout value.
+    private var timeoutSettingObserverToken: (any NSObjectProtocol)?
     /// Text sent to AI processing — needed for retry
     private var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
@@ -104,11 +111,101 @@ final class RecordingFlowCoordinator {
     private static let maxRetries = 3
 
     var isRecording: Bool { audioRecorder.isRecording }
+    var isHotSessionActive: Bool { audioRecorder.isHot }
     var audioLevels: [Float] { audioRecorder.audioLevels }
 
-    /// Deactivates the audio session when the app goes to background.
+    /// Ends the hot mic session and deactivates the audio session.
+    /// Called when the app goes to background — iOS suspends audio without the
+    /// background audio entitlement, so we clean up explicitly to release the
+    /// mic indicator and let other apps resume.
     func deactivateAudioSession() {
+        hotSessionIdleTask?.cancel()
+        hotSessionIdleTask = nil
+        audioRecorder.endHotSession()
         audioRecorder.deactivateSession()
+    }
+
+    // MARK: - Hot Session Lifecycle
+
+    /// Starts the hot mic session (engine running, tap installed) so the
+    /// next recording begins instantly. Safe to call repeatedly; a no-op
+    /// once hot. Pairs with `rescheduleHotSessionTimeout()` so the session
+    /// ends automatically after the user-configured inactivity window.
+    ///
+    /// Skipped while the model is still initializing or after an init failure
+    /// (recording can't work in those states; lighting the mic indicator
+    /// would confuse users). Also skipped when the user picked `.immediately`
+    /// — that mode means "no warm engine unless actually recording".
+    /// `.recording` / `.transcribing` are no-ops because `isHot` is already
+    /// true from the capture path.
+    func startHotSessionIfNeeded() async {
+        switch state {
+        case .initializing, .error:
+            return
+        default:
+            break
+        }
+        guard HotSessionTimeout.current() != .immediately else { return }
+        _ = await audioRecorder.startHotSession()
+        rescheduleHotSessionTimeout()
+    }
+
+    /// Starts (or restarts) the inactivity timer. Called after every stop,
+    /// on hot-session start, and when the user changes the timeout setting.
+    /// Mid-recording we intentionally leave any existing task cancelled —
+    /// `stopAndTranscribe` reschedules once capture ends.
+    ///
+    /// Behavior per setting:
+    /// - `.immediately`: tear down now if idle (no task scheduled).
+    /// - `.never`: no task scheduled; hot session lives until backgrounding.
+    /// - finite: sleep N seconds, then tear down if still idle.
+    private func rescheduleHotSessionTimeout() {
+        hotSessionIdleTask?.cancel()
+        hotSessionIdleTask = nil
+
+        let timeout = HotSessionTimeout.current()
+
+        switch timeout {
+        case .immediately:
+            if audioRecorder.isHot, !audioRecorder.isRecording {
+                audioRecorder.endHotSession()
+                Logger.app.info("Hot session ended immediately (timeout=\(timeout.displayName))")
+            }
+            return
+        case .never:
+            return
+        default:
+            break
+        }
+
+        guard audioRecorder.isHot, !audioRecorder.isRecording else { return }
+
+        hotSessionIdleTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(timeout.rawValue))
+            guard !Task.isCancelled, let self else { return }
+            guard self.audioRecorder.isHot, !self.audioRecorder.isRecording else { return }
+            // State stays at whatever it was (usually .ready) — the UI shows
+            // "tap to record" and the next tap will re-hot on demand.
+            self.audioRecorder.endHotSession()
+            Logger.app.info("Hot session auto-ended after \(timeout.rawValue)s inactivity")
+        }
+    }
+
+    /// Observes UserDefaults changes so a picker flip in Settings restarts
+    /// the live timer with the new duration instead of waiting for the next
+    /// stop to pick it up.
+    private func installTimeoutSettingObserver() {
+        if timeoutSettingObserverToken != nil { return }
+        timeoutSettingObserverToken = NotificationCenter.default.addObserver(
+            forName: HotSessionTimeout.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                self?.rescheduleHotSessionTimeout()
+            }
+        }
     }
 
     func initializeModel() async {
@@ -155,6 +252,13 @@ final class RecordingFlowCoordinator {
             }
             initProgress = "Ready"
             Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
+
+            // Hot mic on by default, VivaDicta-style: the engine runs while the
+            // app is foreground so the first tap to record has zero audio
+            // startup cost. An inactivity timer (user-configurable in Settings)
+            // tears it down after a quiet period.
+            installTimeoutSettingObserver()
+            await startHotSessionIfNeeded()
         } catch {
             pollTask.cancel()
             if state == .initializing {
@@ -262,11 +366,16 @@ final class RecordingFlowCoordinator {
         }
         Logger.app.info("[RecordTiming] streamingSetupTask created at +\(ContinuousClock.now - recordStart)")
 
-        // Start audio engine — buffers forward to the streaming manager
-        let started = await audioRecorder.startRecording { buffer in
+        // Cancel any pending hot-session teardown — we're about to record.
+        hotSessionIdleTask?.cancel()
+        hotSessionIdleTask = nil
+
+        // Start audio capture — engine was kept hot between recordings so the
+        // start cost here is ~0 when the session was already warm.
+        let started = await audioRecorder.startCapture { buffer in
             Task { await streaming.streamAudio(buffer) }
         }
-        Logger.app.info("[RecordTiming] audioRecorder.startRecording returned at +\(ContinuousClock.now - recordStart)")
+        Logger.app.info("[RecordTiming] audioRecorder.startCapture returned at +\(ContinuousClock.now - recordStart)")
 
         guard started else {
             self.streamingManager = nil
@@ -286,7 +395,11 @@ final class RecordingFlowCoordinator {
         // to a system daemon) doesn't block recording start. Under heavy CoreML
         // compilation load the daemon can take seconds to respond.
         Task { @MainActor in UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
-        audioRecorder.stopRecording()
+        // Stop consuming buffers but keep the engine running so the next
+        // recording is instant. The inactivity timer (rescheduled below)
+        // tears it down if the user doesn't come back within the window.
+        audioRecorder.stopCapture()
+        rescheduleHotSessionTimeout()
         setIdleTimerDisabled(false)
         updateTask?.cancel()
 
@@ -506,6 +619,9 @@ final class RecordingFlowCoordinator {
         streamingManager = nil
         aiRetryTask?.cancel()
         aiRetryTask = nil
+        // Re-arm the inactivity timer so a reset counts as fresh activity
+        // rather than leaving a stale teardown scheduled from the prior flow.
+        rescheduleHotSessionTimeout()
     }
 
     // MARK: - AI Processing

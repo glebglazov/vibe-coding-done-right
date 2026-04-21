@@ -21,6 +21,8 @@ struct SettingsView: View {
         HistoryStoreFactory.syncEnabledDefaultsKey,
         store: SharedConstants.sharedDefaults
     ) private var syncHistoryViaICloud: Bool = true
+    @AppStorage(HotSessionTimeout.storageKey)
+    private var hotSessionTimeoutSeconds: Int = HotSessionTimeout.defaultValue.rawValue
     @State private var availableInputs: [AVAudioSessionPortDescription] = []
 
     var body: some View {
@@ -30,6 +32,7 @@ struct SettingsView: View {
                 aiProcessingSection
                 syncSection
                 microphoneSection
+                hotSessionSection
                 appearanceSection
             }
             .onAppear { refreshAvailableInputs() }
@@ -55,6 +58,12 @@ struct SettingsView: View {
                 if let style = TextStyle(rawValue: val) {
                     DefaultSettings.setTextStyle(style)
                 }
+            }
+            .onChange(of: hotSessionTimeoutSeconds) { _, _ in
+                NotificationCenter.default.post(
+                    name: HotSessionTimeout.didChangeNotification,
+                    object: nil
+                )
             }
         }
     }
@@ -166,6 +175,22 @@ struct SettingsView: View {
             try session.setActive(false, options: .notifyOthersOnDeactivation)
         } catch {
             availableInputs = session.availableInputs ?? []
+        }
+    }
+
+    // MARK: - Mic Session
+
+    private var hotSessionSection: some View {
+        Section {
+            Picker("Keep Mic Hot For", selection: $hotSessionTimeoutSeconds) {
+                ForEach(HotSessionTimeout.allCases) { option in
+                    Text(option.displayName).tag(option.rawValue)
+                }
+            }
+        } header: {
+            Text("Mic Session")
+        } footer: {
+            Text("Keeps the microphone engine warm so the next recording starts instantly. The mic indicator stays on until this much time passes without activity, then the session ends. Choose \"Immediately\" to keep the indicator off between recordings, or \"Never\" to leave it on as long as the app is open.")
         }
     }
 
