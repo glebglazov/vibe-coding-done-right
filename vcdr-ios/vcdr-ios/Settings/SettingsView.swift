@@ -190,7 +190,7 @@ struct SettingsView: View {
         } header: {
             Text("Mic Session")
         } footer: {
-            Text("Keeps the microphone engine warm so the next recording starts instantly. The mic indicator stays on until this much time passes without activity, then the session ends. Choose \"Immediately\" to keep the indicator off between recordings, or \"Never\" to leave it on as long as the app is open.")
+            Text("Keeps the microphone engine warm so the next recording starts instantly. The mic indicator stays on until this much time passes without activity, then the session ends. Choose \"Never\" to release the mic as soon as each recording stops (the indicator stays off between recordings), or \"Always\" to keep it on for the whole app lifetime.")
         }
     }
 

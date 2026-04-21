@@ -58,7 +58,7 @@ struct VCDRKeyboardView: View {
                         dictationState: controller.dictationState,
                         showCapture: controller.aiActive && controller.aiMode == .assistant,
                         captureCount: controller.captureCount,
-                        onStart: { controller.captureSelectedTextAndOpenRecord() },
+                        onStart: { controller.startRecordingFromKeyboard() },
                         onStop: { controller.stopAndWaitForResult() },
                         onInsert: { controller.insertPendingText() },
                         onCapture: { controller.captureSelectedText() }

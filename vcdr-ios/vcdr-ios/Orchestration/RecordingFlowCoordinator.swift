@@ -110,6 +110,11 @@ final class RecordingFlowCoordinator {
     /// remove it before re-registering to prevent observer accumulation on scene re-entry.
     private var commandObserverToken: (any NSObjectProtocol)?
     private var settingsObserverToken: (any NSObjectProtocol)?
+    /// Periodic heartbeat written to shared defaults so the keyboard extension
+    /// can tell whether the app is reachable for Darwin commands. Runs only
+    /// while the hot session is alive — if the app suspends, the task pauses
+    /// and the last-written timestamp ages out, signalling "dead" to the keyboard.
+    private var heartbeatTask: Task<Void, Never>?
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
@@ -117,21 +122,14 @@ final class RecordingFlowCoordinator {
     private static let aiProcessingTimeout: Duration = .seconds(5)
     /// Maximum retry attempts for cloud providers within the timeout budget
     private static let maxRetries = 3
+    /// Cadence for the app-alive heartbeat. Small enough that the keyboard's
+    /// freshness threshold can be ~3x this without false negatives, large
+    /// enough to keep write overhead negligible.
+    private static let heartbeatInterval: Duration = .seconds(5)
 
     var isRecording: Bool { audioRecorder.isRecording }
     var isHotSessionActive: Bool { audioRecorder.isHot }
     var audioLevels: [Float] { audioRecorder.audioLevels }
-
-    /// Ends the hot mic session and deactivates the audio session.
-    /// Called when the app goes to background — iOS suspends audio without the
-    /// background audio entitlement, so we clean up explicitly to release the
-    /// mic indicator and let other apps resume.
-    func deactivateAudioSession() {
-        hotSessionIdleTask?.cancel()
-        hotSessionIdleTask = nil
-        audioRecorder.endHotSession()
-        audioRecorder.deactivateSession()
-    }
 
     // MARK: - Hot Session Lifecycle
 
@@ -142,7 +140,7 @@ final class RecordingFlowCoordinator {
     ///
     /// Skipped while the model is still initializing or after an init failure
     /// (recording can't work in those states; lighting the mic indicator
-    /// would confuse users). Also skipped when the user picked `.immediately`
+    /// would confuse users). Also skipped when the user picked `.never`
     /// — that mode means "no warm engine unless actually recording".
     /// `.recording` / `.transcribing` are no-ops because `isHot` is already
     /// true from the capture path.
@@ -153,9 +151,39 @@ final class RecordingFlowCoordinator {
         default:
             break
         }
-        guard HotSessionTimeout.current() != .immediately else { return }
+        guard HotSessionTimeout.current() != .never else { return }
         _ = await audioRecorder.startHotSession()
+        startHeartbeat()
         rescheduleHotSessionTimeout()
+    }
+
+    /// Writes the current timestamp to the shared heartbeat key and starts a
+    /// background loop refreshing it every `heartbeatInterval`. Safe to call
+    /// repeatedly — only one loop runs at a time.
+    private func startHeartbeat() {
+        writeHeartbeat(alive: true)
+        guard heartbeatTask == nil else { return }
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.heartbeatInterval)
+                guard !Task.isCancelled, let self else { return }
+                self.writeHeartbeat(alive: true)
+            }
+        }
+    }
+
+    /// Cancels the periodic heartbeat and clears the shared timestamp so the
+    /// keyboard falls back to the URL-launch path on its next Start tap.
+    private func stopHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+        writeHeartbeat(alive: false)
+    }
+
+    private nonisolated func writeHeartbeat(alive: Bool) {
+        let value = alive ? Date().timeIntervalSince1970 : 0
+        let sd = SharedConstants.sharedDefaults
+        sd.set(value, forKey: SharedConstants.appHeartbeatKey)
     }
 
     /// Starts (or restarts) the inactivity timer. Called after every stop,
@@ -164,9 +192,11 @@ final class RecordingFlowCoordinator {
     /// `stopAndTranscribe` reschedules once capture ends.
     ///
     /// Behavior per setting:
-    /// - `.immediately`: tear down now if idle (no task scheduled).
-    /// - `.never`: no task scheduled; hot session lives until backgrounding.
-    /// - finite: sleep N seconds, then tear down if still idle.
+    /// - `.never`: tear down now if idle (no task scheduled).
+    /// - `.always`: no task scheduled; hot session lives for the full app lifetime
+    ///   (including background — the audio entitlement keeps it alive).
+    /// - finite: sleep N seconds, then tear down if still idle. The timer keeps
+    ///   ticking in background, so a long-backgrounded app still cleans up.
     private func rescheduleHotSessionTimeout() {
         hotSessionIdleTask?.cancel()
         hotSessionIdleTask = nil
@@ -174,13 +204,14 @@ final class RecordingFlowCoordinator {
         let timeout = HotSessionTimeout.current()
 
         switch timeout {
-        case .immediately:
+        case .never:
             if audioRecorder.isHot, !audioRecorder.isRecording {
                 audioRecorder.endHotSession()
+                stopHeartbeat()
                 Logger.app.info("Hot session ended immediately (timeout=\(timeout.displayName))")
             }
             return
-        case .never:
+        case .always:
             return
         default:
             break
@@ -195,6 +226,7 @@ final class RecordingFlowCoordinator {
             // State stays at whatever it was (usually .ready) — the UI shows
             // "tap to record" and the next tap will re-hot on demand.
             self.audioRecorder.endHotSession()
+            self.stopHeartbeat()
             Logger.app.info("Hot session auto-ended after \(timeout.rawValue)s inactivity")
         }
     }
@@ -261,10 +293,12 @@ final class RecordingFlowCoordinator {
             initProgress = "Ready"
             Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
 
-            // Hot mic on by default, VivaDicta-style: the engine runs while the
-            // app is foreground so the first tap to record has zero audio
-            // startup cost. An inactivity timer (user-configurable in Settings)
-            // tears it down after a quiet period.
+            // Hot mic on by default, VivaDicta-style: the engine stays running
+            // (foreground and background, under UIBackgroundModes=audio) so
+            // every tap to record — including taps from the keyboard extension,
+            // which reach the app via Darwin commands — has zero audio startup
+            // cost. An inactivity timer (user-configurable in Settings) tears
+            // it down after a quiet period.
             installTimeoutSettingObserver()
             await startHotSessionIfNeeded()
         } catch {
@@ -393,6 +427,10 @@ final class RecordingFlowCoordinator {
             state = .error("Failed to start recording — check microphone permission")
             return
         }
+
+        // Ensure the heartbeat runs — startCapture may have lit the engine on
+        // demand (cold path) without going through `startHotSessionIfNeeded`.
+        startHeartbeat()
     }
 
     /// Stops recording and shows the result immediately from the live transcript.
