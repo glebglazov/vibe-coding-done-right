@@ -378,7 +378,9 @@ struct RecordingView: View {
             if coordinator.aiActiveThisSession {
                 sessionInfoPill(coordinator.selectedPromptMode.displayName.uppercased())
             }
-            if coordinator.selectedPromptMode.appliesStyles {
+            // Mirrors the recording-time style pill visibility: verbatim always
+            // styles, dictation styles, assistant does not.
+            if !coordinator.aiActiveThisSession || coordinator.selectedPromptMode.appliesStyles {
                 sessionInfoPill(coordinator.currentTextStyle.displayName.uppercased())
             }
         }

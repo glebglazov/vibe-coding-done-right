@@ -44,6 +44,14 @@ final class RecordingFlowCoordinator {
     /// Per-session text style — initialized from the current effective setting.
     var currentTextStyle: TextStyle = SessionSettings.effectiveTextStyle()
 
+    /// Whether the static style rules (capitalization, punctuation) should be
+    /// applied to this session's output. Verbatim (no AI) always styles — the
+    /// pill is always visible, so the setting must take effect. Assistant
+    /// output is the only case we leave untouched.
+    private var shouldApplyStaticStyles: Bool {
+        !aiActiveThisSession || selectedPromptMode.appliesStyles
+    }
+
     // MARK: - In-Session Settings (written to session_* storage)
 
     /// Cycles the AI state through Verbatim → Dictation → Assistant → Verbatim.
@@ -345,9 +353,12 @@ final class RecordingFlowCoordinator {
         // renders the new view tree with stale values from the recording phase.
         liveTranscript = ""
 
-        // Show local result immediately unless AI processing will replace it
+        // Show local result immediately unless AI processing will replace it.
+        // Verbatim (no AI) still gets the static style transform — the pill
+        // the user toggled during recording has to affect the output.
         if !useAI && !cleanedLive.isEmpty {
-            state = .complete(TextPostProcessor.applyTerminator(to: cleanedLive))
+            let styledLive = StyleTransformer.transform(cleanedLive, using: currentTextStyle.style.staticRules)
+            state = .complete(TextPostProcessor.applyTerminator(to: styledLive, style: currentTextStyle.style))
         } else {
             transcribingMessage = useAI ? "Enhancing with AI..." : ""
             state = .transcribing
@@ -392,12 +403,14 @@ final class RecordingFlowCoordinator {
             
             // Stage 3: Apply style transformation (capitalization, punctuation)
             // Stage 4: Apply terminator (spacing)
-            // Skip style transformations for modes that don't apply styles (e.g., assistant)
+            // Skip style transformations only for AI assistant output — its phrasing
+            // is intentional and shouldn't be restyled. Verbatim and dictation both
+            // produce user-voiced text that benefits from the static style rules.
             // Re-sync before styling — user may have flipped mode/style during
             // the AI processing window.
             resyncSettingsFromSharedDefaults()
             let resultText: String
-            if selectedPromptMode.appliesStyles {
+            if shouldApplyStaticStyles {
                 let styledText = StyleTransformer.transform(processedText, using: currentTextStyle.style.staticRules)
                 resultText = TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style)
             } else {
@@ -655,8 +668,10 @@ final class RecordingFlowCoordinator {
             guard !Task.isCancelled else { return }
             // Pick up any style/mode change the user made during the retry.
             resyncSettingsFromSharedDefaults()
-            // Re-apply style transformation and terminator on retry (only for modes that apply styles)
-            if selectedPromptMode.appliesStyles {
+            // Re-apply style transformation and terminator on retry. Assistant
+            // output is excluded; everything else (including verbatim if the
+            // user flipped AI off mid-retry) gets the static style rules.
+            if shouldApplyStaticStyles {
                 let styledText = StyleTransformer.transform(aiResult, using: currentTextStyle.style.staticRules)
                 state = .complete(TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style))
             } else {
