@@ -5,38 +5,62 @@ import SwiftUI
 struct HotMicLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: HotMicActivityAttributes.self) { _ in
-            HStack {
-                Image("LiveActivityIcon")
-                    .resizable()
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
+            HStack(spacing: 12) {
+                iconBadge(size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("VCDR")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text("Ready to record")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                }
                 Spacer()
             }
             .padding()
+            .activityBackgroundTint(Color.black.opacity(0.6))
+            .activitySystemActionForegroundColor(Color.white)
         } dynamicIsland: { _ in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Image("LiveActivityIcon")
-                        .resizable()
-                        .frame(width: 32, height: 32)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                    iconBadge(size: 32)
                 }
                 DynamicIslandExpandedRegion(.trailing) { EmptyView() }
-                DynamicIslandExpandedRegion(.center) { EmptyView() }
+                DynamicIslandExpandedRegion(.center) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("VCDR")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text("Ready to record")
+                            .font(.callout.weight(.medium))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 DynamicIslandExpandedRegion(.bottom) { EmptyView() }
             } compactLeading: {
-                Image("LiveActivityIcon")
-                    .resizable()
-                    .frame(width: 20, height: 20)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                iconBadge(size: 20)
             } compactTrailing: {
-                EmptyView()
+                Text("Ready")
+                    .font(.caption2.weight(.semibold))
             } minimal: {
-                Image("LiveActivityIcon")
-                    .resizable()
-                    .frame(width: 20, height: 20)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                iconBadge(size: 20)
             }
         }
+    }
+
+    @ViewBuilder
+    private func iconBadge(size: CGFloat) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.32, green: 0.68, blue: 0.70),
+                         Color(red: 0.82, green: 0.42, blue: 0.52)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            Image(systemName: "waveform")
+                .font(.system(size: size * 0.55, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
     }
 }
