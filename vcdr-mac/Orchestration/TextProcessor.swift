@@ -293,11 +293,14 @@ final class TextProcessor {
         hadExternalProcessing: Bool
     ) {
         let output = hadExternalProcessing ? processedText : nil
+        let label = input.mode.appliesStyles
+            ? "\(input.mode.name) · \(input.style.name)"
+            : input.mode.name
         history.record(
             conversationID: input.conversationID,
             inputSegments: input.inputSegments,
             output: output,
-            label: input.mode.name
+            label: label
         )
     }
 }
