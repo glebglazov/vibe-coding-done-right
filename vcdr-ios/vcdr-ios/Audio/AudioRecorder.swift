@@ -6,6 +6,11 @@ import OSLog
 @Observable
 final class AudioRecorder {
     private(set) var isRecording = false
+    /// True while the engine is running and the tap is installed — ready to
+    /// accept a `bufferHandler` and flip `isRecording` without another
+    /// `engine.start()` round-trip. Stays true between recordings inside a
+    /// hot session and is torn down by `endHotSession()` on inactivity.
+    private(set) var isHot = false
     /// Rolling buffer of recent audio level samples (0.0–1.0), one per meter tick.
     private(set) var audioLevels: [Float] = Array(repeating: 0, count: levelSampleCount)
 
@@ -143,36 +148,46 @@ final class AudioRecorder {
         Logger.recording.info("Audio engine prepared (format: \(format))")
     }
 
-    /// Starts recording via AVAudioEngine. Buffers are forwarded to `onBuffer` on the audio thread.
-    /// - Parameter onBuffer: Called on the audio render thread with each captured buffer.
-    ///   Must be lightweight — enqueue for processing elsewhere.
-    /// - Returns: true if recording started successfully.
-    func startRecording(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
+    /// Brings the audio engine online and keeps it running with the tap
+    /// installed so the very next `startCapture` is instantaneous.
+    /// `bufferHandler` remains nil — buffers are discarded until capture begins,
+    /// so no audio is written anywhere, but the system mic indicator is visible.
+    /// Safe to call repeatedly; no-op when already hot.
+    /// - Returns: true if the engine is running after the call.
+    func startHotSession() async -> Bool {
+        if isHot { return true }
+
         guard await requestMicrophonePermission() else {
             Logger.recording.warning("Microphone permission denied")
             return false
         }
 
-        // Deep-link cold starts can reach here without prepareAudioSession
-        // having run yet. Go through the same off-main path to avoid a
-        // 50-200ms MainActor stall from setCategory/setActive.
         if !audioSessionConfigured {
             await prepareAudioSession()
             guard audioSessionConfigured else {
-                Logger.recording.error("Failed to configure audio session on demand")
+                Logger.recording.error("Failed to configure audio session for hot session")
                 return false
             }
         }
 
-        bufferHandler = onBuffer
+        guard await startEngine() else { return false }
+        isHot = true
+        Logger.recording.info("Hot audio session started")
+        return true
+    }
 
-        guard await startEngine() else {
-            // Engine failed to start — deactivate the session we just activated
-            // so it doesn't interfere with other apps' audio.
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            audioSessionConfigured = false
-            return false
+    /// Begins forwarding captured audio buffers to `onBuffer`.
+    /// Starts a hot session on demand if one isn't already running, so deep
+    /// links and other cold-start paths still work without a separate call.
+    /// - Parameter onBuffer: Called on the audio render thread with each
+    ///   captured buffer. Must be lightweight — enqueue for processing elsewhere.
+    /// - Returns: true if capture started successfully.
+    func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
+        if !isHot {
+            guard await startHotSession() else { return false }
         }
+        bufferHandler = onBuffer
+        isRecording = true
         return true
     }
 
@@ -182,12 +197,12 @@ final class AudioRecorder {
     /// otherwise creates one from scratch. The blocking `engine.start()` call
     /// runs on a background QoS queue so it does not stall MainActor —
     /// `engine.start()` can take 100-500ms, or several seconds under CoreML load.
-    /// Returns true on success. Assumes `bufferHandler` is already set.
+    /// Returns true on success. Does NOT flip `isRecording` — that's the
+    /// caller's decision, since hot-session startup runs with no buffer handler.
     private func startEngine() async -> Bool {
         // Reuse pre-prepared engine — tap is already installed, resources allocated.
         if let engine = audioEngine, !engine.isRunning {
             if await Self.startEngineOffMain(engine) {
-                isRecording = true
                 let format = engine.inputNode.outputFormat(forBus: 0)
                 Logger.recording.info("Audio engine started (pre-prepared, format: \(format))")
                 return true
@@ -216,7 +231,6 @@ final class AudioRecorder {
 
         if await Self.startEngineOffMain(engine) {
             audioEngine = engine
-            isRecording = true
             Logger.recording.info("Audio engine started (format: \(format))")
             return true
         }
@@ -239,7 +253,8 @@ final class AudioRecorder {
     }
 
     /// Tears down the current engine and starts a fresh one on the new audio route.
-    /// Called when the audio route changes mid-recording (e.g. AirPods connect/disconnect).
+    /// Called when the audio route changes while the hot session is up (which
+    /// includes any active recording).
     private func restartEngine() async {
         guard let oldEngine = audioEngine else { return }
 
@@ -253,25 +268,40 @@ final class AudioRecorder {
             Logger.recording.info("Audio engine restarted after route change")
         } else {
             isRecording = false
+            isHot = false
             deactivateSession()
             Logger.recording.error("Failed to restart audio engine after route change")
         }
     }
 
-    /// Stops recording and cleans up the audio engine.
-    /// The audio session stays active so subsequent recordings start faster.
-    /// Call `deactivateSession()` when the app goes to background.
-    func stopRecording() {
-        guard let engine = audioEngine else { return }
+    /// Stops consuming audio buffers but leaves the engine running so the
+    /// next capture starts immediately. Use `endHotSession()` to fully
+    /// release the microphone.
+    func stopCapture() {
+        bufferHandler = nil
+        isRecording = false
+        audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
+        Logger.recording.info("Capture stopped (hot session alive)")
+    }
+
+    /// Fully ends the hot session: removes the tap, stops the engine, drops
+    /// the mic indicator. The audio session itself stays active so the next
+    /// cold start only pays engine startup, not session activation.
+    func endHotSession() {
+        guard let engine = audioEngine else {
+            isHot = false
+            return
+        }
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         audioEngine = nil
         bufferHandler = nil
         isRecording = false
+        isHot = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
 
-        Logger.recording.info("Recording stopped (session stays active)")
+        Logger.recording.info("Hot audio session ended")
     }
 
     /// Deactivates the audio session and cleans up observers.
@@ -393,7 +423,9 @@ final class AudioRecorder {
 
         Logger.recording.info("Audio route changed — reason: \(reasonValue)")
 
-        guard isRecording else { return }
+        // Restart on any active engine (hot-but-not-recording or recording),
+        // so the next capture doesn't start on a stale device/format.
+        guard isHot else { return }
 
         switch reason {
         case .newDeviceAvailable, .oldDeviceUnavailable, .override, .routeConfigurationChange:
