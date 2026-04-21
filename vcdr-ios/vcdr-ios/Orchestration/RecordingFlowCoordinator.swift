@@ -115,6 +115,9 @@ final class RecordingFlowCoordinator {
     /// while the hot session is alive — if the app suspends, the task pauses
     /// and the last-written timestamp ages out, signalling "dead" to the keyboard.
     private var heartbeatTask: Task<Void, Never>?
+    /// Surfaces a Live Activity whenever the mic engine is running, so the
+    /// system orange mic indicator has visible app identity next to it.
+    private let liveActivity = HotMicActivityController()
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
@@ -154,6 +157,7 @@ final class RecordingFlowCoordinator {
         guard HotSessionTimeout.current() != .never else { return }
         _ = await audioRecorder.startHotSession()
         startHeartbeat()
+        await liveActivity.start()
         rescheduleHotSessionTimeout()
     }
 
@@ -208,6 +212,7 @@ final class RecordingFlowCoordinator {
             if audioRecorder.isHot, !audioRecorder.isRecording {
                 audioRecorder.endHotSession()
                 stopHeartbeat()
+                Task { [liveActivity] in await liveActivity.stop() }
                 Logger.app.info("Hot session ended immediately (timeout=\(timeout.displayName))")
             }
             return
@@ -227,6 +232,7 @@ final class RecordingFlowCoordinator {
             // "tap to record" and the next tap will re-hot on demand.
             self.audioRecorder.endHotSession()
             self.stopHeartbeat()
+            await self.liveActivity.stop()
             Logger.app.info("Hot session auto-ended after \(timeout.rawValue)s inactivity")
         }
     }
@@ -431,6 +437,7 @@ final class RecordingFlowCoordinator {
         // Ensure the heartbeat runs — startCapture may have lit the engine on
         // demand (cold path) without going through `startHotSessionIfNeeded`.
         startHeartbeat()
+        await liveActivity.start()
     }
 
     /// Stops recording and shows the result immediately from the live transcript.

@@ -8,6 +8,8 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>VCDR needs microphone access to record your voice for transcription.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>mobilenotes</string>
@@ -40,6 +42,8 @@
 		<string>linear</string>
 		<string>googletranslate</string>
 	</array>
+	<key>CFBundleIdentifier</key>
+	<string></string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
