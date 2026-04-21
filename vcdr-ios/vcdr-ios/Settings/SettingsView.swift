@@ -1,10 +1,9 @@
 import SwiftUI
-import AVFoundation
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance: Appearance = .system
-    @AppStorage(AudioRecorder.preferredInputUIDKey) private var preferredInputUID = ""
+    @AppStorage(AudioRecorder.useBuiltInMicOnlyKey) private var useBuiltInMicOnly = true
     @AppStorage(
         SharedConstants.defaultAIModeKey,
         store: SharedConstants.sharedDefaults
@@ -23,7 +22,6 @@ struct SettingsView: View {
     ) private var syncHistoryViaICloud: Bool = true
     @AppStorage(HotSessionTimeout.storageKey)
     private var hotSessionTimeoutSeconds: Int = HotSessionTimeout.defaultValue.rawValue
-    @State private var availableInputs: [AVAudioSessionPortDescription] = []
 
     var body: some View {
         NavigationStack {
@@ -35,7 +33,6 @@ struct SettingsView: View {
                 hotSessionSection
                 appearanceSection
             }
-            .onAppear { refreshAvailableInputs() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -128,53 +125,11 @@ struct SettingsView: View {
 
     private var microphoneSection: some View {
         Section {
-            if availableInputs.isEmpty {
-                Text("No audio inputs available")
-                    .foregroundStyle(.secondary)
-            } else {
-                Picker("Microphone", selection: $preferredInputUID) {
-                    Text("Automatic").tag("")
-                    ForEach(availableInputs, id: \.uid) { input in
-                        Text(input.portName).tag(input.uid)
-                    }
-                }
-            }
-            Label {
-                Text("Bluetooth mics (AirPods, etc.) aren't supported — their narrowband audio hurts transcription accuracy. Even when AirPods are connected, recording uses the built-in mic.")
-            } icon: {
-                Image(systemName: "info.circle")
-                    .foregroundStyle(.secondary)
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            Toggle("Use built-in microphone", isOn: $useBuiltInMicOnly)
         } header: {
             Text("Microphone")
         } footer: {
-            Text("Choose which microphone to use for recording.")
-        }
-    }
-
-    private func refreshAvailableInputs() {
-        let session = AVAudioSession.sharedInstance()
-
-        // If the session is already active (recording in progress), just read inputs
-        // without reconfiguring — changing the category mid-recording would disrupt audio.
-        if session.isOtherAudioPlaying || session.category == .playAndRecord {
-            availableInputs = session.availableInputs ?? []
-            return
-        }
-
-        // Temporarily activate the session to query available inputs, then deactivate
-        // so it doesn't interfere with other audio. Match the recorder's category
-        // options so the list reflects what recording will actually see — notably,
-        // no `.allowBluetoothHFP`, which would otherwise show BT devices we don't use.
-        do {
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
-            try session.setActive(true)
-            availableInputs = session.availableInputs ?? []
-            try session.setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            availableInputs = session.availableInputs ?? []
+            Text("Always records from the built-in mic. AirPods and other Bluetooth headsets use narrowband audio that hurts transcription accuracy, so forcing the built-in mic keeps results consistent. Turn this off to record from whatever input iOS picks — AirPods, wired headsets, USB mics — and transcription quality may vary a lot depending on the device connected.")
         }
     }
 

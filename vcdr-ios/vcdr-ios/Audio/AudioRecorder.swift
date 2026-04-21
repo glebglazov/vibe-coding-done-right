@@ -26,35 +26,33 @@ final class AudioRecorder {
 
     // MARK: - Audio Input
 
-    /// UserDefaults key for the preferred audio input port UID
-    static let preferredInputUIDKey = "preferredAudioInputUID"
+    /// UserDefaults key for the "Use built-in microphone" toggle. Defaults to
+    /// true when absent — the safe choice, since transcription accuracy drops
+    /// sharply on Bluetooth HFP audio (16 kHz narrowband) and varies a lot
+    /// across wired / USB accessories.
+    static let useBuiltInMicOnlyKey = "useBuiltInMicOnly"
 
-    /// Returns the list of available audio input ports on the current device.
-    /// Requires an active audio session — returns an empty array if unavailable.
-    var availableInputs: [AVAudioSessionPortDescription] {
-        AVAudioSession.sharedInstance().availableInputs ?? []
+    private nonisolated static var useBuiltInMicOnly: Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: useBuiltInMicOnlyKey) != nil else { return true }
+        return defaults.bool(forKey: useBuiltInMicOnlyKey)
     }
 
-    /// Returns the user's saved preferred input port if it's currently available,
-    /// or nil to mean "let iOS pick the default" (which is the built-in mic now
-    /// that the session category no longer permits Bluetooth HFP).
-    private nonisolated static func preferredInputPort(session: AVAudioSession) -> AVAudioSessionPortDescription? {
-        let savedUID = UserDefaults.standard.string(forKey: preferredInputUIDKey) ?? ""
-        guard !savedUID.isEmpty else { return nil }
-        return session.availableInputs?.first(where: { $0.uid == savedUID })
+    private nonisolated static func builtInInputPort(session: AVAudioSession) -> AVAudioSessionPortDescription? {
+        session.availableInputs?.first(where: { $0.portType == .builtInMic })
     }
 
-    /// Applies the user's preferred audio input to an already-active session.
-    /// Used after route changes (e.g. a wired headset is plugged in mid-recording).
-    /// For the initial session setup the preferred input is set before `setActive`
-    /// inside ``prepareAudioSession`` — iOS treats post-activation calls as a
-    /// hint it may ignore.
+    /// Pins the built-in mic on an already-active session when the user has
+    /// opted to force it. Called after route changes (e.g. a wired headset is
+    /// plugged in mid-recording) so iOS doesn't silently swap inputs. When the
+    /// user has turned the toggle off, we let iOS keep whatever input it picked.
     private func applyPreferredInput() {
+        guard Self.useBuiltInMicOnly else { return }
         let session = AVAudioSession.sharedInstance()
-        guard let match = Self.preferredInputPort(session: session) else { return }
+        guard let builtIn = Self.builtInInputPort(session: session) else { return }
         do {
-            try session.setPreferredInput(match)
-            Logger.recording.info("Set preferred input to \(match.portName)")
+            try session.setPreferredInput(builtIn)
+            Logger.recording.info("Set preferred input to built-in mic")
         } catch {
             Logger.recording.warning("Failed to set preferred input: \(error)")
         }
@@ -86,25 +84,34 @@ final class AudioRecorder {
     /// Safe to call multiple times — skipped if already configured.
     /// Blocking AVAudioSession calls run off the main thread to avoid stalling the UI.
     ///
-    /// We deliberately do NOT pass `.allowBluetoothHFP`: HFP audio is 16 kHz
-    /// narrowband, which tanks Parakeet's accuracy. Without the option AirPods
-    /// simply don't appear as an input route, so iOS can't silently override
-    /// our preferred input to them in `.playAndRecord` mode — which it does
-    /// even when `setPreferredInput` points at the built-in mic, because the
-    /// HFP link is bidirectional and iOS routes input along with output.
+    /// Honours the "Use built-in microphone" toggle. When ON (the default) we
+    /// deliberately omit `.allowBluetoothHFP`: HFP audio is 16 kHz narrowband,
+    /// which tanks Parakeet's accuracy. Without the option AirPods simply
+    /// don't appear as an input route, so iOS can't silently override our
+    /// preferred input to them in `.playAndRecord` mode — which it does even
+    /// when `setPreferredInput` points at the built-in mic, because the HFP
+    /// link is bidirectional and iOS routes input along with output. When the
+    /// toggle is OFF we include `.allowBluetoothHFP` so AirPods / BT headsets
+    /// can be picked up, and we skip pinning the built-in mic so iOS is free
+    /// to route to whatever accessory the user has connected.
     func prepareAudioSession() async {
         guard !audioSessionConfigured else { return }
         // AVAudioSession configuration is thread-safe — run off main thread
         // to avoid blocking UI during setCategory/setActive (~50-200ms).
         let success = await Task.detached {
             let session = AVAudioSession.sharedInstance()
+            let forceBuiltIn = Self.useBuiltInMicOnly
             do {
-                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+                var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
+                if !forceBuiltIn {
+                    options.insert(.allowBluetoothHFP)
+                }
+                try session.setCategory(.playAndRecord, mode: .default, options: options)
                 // Set the preferred input BEFORE setActive so iOS honours it
                 // while picking the initial route. A post-activation call is
                 // just a hint iOS may ignore.
-                if let preferred = Self.preferredInputPort(session: session) {
-                    try? session.setPreferredInput(preferred)
+                if forceBuiltIn, let builtIn = Self.builtInInputPort(session: session) {
+                    try? session.setPreferredInput(builtIn)
                 }
                 try session.setActive(true)
                 return true
