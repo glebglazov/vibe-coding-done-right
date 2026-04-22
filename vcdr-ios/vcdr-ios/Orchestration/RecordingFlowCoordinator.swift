@@ -148,14 +148,24 @@ final class RecordingFlowCoordinator {
     /// `.recording` / `.transcribing` are no-ops because `isHot` is already
     /// true from the capture path.
     func startHotSessionIfNeeded() async {
+        let timeout = HotSessionTimeout.current()
+        Logger.app.info("startHotSessionIfNeeded: state=\(String(describing: self.state)), timeout=\(timeout.displayName), wasHot=\(self.audioRecorder.isHot)")
         switch state {
         case .initializing, .error:
+            Logger.app.info("startHotSessionIfNeeded: skipping — state is \(String(describing: self.state))")
             return
         default:
             break
         }
-        guard HotSessionTimeout.current() != .never else { return }
-        _ = await audioRecorder.startHotSession()
+        guard timeout != .never else {
+            Logger.app.info("startHotSessionIfNeeded: skipping — timeout is .never")
+            return
+        }
+        let started = await audioRecorder.startHotSession()
+        if !started {
+            Logger.app.error("startHotSessionIfNeeded: audioRecorder.startHotSession() returned false — not lighting heartbeat/LiveActivity")
+            return
+        }
         startHeartbeat()
         await liveActivity.start()
         rescheduleHotSessionTimeout()
