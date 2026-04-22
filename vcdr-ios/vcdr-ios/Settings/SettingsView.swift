@@ -137,7 +137,7 @@ struct SettingsView: View {
 
     private var hotSessionSection: some View {
         Section {
-            Picker("Keep Mic Hot For", selection: $hotSessionTimeoutSeconds) {
+            Picker("Keep Mic Warm For", selection: $hotSessionTimeoutSeconds) {
                 ForEach(HotSessionTimeout.allCases) { option in
                     Text(option.displayName).tag(option.rawValue)
                 }
