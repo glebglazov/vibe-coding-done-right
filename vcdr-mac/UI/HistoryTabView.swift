@@ -3,6 +3,7 @@ import SwiftUI
 struct HistoryTabView: View {
     let history: any HistoryStore
     let settings: AppSettings
+    @State private var showClearAllConfirmation = false
 
     var body: some View {
         Group {
@@ -38,11 +39,25 @@ struct HistoryTabView: View {
         .toolbar {
             if !history.conversations.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Clear All") {
-                        history.clearAll()
+                    Menu {
+                        Button("Clear All", role: .destructive) {
+                            showClearAllConfirmation = true
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }
+        }
+        .confirmationDialog(
+            "Clear all history?",
+            isPresented: $showClearAllConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear All", role: .destructive) { history.clearAll() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes all transcriptions. This cannot be undone.")
         }
     }
 }

@@ -6,6 +6,7 @@ struct HistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var copiedConversationID: UUID?
     @State private var copyConfirmationTask: Task<Void, Never>?
+    @State private var showClearAllConfirmation = false
 
     private var theme: Theme { Theme.current(for: colorScheme) }
     private static let copyConfirmationDuration: Duration = .seconds(1.5)
@@ -32,10 +33,26 @@ struct HistoryView: View {
                 }
                 if !history.conversations.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Clear") { history.clearAll() }
-                            .foregroundStyle(theme.onSurface)
+                        Menu {
+                            Button("Clear All", role: .destructive) {
+                                showClearAllConfirmation = true
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundStyle(theme.onSurface)
+                        }
                     }
                 }
+            }
+            .confirmationDialog(
+                "Clear all history?",
+                isPresented: $showClearAllConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Clear All", role: .destructive) { history.clearAll() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes all transcriptions. This cannot be undone.")
             }
         }
     }
