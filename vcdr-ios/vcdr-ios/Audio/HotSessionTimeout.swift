@@ -38,7 +38,7 @@ enum HotSessionTimeout: Int, CaseIterable, Identifiable {
         }
     }
 
-    static let defaultValue: HotSessionTimeout = .fiveMinutes
+    static let defaultValue: HotSessionTimeout = .never
 
     /// UserDefaults key. App-local: the keyboard extension never runs its own
     /// engine, so no App Group sharing is needed.
@@ -51,8 +51,8 @@ enum HotSessionTimeout: Int, CaseIterable, Identifiable {
 
     static func current() -> HotSessionTimeout {
         // Distinguish "unset" from "set to 0" (`.never`) —
-        // `integer(forKey:)` returns 0 for both, which would silently flip
-        // fresh installs into `.never` when the user expected the 5-minute default.
+        // `integer(forKey:)` returns 0 for both, so go through `object(forKey:)`
+        // to preserve an explicit user choice vs. falling back to `defaultValue`.
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: storageKey) != nil else {
             return .defaultValue
