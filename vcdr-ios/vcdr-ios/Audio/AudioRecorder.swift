@@ -6,30 +6,19 @@ import OSLog
 @Observable
 final class AudioRecorder {
     private(set) var isRecording = false
-    /// True while the engine is running and the tap is installed — ready to
-    /// accept a `bufferHandler` and flip `isRecording` without another
-    /// `engine.start()` round-trip. Stays true between recordings inside a
-    /// hot session and is torn down by `endHotSession()` on inactivity.
-    ///
-    /// Mirror of the underlying `AVAudioEngine.isRunning`. Can drift out of
-    /// sync when iOS stops the engine on us (interruption, background
-    /// suspension, audio session deactivation by another process). Entry
-    /// points that would early-return on this flag MUST reconcile against
-    /// `isEngineLive` first — otherwise the bug manifests as a "hot" session
-    /// with no tap callbacks: no waveform, no speech, mic stuck on.
-    private(set) var isHot = false
+    /// True while the audio engine is running with the tap installed — ready
+    /// to accept a `bufferHandler` and flip `isRecording` without another
+    /// `engine.start()` round-trip. Derived from `AVAudioEngine.isRunning`
+    /// so it cannot drift from reality: iOS can stop the engine on us
+    /// (interruption, background suspension, audio session deactivation by
+    /// another process) and this property immediately reflects that, so any
+    /// start-path check against it is always truthful.
+    var isHot: Bool { audioEngine?.isRunning == true }
     /// Rolling buffer of recent audio level samples (0.0–1.0), one per meter tick.
     private(set) var audioLevels: [Float] = Array(repeating: 0, count: levelSampleCount)
 
     private var audioEngine: AVAudioEngine?
     private var audioSessionConfigured = false
-
-    /// Ground truth for "the engine is actually producing audio right now".
-    /// `isHot` is our in-memory mirror and can lie after iOS interruptions or
-    /// background suspensions; always prefer this for start-path guards.
-    private var isEngineLive: Bool {
-        audioEngine?.isRunning == true
-    }
     /// nonisolated(unsafe) because the audio tap callback reads this from the audio thread.
     /// Safe: only set before starting the engine, cleared after stopping it.
     @ObservationIgnored
@@ -173,22 +162,14 @@ final class AudioRecorder {
     /// installed so the very next `startCapture` is instantaneous.
     /// `bufferHandler` remains nil — buffers are discarded until capture begins,
     /// so no audio is written anywhere, but the system mic indicator is visible.
-    /// Safe to call repeatedly; no-op when already hot AND the engine is
-    /// actually running. If `isHot` is set but the engine has been stopped
-    /// by iOS (interruption, background suspension), the session is torn
-    /// down and rebuilt so the caller gets a working engine back.
+    /// Safe to call repeatedly; a no-op once the engine is running. Because
+    /// `isHot` is derived from `AVAudioEngine.isRunning`, the early-return
+    /// below can never skip past a dead engine.
     /// - Returns: true if the engine is running after the call.
     func startHotSession() async -> Bool {
         if isHot {
-            if isEngineLive {
-                Logger.recording.debug("startHotSession: already hot and engine live — no-op")
-                return true
-            }
-            // Stale: flag says hot but iOS has stopped the engine (interruption,
-            // background suspension, session deactivation by another app).
-            // Tear everything down so the rebuild below starts from scratch.
-            Logger.recording.warning("startHotSession: stale hot flag (engine not running) — tearing down before rebuild")
-            endHotSession()
+            Logger.recording.debug("startHotSession: engine already running — no-op")
+            return true
         }
 
         guard await requestMicrophonePermission() else {
@@ -208,8 +189,7 @@ final class AudioRecorder {
             Logger.recording.error("startHotSession: startEngine() failed")
             return false
         }
-        isHot = true
-        Logger.recording.info("Hot audio session started (engine.isRunning=\(self.isEngineLive))")
+        Logger.recording.info("Hot audio session started (isHot=\(self.isHot))")
         return true
     }
 
@@ -220,28 +200,15 @@ final class AudioRecorder {
     ///   captured buffer. Must be lightweight — enqueue for processing elsewhere.
     /// - Returns: true if capture started successfully.
     func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
-        // Reconcile against the real engine state before trusting `isHot`.
-        // A stale `isHot` here is what produces the silent-failure bug: we
-        // wire up `bufferHandler` and flip `isRecording = true` against a
-        // dead engine, so no buffers ever arrive — no waveform, no speech,
-        // mic indicator stuck on until the user kills the app.
-        if isHot, !isEngineLive {
-            Logger.recording.warning("startCapture: isHot=true but engine not running — rebuilding")
-            endHotSession()
-        }
         if !isHot {
             guard await startHotSession() else {
                 Logger.recording.error("startCapture: startHotSession() failed")
                 return false
             }
         }
-        guard isEngineLive else {
-            Logger.recording.error("startCapture: engine still not running after startHotSession — giving up")
-            return false
-        }
         bufferHandler = onBuffer
         isRecording = true
-        Logger.recording.info("Capture started (engine.isRunning=\(self.isEngineLive))")
+        Logger.recording.info("Capture started (isHot=\(self.isHot))")
         return true
     }
 
@@ -322,7 +289,6 @@ final class AudioRecorder {
             Logger.recording.info("Audio engine restarted after route change")
         } else {
             isRecording = false
-            isHot = false
             deactivateSession()
             Logger.recording.error("Failed to restart audio engine after route change")
         }
@@ -342,24 +308,17 @@ final class AudioRecorder {
     /// the mic indicator. The audio session itself stays active so the next
     /// cold start only pays engine startup, not session activation.
     func endHotSession() {
-        let wasRunning = isEngineLive
-        guard let engine = audioEngine else {
-            if isHot {
-                Logger.recording.warning("endHotSession: isHot was true but audioEngine was nil — clearing stale flag")
-            }
-            isHot = false
-            return
-        }
+        let wasRunning = isHot
+        guard let engine = audioEngine else { return }
 
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         audioEngine = nil
         bufferHandler = nil
         isRecording = false
-        isHot = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
 
-        Logger.recording.info("Hot audio session ended (engine.isRunning was \(wasRunning))")
+        Logger.recording.info("Hot audio session ended (engine was running: \(wasRunning))")
     }
 
     /// Deactivates the audio session and cleans up observers.
@@ -452,17 +411,17 @@ final class AudioRecorder {
 
         switch type {
         case .began:
-            // iOS stops the engine for us during interruption. Clear our mirror
-            // state immediately so the next start path rebuilds from scratch
-            // instead of no-op'ing on a dead engine. If we skipped this, the
-            // user would see a "hot" session with no audio flowing.
-            Logger.recording.warning("Audio session interrupted — clearing hot session state (was isHot=\(self.isHot), isRecording=\(self.isRecording), engine.isRunning=\(self.isEngineLive))")
+            // iOS stops the engine for us during interruption. Drop our
+            // reference so the next start path creates a fresh engine on
+            // the recovered audio session. `isHot` is derived from the
+            // engine's `isRunning`, so nulling the reference is enough —
+            // no parallel flag to clear.
+            Logger.recording.warning("Audio session interrupted — dropping engine reference (was isHot=\(self.isHot), isRecording=\(self.isRecording))")
             if let engine = audioEngine {
                 engine.inputNode.removeTap(onBus: 0)
             }
             audioEngine = nil
             bufferHandler = nil
-            isHot = false
             isRecording = false
 
         case .ended:
