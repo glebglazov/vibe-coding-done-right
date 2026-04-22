@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 @main
 struct VCDRiOSApp: App {
@@ -46,14 +47,18 @@ struct VCDRiOSApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     switch newPhase {
                     case .active:
+                        Logger.app.info("Scene became active — isHot=\(coordinator.isHotSessionActive), isRecording=\(coordinator.isRecording), state=\(String(describing: coordinator.state))")
                         // Re-apply idle timer state — iOS can reset it on scene transitions
                         let shouldDisable = coordinator.state == .recording
                         UIApplication.shared.isIdleTimerDisabled = shouldDisable
                         // Renew the hot session (no-op if already hot) and
                         // restart the idle timer so each return to the app
-                        // counts as fresh activity.
+                        // counts as fresh activity. `startHotSessionIfNeeded`
+                        // self-heals stale `isHot` state internally, so a mic
+                        // that died during background time rebuilds on foreground.
                         Task { await coordinator.startHotSessionIfNeeded() }
                     case .background:
+                        Logger.app.info("Scene entering background — isHot=\(coordinator.isHotSessionActive), isRecording=\(coordinator.isRecording)")
                         // Intentionally NOT tearing down the hot session:
                         // UIBackgroundModes=audio keeps the engine alive, so
                         // the keyboard extension can drive recording via the
