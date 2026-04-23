@@ -32,6 +32,9 @@ struct SettingsView: View {
                 microphoneSection
                 hotSessionSection
                 appearanceSection
+                #if DEBUG
+                debugSection
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -148,6 +151,22 @@ struct SettingsView: View {
             Text("Keeps the microphone engine warm so the next recording starts instantly. The mic indicator stays on until this much time passes without activity, then the session ends. Choose \"Never\" to release the mic as soon as each recording stops (the indicator stays off between recordings), or \"Always\" to keep it on for the whole app lifetime.")
         }
     }
+
+    // MARK: - Debug
+
+    #if DEBUG
+    private var debugSection: some View {
+        Section {
+            NavigationLink("View Logs") {
+                DebugLogView()
+            }
+        } header: {
+            Text("Debug")
+        } footer: {
+            Text("Visible in Xcode builds only. Reads the unified logging store for this process.")
+        }
+    }
+    #endif
 
     // MARK: - AI Processing
 
