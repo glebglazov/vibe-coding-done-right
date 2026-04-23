@@ -77,12 +77,11 @@ final class RecordingFlowCoordinator {
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
-    let history: any HistoryStore = {
-        let defaults = SharedConstants.sharedDefaults
-        let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
-        return HistoryStoreFactory.make(defaults: defaults)
-    }()
+    /// Populated asynchronously by `bootstrapHistory()` — the scene construction
+    /// path can't block on it, because `FileManager.url(forUbiquityContainerIdentifier:)`
+    /// can take seconds on first launch after install. `nil` until the
+    /// bootstrap task completes; callers must tolerate the transient gap.
+    private(set) var history: (any HistoryStore)?
     /// UUID stamped at recording start; reused as the Conversation.id on record().
     private var currentConversationID: UUID = UUID()
 
@@ -262,6 +261,26 @@ final class RecordingFlowCoordinator {
                 self?.rescheduleHotSessionTimeout()
             }
         }
+    }
+
+    /// Resolves the iCloud container and reconciles local ↔︎ ubiquity storage
+    /// off the main actor, then constructs the active store on the main actor
+    /// (stores are `@Observable` / `@MainActor`, so init must hop back).
+    ///
+    /// Previously this ran inside the `history` stored-property initializer,
+    /// which executes during SwiftUI scene construction on the main actor —
+    /// the synchronous `FileManager.url(forUbiquityContainerIdentifier:)`
+    /// call blocks for seconds on first launch after install while iCloud
+    /// provisions the container, holding back the first frame and leaving
+    /// the user staring at the blank launch screen.
+    func bootstrapHistory() async {
+        guard history == nil else { return }
+        let defaults = SharedConstants.sharedDefaults
+        let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        await Task.detached(priority: .userInitiated) {
+            HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
+        }.value
+        history = HistoryStoreFactory.make(defaults: defaults)
     }
 
     func initializeModel() async {
@@ -657,7 +676,11 @@ final class RecordingFlowCoordinator {
             .map { InputSegment(capture: CapturedContext(text: $0, source: .selection)) }
         let segments = [primarySegment] + captureSegments
         let label = historyLabel()
-        history.record(
+        // `history` is nil only during the brief window between app launch
+        // and `bootstrapHistory()` completing — well before the user can
+        // finish a recording in practice. Optional-chain so an edge-case race
+        // drops the write rather than crashing.
+        history?.record(
             conversationID: currentConversationID,
             inputSegments: segments,
             output: processed != nil ? finalText : nil,

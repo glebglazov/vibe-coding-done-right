@@ -73,13 +73,16 @@ struct RecordingView: View {
         } label: {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 18))
-                .foregroundStyle(theme.onSurfaceVariant)
+                .foregroundStyle(theme.onSurfaceVariant.opacity(coordinator.history == nil ? 0.3 : 1))
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
+        .disabled(coordinator.history == nil)
         .sheet(isPresented: $showHistory) {
-            HistoryView(history: coordinator.history)
-                .preferredColorScheme(appearance.colorScheme)
+            if let history = coordinator.history {
+                HistoryView(history: history)
+                    .preferredColorScheme(appearance.colorScheme)
+            }
         }
     }
 

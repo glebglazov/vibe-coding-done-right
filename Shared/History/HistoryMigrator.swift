@@ -9,8 +9,14 @@ import OSLog
 /// Only acts when the destination is empty AND the source has files — this
 /// guards against overwriting an authoritative copy when the user has
 /// toggled the setting multiple times.
-@MainActor
-enum HistoryMigrator {
+///
+/// Nonisolated on purpose: this runs during app launch and the first call to
+/// `UbiquityHistoryStore.resolveStorageRoot()` synchronously provisions the
+/// iCloud container, which can block for seconds on the first launch after
+/// install. Callers dispatch this to a detached task so the main actor stays
+/// free to render the first frame. The explicit `nonisolated` overrides the
+/// target-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` setting.
+nonisolated enum HistoryMigrator {
 
     static func reconcileAtLaunch(syncEnabled: Bool) {
         let localRoot = FileHistoryStore.localStorageRoot

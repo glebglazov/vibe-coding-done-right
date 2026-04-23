@@ -25,10 +25,16 @@ struct VCDRiOSApp: App {
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     // Cold-launch boot sequence:
+                    //   0. Resolve the iCloud history container off-main.
+                    //      Must come first: without this, `FileManager.url(forUbiquityContainerIdentifier:)`
+                    //      used to run inside the coordinator's stored-property
+                    //      initializer and froze scene construction for
+                    //      seconds on first launch after install.
                     //   1. Migrate pre-split legacy keys (idempotent).
                     //   2. Drop any leftover session overrides so the run
                     //      starts from the user's configured defaults.
                     //   3. Republish AI capability (keyboard gates its UI on it).
+                    async let historyReady: Void = coordinator.bootstrapHistory()
                     LegacySettingsMigrator.migrateIfNeeded()
                     SessionSettings.clearAll()
                     DefaultSettings.setAIConfigured(AIProcessingSettings.hasAICapability)
@@ -38,6 +44,7 @@ struct VCDRiOSApp: App {
                     coordinator.refreshSettingsFromStorage()
                     coordinator.cleanupStaleResults()
                     coordinator.setupCommandListener()
+                    await historyReady
                     await coordinator.initializeModel()
                     // Fetch updated prompts in background (non-blocking)
                     Task.detached {
