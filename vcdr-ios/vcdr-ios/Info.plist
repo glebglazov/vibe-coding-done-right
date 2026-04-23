@@ -2,14 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIBackgroundModes</key>
+	<key>CFBundleURLTypes</key>
 	<array>
-		<string>audio</string>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>vcdr-ios</string>
+				<string>vcdr</string>
+			</array>
+		</dict>
 	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>VCDR needs microphone access to record your voice for transcription.</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>mobilenotes</string>
@@ -42,17 +44,9 @@
 		<string>linear</string>
 		<string>googletranslate</string>
 	</array>
-	<key>CFBundleIdentifier</key>
-	<string></string>
-	<key>CFBundleURLTypes</key>
+	<key>UIBackgroundModes</key>
 	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>vcdr-ios</string>
-				<string>vcdr</string>
-			</array>
-		</dict>
+		<string>audio</string>
 	</array>
 </dict>
 </plist>
