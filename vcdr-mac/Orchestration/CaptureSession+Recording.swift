@@ -54,11 +54,38 @@ extension CaptureSession {
         run?.previousActiveApp = frontmostApp
         Logger.recording.info("Capturing selection from app: \(frontmostApp?.bundleIdentifier ?? "unknown")")
 
-        // Kick off selection capture; continue starting audio in parallel.
+        // Start audio FIRST, then kick off capture. Capture fallbacks (Layer 3 osascript
+        // `set volume alert volume`) write CoreAudio HAL properties that serialize at
+        // coreaudiod against our own `setSystemDefaultInputDevice`. Running capture in
+        // parallel with audio start made the input-device switch wait behind Layer 3's
+        // HAL writes — adding ~400ms on AX-less apps (Ghostty, Telegram). Serializing
+        // audio-first means HAL is empty during our input switch. Capture then runs
+        // after, doesn't affect perceived recording start, and merges at transcription
+        // time in `processTranscription`.
+        let started = await audio.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID)
+        guard started else {
+            setStatus(.error("Failed to start recording"))
+            panel.setError("Failed to start recording")
+            scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
+            emit(.failed, finalText: nil, destinationID: nil, historyConversationID: nil)
+            Logger.app.error("Failed to start recording")
+            resetErrorAfterDelay()
+            return
+        }
+
+        preparingOK = true
+        setStatus(.recording)
+        recordingStartInstant = .now
+        destinationHotkey.isEnabled = true
+        updateCancelHotkey()
+
+        // Detached so blocking work inside the capturer (osascript Process.waitUntilExit,
+        // AX round-trips) runs off MainActor — otherwise it queues ahead of UI updates
+        // that happen during recording.
         let capturer = selectionCapturer
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
-        run?.captureTask = Task { [weak self] in
+        run?.captureTask = Task.detached { [weak self] in
             let result = await capturer.capture(bundleIdentifier: bundleID, pid: pid)
 
             // Store cursor context immediately (will be nil if unavailable)
@@ -109,23 +136,6 @@ extension CaptureSession {
                 self.accumulatedClipboardCaptures.append(CapturedContext(text: text, source: .clipboard))
             }
         }
-
-        let started = await audio.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID)
-        guard started else {
-            setStatus(.error("Failed to start recording"))
-            panel.setError("Failed to start recording")
-            scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
-            emit(.failed, finalText: nil, destinationID: nil, historyConversationID: nil)
-            Logger.app.error("Failed to start recording")
-            resetErrorAfterDelay()
-            return
-        }
-
-        preparingOK = true
-        setStatus(.recording)
-        recordingStartInstant = .now
-        destinationHotkey.isEnabled = true
-        updateCancelHotkey()
 
         // Pause media in the background now that audio is capturing. The
         // controller stores the in-flight task and resumeIfNeeded awaits it,
