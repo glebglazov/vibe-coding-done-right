@@ -1,140 +1,159 @@
 {
-  "description": "Eval set for dictation cleanup prompt optimization. Inputs simulate raw dictation app output (partial punctuation, capitalization attempts, filler words, thought drifts). Expected outputs preserve meaning and content exactly while fixing structure (punctuation, grammar, formatting). Speaker's phrasing, reasoning, and voice are kept intact. Only pure filler words are removed. Captures are always trailing the dictated text (separated by \\n\\n), matching the app's Mode.applyPreProcessing() behavior.",
+  "description": "Fresh eval set for the readability-with-style-preservation dictation prompt. Expected outputs represent what a careful human would write if they polished the dictation (aggressive-readability target), not mechanical transformations. Each case has a `category` and `exercises` tag. Categories: readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual.",
   "evals": [
     {
-      "id": "casual_tech_opinion",
-      "input": "So I've been thinking about this whole AI thing and like. honestly I think most people are using it wrong they just copy paste stuff and expect magic. But the real value is when you like actually work with it iteratively you know. Like you go back and forth and refine things. its like pair programming but with a very patient partner who never gets tired. although sometimes it does go off the rails and you have to kind of pull it back. But yeah overall I think the iterative approach is way better than just throwing a prompt at it and hoping for the best",
-      "expected_output": "So I've been thinking about this whole AI thing, and honestly, I think most people are using it wrong. They just copy-paste stuff and expect magic. But the real value is when you actually work with it iteratively. You go back and forth and refine things. It's like pair programming but with a very patient partner who never gets tired, although sometimes it does go off the rails and you have to pull it back. But yeah, overall I think the iterative approach is way better than just throwing a prompt at it and hoping for the best."
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "exercises": "Trailing 'I think' / 'I guess' fronted within their own clauses.",
+      "input": "the migration ran overnight without issues I think and we can close the ticket tomorrow I guess",
+      "expected_output": "I think the migration ran overnight without issues, and I guess we can close the ticket tomorrow."
     },
     {
-      "id": "meeting_followup",
-      "input": "Okay so after the meeting with the design team I think we need to. we need to reconsider the timeline because they said the new components won't be ready until mid April. which kind of pushes everything back by like two weeks at least. And also Maria mentioned that the accessibility audit hasn't even started yet so that's another thing we need to factor in. Oh and I almost forgot we need to loop in the backend team because apparently there's some API changes that might affect the frontend. so yeah basically the launch date is probably more like May at this point",
-      "expected_output": "Okay, so after the meeting with the design team, I think we need to reconsider the timeline because they said the new components won't be ready until mid-April, which pushes everything back by at least two weeks. And also, Maria mentioned that the accessibility audit hasn't even started yet, so that's another thing we need to factor in. Oh, and I almost forgot — we need to loop in the backend team because apparently there's some API changes that might affect the frontend. So yeah, basically the launch date is probably more like May at this point."
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "exercises": "Spoken-order quantity 'weeks like three to four' -> written 'three to four weeks'.",
+      "input": "the rollout will take weeks like three to four depending on the market",
+      "expected_output": "The rollout will take three to four weeks, depending on the market."
     },
     {
-      "id": "personal_reflection",
-      "input": "I was walking home today and I realized that I've been so focused on work lately that I haven't really. like I haven't taken a proper break in months. And it's funny because I keep telling other people to take care of themselves but I don't follow my own advice. I think what I need to do is just block out a week in April and go somewhere. doesn't even matter where just somewhere different. Maybe the coast or something. The thing is every time I plan something like this work comes up and I cancel it so maybe this time I should just book it and not tell anyone until it's too late to cancel",
-      "expected_output": "I was walking home today and I realized that I've been so focused on work lately that I haven't really taken a proper break in months. And it's funny because I keep telling other people to take care of themselves, but I don't follow my own advice. I think what I need to do is just block out a week in April and go somewhere — doesn't even matter where, just somewhere different. Maybe the coast or something. The thing is, every time I plan something like this, work comes up and I cancel it, so maybe this time I should just book it and not tell anyone until it's too late to cancel."
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "exercises": "Adverb in split-infinitive position moved before the verb it modifies.",
+      "input": "he wants to eventually hand off the whole project to a new team",
+      "expected_output": "He eventually wants to hand off the whole project to a new team."
     },
     {
-      "id": "technical_explanation",
-      "input": "so the way the caching layer works is basically. you have your primary cache which is Redis and then behind that you have a secondary cache which is just in memory on each node. And when a request comes in it first checks the local cache and if it's not there it goes to Redis and if it's not in Redis either then it hits the database. The tricky part is invalidation because you have to invalidate both layers. and if you only invalidate Redis but not the local cache you get stale data for up to like 30 seconds which is the TTL on the local cache. We had a bug with this last month actually where. where prices were showing wrong for some users because of exactly this issue",
-      "expected_output": "So the way the caching layer works is basically: you have your primary cache, which is Redis, and then behind that you have a secondary cache, which is just in-memory on each node. And when a request comes in, it first checks the local cache, and if it's not there, it goes to Redis, and if it's not in Redis either, then it hits the database. The tricky part is invalidation, because you have to invalidate both layers. And if you only invalidate Redis but not the local cache, you get stale data for up to 30 seconds, which is the TTL on the local cache. We had a bug with this last month actually, where prices were showing wrong for some users because of exactly this issue."
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "exercises": "First 'I think' governs the thought; drop the two tic repetitions, keep all content.",
+      "input": "I think we should do a post-mortem because I think this kept coming up and I think everyone keeps hitting it differently",
+      "expected_output": "I think we should do a post-mortem, because this kept coming up and everyone keeps hitting it differently."
     },
     {
-      "id": "product_idea",
-      "input": "Okay here's an idea I had. What if we built like a browser extension that. that tracks how much time you spend on different sites but instead of just showing you a boring chart it actually calculates how much money that time cost based on your hourly rate. So like if you spend 45 minutes on Twitter it would say hey that just cost you 37 dollars or whatever. I know there's time trackers out there already but none of them do the money angle in a way that's like in your face about it. The psychological impact of seeing dollars instead of minutes could be really powerful I think. although some people might find it depressing. But that's kind of the point right",
-      "expected_output": "Okay, here's an idea I had. What if we built a browser extension that tracks how much time you spend on different sites, but instead of just showing you a boring chart, it actually calculates how much money that time cost based on your hourly rate? So if you spend 45 minutes on Twitter, it would say \"hey, that just cost you $37\" or whatever. I know there's time trackers out there already, but none of them do the money angle in a way that's in-your-face about it. The psychological impact of seeing dollars instead of minutes could be really powerful, I think — although some people might find it depressing. But that's kind of the point, right?"
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "exercises": "Topic + 'and X and Y and Z' list of parallel symptoms -> 'topic: X, Y, and Z'.",
+      "input": "the release notes need work and the screenshots are outdated and the install instructions are missing a step and the release date is wrong",
+      "expected_output": "The release notes need work: the screenshots are outdated, the install instructions are missing a step, and the release date is wrong."
     },
     {
-      "id": "frustration_vent",
-      "input": "I cannot believe we're having this discussion again about the deployment process. like we agreed three months ago that we would move to automated deployments and here we are still doing manual deploys every Thursday. And every time something breaks someone says oh we should automate this and everyone nods and then nothing happens. I'm starting to think the problem isn't technical it's that nobody wants to own it. Like everyone's happy to complain but nobody wants to actually sit down and write the CI pipeline. Maybe I should just do it myself over a weekend and present it as a done deal. because clearly the committee approach is not working",
-      "expected_output": "I cannot believe we're having this discussion again about the deployment process. We agreed three months ago that we would move to automated deployments, and here we are still doing manual deploys every Thursday. And every time something breaks, someone says \"oh, we should automate this,\" and everyone nods, and then nothing happens. I'm starting to think the problem isn't technical — it's that nobody wants to own it. Everyone's happy to complain but nobody wants to actually sit down and write the CI pipeline. Maybe I should just do it myself over a weekend and present it as a done deal, because clearly the committee approach is not working."
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "exercises": "False-start repetition 'and then and then' collapses to single 'and then'.",
+      "input": "and then and then we hit the scaling wall and we had to restart the whole node pool",
+      "expected_output": "And then we hit the scaling wall, and we had to restart the whole node pool."
     },
     {
-      "id": "recipe_ramble",
-      "input": "So my grandmother used to make this amazing soup and I've been trying to recreate it for years. The base is pretty simple its just onions carrots celery the usual. But the secret was she would add a little bit of. I think it was miso paste which is weird because she was not into Asian cooking at all but someone must have told her about it at some point. And she would let it simmer for like hours. Not 30 minutes like the recipes online say but actually hours like three or four. And the texture would get so thick almost like a stew. I tried it last weekend and it was close but not quite right. I think maybe I need to use a different kind of potato because she used those waxy ones not the russet ones I had",
-      "expected_output": "So my grandmother used to make this amazing soup, and I've been trying to recreate it for years. The base is pretty simple — it's just onions, carrots, celery, the usual. But the secret was she would add a little bit of... I think it was miso paste, which is weird because she was not into Asian cooking at all, but someone must have told her about it at some point. And she would let it simmer for hours — not 30 minutes like the recipes online say, but actually hours, like three or four. And the texture would get so thick, almost like a stew. I tried it last weekend and it was close but not quite right. I think maybe I need to use a different kind of potato, because she used those waxy ones, not the russet ones I had."
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "exercises": "Casual, opinionated voice: keep 'honestly', 'dumpster fire', 'But yeah', and the speaker's rhythm.",
+      "input": "honestly the whole refactor has been a dumpster fire from day one. But yeah I don't think it's salvageable anymore we should just rewrite the module from scratch",
+      "expected_output": "Honestly, the whole refactor has been a dumpster fire from day one. But yeah, I don't think it's salvageable anymore — we should just rewrite the module from scratch."
     },
     {
-      "id": "short_quick_thought",
-      "input": "remind me to email john about the contract. also need to buy milk and. oh and check if the dentist appointment is confirmed for next Tuesday",
-      "expected_output": "Remind me to email John about the contract. Also need to buy milk. Oh, and check if the dentist appointment is confirmed for next Tuesday."
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "exercises": "'So I've been thinking' opening phrase must be preserved intact.",
+      "input": "so I've been thinking about this on and off for weeks. what if we just moved the entire cache layer to the edge instead of regional clusters",
+      "expected_output": "So I've been thinking about this on and off for weeks. What if we just moved the entire cache layer to the edge instead of regional clusters?"
     },
     {
-      "id": "scattered_planning",
-      "input": "For the trip I think we should fly into Lisbon and then maybe. actually wait no Porto might be better because it's cheaper and then we can take the train down to Lisbon which is supposed to be a really nice ride along the coast. Or is it inland I can't remember. Anyway the main thing is we need to book the flights soon because prices are going up. Sarah said she found something for like 400 round trip but that was last week so. And we need to figure out the Airbnb situation because last time we waited too long and everything good was taken. I'd say we need at least two bedrooms since there's four of us unless someone's okay with a couch",
-      "expected_output": "For the trip, I think we should fly into Porto because it's cheaper, and then we can take the train down to Lisbon, which is supposed to be a really nice ride along the coast. Or is it inland? I can't remember. Anyway, the main thing is we need to book the flights soon because prices are going up. Sarah said she found something for like $400 round trip, but that was last week. And we need to figure out the Airbnb situation because last time we waited too long and everything good was taken. I'd say we need at least two bedrooms since there's four of us, unless someone's okay with a couch."
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "exercises": "Different hedge words (guess, maybe, probably, I think) are all semantic — none is a tic, keep them all.",
+      "input": "I guess maybe we could probably just skip the integration tests this time I think nobody really looks at them anymore",
+      "expected_output": "I guess maybe we could probably just skip the integration tests this time — I think nobody really looks at them anymore."
     },
     {
-      "id": "self_correction_removal",
-      "input": "So I think the best framework for this project would be React. oh wait actually no Vue would be better because we already have Vue experience on the team. And for the backend I was going to say Django but. no actually FastAPI makes more sense since we need async support. So yeah Vue plus FastAPI that's the stack",
-      "expected_output": "So I think the best framework for this project would be Vue, because we already have Vue experience on the team. And for the backend, FastAPI makes more sense since we need async support. So yeah, Vue plus FastAPI — that's the stack."
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "exercises": "Every 'and if X' is a distinct cascade step; keep all connectors, do NOT split into separate sentences.",
+      "input": "the check runs first and if it passes you hit the cache and if that misses you query the DB and if the DB is slow we fall back to a cached response",
+      "expected_output": "The check runs first, and if it passes you hit the cache, and if that misses you query the DB, and if the DB is slow we fall back to a cached response."
     },
     {
-      "id": "citation_with_self_correction",
-      "input": "So I was talking to Mike yesterday and he was like yeah I think we should go with Lisbon. oh wait no not Lisbon I meant Porto. And I was like okay Porto sounds good to me. So apparently he had looked into flights and everything and Porto was way cheaper",
-      "expected_output": "So I was talking to Mike yesterday and he was like \"yeah, I think we should go with Lisbon — oh wait, no, not Lisbon, I meant Porto.\" And I was like \"okay, Porto sounds good to me.\" So apparently he had looked into flights and everything, and Porto was way cheaper."
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "exercises": "Chain of events joined by 'and' — split the run-on into two sentences but preserve sequential 'and' connectors (each is a discrete action).",
+      "input": "we pushed the build and waited for the smoke tests and everything passed and then Sarah approved it and we deployed to staging",
+      "expected_output": "We pushed the build and waited for the smoke tests. Everything passed, and then Sarah approved it, and we deployed to staging."
     },
     {
-      "id": "philosophical_musing",
-      "input": "You know what's weird is that we spend so much time optimizing for productivity but like. what are we even being productive for. I read this article the other day that said people on their deathbed never say I wish I'd been more productive. they say I wish I'd spent more time with people I love. And I think there's something to that but also like you can't just not work that's not realistic. So the question becomes how do you find the balance. And I don't think anyone's really figured that out yet. maybe the answer is different for everyone. I don't know it's just something I've been thinking about lately especially with everything going on",
-      "expected_output": "You know what's weird is that we spend so much time optimizing for productivity, but what are we even being productive for? I read this article the other day that said people on their deathbed never say \"I wish I'd been more productive\" — they say \"I wish I'd spent more time with people I love.\" And I think there's something to that, but also, you can't just not work — that's not realistic. So the question becomes: how do you find the balance? And I don't think anyone's really figured that out yet. Maybe the answer is different for everyone. I don't know, it's just something I've been thinking about lately, especially with everything going on."
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "exercises": "'The way the thing with X works is' is a characteristic wordy spoken intro; preserve it, do not tighten.",
+      "input": "so the way the thing with the permissions system works is you have a user and users can belong to multiple groups and groups have roles",
+      "expected_output": "So the way the thing with the permissions system works is: you have a user, users can belong to multiple groups, and groups have roles."
     },
     {
-      "id": "capture_with_data_reference",
-      "input": "so yeah looking at these numbers I think we're in a pretty good position. the APAC growth is especially impressive considering we only launched there in September. I think we should double down on that region maybe allocate more marketing budget there for next quarter\n\n<capture id=\"1\">The quarterly report shows a 15% increase in MAU across all regions, with APAC leading at 23%.</capture>",
-      "expected_output": "So yeah, looking at these numbers, I think we're in a pretty good position. The APAC growth is especially impressive considering we only launched there in September. I think we should double down on that region, maybe allocate more marketing budget there for next quarter.\n\n<capture id=\"1\">The quarterly report shows a 15% increase in MAU across all regions, with APAC leading at 23%.</capture>"
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "exercises": "Speaker's own mid-thought correction — collapse to final decision but KEEP the reasoning clause.",
+      "input": "I think we should use postgres. actually wait no mongo would be better because the data is pretty document-shaped anyway",
+      "expected_output": "I think we should use Mongo, because the data is pretty document-shaped anyway."
     },
     {
-      "id": "capture_with_error_log",
-      "input": "So I was reviewing the error logs and I found something interesting. basically there's a pattern where the timeout errors spike every day around 2 PM UTC. so that's the actual error and I think it's related to the daily backup job that runs on that replica. we should probably move the backup window or route traffic away from replica 3 during that time\n\n<capture id=\"1\">TimeoutError: Connection to db-replica-3 timed out after 30000ms\n  at ConnectionPool.acquire (pool.js:142)\n  at QueryRunner.connect (runner.js:89)</capture>",
-      "expected_output": "So I was reviewing the error logs and I found something interesting. Basically there's a pattern where the timeout errors spike every day around 2 PM UTC. So that's the actual error, and I think it's related to the daily backup job that runs on that replica. We should probably move the backup window or route traffic away from replica 3 during that time.\n\n<capture id=\"1\">TimeoutError: Connection to db-replica-3 timed out after 30000ms\n  at ConnectionPool.acquire (pool.js:142)\n  at QueryRunner.connect (runner.js:89)</capture>"
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "exercises": "Quoted self-correction from someone else — preserve inside quotation marks as dialogue, do NOT collapse.",
+      "input": "Jess was like we should meet Monday. oh wait no Tuesday because Monday is a holiday. so we rescheduled everything",
+      "expected_output": "Jess was like \"we should meet Monday — oh wait, no, Tuesday, because Monday is a holiday.\" So we rescheduled everything."
     },
     {
-      "id": "multiple_captures",
-      "input": "okay so the first capture is the current discount logic and then the second one is what Jake proposed as a replacement. I think Jake's version is better because it handles promo codes but I'd like to add validation for the discount not going below like 70 percent. also we should add tests for edge cases like negative prices\n\n<capture id=\"1\">def calculate_discount(price, tier):\n    if tier == \"gold\":\n        return price * 0.8\n    return price * 0.95</capture>\n\n<capture id=\"2\">def calculate_discount(price, tier, promo_code=None):\n    base = 0.8 if tier == \"gold\" else 0.95\n    if promo_code:\n        base -= 0.05\n    return price * base</capture>",
-      "expected_output": "Okay, so the first capture is the current discount logic, and then the second one is what Jake proposed as a replacement. I think Jake's version is better because it handles promo codes, but I'd like to add validation for the discount not going below 70%. Also, we should add tests for edge cases like negative prices.\n\n<capture id=\"1\">def calculate_discount(price, tier):\n    if tier == \"gold\":\n        return price * 0.8\n    return price * 0.95</capture>\n\n<capture id=\"2\">def calculate_discount(price, tier, promo_code=None):\n    base = 0.8 if tier == \"gold\" else 0.95\n    if promo_code:\n        base -= 0.05\n    return price * base</capture>"
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "exercises": "Longer meeting-style dictation: filler removal, casual voice preserved, numbered items structured, em-dashes for asides.",
+      "input": "okay so after the retro I think we need to basically like address three things. first the incident response is way too slow we had like twenty minutes of downtime on Thursday and nobody paged the right team. second we need to fix the runbook it's wildly out of date I mean nothing in there matches our current infra. and third we should probably invest in like better monitoring because right now we're basically flying blind between alerts",
+      "expected_output": "Okay, so after the retro, I think we need to address three things. First, the incident response is way too slow — we had twenty minutes of downtime on Thursday and nobody paged the right team. Second, we need to fix the runbook — it's wildly out of date, nothing in there matches our current infra. And third, we should probably invest in better monitoring, because right now we're basically flying blind between alerts."
     },
     {
-      "id": "capture_with_code_review",
-      "input": "hey so I need to send this snippet to the team for review. I think the implementation is mostly fine but there's a potential race condition in the event handler. let me grab the code real quick\n\n<capture id=\"1\">eventBus.on('user.updated', async (event) => {\n  const user = await db.users.findById(event.userId);\n  user.lastSync = Date.now();\n  await user.save();\n});</capture>",
-      "expected_output": "Hey, so I need to send this snippet to the team for review. I think the implementation is mostly fine, but there's a potential race condition in the event handler. Let me grab the code real quick.\n\n<capture id=\"1\">eventBus.on('user.updated', async (event) => {\n  const user = await db.users.findById(event.userId);\n  user.lastSync = Date.now();\n  await user.save();\n});</capture>"
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "exercises": "Product-idea rambling: filler removal ('like' × many), question-mark recognition, em-dash expansion of 'what if'.",
+      "input": "here's an idea I had on the walk today. what if we made the onboarding like actually fun. like right now it's this boring form where you enter your email and your name and whatever. but what if we gamified it and you like earned points for filling things in and you could like unlock features by completing steps. I think people would actually enjoy it and we'd probably get way better completion rates",
+      "expected_output": "Here's an idea I had on the walk today. What if we made the onboarding actually fun? Right now it's this boring form where you enter your email, your name, and whatever. But what if we gamified it — you earned points for filling things in, and you could unlock features by completing steps? I think people would actually enjoy it, and we'd probably get way better completion rates."
     },
     {
-      "id": "russian_casual_planning",
-      "input": "Короче я думаю нам нужно перенести релиз на следующую неделю потому что. ну потому что тесты ещё не готовы и Саша сказал что ему нужно ещё два дня минимум на интеграцию. И ещё там баг в авторизации который мы вчера нашли. ну такой неприятный когда пользователь логинится через гугл и его редиректит не туда. Я думаю это критичный баг и без его фикса выкатывать нельзя. А так в целом всё более менее готово просто нужно ещё немного времени",
-      "expected_output": "Короче, я думаю, нам нужно перенести релиз на следующую неделю, потому что тесты ещё не готовы и Саша сказал, что ему нужно ещё минимум два дня на интеграцию. И ещё там баг в авторизации, который мы вчера нашли — неприятный, когда пользователь логинится через Google и его редиректит не туда. Я думаю, это критичный баг, и без его фикса выкатывать нельзя. А так в целом всё более-менее готово, просто нужно ещё немного времени."
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "exercises": "Technical explanation: keep 'kind of weird' voice marker, em-dash for clarification, 429/60 number formatting, preserve contrasting 'but the downside' clause.",
+      "input": "so the way our rate limiter works is kind of weird. we don't actually use a fixed window like most people do. we use this sliding window thing where we count requests in the last sixty seconds and if you exceed the limit we return a 429. the cool thing is it adapts to burst traffic better. but the downside is it's more expensive computationally because you have to track every request",
+      "expected_output": "So the way our rate limiter works is kind of weird. We don't actually use a fixed window like most people do — we use this sliding window thing where we count requests in the last 60 seconds, and if you exceed the limit we return a 429. The cool thing is it adapts to burst traffic better. But the downside is it's more expensive computationally, because you have to track every request."
     },
     {
-      "id": "greeting_passthrough",
-      "input": "Hello how are you",
-      "expected_output": "Hello, how are you?"
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "exercises": "Frustrated rambling: preserve 'honestly', 'just', 'I mean' when semantic, remove 'like' / 'basically' as fillers, number formatting (forty-five -> 45), proper nouns (jira, slack).",
+      "input": "honestly I'm so tired of the standup format we have. we spend like forty five minutes every day going around and everyone just basically reads their jira tickets out loud and nobody actually listens. and half the team is remote so they're muted anyway. I think we should just kill it and do async updates in slack instead I mean nobody would miss it",
+      "expected_output": "Honestly, I'm so tired of the standup format we have. We spend 45 minutes every day going around, and everyone just reads their Jira tickets out loud, and nobody actually listens. And half the team is remote, so they're muted anyway. I think we should just kill it and do async updates in Slack instead — I mean, nobody would miss it."
     },
     {
-      "id": "short_question_passthrough",
-      "input": "what time is the meeting tomorrow",
-      "expected_output": "What time is the meeting tomorrow?"
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "exercises": "Short conversational input — just punctuation + capitalization, no creative treatment.",
+      "input": "hey are you free this afternoon for a quick sync",
+      "expected_output": "Hey, are you free this afternoon for a quick sync?"
     },
     {
-      "id": "thank_you_passthrough",
-      "input": "thanks for the help I really appreciate it",
-      "expected_output": "Thanks for the help, I really appreciate it."
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "exercises": "Short reminder — keep conjunction 'and also', add punctuation, no splitting.",
+      "input": "remind me to email the finance team about the invoice and also pick up groceries on the way home",
+      "expected_output": "Remind me to email the finance team about the invoice, and also pick up groceries on the way home."
     },
     {
-      "id": "single_sentence_passthrough",
-      "input": "please send me the report by end of day",
-      "expected_output": "Please send me the report by end of day."
+      "id": "capture_with_code",
+      "category": "capture",
+      "exercises": "<capture id=\"1\"> block must be preserved byte-for-byte, including newlines and special characters inside code.",
+      "input": "so here's the snippet for the rate limiter I was talking about. I think the bug is in how we're handling the cleanup can you take a look\n\n<capture id=\"1\">function rateLimiter(userId) {\n  const now = Date.now();\n  const requests = cache.get(userId) || [];\n  const recent = requests.filter(t => t > now - 60000);\n  if (recent.length >= 100) return false;\n  cache.set(userId, [...recent, now]);\n  return true;\n}</capture>",
+      "expected_output": "So here's the snippet for the rate limiter I was talking about. I think the bug is in how we're handling the cleanup — can you take a look?\n\n<capture id=\"1\">function rateLimiter(userId) {\n  const now = Date.now();\n  const requests = cache.get(userId) || [];\n  const recent = requests.filter(t => t > now - 60000);\n  if (recent.length >= 100) return false;\n  cache.set(userId, [...recent, now]);\n  return true;\n}</capture>"
     },
     {
-      "id": "conversational_dictation",
-      "input": "hey can you take a look at the pull request I just opened I think there might be an issue with the error handling",
-      "expected_output": "Hey, can you take a look at the pull request I just opened? I think there might be an issue with the error handling."
-    },
-    {
-      "id": "number_words_dollars",
-      "input": "the project will cost about thirty seven thousand dollars and take around forty five days to complete",
-      "expected_output": "The project will cost about $37,000 and take around 45 days to complete."
-    },
-    {
-      "id": "number_words_percent",
-      "input": "our conversion rate increased by fifteen percent this quarter which is about three percent higher than expected",
-      "expected_output": "Our conversion rate increased by 15% this quarter, which is about 3% higher than expected."
-    },
-    {
-      "id": "number_words_year",
-      "input": "the company was founded in two thousand and eight and moved to the new office in twenty twenty three",
-      "expected_output": "The company was founded in 2008 and moved to the new office in 2023."
-    },
-    {
-      "id": "number_words_mixed",
-      "input": "we need to hire twenty five people and the budget is around one hundred twenty five thousand dollars",
-      "expected_output": "We need to hire 25 people and the budget is around $125,000."
-    },
-    {
-      "id": "number_words_time",
-      "input": "the meeting starts at three thirty and should last about forty five minutes",
-      "expected_output": "The meeting starts at 3:30 and should last about 45 minutes."
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "exercises": "Russian dictation: reorder 'два месяца как минимум' -> 'как минимум два месяца'; natural punctuation; preserve 'Слушай' opener.",
+      "input": "слушай я думаю нам нужно переехать на новый фреймворк потому что старый постоянно ломается и документация у него отстой и никто в команде его не любит. я уже два месяца как минимум об этом думаю но всё не было времени нормально обсудить",
+      "expected_output": "Слушай, я думаю, нам нужно переехать на новый фреймворк, потому что старый постоянно ломается, документация у него отстой, и никто в команде его не любит. Я уже как минимум два месяца об этом думаю, но всё не было времени нормально обсудить."
     }
   ]
 }
