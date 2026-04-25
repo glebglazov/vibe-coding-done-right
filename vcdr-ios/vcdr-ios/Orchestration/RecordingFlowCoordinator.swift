@@ -34,6 +34,12 @@ final class RecordingFlowCoordinator {
     /// When true, the current recording was started via deep link from keyboard.
     /// Exposed for the view to show/hide the back button.
     private(set) var launchedViaDeepLink = false
+    /// When true, the app was foregrounded by the keyboard's stop-deep-link
+    /// fallback (`vcdr-ios://stop`). Drives the Done-page "Swipe to paste"
+    /// hint, which is only meaningful in that path — every other way of
+    /// landing on the Done page leaves the user already where they want
+    /// the text to appear, or with no host app to swipe back to.
+    private(set) var stoppedViaDeepLink = false
     /// Status of the AI post-processing request
     private(set) var aiProcessingStatus: AIProcessingStatus = .idle
     /// Per-session prompt mode — initialized from the current effective setting.
@@ -351,6 +357,7 @@ final class RecordingFlowCoordinator {
         guard state != .recording && state != .transcribing else { return }
         state = .recording
         launchedViaDeepLink = true
+        stoppedViaDeepLink = false
     }
 
     /// Called when a deep link arrives. Starts recording immediately (user stays in VCDR app).
@@ -389,6 +396,7 @@ final class RecordingFlowCoordinator {
             return
         }
         launchedViaDeepLink = true
+        stoppedViaDeepLink = true
         await stopAndTranscribe(sendToKeyboard: true)
     }
 
@@ -409,6 +417,7 @@ final class RecordingFlowCoordinator {
         // UI flip FIRST — nothing blocks it. Everything perceptually slow
         // (haptics, UserDefaults reads, disk flushes, engine start) runs after.
         launchedViaDeepLink = fromDeepLink
+        stoppedViaDeepLink = false
         aiProcessingStatus = .idle
         currentConversationID = UUID()
         state = .recording
@@ -720,6 +729,7 @@ final class RecordingFlowCoordinator {
         setIdleTimerDisabled(false)
         liveTranscript = ""
         launchedViaDeepLink = false
+        stoppedViaDeepLink = false
         aiProcessingStatus = .idle
         selectedPromptMode = SessionSettings.effectiveAIMode()
         currentTextStyle = SessionSettings.effectiveTextStyle()
