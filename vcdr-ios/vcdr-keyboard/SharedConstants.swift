@@ -66,11 +66,13 @@ enum RecordingState: String {
 /// AI prompt mode — keyboard-safe mirror of AIPromptMode.
 /// Raw values must match AIPromptMode in the main app.
 enum SharedAIMode: String {
+    case verbatim
     case dictation
     case assistant
 
     var displayName: String {
         switch self {
+        case .verbatim: "Verbatim"
         case .dictation: "Dictation"
         case .assistant: "Assistant"
         }
@@ -134,7 +136,7 @@ enum SessionSettings {
         let raw = sd.string(forKey: SharedConstants.sessionAIModeKey)
             ?? sd.string(forKey: SharedConstants.defaultAIModeKey)
             ?? ""
-        return SharedAIMode(rawValue: raw) ?? .dictation
+        return SharedAIMode(rawValue: raw) ?? .verbatim
     }
 
     static func effectiveAIActive() -> Bool {
@@ -145,7 +147,7 @@ enum SessionSettings {
         if sd.object(forKey: SharedConstants.defaultAIActiveKey) != nil {
             return sd.bool(forKey: SharedConstants.defaultAIActiveKey)
         }
-        return true
+        return false
     }
 
     private static func write(_ block: (UserDefaults) -> Void) {

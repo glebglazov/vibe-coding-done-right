@@ -22,7 +22,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     // MARK: - Shared Settings (keyboard ↔ app)
     @Published var aiConfigured: Bool = false
     @Published var aiActive: Bool = false
-    @Published var aiMode: SharedAIMode = .dictation
+    @Published var aiMode: SharedAIMode = .verbatim
     @Published var textStyle: SharedTextStyle = .casual
 
     /// True when the text field has a non-empty selection and assistant mode is active.
