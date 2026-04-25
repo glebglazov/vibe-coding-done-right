@@ -45,6 +45,7 @@ enum BuiltInPrompts {
 
     private static func defaultPrompt(for mode: AIPromptMode) -> String {
         switch mode {
+        case .verbatim: ""
         case .dictation: defaultDictation
         case .assistant: defaultAssistant
         }

@@ -4,11 +4,13 @@ import FoundationModels
 /// Available AI processing prompt modes.
 /// Raw values match the server's prompt keys for cache lookup.
 enum AIPromptMode: String, CaseIterable, Codable {
+    case verbatim
     case dictation
     case assistant
 
     var displayName: String {
         switch self {
+        case .verbatim: "Verbatim"
         case .dictation: "Dictation"
         case .assistant: "Assistant"
         }
@@ -18,6 +20,7 @@ enum AIPromptMode: String, CaseIterable, Codable {
     /// Used to filter the picker — allows defining enum cases before they're ready.
     var isAvailable: Bool {
         switch self {
+        case .verbatim: true
         case .dictation: true
         case .assistant: true
         }
@@ -29,9 +32,10 @@ enum AIPromptMode: String, CaseIterable, Codable {
     }
 
     /// Whether style transformations (capitalization, punctuation) should be applied for this mode.
-    /// Dictation modes produce user text that benefits from styling; assistant modes produce AI output that shouldn't be restyled.
+    /// Verbatim and dictation produce user text that benefits from styling; assistant produces AI output that shouldn't be restyled.
     var appliesStyles: Bool {
         switch self {
+        case .verbatim: true
         case .dictation: true
         case .assistant: false
         }
@@ -104,7 +108,7 @@ enum AIProcessingSettings {
     /// go through `DefaultSettings.setAIMode(_:)`.
     static var defaultMode: AIPromptMode {
         let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.defaultAIModeKey) ?? ""
-        return AIPromptMode(rawValue: raw) ?? .dictation
+        return AIPromptMode(rawValue: raw) ?? .verbatim
     }
 
     static var enabled: Bool {
@@ -123,7 +127,13 @@ enum AIProcessingSettings {
     }
 
     static func provider(for mode: AIPromptMode) -> AIProvider {
-        let key = mode == .dictation ? dictationProviderKey : assistantProviderKey
+        // Verbatim doesn't call AI, but capability checks read this; map it to
+        // the dictation provider since that's the natural first AI mode.
+        let key: String
+        switch mode {
+        case .verbatim, .dictation: key = dictationProviderKey
+        case .assistant: key = assistantProviderKey
+        }
         let raw = UserDefaults.standard.string(forKey: key) ?? ""
         // Fall back to legacy global provider key for migration
         return AIProvider(rawValue: raw)
@@ -144,7 +154,11 @@ enum AIProcessingSettings {
     }
 
     static func afmFallbackEnabled(for mode: AIPromptMode) -> Bool {
-        let key = mode == .dictation ? dictationAfmFallbackKey : assistantAfmFallbackKey
+        let key: String
+        switch mode {
+        case .verbatim, .dictation: key = dictationAfmFallbackKey
+        case .assistant: key = assistantAfmFallbackKey
+        }
         return UserDefaults.standard.bool(forKey: key)
     }
 

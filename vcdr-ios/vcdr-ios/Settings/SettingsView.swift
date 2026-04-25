@@ -7,7 +7,7 @@ struct SettingsView: View {
     @AppStorage(
         SharedConstants.defaultAIModeKey,
         store: SharedConstants.sharedDefaults
-    ) private var defaultModeRaw = AIPromptMode.dictation.rawValue
+    ) private var defaultModeRaw = AIPromptMode.verbatim.rawValue
     @AppStorage(
         SharedConstants.defaultAIActiveKey,
         store: SharedConstants.sharedDefaults
