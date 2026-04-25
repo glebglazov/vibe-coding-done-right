@@ -33,6 +33,10 @@ enum SharedConstants {
     static let sessionAIModeKey    = "session_ai_mode"
     static let sessionAIActiveKey  = "session_ai_active"
 
+    /// Whether the custom keyboard should fire haptic feedback. Absent → treat
+    /// as enabled (the default). Written by the Settings UI via `DefaultSettings`.
+    static let defaultKeyboardHapticsEnabledKey = "default_keyboard_haptics_enabled"
+
     static let settingsNotificationName = "glebglazov.vcdr-ios.settingsChanged"
     static let aiConfiguredKey = "shared_ai_configured"
 
@@ -139,6 +143,10 @@ enum DefaultSettings {
 
     static func setAIConfigured(_ configured: Bool) {
         write { $0.set(configured, forKey: SharedConstants.aiConfiguredKey) }
+    }
+
+    static func setKeyboardHapticsEnabled(_ enabled: Bool) {
+        write { $0.set(enabled, forKey: SharedConstants.defaultKeyboardHapticsEnabledKey) }
     }
 
     private static func write(_ block: (UserDefaults) -> Void) {

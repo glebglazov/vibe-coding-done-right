@@ -22,6 +22,10 @@ struct SettingsView: View {
     ) private var syncHistoryViaICloud: Bool = true
     @AppStorage(HotSessionTimeout.storageKey)
     private var hotSessionTimeoutSeconds: Int = HotSessionTimeout.defaultValue.rawValue
+    @AppStorage(
+        SharedConstants.defaultKeyboardHapticsEnabledKey,
+        store: SharedConstants.sharedDefaults
+    ) private var keyboardHapticsEnabled: Bool = true
 
     var body: some View {
         NavigationStack {
@@ -31,6 +35,7 @@ struct SettingsView: View {
                 syncSection
                 microphoneSection
                 hotSessionSection
+                keyboardSection
                 appearanceSection
                 #if DEBUG
                 debugSection
@@ -64,6 +69,9 @@ struct SettingsView: View {
                     name: HotSessionTimeout.didChangeNotification,
                     object: nil
                 )
+            }
+            .onChange(of: keyboardHapticsEnabled) { _, val in
+                DefaultSettings.setKeyboardHapticsEnabled(val)
             }
         }
     }
@@ -133,6 +141,18 @@ struct SettingsView: View {
             Text("Microphone")
         } footer: {
             Text("Always records from the built-in mic. AirPods and other Bluetooth headsets use narrowband audio that hurts transcription accuracy, so forcing the built-in mic keeps results consistent. Turn this off to record from whatever input iOS picks — AirPods, wired headsets, USB mics — and transcription quality may vary a lot depending on the device connected.")
+        }
+    }
+
+    // MARK: - Keyboard
+
+    private var keyboardSection: some View {
+        Section {
+            Toggle("Haptic Feedback", isOn: $keyboardHapticsEnabled)
+        } header: {
+            Text("Keyboard")
+        } footer: {
+            Text("Plays a tap when you press a button in the custom keyboard and when a transcription is inserted. Requires \"Allow Full Access\" to be enabled for the keyboard in iOS Settings.")
         }
     }
 

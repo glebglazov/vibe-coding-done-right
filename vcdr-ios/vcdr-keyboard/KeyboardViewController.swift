@@ -159,7 +159,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     func insertPendingText() {
         guard let text = pendingText, !text.isEmpty else { return }
         textDocumentProxy.insertText(text)
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        KeyboardHaptics.success()
         // Space is already added by TextPostProcessor.applyTerminator in the pipeline
         pendingText = nil
         dictationState = .idle
@@ -243,7 +243,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
             // Result arrived — insert while the tap's event context is still active
             textDocumentProxy.insertText(text)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            KeyboardHaptics.success()
             // Space is already added by TextPostProcessor.applyTerminator in the pipeline
             SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
             pendingText = nil
