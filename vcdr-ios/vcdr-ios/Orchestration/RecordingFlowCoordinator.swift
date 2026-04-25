@@ -292,13 +292,22 @@ final class RecordingFlowCoordinator {
         initProgress = "Downloading model..."
 
         let pollTask = Task {
+            // Track the last published phase so we only write `initProgress`
+            // (an @Observable) on a real transition. Unconditional writes here
+            // tick at the poll cadence and force a SwiftUI body re-evaluation
+            // every iteration, which is enough to starve sheet-presentation
+            // animations during init and make the Settings gear feel dead.
+            var lastPhase: ParakeetProvider.InitPhase?
             while !Task.isCancelled {
                 let phase = await transcriptionProvider.initPhase
-                switch phase {
-                case .notStarted: initProgress = "Preparing..."
-                case .downloading: initProgress = "Downloading model..."
-                case .compiling: initProgress = "Compiling model..."
-                case .ready: return
+                if phase != lastPhase {
+                    switch phase {
+                    case .notStarted: initProgress = "Preparing..."
+                    case .downloading: initProgress = "Downloading model..."
+                    case .compiling: initProgress = "Compiling model..."
+                    case .ready: return
+                    }
+                    lastPhase = phase
                 }
                 try? await Task.sleep(for: Self.initPollInterval)
             }
