@@ -115,12 +115,6 @@ enum AIProcessingSettings {
         UserDefaults.standard.bool(forKey: enabledKey)
     }
 
-    /// Whether AI is on by default for new dictation sessions. Reads from
-    /// `sharedDefaults`; mutations go through `DefaultSettings.setAIActive(_:)`.
-    static var activeInDictation: Bool {
-        SharedConstants.sharedDefaults.bool(forKey: SharedConstants.defaultAIActiveKey)
-    }
-
     /// Provider for the current default mode. Used by hasAICapability / isConfigured checks.
     static var provider: AIProvider {
         provider(for: defaultMode)

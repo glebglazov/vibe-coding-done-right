@@ -36,35 +36,28 @@ final class RecordingFlowCoordinator {
     private(set) var launchedViaDeepLink = false
     /// Status of the AI post-processing request
     private(set) var aiProcessingStatus: AIProcessingStatus = .idle
-    /// Per-session AI-active override. Initialized from the current effective
-    /// setting (session override if any, otherwise the user's default).
-    var aiActiveThisSession: Bool = SessionSettings.effectiveAIActive()
     /// Per-session prompt mode — initialized from the current effective setting.
+    /// `.verbatim` is the canonical "AI off" value; mode is the single source of
+    /// truth for whether AI runs and which prompt it uses.
     var selectedPromptMode: AIPromptMode = SessionSettings.effectiveAIMode()
     /// Per-session text style — initialized from the current effective setting.
     var currentTextStyle: TextStyle = SessionSettings.effectiveTextStyle()
 
     /// Whether the static style rules (capitalization, punctuation) should be
-    /// applied to this session's output. Verbatim (no AI) always styles — the
-    /// pill is always visible, so the setting must take effect. Assistant
-    /// output is the only case we leave untouched.
+    /// applied. Assistant output is the only case we leave untouched.
     private var shouldApplyStaticStyles: Bool {
-        !aiActiveThisSession || selectedPromptMode.appliesStyles
+        selectedPromptMode.appliesStyles
     }
 
     // MARK: - In-Session Settings (written to session_* storage)
 
     /// Cycles the AI state through Verbatim → Dictation → Assistant → Verbatim.
     func cycleAIState() {
-        if !aiActiveThisSession {
-            aiActiveThisSession = true
-            selectedPromptMode = .dictation
-        } else if selectedPromptMode == .dictation {
-            selectedPromptMode = .assistant
-        } else {
-            aiActiveThisSession = false
+        switch selectedPromptMode {
+        case .verbatim: selectedPromptMode = .dictation
+        case .dictation: selectedPromptMode = .assistant
+        case .assistant: selectedPromptMode = .verbatim
         }
-        SessionSettings.setAIActive(aiActiveThisSession)
         SessionSettings.setAIMode(selectedPromptMode)
     }
 
@@ -434,7 +427,6 @@ final class RecordingFlowCoordinator {
         capturedTexts = []
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.aiActiveThisSession = SessionSettings.effectiveAIActive()
             self.selectedPromptMode = SessionSettings.effectiveAIMode()
             self.currentTextStyle = SessionSettings.effectiveTextStyle()
             let sd = SharedConstants.sharedDefaults
@@ -562,7 +554,7 @@ final class RecordingFlowCoordinator {
         // Refresh mode/style from shared defaults — keyboard may have flipped
         // mid-recording. Live-flip semantics: latest user intent wins.
         resyncSettingsFromSharedDefaults()
-        let useAI = aiActiveThisSession && AIProcessingSettings.hasAICapability
+        let useAI = selectedPromptMode != .verbatim && AIProcessingSettings.hasAICapability
 
         // Stage 1: Filler removal only — terminator is applied after external processing
         let cleanedLive = TextPostProcessor.removeFillers(from: liveTranscript)
@@ -671,15 +663,14 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Cross-process settings sync
 
-    /// Re-reads mode/style/aiActive from shared defaults right before a
-    /// pipeline decision. Guards against cross-process staleness: the keyboard
-    /// may have flipped mode since the last Darwin `settingsChanged` notif
+    /// Re-reads mode/style from shared defaults right before a pipeline
+    /// decision. Guards against cross-process staleness: the keyboard may
+    /// have flipped mode since the last Darwin `settingsChanged` notif
     /// landed, and `handleSettingsChanged`'s MainActor task may still be
     /// queued. `synchronize()` forces the current process to pull the latest
     /// cross-process writes. Cheap (µs) — safe to call on hot paths.
     private func resyncSettingsFromSharedDefaults() {
         SharedConstants.sharedDefaults.synchronize()
-        aiActiveThisSession = SessionSettings.effectiveAIActive()
         selectedPromptMode = SessionSettings.effectiveAIMode()
         currentTextStyle = SessionSettings.effectiveTextStyle()
     }
@@ -716,7 +707,7 @@ final class RecordingFlowCoordinator {
     /// Display label for the history entry — mirrors the current AI mode
     /// and text style when the user enabled AI for this recording.
     private func historyLabel() -> String? {
-        guard aiActiveThisSession else { return nil }
+        guard selectedPromptMode != .verbatim else { return nil }
         let mode = selectedPromptMode.rawValue.capitalized
         return selectedPromptMode.appliesStyles
             ? "\(mode) · \(currentTextStyle.rawValue.capitalized)"
@@ -730,7 +721,6 @@ final class RecordingFlowCoordinator {
         liveTranscript = ""
         launchedViaDeepLink = false
         aiProcessingStatus = .idle
-        aiActiveThisSession = SessionSettings.effectiveAIActive()
         selectedPromptMode = SessionSettings.effectiveAIMode()
         currentTextStyle = SessionSettings.effectiveTextStyle()
         aiInputText = ""
@@ -1028,7 +1018,6 @@ final class RecordingFlowCoordinator {
 
     private func handleSettingsChanged() {
         SharedConstants.sharedDefaults.synchronize()
-        aiActiveThisSession = SessionSettings.effectiveAIActive()
         selectedPromptMode = SessionSettings.effectiveAIMode()
         currentTextStyle = SessionSettings.effectiveTextStyle()
     }

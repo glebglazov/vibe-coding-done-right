@@ -21,10 +21,8 @@ enum SharedConstants {
     // read effective values from SessionSettings.
     static let defaultTextStyleKey = "default_text_style"
     static let defaultAIModeKey    = "default_ai_mode"
-    static let defaultAIActiveKey  = "default_ai_active"
     static let sessionTextStyleKey = "session_text_style"
     static let sessionAIModeKey    = "session_ai_mode"
-    static let sessionAIActiveKey  = "session_ai_active"
 
     /// Mirror of the app-side key. Absent → treat as enabled.
     static let defaultKeyboardHapticsEnabledKey = "default_keyboard_haptics_enabled"
@@ -81,6 +79,15 @@ enum SharedAIMode: String {
         case .assistant: "Assistant"
         }
     }
+
+    /// Cycles verbatim → dictation → assistant → verbatim.
+    var next: SharedAIMode {
+        switch self {
+        case .verbatim: .dictation
+        case .dictation: .assistant
+        case .assistant: .verbatim
+        }
+    }
 }
 
 /// Text style — keyboard-safe mirror of TextStyle.
@@ -121,10 +128,6 @@ enum SessionSettings {
         write { $0.set(value.rawValue, forKey: SharedConstants.sessionAIModeKey) }
     }
 
-    static func setAIActive(_ active: Bool) {
-        write { $0.set(active, forKey: SharedConstants.sessionAIActiveKey) }
-    }
-
     // MARK: - Readers (effective: session ?? default ?? fallback)
 
     static func effectiveTextStyle() -> SharedTextStyle {
@@ -141,17 +144,6 @@ enum SessionSettings {
             ?? sd.string(forKey: SharedConstants.defaultAIModeKey)
             ?? ""
         return SharedAIMode(rawValue: raw) ?? .verbatim
-    }
-
-    static func effectiveAIActive() -> Bool {
-        let sd = SharedConstants.sharedDefaults
-        if sd.object(forKey: SharedConstants.sessionAIActiveKey) != nil {
-            return sd.bool(forKey: SharedConstants.sessionAIActiveKey)
-        }
-        if sd.object(forKey: SharedConstants.defaultAIActiveKey) != nil {
-            return sd.bool(forKey: SharedConstants.defaultAIActiveKey)
-        }
-        return false
     }
 
     /// Default-only setting (no session override). Absent key → treat as enabled.

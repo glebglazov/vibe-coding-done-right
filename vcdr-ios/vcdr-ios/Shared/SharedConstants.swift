@@ -29,10 +29,8 @@ enum SharedConstants {
     // unrepresentable when defaults and sessions live in different keys.
     static let defaultTextStyleKey = "default_text_style"
     static let defaultAIModeKey    = "default_ai_mode"
-    static let defaultAIActiveKey  = "default_ai_active"
     static let sessionTextStyleKey = "session_text_style"
     static let sessionAIModeKey    = "session_ai_mode"
-    static let sessionAIActiveKey  = "session_ai_active"
 
     /// Whether the custom keyboard should fire haptic feedback. Absent → treat
     /// as enabled (the default). Written by the Settings UI via `DefaultSettings`.
@@ -90,8 +88,13 @@ enum SharedAIMode: String {
         }
     }
 
+    /// Cycles verbatim → dictation → assistant → verbatim.
     var next: SharedAIMode {
-        self == .dictation ? .assistant : .dictation
+        switch self {
+        case .verbatim: .dictation
+        case .dictation: .assistant
+        case .assistant: .verbatim
+        }
     }
 }
 
@@ -137,13 +140,6 @@ enum DefaultSettings {
         }
     }
 
-    static func setAIActive(_ active: Bool) {
-        write { sd in
-            sd.set(active, forKey: SharedConstants.defaultAIActiveKey)
-            sd.removeObject(forKey: SharedConstants.sessionAIActiveKey)
-        }
-    }
-
     static func setAIConfigured(_ configured: Bool) {
         write { $0.set(configured, forKey: SharedConstants.aiConfiguredKey) }
     }
@@ -178,17 +174,12 @@ enum SessionSettings {
         write { $0.set(value.rawValue, forKey: SharedConstants.sessionAIModeKey) }
     }
 
-    static func setAIActive(_ active: Bool) {
-        write { $0.set(active, forKey: SharedConstants.sessionAIActiveKey) }
-    }
-
     /// Drops every per-session override. Call on cold launch so a new run
     /// starts from configured defaults rather than the last run's overrides.
     static func clearAll() {
         write { sd in
             sd.removeObject(forKey: SharedConstants.sessionTextStyleKey)
             sd.removeObject(forKey: SharedConstants.sessionAIModeKey)
-            sd.removeObject(forKey: SharedConstants.sessionAIActiveKey)
         }
     }
 
@@ -210,17 +201,6 @@ enum SessionSettings {
         return AIPromptMode(rawValue: raw) ?? .verbatim
     }
 
-    static func effectiveAIActive() -> Bool {
-        let sd = SharedConstants.sharedDefaults
-        if sd.object(forKey: SharedConstants.sessionAIActiveKey) != nil {
-            return sd.bool(forKey: SharedConstants.sessionAIActiveKey)
-        }
-        if sd.object(forKey: SharedConstants.defaultAIActiveKey) != nil {
-            return sd.bool(forKey: SharedConstants.defaultAIActiveKey)
-        }
-        return false
-    }
-
     private static func write(_ block: (UserDefaults) -> Void) {
         let sd = SharedConstants.sharedDefaults
         block(sd)
@@ -236,6 +216,8 @@ enum LegacySettingsMigrator {
     private static let legacyDefaultStyleKey = "text_style_default"
     private static let legacyDefaultModeKey = "ai_processing_default_mode"
     private static let legacyActiveInDictationKey = "ai_processing_active_in_dictation"
+    private static let legacyDefaultAIActiveKey = "default_ai_active"
+    private static let legacySessionAIActiveKey = "session_ai_active"
     private static let legacySharedAIActiveKey = "shared_ai_active"
     private static let legacySharedAIModeKey = "shared_ai_mode"
     private static let legacySharedTextStyleKey = "shared_text_style"
@@ -252,10 +234,21 @@ enum LegacySettingsMigrator {
            let raw = std.string(forKey: legacyDefaultModeKey) {
             sd.set(raw, forKey: SharedConstants.defaultAIModeKey)
         }
-        if sd.object(forKey: SharedConstants.defaultAIActiveKey) == nil,
-           std.object(forKey: legacyActiveInDictationKey) != nil {
-            sd.set(std.bool(forKey: legacyActiveInDictationKey), forKey: SharedConstants.defaultAIActiveKey)
+
+        // Pre-rev: "AI off" was a separate boolean (`default_ai_active=false`)
+        // that overrode the mode picker. The mode picker now owns that state
+        // via `.verbatim`, so collapse the boolean into the mode and drop it.
+        // Any stored mode wins; only force `.verbatim` when the boolean was
+        // explicitly false and the user never picked a mode.
+        if sd.object(forKey: legacyDefaultAIActiveKey) != nil {
+            let wasActive = sd.bool(forKey: legacyDefaultAIActiveKey)
+            if !wasActive, sd.object(forKey: SharedConstants.defaultAIModeKey) == nil {
+                sd.set(AIPromptMode.verbatim.rawValue, forKey: SharedConstants.defaultAIModeKey)
+            }
+            sd.removeObject(forKey: legacyDefaultAIActiveKey)
         }
+        sd.removeObject(forKey: legacySessionAIActiveKey)
+        std.removeObject(forKey: legacyActiveInDictationKey)
 
         // The old "live" keys in sharedDefaults no longer mean anything —
         // they were both the source of truth for cycles and the clobber

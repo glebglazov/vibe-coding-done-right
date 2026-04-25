@@ -347,7 +347,7 @@ struct RecordingView: View {
 
     @ViewBuilder
     private var aiStatusView: some View {
-        if !coordinator.aiActiveThisSession || coordinator.aiProcessingStatus == .idle {
+        if coordinator.selectedPromptMode == .verbatim || coordinator.aiProcessingStatus == .idle {
             EmptyView()
         } else if coordinator.aiProcessingStatus == .processing {
             HStack(spacing: 8) {
@@ -391,12 +391,11 @@ struct RecordingView: View {
 
     private var sessionInfoView: some View {
         HStack(spacing: 12) {
-            if coordinator.aiActiveThisSession {
+            if coordinator.selectedPromptMode != .verbatim {
                 sessionInfoPill(coordinator.selectedPromptMode.displayName.uppercased())
             }
-            // Mirrors the recording-time style pill visibility: verbatim always
-            // styles, dictation styles, assistant does not.
-            if !coordinator.aiActiveThisSession || coordinator.selectedPromptMode.appliesStyles {
+            // Verbatim and dictation both apply styles; assistant does not.
+            if coordinator.selectedPromptMode.appliesStyles {
                 sessionInfoPill(coordinator.currentTextStyle.displayName.uppercased())
             }
         }
@@ -431,18 +430,16 @@ struct RecordingView: View {
                 } label: {
                     sonicPill(
                         icon: "sparkles",
-                        text: coordinator.aiActiveThisSession
-                            ? coordinator.selectedPromptMode.displayName.uppercased()
-                            : "VERBATIM",
+                        text: coordinator.selectedPromptMode.displayName.uppercased(),
                         sizingTexts: Self.aiModeSizingLabels,
-                        filled: coordinator.aiActiveThisSession
+                        filled: coordinator.selectedPromptMode != .verbatim
                     )
                 }
             }
 
             // Style toggle pill: visually hidden in Assistant mode but keeps its
             // slot in the layout so the AI pill doesn't reflow horizontally.
-            let styleVisible = !coordinator.aiActiveThisSession || coordinator.selectedPromptMode.appliesStyles
+            let styleVisible = coordinator.selectedPromptMode.appliesStyles
             Button {
                 coordinator.cycleTextStyle()
             } label: {

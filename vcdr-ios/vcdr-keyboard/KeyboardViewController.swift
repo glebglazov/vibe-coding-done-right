@@ -21,7 +21,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     // MARK: - Shared Settings (keyboard ↔ app)
     @Published var aiConfigured: Bool = false
-    @Published var aiActive: Bool = false
+    /// Source of truth for the AI/Verbatim pill. `.verbatim` ↔ "AI off".
     @Published var aiMode: SharedAIMode = .verbatim
     @Published var textStyle: SharedTextStyle = .casual
 
@@ -290,22 +290,13 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     private func refreshSettings() {
         aiConfigured = SharedConstants.sharedDefaults.bool(forKey: SharedConstants.aiConfiguredKey)
-        aiActive = SessionSettings.effectiveAIActive()
         aiMode = SessionSettings.effectiveAIMode()
         textStyle = SessionSettings.effectiveTextStyle()
     }
 
-    /// Cycles the AI state through Off → Dictation → Assistant → Off.
+    /// Cycles the AI mode through Verbatim → Dictation → Assistant → Verbatim.
     func cycleAIState() {
-        if !aiActive {
-            aiActive = true
-            aiMode = .dictation
-        } else if aiMode == .dictation {
-            aiMode = .assistant
-        } else {
-            aiActive = false
-        }
-        SessionSettings.setAIActive(aiActive)
+        aiMode = aiMode.next
         SessionSettings.setAIMode(aiMode)
         refreshSelectedTextIndicator()
     }
@@ -337,7 +328,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         sd.removeObject(forKey: SharedConstants.selectedTextKey)
         // Initialize captures array — include current selection as first capture if available
         var captures: [String] = []
-        if aiActive, aiMode == .assistant,
+        if aiMode == .assistant,
            let selected = textDocumentProxy.selectedText, !selected.isEmpty {
             captures.append(selected)
         }
@@ -385,7 +376,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Captures the currently selected text and appends it to the captures array.
     /// Called via the Capture button during recording in assistant mode.
     func captureSelectedText() {
-        guard aiActive, aiMode == .assistant,
+        guard aiMode == .assistant,
               let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
         let sd = SharedConstants.sharedDefaults
         sd.synchronize()
@@ -404,7 +395,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     /// Refreshes the `hasSelectedText` flag based on current proxy state and mode.
     func refreshSelectedTextIndicator() {
-        let selected = aiActive && aiMode == .assistant
+        let selected = aiMode == .assistant
             && !(textDocumentProxy.selectedText ?? "").isEmpty
         if hasSelectedText != selected {
             hasSelectedText = selected

@@ -56,7 +56,7 @@ struct VCDRKeyboardView: View {
                     // Right: capture button (during recording in assistant mode) + action button
                     DictateActionButton(
                         dictationState: controller.dictationState,
-                        showCapture: controller.aiActive && controller.aiMode == .assistant,
+                        showCapture: controller.aiMode == .assistant,
                         captureCount: controller.captureCount,
                         onStart: { controller.startRecordingFromKeyboard() },
                         onStop: { controller.stopAndWaitForResult() },
@@ -94,14 +94,14 @@ struct DictateSettingsPills: View {
                 } label: {
                     sonicPill(
                         icon: "sparkles",
-                        text: controller.aiActive ? controller.aiMode.displayName.uppercased() : "VERBATIM",
+                        text: controller.aiMode.displayName.uppercased(),
                         sizingTexts: Self.aiModeLabels,
-                        filled: controller.aiActive
+                        filled: controller.aiMode != .verbatim
                     )
                 }
             }
 
-            if !controller.aiActive || controller.aiMode != .assistant {
+            if controller.aiMode != .assistant {
                 Button {
                     KeyboardHaptics.light()
                     controller.cycleTextStyle()

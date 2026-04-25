@@ -9,10 +9,6 @@ struct SettingsView: View {
         store: SharedConstants.sharedDefaults
     ) private var defaultModeRaw = AIPromptMode.verbatim.rawValue
     @AppStorage(
-        SharedConstants.defaultAIActiveKey,
-        store: SharedConstants.sharedDefaults
-    ) private var aiActiveInDictation = false
-    @AppStorage(
         SharedConstants.defaultTextStyleKey,
         store: SharedConstants.sharedDefaults
     ) private var defaultStyleRaw = TextStyle.casual.rawValue
@@ -51,9 +47,6 @@ struct SettingsView: View {
             // @AppStorage above writes directly to sharedDefaults; route each
             // change through DefaultSettings so the matching session override
             // is cleared and the keyboard extension is notified.
-            .onChange(of: aiActiveInDictation) { _, val in
-                DefaultSettings.setAIActive(val)
-            }
             .onChange(of: defaultModeRaw) { _, val in
                 if let mode = AIPromptMode(rawValue: val) {
                     DefaultSettings.setAIMode(mode)
@@ -192,8 +185,6 @@ struct SettingsView: View {
 
     private var aiProcessingSection: some View {
         Section {
-            Toggle("Enabled by Default", isOn: $aiActiveInDictation)
-
             Picker("Default Mode", selection: $defaultModeRaw) {
                 ForEach(AIPromptMode.availableModes, id: \.self) { mode in
                     Text(mode.displayName).tag(mode.rawValue)
