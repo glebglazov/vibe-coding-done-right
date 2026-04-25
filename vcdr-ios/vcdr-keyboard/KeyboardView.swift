@@ -256,32 +256,31 @@ struct DictateActionButton: View {
 
 /// Haptic feedback for keyboard-extension buttons.
 ///
-/// Why this is non-trivial in a keyboard extension: the main app's transient-
-/// generator pattern works because by the time the user taps record, UIKit
-/// activity has already warmed the haptic-engine XPC daemon connection in
-/// that process. The keyboard extension is a separately-spawned process with
-/// a *cold* daemon connection on first use; a freshly-allocated
-/// `UIImpactFeedbackGenerator` deinits before the cold round-trip resolves
-/// and the impact is dropped on the floor — exactly the failure mode Apple's
-/// docs warn about ("hold a reference to a feedback generator for as long as
-/// you can"). PR #25 swapped the generator style without addressing the
-/// lifecycle; this type does.
+/// Why this is non-trivial in a keyboard extension: `UIImpactFeedbackGenerator(style:)`
+/// (the legacy initializer) resolves its haptic engine via the host process's
+/// key window. A keyboard extension's input view doesn't live in that key
+/// window — it lives in its own scene — so the legacy initializer binds to
+/// either nothing or the wrong context, and impacts are dropped silently.
+/// `prepare()` and long-lived references can't fix a generator that never
+/// had a usable scene to begin with (the failure mode in PRs #25 and #29).
 ///
-/// The fix:
-/// 1. Hold long-lived generators for the lifetime of the extension process.
-/// 2. Call `prepare()` from `viewDidLoad`/`viewWillAppear` and again whenever
-///    `dictationState` becomes `.transcribing`, so the success haptic that
-///    fires deep inside `stopAndWaitForResult`'s `RunLoop.main.run(until:)`
-///    poll lands on a primed engine.
-/// 3. Re-prepare immediately after each `impactOccurred()` to keep the
-///    engine warm for the next event.
+/// The iOS 17.5+ `init(view:style:)` form lets the system bind the generator
+/// to a specific view's window/scene. Apple's docs call this out explicitly
+/// for "apps that support multiple scenes or are running in a window that
+/// isn't on the main screen" — the textbook description of a keyboard
+/// extension. Call `attach(to:)` from `viewDidLoad` once the controller's
+/// view exists; the generators are then long-lived for the process lifetime.
+///
+/// We still hold long-lived references and re-`prepare()` after each impact
+/// to keep the haptic-engine XPC connection warm — that part of PR #29 is
+/// independently useful for latency, just not sufficient on its own.
 ///
 /// `isEnabled` is cached and refreshed via `refreshEnabled()` from
 /// `handleSettingsChanged` (after `synchronize()`), so the per-call hot path
 /// is a bool read rather than a cross-process `UserDefaults` round-trip.
 enum KeyboardHaptics {
-    private static let lightGenerator = UIImpactFeedbackGenerator(style: .light)
-    private static let mediumGenerator = UIImpactFeedbackGenerator(style: .medium)
+    private static var lightGenerator: UIImpactFeedbackGenerator?
+    private static var mediumGenerator: UIImpactFeedbackGenerator?
 
     /// Cached enabled flag. Refresh via `refreshEnabled()` whenever the
     /// settings notification fires.
@@ -295,30 +294,52 @@ enum KeyboardHaptics {
         isEnabled = SessionSettings.effectiveKeyboardHapticsEnabled()
     }
 
+    /// Builds the long-lived generators bound to the extension's own
+    /// view/scene via iOS 17.5+ `init(view:style:)`. Without this, the
+    /// generators bind to the host app's key window (or nothing) and
+    /// impacts are dropped silently.
+    ///
+    /// **Must be called when `view.window` is non-nil** — i.e. from
+    /// `viewWillAppear` or later, NOT `viewDidLoad`. The legacy initializer
+    /// is forgiving about scene context; the `view:` form binds to a real
+    /// scene at construction time and a windowless view binds to nothing.
+    ///
+    /// Idempotent: subsequent calls are no-ops, so PR #29's long-lived
+    /// warming holds across re-appearances.
+    static func attach(to view: UIView) {
+        if lightGenerator == nil {
+            lightGenerator = UIImpactFeedbackGenerator(style: .light, view: view)
+        }
+        if mediumGenerator == nil {
+            mediumGenerator = UIImpactFeedbackGenerator(style: .medium, view: view)
+        }
+        prepare()
+    }
+
     /// Warms the haptic engine. Cheap once warm; pays the cold-daemon cost
     /// the first time the keyboard process spins up. Call from view
     /// lifecycle hooks and on transitions to `.transcribing`.
     static func prepare() {
         guard isEnabled else { return }
-        lightGenerator.prepare()
-        mediumGenerator.prepare()
+        lightGenerator?.prepare()
+        mediumGenerator?.prepare()
     }
 
     static func light() {
         guard isEnabled else { return }
-        lightGenerator.impactOccurred()
-        lightGenerator.prepare()
+        lightGenerator?.impactOccurred()
+        lightGenerator?.prepare()
     }
 
     static func medium() {
         guard isEnabled else { return }
-        mediumGenerator.impactOccurred()
-        mediumGenerator.prepare()
+        mediumGenerator?.impactOccurred()
+        mediumGenerator?.prepare()
     }
 
     static func success() {
         guard isEnabled else { return }
-        mediumGenerator.impactOccurred()
-        mediumGenerator.prepare()
+        mediumGenerator?.impactOccurred()
+        mediumGenerator?.prepare()
     }
 }

@@ -51,11 +51,11 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         super.viewDidLoad()
         setup(for: .vcdr)
 
-        // Warm the haptic engine before the user taps anything. The extension's
-        // daemon connection is cold on process spawn; without an early prepare()
-        // the first impact (Start pill) routinely drops.
+        // Refresh the cached enabled flag now; haptic generator construction
+        // is deferred to `viewWillAppear` because the iOS 17.5+
+        // `UIImpactFeedbackGenerator(view:style:)` needs `view.window` to be
+        // non-nil at construction time — and at `viewDidLoad` it isn't yet.
         KeyboardHaptics.refreshEnabled()
-        KeyboardHaptics.prepare()
 
         // Listen for recording state changes from the main app.
         // Text is delivered via state bundling ("idle|text") on this same channel.
@@ -106,11 +106,13 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         refreshSettings()
         refreshSelectedTextIndicator()
 
-        // Re-prepare every time the keyboard appears — prepared state expires
-        // after a few seconds, so this catches the case where the keyboard
-        // was dismissed and re-shown without the process being killed.
+        // First call here builds the long-lived generators bound to this
+        // view's window/scene (iOS 17.5+ `init(view:style:)`); subsequent
+        // calls are no-op + `prepare()`. `viewWillAppear` is the earliest
+        // hook where `view.window` is guaranteed non-nil, which is what
+        // the scene-aware initializer needs.
         KeyboardHaptics.refreshEnabled()
-        KeyboardHaptics.prepare()
+        KeyboardHaptics.attach(to: view)
         // viewWillAppear provides a fresh textDocumentProxy connection —
         // auto-insert if text is pending (handles the case where the keyboard
         // wasn't visible when the transcription arrived).
