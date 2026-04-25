@@ -18,6 +18,7 @@ struct ModeTemplate {
     let showPreview: Bool
     let appliesStyles: Bool
     let contextAware: Bool
+    let appendCapturesToOutput: Bool
 
     func makeMode() -> Mode {
         Mode(
@@ -37,7 +38,8 @@ struct ModeTemplate {
             parameters: parameters,
             showPreview: showPreview,
             appliesStyles: appliesStyles,
-            contextAware: contextAware
+            contextAware: contextAware,
+            appendCapturesToOutput: appendCapturesToOutput
         )
     }
 
@@ -57,6 +59,7 @@ struct ModeTemplate {
         mode.showPreview = showPreview
         mode.appliesStyles = appliesStyles
         mode.contextAware = contextAware
+        mode.appendCapturesToOutput = appendCapturesToOutput
     }
 
     /// Finds the template definition for a given template ID.
@@ -97,7 +100,8 @@ extension ModeTemplate {
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
         appliesStyles: true,
-        contextAware: false
+        contextAware: false,
+        appendCapturesToOutput: false
     )
 
     static let aiDictation = ModeTemplate(
@@ -116,7 +120,8 @@ extension ModeTemplate {
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
         appliesStyles: true,
-        contextAware: false
+        contextAware: false,
+        appendCapturesToOutput: true
     )
 
     static let claudeCode = ModeTemplate(
@@ -141,7 +146,8 @@ extension ModeTemplate {
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
         appliesStyles: false,
-        contextAware: false
+        contextAware: false,
+        appendCapturesToOutput: false
     )
 
     static let ollama = ModeTemplate(
@@ -165,7 +171,8 @@ extension ModeTemplate {
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
         appliesStyles: false,
-        contextAware: false
+        contextAware: false,
+        appendCapturesToOutput: false
     )
 
     static let all: [ModeTemplate] = [.plain, .aiDictation, .claudeCode, .ollama]

@@ -57,7 +57,14 @@ enum TextProcessingPipeline {
         }
 
         // MARK: External processing — content processing
-        let structured = structureInput(text: cleanedText, captures: captures, mode: mode, style: style, cursorContext: cursorContext)
+        // When `appendCapturesToOutput` is on (and there's actual external processing happening),
+        // captures bypass the prompt entirely and are re-attached to the result after style transform.
+        // This avoids the LLM mutating or dropping `<capture>` tags.
+        let appendCapturesAfterProcessing = mode.appendCapturesToOutput
+            && mode.processingType != .none
+            && !captures.isEmpty
+        let capturesForPrompt = appendCapturesAfterProcessing ? [] : captures
+        let structured = structureInput(text: cleanedText, captures: capturesForPrompt, mode: mode, style: style, cursorContext: cursorContext)
         Logger.textTransform.debug("Structured input for \(mode.processingType.rawValue):\n\(structured)")
         let result: PipelineResult
 
@@ -140,10 +147,23 @@ enum TextProcessingPipeline {
             Logger.textTransform.debug("Style transform: skipped (mode.appliesStyles=false)")
         }
 
-        Logger.textTransform.info("Pipeline final output: \"\(styledText)\"")
+        // MARK: Append captures (when appendCapturesToOutput is on)
+        // Captures are appended verbatim after style transform so the AI text is styled
+        // but capture content stays byte-exact. Sentinel result is returned untouched above.
+        // Skip when external processing didn't happen — the AI-failure fallback already
+        // re-includes captures via `structureInputPlaintext`.
+        let finalText: String
+        if appendCapturesAfterProcessing && result.hadExternalProcessing {
+            finalText = styledText + "\n\n" + Mode.formatCaptures(captures)
+            Logger.textTransform.info("Appended \(captures.count) capture(s) to output")
+        } else {
+            finalText = styledText
+        }
+
+        Logger.textTransform.info("Pipeline final output: \"\(finalText)\"")
 
         return PipelineResult(
-            text: styledText,
+            text: finalText,
             hadExternalProcessing: result.hadExternalProcessing,
             aiProcessingFallback: result.aiProcessingFallback
         )

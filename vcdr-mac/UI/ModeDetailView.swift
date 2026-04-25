@@ -149,6 +149,11 @@ struct ModeDetailView: View {
 
                 Toggle("Save result to clipboard", isOn: $mode.saveResultToClipboard)
                     .help("When enabled, the result is saved to your clipboard after the output action completes.")
+
+                if mode.processingType != .none {
+                    Toggle("Append captures to output", isOn: $mode.appendCapturesToOutput)
+                        .help("When on, captures are appended after the AI response instead of being sent as input.")
+                }
             }
         }
         .formStyle(.grouped)

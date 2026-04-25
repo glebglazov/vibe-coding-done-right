@@ -153,6 +153,11 @@ struct Mode: Identifiable, Codable, Equatable {
     /// When true, cursor context (text before/after the cursor) is used for context-aware
     /// formatting: separator insertion, leading-edge capitalization, and AI context XML.
     var contextAware: Bool
+    /// When true, captures are stripped from the LLM prompt and appended verbatim to the
+    /// processed output. When false (default), captures are included in the prompt as
+    /// `<capture id="N">` tags. Has no effect when `processingType == .none`, which
+    /// always appends captures using its own plaintext format.
+    var appendCapturesToOutput: Bool
 
     /// Joined labels from the first option of each parameter (the defaults, without overrides).
     /// Used in static UI contexts (settings, menu bar, quick actions) where there's no active session.
@@ -223,7 +228,8 @@ struct Mode: Identifiable, Codable, Equatable {
         showPreview: Bool = false,
         saveResultToClipboard: Bool = false,
         appliesStyles: Bool = true,
-        contextAware: Bool = false
+        contextAware: Bool = false,
+        appendCapturesToOutput: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -243,6 +249,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.saveResultToClipboard = saveResultToClipboard
         self.appliesStyles = appliesStyles
         self.contextAware = contextAware
+        self.appendCapturesToOutput = appendCapturesToOutput
     }
 
     // MARK: - Codable (backward-compatible)
@@ -261,6 +268,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case saveResultToClipboard
         case appliesStyles
         case contextAware
+        case appendCapturesToOutput
         // Legacy key for migration (quickAction was inverted: true = skip preview)
         case quickAction
         // Legacy keys (read-only, for migration)
@@ -288,6 +296,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
         try container.encode(appliesStyles, forKey: .appliesStyles)
         try container.encode(contextAware, forKey: .contextAware)
+        try container.encode(appendCapturesToOutput, forKey: .appendCapturesToOutput)
         // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
         // Once saved in new format, old keys are gone (one-way migration).
     }
@@ -314,6 +323,7 @@ struct Mode: Identifiable, Codable, Equatable {
         saveResultToClipboard = try container.decodeIfPresent(Bool.self, forKey: .saveResultToClipboard) ?? false
         appliesStyles = try container.decodeIfPresent(Bool.self, forKey: .appliesStyles) ?? true
         contextAware = try container.decodeIfPresent(Bool.self, forKey: .contextAware) ?? false
+        appendCapturesToOutput = try container.decodeIfPresent(Bool.self, forKey: .appendCapturesToOutput) ?? false
 
         // New fields — with companion/aiProcessing → cloudAI migration
         if let rawType = try container.decodeIfPresent(String.self, forKey: .processingType) {
