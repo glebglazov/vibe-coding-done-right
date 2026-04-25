@@ -304,44 +304,50 @@ struct RecordingView: View {
     }
 
     private func completeContent(_ text: String) -> some View {
-        VStack(spacing: 28) {
-            heroTitle("DONE")
+        ZStack {
+            VStack(spacing: 28) {
+                heroTitle("DONE")
 
-            if coordinator.launchedViaDeepLink {
-                swipeHint("Swipe to paste")
-            }
+                aiStatusView
 
-            aiStatusView
+                sessionInfoView
 
-            sessionInfoView
-
-            HStack(spacing: 16) {
-                brutalistButton(showCopiedConfirmation ? "COPIED" : "COPY") {
-                    UIPasteboard.general.string = text
-                    showCopiedConfirmation = true
-                    Task {
-                        try? await Task.sleep(for: Self.copiedConfirmationDuration)
-                        showCopiedConfirmation = false
+                HStack(spacing: 16) {
+                    brutalistButton(showCopiedConfirmation ? "COPIED" : "COPY") {
+                        UIPasteboard.general.string = text
+                        showCopiedConfirmation = true
+                        Task {
+                            try? await Task.sleep(for: Self.copiedConfirmationDuration)
+                            showCopiedConfirmation = false
+                        }
+                    }
+                    brutalistButton("NEW") {
+                        Task { await coordinator.startRecording() }
                     }
                 }
-                brutalistButton("NEW") {
-                    Task { await coordinator.startRecording() }
+
+                ScrollView {
+                    HStack(alignment: .top, spacing: 16) {
+                        Rectangle()
+                            .fill(theme.primary)
+                            .frame(width: 2)
+                        Text(text)
+                            .font(.system(size: 18, weight: .light))
+                            .foregroundStyle(theme.onSurface)
+                            .lineSpacing(6)
+                    }
                 }
+                .frame(maxHeight: 200)
+                .padding(.horizontal, 32)
             }
 
-            ScrollView {
-                HStack(alignment: .top, spacing: 16) {
-                    Rectangle()
-                        .fill(theme.primary)
-                        .frame(width: 2)
-                    Text(text)
-                        .font(.system(size: 18, weight: .light))
-                        .foregroundStyle(theme.onSurface)
-                        .lineSpacing(6)
+            if coordinator.stoppedViaDeepLink {
+                VStack {
+                    Spacer()
+                    swipeHint("Swipe to paste")
+                        .padding(.bottom, 16)
                 }
             }
-            .frame(maxHeight: 200)
-            .padding(.horizontal, 32)
         }
     }
 
