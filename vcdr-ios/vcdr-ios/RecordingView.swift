@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import OSLog
 
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
@@ -88,7 +89,9 @@ struct RecordingView: View {
 
     private var settingsButton: some View {
         Button {
+            Logger.app.info("[LaunchProbe] settings button tapped main=\(Thread.isMainThread)")
             showSettings = true
+            Logger.app.info("[LaunchProbe] settings showSettings=true main=\(Thread.isMainThread)")
         } label: {
             Image(systemName: "gearshape")
                 .font(.system(size: 18))
@@ -98,8 +101,12 @@ struct RecordingView: View {
         }
         .padding(.leading, 4)
         .sheet(isPresented: $showSettings) {
+            let _ = Logger.app.info("[LaunchProbe] settings sheet content built main=\(Thread.isMainThread)")
             SettingsView()
                 .preferredColorScheme(appearance.colorScheme)
+                .onAppear {
+                    Logger.app.info("[LaunchProbe] SettingsView onAppear main=\(Thread.isMainThread)")
+                }
         }
     }
 

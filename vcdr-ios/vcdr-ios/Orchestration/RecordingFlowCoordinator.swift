@@ -273,16 +273,26 @@ final class RecordingFlowCoordinator {
     /// provisions the container, holding back the first frame and leaving
     /// the user staring at the blank launch screen.
     func bootstrapHistory() async {
-        guard history == nil else { return }
+        Logger.app.info("[LaunchProbe] bootstrapHistory entry main=\(Thread.isMainThread)")
+        guard history == nil else {
+            Logger.app.info("[LaunchProbe] bootstrapHistory already-bootstrapped")
+            return
+        }
         let defaults = SharedConstants.sharedDefaults
         let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        Logger.app.info("[LaunchProbe] bootstrapHistory before reconcile detached")
         await Task.detached(priority: .userInitiated) {
+            Logger.app.info("[LaunchProbe] bootstrapHistory reconcile detached body main=\(Thread.isMainThread)")
             HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
+            Logger.app.info("[LaunchProbe] bootstrapHistory reconcile detached body done main=\(Thread.isMainThread)")
         }.value
+        Logger.app.info("[LaunchProbe] bootstrapHistory after reconcile main=\(Thread.isMainThread)")
         history = HistoryStoreFactory.make(defaults: defaults)
+        Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
 
     func initializeModel() async {
+        Logger.app.info("[LaunchProbe] initializeModel entry main=\(Thread.isMainThread) state=\(String(describing: self.state))")
         // If recording already started, model init is handled by streamingSetupTask
         guard state != .recording else { return }
 
@@ -292,6 +302,7 @@ final class RecordingFlowCoordinator {
         initProgress = "Downloading model..."
 
         let pollTask = Task {
+            Logger.app.info("[LaunchProbe] pollTask started main=\(Thread.isMainThread)")
             // Track the last published phase so we only write `initProgress`
             // (an @Observable) on a real transition. Unconditional writes here
             // tick at the poll cadence and force a SwiftUI body re-evaluation
@@ -301,6 +312,7 @@ final class RecordingFlowCoordinator {
             while !Task.isCancelled {
                 let phase = await transcriptionProvider.initPhase
                 if phase != lastPhase {
+                    Logger.app.info("[LaunchProbe] pollTask phase=\(String(describing: phase)) main=\(Thread.isMainThread)")
                     switch phase {
                     case .notStarted: initProgress = "Preparing..."
                     case .downloading: initProgress = "Downloading model..."
@@ -319,9 +331,12 @@ final class RecordingFlowCoordinator {
             // a cold engine.start() while CoreML compile has all the CPU —
             // a multi-second stall that looks like the UI has frozen.
             async let audioPrep: Void = prewarmAudioResources()
+            Logger.app.info("[LaunchProbe] before transcriptionProvider.initialize await main=\(Thread.isMainThread)")
             try await transcriptionProvider.initialize()
+            Logger.app.info("[LaunchProbe] after transcriptionProvider.initialize main=\(Thread.isMainThread)")
             Logger.app.info("[InitTiming] transcriptionProvider.initialize() done at +\(ContinuousClock.now - initStart)")
             await audioPrep
+            Logger.app.info("[LaunchProbe] after audioPrep await main=\(Thread.isMainThread)")
             Logger.app.info("[InitTiming] audio prewarm done at +\(ContinuousClock.now - initStart)")
 
             pollTask.cancel()
@@ -354,9 +369,13 @@ final class RecordingFlowCoordinator {
     /// never triggers the system permission prompt mid-flow, and the engine is
     /// already hot so a tap during model compile doesn't pay a cold-start cost.
     private func prewarmAudioResources() async {
+        Logger.app.info("[LaunchProbe] prewarmAudioResources entry main=\(Thread.isMainThread)")
         _ = await audioRecorder.requestMicrophonePermission()
+        Logger.app.info("[LaunchProbe] prewarmAudioResources after mic permission main=\(Thread.isMainThread)")
         await audioRecorder.prepareAudioSession()
+        Logger.app.info("[LaunchProbe] prewarmAudioResources after prepareAudioSession main=\(Thread.isMainThread)")
         await audioRecorder.prepareEngine()
+        Logger.app.info("[LaunchProbe] prewarmAudioResources exit main=\(Thread.isMainThread)")
     }
 
     /// Sets state to `.recording` synchronously so the view shows "LISTENING"

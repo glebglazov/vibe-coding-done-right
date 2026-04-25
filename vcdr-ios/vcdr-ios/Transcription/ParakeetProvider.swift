@@ -37,6 +37,7 @@ actor ParakeetProvider: TranscriptionProvider {
     }
 
     func initialize() async throws {
+        Logger.transcription.info("[LaunchProbe] ParakeetProvider.initialize entry main=\(Thread.isMainThread)")
         guard !isReady else { return }
 
         // If another call is already initializing, wait for it instead of
@@ -56,8 +57,11 @@ actor ParakeetProvider: TranscriptionProvider {
         do {
             // Phase 1: Download models if not cached (typically instant when cached)
             initPhase = .downloading
+            Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=downloading set main=\(Thread.isMainThread)")
             let downloadStart = ContinuousClock.now
+            Logger.transcription.info("[LaunchProbe] ParakeetProvider before AsrModels.download main=\(Thread.isMainThread)")
             let modelDir = try await AsrModels.download(version: .v3)
+            Logger.transcription.info("[LaunchProbe] ParakeetProvider after AsrModels.download main=\(Thread.isMainThread)")
             Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
 
             // Phase 2: Compile CoreML models for Neural Engine (the slow part).
@@ -65,9 +69,13 @@ actor ParakeetProvider: TranscriptionProvider {
             // at the "Compiling..." spinner — .utility gets preempted under
             // thermal/CPU pressure and stretches the visible wait.
             initPhase = .compiling
+            Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=compiling set main=\(Thread.isMainThread)")
             let compileStart = ContinuousClock.now
             let models = try await Task.detached(priority: .userInitiated) {
-                try await AsrModels.load(from: modelDir, version: .v3)
+                Logger.transcription.info("[LaunchProbe] ParakeetProvider compile detached body start main=\(Thread.isMainThread)")
+                let result = try await AsrModels.load(from: modelDir, version: .v3)
+                Logger.transcription.info("[LaunchProbe] ParakeetProvider compile detached body end main=\(Thread.isMainThread)")
+                return result
             }.value
             Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: compileStart))")
 

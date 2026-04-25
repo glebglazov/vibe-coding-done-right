@@ -24,6 +24,7 @@ struct VCDRiOSApp: App {
             RecordingView(coordinator: coordinator)
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
+                    Logger.app.info("[LaunchProbe] .task entered main=\(Thread.isMainThread)")
                     // Cold-launch boot sequence:
                     //   0. Resolve the iCloud history container off-main.
                     //      Must come first: without this, `FileManager.url(forUbiquityContainerIdentifier:)`
@@ -41,22 +42,32 @@ struct VCDRiOSApp: App {
                     //      the keyboard extension gates its UI on the cached flag.
                     async let historyReady: Void = coordinator.bootstrapHistory()
                     async let afmReady: Bool = AFMAvailabilityCache.shared.refresh()
+                    Logger.app.info("[LaunchProbe] async-lets dispatched")
                     LegacySettingsMigrator.migrateIfNeeded()
+                    Logger.app.info("[LaunchProbe] migrateIfNeeded done")
                     SessionSettings.clearAll()
+                    Logger.app.info("[LaunchProbe] SessionSettings.clearAll done")
                     // The coordinator's @State init ran before migration, so
                     // its cached settings may reflect pre-migration storage.
                     // Refresh once the post-split state is authoritative.
                     coordinator.refreshSettingsFromStorage()
+                    Logger.app.info("[LaunchProbe] refreshSettingsFromStorage done")
                     coordinator.cleanupStaleResults()
+                    Logger.app.info("[LaunchProbe] cleanupStaleResults done")
                     coordinator.setupCommandListener()
+                    Logger.app.info("[LaunchProbe] setupCommandListener done")
                     await historyReady
+                    Logger.app.info("[LaunchProbe] historyReady awaited")
                     await coordinator.initializeModel()
+                    Logger.app.info("[LaunchProbe] initializeModel returned")
                     _ = await afmReady
+                    Logger.app.info("[LaunchProbe] afmReady awaited")
                     DefaultSettings.setAIConfigured(AIProcessingSettings.hasAICapability)
                     // Fetch updated prompts in background (non-blocking)
                     Task.detached {
                         await PromptFetcher.refreshIfNeeded()
                     }
+                    Logger.app.info("[LaunchProbe] .task complete")
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     switch newPhase {

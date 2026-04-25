@@ -76,11 +76,15 @@ final class AudioRecorder {
     private nonisolated static let dbRange: Float = 60
 
     func requestMicrophonePermission() async -> Bool {
+        Logger.app.info("[LaunchProbe] requestMicrophonePermission entry main=\(Thread.isMainThread)")
         // Fast path: skip the async hop when permission is already granted
         if AVAudioApplication.shared.recordPermission == .granted {
+            Logger.app.info("[LaunchProbe] requestMicrophonePermission already-granted")
             return true
         }
-        return await AVAudioApplication.requestRecordPermission()
+        let granted = await AVAudioApplication.requestRecordPermission()
+        Logger.app.info("[LaunchProbe] requestMicrophonePermission resolved granted=\(granted) main=\(Thread.isMainThread)")
+        return granted
     }
 
     /// Pre-configures the AVAudioSession so it's ready when recording starts.
@@ -98,10 +102,15 @@ final class AudioRecorder {
     /// can be picked up, and we skip pinning the built-in mic so iOS is free
     /// to route to whatever accessory the user has connected.
     func prepareAudioSession() async {
-        guard !audioSessionConfigured else { return }
+        Logger.app.info("[LaunchProbe] prepareAudioSession entry main=\(Thread.isMainThread)")
+        guard !audioSessionConfigured else {
+            Logger.app.info("[LaunchProbe] prepareAudioSession already-configured")
+            return
+        }
         // AVAudioSession configuration is thread-safe — run off main thread
         // to avoid blocking UI during setCategory/setActive (~50-200ms).
         let success = await Task.detached {
+            Logger.app.info("[LaunchProbe] prepareAudioSession detached body start main=\(Thread.isMainThread)")
             let session = AVAudioSession.sharedInstance()
             let forceBuiltIn = Self.useBuiltInMicOnly
             do {
@@ -117,6 +126,7 @@ final class AudioRecorder {
                     try? session.setPreferredInput(builtIn)
                 }
                 try session.setActive(true)
+                Logger.app.info("[LaunchProbe] prepareAudioSession detached body end main=\(Thread.isMainThread)")
                 return true
             } catch {
                 Logger.recording.warning("Failed to pre-configure audio session: \(error)")
@@ -128,6 +138,7 @@ final class AudioRecorder {
         audioSessionConfigured = true
         setupInterruptionObservers()
         Logger.recording.info("Audio session pre-configured")
+        Logger.app.info("[LaunchProbe] prepareAudioSession exit main=\(Thread.isMainThread)")
     }
 
     /// Pre-allocates audio engine resources so that `startRecording` is fast.
@@ -139,12 +150,19 @@ final class AudioRecorder {
     /// the audio unit and together cost a few hundred ms on first launch.
     /// They run off the main actor so the PREPARING UI stays responsive.
     func prepareEngine() async {
-        guard audioSessionConfigured, audioEngine == nil else { return }
+        Logger.app.info("[LaunchProbe] prepareEngine entry main=\(Thread.isMainThread)")
+        guard audioSessionConfigured, audioEngine == nil else {
+            Logger.app.info("[LaunchProbe] prepareEngine skip configured=\(self.audioSessionConfigured) hasEngine=\(self.audioEngine != nil)")
+            return
+        }
 
         let engine = await Task.detached { [weak self] () -> AVAudioEngine in
+            Logger.app.info("[LaunchProbe] prepareEngine detached body start main=\(Thread.isMainThread)")
             let engine = AVAudioEngine()
+            Logger.app.info("[LaunchProbe] prepareEngine after AVAudioEngine() main=\(Thread.isMainThread)")
             let inputNode = engine.inputNode
             let format = inputNode.outputFormat(forBus: 0)
+            Logger.app.info("[LaunchProbe] prepareEngine after outputFormat main=\(Thread.isMainThread)")
 
             inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
                 buffer, _ in
@@ -157,13 +175,16 @@ final class AudioRecorder {
 
                 self.bufferHandler?(buffer)
             }
+            Logger.app.info("[LaunchProbe] prepareEngine after installTap main=\(Thread.isMainThread)")
 
             engine.prepare()
+            Logger.app.info("[LaunchProbe] prepareEngine after engine.prepare main=\(Thread.isMainThread)")
             Logger.recording.info("Audio engine prepared (format: \(format))")
             return engine
         }.value
 
         audioEngine = engine
+        Logger.app.info("[LaunchProbe] prepareEngine exit main=\(Thread.isMainThread)")
     }
 
     /// Brings the audio engine online and keeps it running with the tap

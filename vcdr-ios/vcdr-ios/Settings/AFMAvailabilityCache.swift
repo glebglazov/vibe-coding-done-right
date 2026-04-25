@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import OSLog
 
 /// Caches `SystemLanguageModel.default.isAvailable`. The synchronous accessor
 /// can block the main thread for tens of seconds on first launch after install
@@ -24,13 +25,18 @@ final class AFMAvailabilityCache {
     @discardableResult
     func refresh() async -> Bool {
         if let probe { return await probe.value }
+        Logger.app.info("[LaunchProbe] AFMAvailabilityCache.refresh entry main=\(Thread.isMainThread)")
         let task = Task.detached(priority: .utility) {
-            SystemLanguageModel.default.isAvailable
+            Logger.app.info("[LaunchProbe] AFMAvailabilityCache detached body start main=\(Thread.isMainThread)")
+            let result = SystemLanguageModel.default.isAvailable
+            Logger.app.info("[LaunchProbe] AFMAvailabilityCache detached body end main=\(Thread.isMainThread) available=\(result)")
+            return result
         }
         probe = task
         let result = await task.value
         probe = nil
         isAvailable = result
+        Logger.app.info("[LaunchProbe] AFMAvailabilityCache.refresh exit main=\(Thread.isMainThread)")
         return result
     }
 }
