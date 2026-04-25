@@ -11,7 +11,7 @@ struct SettingsView: View {
     @AppStorage(
         SharedConstants.defaultAIActiveKey,
         store: SharedConstants.sharedDefaults
-    ) private var aiActiveInDictation = false
+    ) private var aiActiveInDictation = true
     @AppStorage(
         SharedConstants.defaultTextStyleKey,
         store: SharedConstants.sharedDefaults

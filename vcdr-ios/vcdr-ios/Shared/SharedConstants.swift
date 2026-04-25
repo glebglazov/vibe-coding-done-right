@@ -207,7 +207,7 @@ enum SessionSettings {
         if sd.object(forKey: SharedConstants.defaultAIActiveKey) != nil {
             return sd.bool(forKey: SharedConstants.defaultAIActiveKey)
         }
-        return false
+        return true
     }
 
     private static func write(_ block: (UserDefaults) -> Void) {
