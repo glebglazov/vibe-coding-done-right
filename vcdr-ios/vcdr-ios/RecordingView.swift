@@ -262,6 +262,15 @@ struct RecordingView: View {
     }
 
     private var swipeBackHint: some View {
+        swipeHint("Swipe to go back")
+    }
+
+    /// Animated "swipe back" hint reused on the Done page (with a "paste"
+    /// label) for the deep-link-stop fallback path. The user is in the app
+    /// because the keyboard's Darwin command path failed; swiping back to
+    /// the host app surfaces the keyboard, whose `viewWillAppear` reads the
+    /// bundled transcription from shared defaults and auto-pastes.
+    private func swipeHint(_ label: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "arrow.left")
                 .font(.system(size: Self.hintFontSize, weight: .semibold))
@@ -272,7 +281,7 @@ struct RecordingView: View {
                 } animation: { _ in
                     .easeInOut(duration: Self.returnPulseDuration)
                 }
-            Text("Swipe to go back")
+            Text(label)
                 .font(.system(size: Self.hintFontSize, weight: .medium))
         }
         .foregroundStyle(theme.onSurfaceVariant)
@@ -297,6 +306,10 @@ struct RecordingView: View {
     private func completeContent(_ text: String) -> some View {
         VStack(spacing: 28) {
             heroTitle("DONE")
+
+            if coordinator.launchedViaDeepLink {
+                swipeHint("Swipe to paste")
+            }
 
             aiStatusView
 
