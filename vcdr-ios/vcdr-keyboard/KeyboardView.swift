@@ -255,12 +255,32 @@ struct DictateActionButton: View {
 // MARK: - Haptic Feedback
 
 /// Lightweight haptic feedback for keyboard extension buttons.
+///
+/// Every call is gated on `SessionSettings.effectiveKeyboardHapticsEnabled()`
+/// so the user can disable haptics from the main app's Settings UI.
+///
+/// `success()` uses `UIImpactFeedbackGenerator(style: .medium)` rather than
+/// `UINotificationFeedbackGenerator(.success)`. The notification generator's
+/// 3-tap pattern is unreliable in keyboard extensions — especially inside the
+/// `RunLoop.main.run(until:)` polling loop in `stopAndWaitForResult` — and
+/// frequently drops. A single medium impact lands consistently.
 enum KeyboardHaptics {
+    private static var isEnabled: Bool {
+        SessionSettings.effectiveKeyboardHapticsEnabled()
+    }
+
     static func light() {
+        guard isEnabled else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     static func medium() {
+        guard isEnabled else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    static func success() {
+        guard isEnabled else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 }

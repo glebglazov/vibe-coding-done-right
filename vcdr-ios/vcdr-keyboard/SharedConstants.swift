@@ -25,6 +25,9 @@ enum SharedConstants {
     static let sessionAIModeKey    = "session_ai_mode"
     static let sessionAIActiveKey  = "session_ai_active"
 
+    /// Mirror of the app-side key. Absent → treat as enabled.
+    static let defaultKeyboardHapticsEnabledKey = "default_keyboard_haptics_enabled"
+
     static let settingsNotificationName = "glebglazov.vcdr-ios.settingsChanged"
     static let aiConfiguredKey = "shared_ai_configured"
 
@@ -146,6 +149,15 @@ enum SessionSettings {
             return sd.bool(forKey: SharedConstants.defaultAIActiveKey)
         }
         return false
+    }
+
+    /// Default-only setting (no session override). Absent key → treat as enabled.
+    static func effectiveKeyboardHapticsEnabled() -> Bool {
+        let sd = SharedConstants.sharedDefaults
+        if sd.object(forKey: SharedConstants.defaultKeyboardHapticsEnabledKey) != nil {
+            return sd.bool(forKey: SharedConstants.defaultKeyboardHapticsEnabledKey)
+        }
+        return true
     }
 
     private static func write(_ block: (UserDefaults) -> Void) {
