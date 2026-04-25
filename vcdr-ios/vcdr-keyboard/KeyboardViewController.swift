@@ -17,7 +17,19 @@ enum DictationState {
 class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     /// Current dictation state — drives the DictateBarView appearance.
-    @Published var dictationState: DictationState = .idle
+    ///
+    /// Re-warms the haptic engine on every transition into `.transcribing`
+    /// so the success impact fired from inside `stopAndWaitForResult`'s
+    /// `RunLoop.main.run(until:)` poll lands on a primed engine. The keyboard
+    /// extension's daemon connection goes cold quickly, so without this the
+    /// insertion haptic is the most likely to drop.
+    @Published var dictationState: DictationState = .idle {
+        didSet {
+            if dictationState == .transcribing, oldValue != .transcribing {
+                KeyboardHaptics.prepare()
+            }
+        }
+    }
 
     // MARK: - Shared Settings (keyboard ↔ app)
     @Published var aiConfigured: Bool = false
@@ -38,6 +50,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     override func viewDidLoad() {
         super.viewDidLoad()
         setup(for: .vcdr)
+
+        // Warm the haptic engine before the user taps anything. The extension's
+        // daemon connection is cold on process spawn; without an early prepare()
+        // the first impact (Start pill) routinely drops.
+        KeyboardHaptics.refreshEnabled()
+        KeyboardHaptics.prepare()
 
         // Listen for recording state changes from the main app.
         // Text is delivered via state bundling ("idle|text") on this same channel.
@@ -87,6 +105,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         refreshState()
         refreshSettings()
         refreshSelectedTextIndicator()
+
+        // Re-prepare every time the keyboard appears — prepared state expires
+        // after a few seconds, so this catches the case where the keyboard
+        // was dismissed and re-shown without the process being killed.
+        KeyboardHaptics.refreshEnabled()
+        KeyboardHaptics.prepare()
         // viewWillAppear provides a fresh textDocumentProxy connection —
         // auto-insert if text is pending (handles the case where the keyboard
         // wasn't visible when the transcription arrived).
@@ -105,6 +129,9 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         SharedConstants.sharedDefaults.synchronize()
         refreshSettings()
         refreshSelectedTextIndicator()
+        // The Settings UI may have toggled the haptics flag — refresh the
+        // cached value the per-call hot path reads.
+        KeyboardHaptics.refreshEnabled()
     }
 
     /// Reads the shared state key and updates `dictationState`.

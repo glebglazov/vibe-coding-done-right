@@ -254,33 +254,71 @@ struct DictateActionButton: View {
 
 // MARK: - Haptic Feedback
 
-/// Lightweight haptic feedback for keyboard extension buttons.
+/// Haptic feedback for keyboard-extension buttons.
 ///
-/// Every call is gated on `SessionSettings.effectiveKeyboardHapticsEnabled()`
-/// so the user can disable haptics from the main app's Settings UI.
+/// Why this is non-trivial in a keyboard extension: the main app's transient-
+/// generator pattern works because by the time the user taps record, UIKit
+/// activity has already warmed the haptic-engine XPC daemon connection in
+/// that process. The keyboard extension is a separately-spawned process with
+/// a *cold* daemon connection on first use; a freshly-allocated
+/// `UIImpactFeedbackGenerator` deinits before the cold round-trip resolves
+/// and the impact is dropped on the floor — exactly the failure mode Apple's
+/// docs warn about ("hold a reference to a feedback generator for as long as
+/// you can"). PR #25 swapped the generator style without addressing the
+/// lifecycle; this type does.
 ///
-/// `success()` uses `UIImpactFeedbackGenerator(style: .medium)` rather than
-/// `UINotificationFeedbackGenerator(.success)`. The notification generator's
-/// 3-tap pattern is unreliable in keyboard extensions — especially inside the
-/// `RunLoop.main.run(until:)` polling loop in `stopAndWaitForResult` — and
-/// frequently drops. A single medium impact lands consistently.
+/// The fix:
+/// 1. Hold long-lived generators for the lifetime of the extension process.
+/// 2. Call `prepare()` from `viewDidLoad`/`viewWillAppear` and again whenever
+///    `dictationState` becomes `.transcribing`, so the success haptic that
+///    fires deep inside `stopAndWaitForResult`'s `RunLoop.main.run(until:)`
+///    poll lands on a primed engine.
+/// 3. Re-prepare immediately after each `impactOccurred()` to keep the
+///    engine warm for the next event.
+///
+/// `isEnabled` is cached and refreshed via `refreshEnabled()` from
+/// `handleSettingsChanged` (after `synchronize()`), so the per-call hot path
+/// is a bool read rather than a cross-process `UserDefaults` round-trip.
 enum KeyboardHaptics {
-    private static var isEnabled: Bool {
-        SessionSettings.effectiveKeyboardHapticsEnabled()
+    private static let lightGenerator = UIImpactFeedbackGenerator(style: .light)
+    private static let mediumGenerator = UIImpactFeedbackGenerator(style: .medium)
+
+    /// Cached enabled flag. Refresh via `refreshEnabled()` whenever the
+    /// settings notification fires.
+    private static var isEnabled: Bool = SessionSettings.effectiveKeyboardHapticsEnabled()
+
+    /// Reads the current value from shared defaults into the cache. Call
+    /// from `KeyboardViewController.handleSettingsChanged` after the
+    /// `synchronize()` so changes from the main app's Settings UI take
+    /// effect on the next tap.
+    static func refreshEnabled() {
+        isEnabled = SessionSettings.effectiveKeyboardHapticsEnabled()
+    }
+
+    /// Warms the haptic engine. Cheap once warm; pays the cold-daemon cost
+    /// the first time the keyboard process spins up. Call from view
+    /// lifecycle hooks and on transitions to `.transcribing`.
+    static func prepare() {
+        guard isEnabled else { return }
+        lightGenerator.prepare()
+        mediumGenerator.prepare()
     }
 
     static func light() {
         guard isEnabled else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        lightGenerator.impactOccurred()
+        lightGenerator.prepare()
     }
 
     static func medium() {
         guard isEnabled else { return }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        mediumGenerator.impactOccurred()
+        mediumGenerator.prepare()
     }
 
     static func success() {
         guard isEnabled else { return }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        mediumGenerator.impactOccurred()
+        mediumGenerator.prepare()
     }
 }
