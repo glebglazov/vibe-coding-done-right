@@ -69,7 +69,7 @@ final class AudioRecorder {
     private nonisolated static let levelDecayFactor: Float = 0.3
     /// Buffer size for the audio engine tap — 4096 frames at hardware sample rate
     /// gives ~85ms per buffer at 48kHz, a good balance between latency and overhead
-    private static let tapBufferSize: AVAudioFrameCount = 4096
+    private nonisolated static let tapBufferSize: AVAudioFrameCount = 4096
     /// Floor value to avoid log10(0) when computing level from silent audio
     private nonisolated static let silenceFloor: Float = 1e-7
     /// dB range mapped to 0.0–1.0 linear scale (matches AVAudioRecorder.averagePower range)
@@ -134,28 +134,36 @@ final class AudioRecorder {
     /// Call after `prepareAudioSession()` completes. The engine is created and
     /// prepared (resources allocated) but NOT started — no microphone indicator
     /// appears until `startRecording` is called.
-    func prepareEngine() {
+    ///
+    /// Construction, `outputFormat`, `installTap`, and `prepare()` each touch
+    /// the audio unit and together cost a few hundred ms on first launch.
+    /// They run off the main actor so the PREPARING UI stays responsive.
+    func prepareEngine() async {
         guard audioSessionConfigured, audioEngine == nil else { return }
 
-        let engine = AVAudioEngine()
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
+        let engine = await Task.detached { [weak self] () -> AVAudioEngine in
+            let engine = AVAudioEngine()
+            let inputNode = engine.inputNode
+            let format = inputNode.outputFormat(forBus: 0)
 
-        inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
-            [weak self] buffer, _ in
-            guard let self else { return }
+            inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
+                buffer, _ in
+                guard let self else { return }
 
-            let level = Self.computeLevel(from: buffer)
-            Task { @MainActor [weak self] in
-                self?.appendLevel(level)
+                let level = Self.computeLevel(from: buffer)
+                Task { @MainActor [weak self] in
+                    self?.appendLevel(level)
+                }
+
+                self.bufferHandler?(buffer)
             }
 
-            self.bufferHandler?(buffer)
-        }
+            engine.prepare()
+            Logger.recording.info("Audio engine prepared (format: \(format))")
+            return engine
+        }.value
 
-        engine.prepare()
         audioEngine = engine
-        Logger.recording.info("Audio engine prepared (format: \(format))")
     }
 
     /// Brings the audio engine online and keeps it running with the tap

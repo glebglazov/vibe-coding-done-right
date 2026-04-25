@@ -341,7 +341,7 @@ final class RecordingFlowCoordinator {
     private func prewarmAudioResources() async {
         _ = await audioRecorder.requestMicrophonePermission()
         await audioRecorder.prepareAudioSession()
-        audioRecorder.prepareEngine()
+        await audioRecorder.prepareEngine()
     }
 
     /// Sets state to `.recording` synchronously so the view shows "LISTENING"
