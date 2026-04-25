@@ -185,6 +185,11 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// writing `state = .recording`. If nothing by then, fall back to URL.
     /// Tuned for Darwin roundtrip + a MainActor hop under CoreML load.
     private static let startCommandAckTimeout: TimeInterval = 0.4
+    /// Same purpose as `startCommandAckTimeout` but for stop. Counted from
+    /// when the Darwin command is posted; if the app hasn't moved state out
+    /// of `.recording` by then, we assume the command was lost (suspended
+    /// app between heartbeat read and Darwin post) and foreground via URL.
+    private static let stopCommandAckTimeout: TimeInterval = 0.4
 
     // MARK: - Commands
 
@@ -192,9 +197,25 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// button tap's UIKit event context. By never returning from the tap handler,
     /// the input connection stays alive so `insertText()` works — single-tap insert.
     /// `RunLoop.main.run(until:)` keeps UI events processing (animations stay alive).
-    /// Falls back to `.ready` state if the result doesn't arrive within the timeout.
+    ///
+    /// Mirrors the start path's heartbeat-aware fallback: if the app's heartbeat
+    /// is stale we skip Darwin entirely and foreground via URL. If the heartbeat
+    /// is fresh but the app doesn't ack within `stopCommandAckTimeout` (the
+    /// heartbeat lied because the app suspended between our read and our post),
+    /// we fall back to URL mid-poll. In both URL paths the keyboard returns
+    /// without a result; the app's stop pipeline publishes bundled text and the
+    /// next `viewWillAppear` auto-pastes it.
     func stopAndWaitForResult() {
         let sd = SharedConstants.sharedDefaults
+
+        // Stale heartbeat → app is suspended/killed. The Darwin command would
+        // be dropped on the floor; go straight to URL.
+        guard appLikelyAlive(in: sd) else {
+            dictationState = .transcribing
+            openURL(SharedConstants.stopDeepLinkURL)
+            return
+        }
+
         // Multi-capture: captures are accumulated explicitly via the Capture button.
         // No implicit capture on stop — the cursor position at stop time determines
         // where the result is inserted, independent of capture locations.
@@ -206,7 +227,9 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
         dictationState = .transcribing
 
-        let deadline = Date().addingTimeInterval(Self.insertionTimeout)
+        let postedAt = Date()
+        let ackDeadline = postedAt.addingTimeInterval(Self.stopCommandAckTimeout)
+        let deadline = postedAt.addingTimeInterval(Self.insertionTimeout)
         let idlePrefix = "\(RecordingState.idle.rawValue)|"
 
         while Date() < deadline {
@@ -233,6 +256,14 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                     guard self?.dictationState == .emptyResult else { return }
                     self?.dictationState = .idle
                 }
+                return
+            }
+
+            // Ack window passed and state hasn't moved off `.recording` —
+            // the Darwin post landed in a suspended app. Foreground via URL
+            // and exit; the app's stop pipeline takes it from here.
+            if raw == RecordingState.recording.rawValue, Date() >= ackDeadline {
+                openURL(SharedConstants.stopDeepLinkURL)
                 return
             }
 

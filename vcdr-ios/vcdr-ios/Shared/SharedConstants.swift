@@ -13,6 +13,7 @@ enum SharedConstants {
 
     // Deep link URLs
     static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
+    static let stopDeepLinkURL = URL(string: "vcdr-ios://stop")!
 
     // Settings — two disjoint tiers. Never copy one tier into the other.
     //

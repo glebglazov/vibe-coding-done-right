@@ -374,6 +374,31 @@ final class RecordingFlowCoordinator {
         }
     }
 
+    /// Called when the keyboard's stop fallback opens `vcdr-ios://stop`. Drives
+    /// the same `stopAndTranscribe(sendToKeyboard:)` path the Darwin command
+    /// would have, plus flags the run as deep-linked so the Done page shows
+    /// the swipe-to-paste hint. The `sendToKeyboard: true` write is what flips
+    /// the keyboard's stuck "transcribing" pill to either bundled text (auto-
+    /// pasted on next viewWillAppear) or an empty-result flash.
+    func handleStopDeepLink() async {
+        guard audioRecorder.isRecording else {
+            // Cold-launch / orphaned path: nothing was recording, audio
+            // buffers are gone. Surface emptyResult so the keyboard's 15s
+            // polling doesn't time out staring at "transcribing". Skip when
+            // a stop is already mid-flight or just finished — that pipeline
+            // will publish its own result.
+            switch state {
+            case .transcribing, .complete:
+                break
+            default:
+                writeState(.emptyResult)
+            }
+            return
+        }
+        launchedViaDeepLink = true
+        await stopAndTranscribe(sendToKeyboard: true)
+    }
+
     /// Starts recording with real-time streaming transcription.
     /// Audio capture begins immediately; model initialization and streaming setup
     /// proceed in the background. Buffers queue in StreamingAsrManager's AsyncStream
