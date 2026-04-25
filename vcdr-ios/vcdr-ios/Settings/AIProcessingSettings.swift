@@ -1,5 +1,4 @@
 import Foundation
-import FoundationModels
 
 /// Available AI processing prompt modes.
 /// Raw values match the server's prompt keys for cache lookup.
@@ -73,6 +72,7 @@ enum AIProvider: String, Codable, CaseIterable {
     }
 
     /// Whether this provider is ready to use (has API key or AFM available).
+    @MainActor
     var isConfigured: Bool {
         switch self {
         case .anthropic: !AIProcessingSettings.anthropicApiKey.isEmpty
@@ -82,6 +82,7 @@ enum AIProvider: String, Codable, CaseIterable {
     }
 
     /// Providers that are configured and available for selection.
+    @MainActor
     static var configuredProviders: [AIProvider] {
         allCases.filter(\.isConfigured)
     }
@@ -158,8 +159,11 @@ enum AIProcessingSettings {
 
     /// Whether Apple Foundation Models are available on this device
     /// (Apple Intelligence enabled + supported hardware + model downloaded).
+    /// Reads the cached probe value — see `AFMAvailabilityCache` for why this
+    /// is not a direct `SystemLanguageModel.default.isAvailable` lookup.
+    @MainActor
     static var isAFMAvailable: Bool {
-        SystemLanguageModel.default.isAvailable
+        AFMAvailabilityCache.shared.isAvailable
     }
 
     /// The API key for the currently selected provider.
@@ -176,6 +180,7 @@ enum AIProcessingSettings {
     }
 
     /// Whether AI processing is fully configured: enabled + provider ready.
+    @MainActor
     static var isConfigured: Bool {
         guard enabled else { return false }
         if provider.requiresAPIKey {
@@ -187,6 +192,7 @@ enum AIProcessingSettings {
     /// Whether AI can be used if toggled on — API key exists or AFM available.
     /// Unlike `isConfigured`, does not require the global `enabled` flag.
     /// Used to show/hide the per-session AI toggle in recording and keyboard.
+    @MainActor
     static var hasAICapability: Bool {
         if provider.requiresAPIKey {
             return !activeApiKey.isEmpty

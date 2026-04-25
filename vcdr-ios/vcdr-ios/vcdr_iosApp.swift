@@ -30,14 +30,19 @@ struct VCDRiOSApp: App {
                     //      used to run inside the coordinator's stored-property
                     //      initializer and froze scene construction for
                     //      seconds on first launch after install.
+                    //   0b. Probe Apple Foundation Models availability off-main.
+                    //       The synchronous accessor blocks for tens of seconds
+                    //       on first launch after install while iOS resolves
+                    //       Apple Intelligence state.
                     //   1. Migrate pre-split legacy keys (idempotent).
                     //   2. Drop any leftover session overrides so the run
                     //      starts from the user's configured defaults.
-                    //   3. Republish AI capability (keyboard gates its UI on it).
+                    //   3. Republish AI capability after the probe lands —
+                    //      the keyboard extension gates its UI on the cached flag.
                     async let historyReady: Void = coordinator.bootstrapHistory()
+                    async let afmReady: Bool = AFMAvailabilityCache.shared.refresh()
                     LegacySettingsMigrator.migrateIfNeeded()
                     SessionSettings.clearAll()
-                    DefaultSettings.setAIConfigured(AIProcessingSettings.hasAICapability)
                     // The coordinator's @State init ran before migration, so
                     // its cached settings may reflect pre-migration storage.
                     // Refresh once the post-split state is authoritative.
@@ -46,6 +51,8 @@ struct VCDRiOSApp: App {
                     coordinator.setupCommandListener()
                     await historyReady
                     await coordinator.initializeModel()
+                    _ = await afmReady
+                    DefaultSettings.setAIConfigured(AIProcessingSettings.hasAICapability)
                     // Fetch updated prompts in background (non-blocking)
                     Task.detached {
                         await PromptFetcher.refreshIfNeeded()
