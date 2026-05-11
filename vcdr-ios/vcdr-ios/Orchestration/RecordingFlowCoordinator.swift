@@ -26,7 +26,7 @@ final class RecordingFlowCoordinator {
     }
 
     private(set) var state: State = .idle
-    private(set) var initProgress: String = "Preparing..."
+    private(set) var initProgress: String = "Preparing"
     /// Live transcription text updated in real-time during recording
     private(set) var liveTranscript: String = ""
     /// Shown in the transcribing state — describes what the app is waiting on
@@ -127,6 +127,30 @@ final class RecordingFlowCoordinator {
     /// freshness threshold can be ~3x this without false negatives, large
     /// enough to keep write overhead negligible.
     private static let heartbeatInterval: Duration = .seconds(5)
+    /// Seconds the model can spend in a single init phase before the
+    /// progress label starts appending elapsed time. Fast inits stay quiet;
+    /// slow ones get a visible tick so the wait reads as bounded.
+    private static let initElapsedRevealThreshold: Int = 2
+
+    /// Renders the init progress label for the given phase + elapsed time.
+    /// Past `initElapsedRevealThreshold` seconds the label gains a "· Ns"
+    /// suffix so a stuck-looking spinner gains a visible heartbeat.
+    private static func formatInitProgress(
+        phase: ParakeetProvider.InitPhase,
+        elapsedSeconds: Int
+    ) -> String {
+        let base: String
+        switch phase {
+        case .notStarted: base = "Preparing"
+        case .downloading: base = "Downloading model"
+        case .compiling: base = "Loading model"
+        case .ready: return "Ready"
+        }
+        if elapsedSeconds >= initElapsedRevealThreshold {
+            return "\(base) · \(elapsedSeconds)s"
+        }
+        return base
+    }
 
     var isRecording: Bool { audioRecorder.isRecording }
     var isHotSessionActive: Bool { audioRecorder.isHot }
@@ -299,27 +323,37 @@ final class RecordingFlowCoordinator {
         let initStart = ContinuousClock.now
         Logger.app.info("[InitTiming] initializeModel entered")
         state = .initializing
-        initProgress = "Downloading model..."
+        // Initial label; pollTask below replaces this on the first iteration
+        // with phase-true text once `ParakeetProvider.initPhase` advances.
+        initProgress = "Preparing"
 
         let pollTask = Task {
             Logger.app.info("[LaunchProbe] pollTask started main=\(Thread.isMainThread)")
-            // Track the last published phase so we only write `initProgress`
-            // (an @Observable) on a real transition. Unconditional writes here
-            // tick at the poll cadence and force a SwiftUI body re-evaluation
-            // every iteration, which is enough to starve sheet-presentation
+            // Track the last published phase + the last text we wrote so we
+            // only mutate `initProgress` (an @Observable) when the visible
+            // content actually changes. Unconditional writes here tick at the
+            // poll cadence and force a SwiftUI body re-evaluation every
+            // iteration, which is enough to starve sheet-presentation
             // animations during init and make the Settings gear feel dead.
+            // Past a short grace period we also append elapsed-in-phase so
+            // a slow load reads as bounded rather than frozen.
             var lastPhase: ParakeetProvider.InitPhase?
+            var phaseStart = ContinuousClock.now
+            var lastWrittenText = ""
             while !Task.isCancelled {
                 let phase = await transcriptionProvider.initPhase
                 if phase != lastPhase {
                     Logger.app.info("[LaunchProbe] pollTask phase=\(String(describing: phase)) main=\(Thread.isMainThread)")
-                    switch phase {
-                    case .notStarted: initProgress = "Preparing..."
-                    case .downloading: initProgress = "Downloading model..."
-                    case .compiling: initProgress = "Compiling model..."
-                    case .ready: return
-                    }
+                    phaseStart = ContinuousClock.now
                     lastPhase = phase
+                    if phase == .ready { return }
+                }
+
+                let elapsedSeconds = Int((ContinuousClock.now - phaseStart).components.seconds)
+                let text = Self.formatInitProgress(phase: phase, elapsedSeconds: elapsedSeconds)
+                if text != lastWrittenText {
+                    initProgress = text
+                    lastWrittenText = text
                 }
                 try? await Task.sleep(for: Self.initPollInterval)
             }
@@ -571,7 +605,7 @@ final class RecordingFlowCoordinator {
         // will process all queued buffers once it starts.
         if let task = streamingSetupTask {
             let waitStart = ContinuousClock.now
-            transcribingMessage = "Compiling model — your recording is safe"
+            transcribingMessage = "Loading model — your recording is safe"
             state = .transcribing
             writeState(.transcribing)
             // Tick the message every second so the wait feels bounded rather
@@ -581,7 +615,7 @@ final class RecordingFlowCoordinator {
                     try? await Task.sleep(for: .seconds(1))
                     guard !Task.isCancelled, let self else { return }
                     let elapsed = Int((ContinuousClock.now - waitStart).components.seconds)
-                    self.transcribingMessage = "Compiling model · \(elapsed)s — your recording is safe"
+                    self.transcribingMessage = "Loading model · \(elapsed)s — your recording is safe"
                 }
             }
             do {
