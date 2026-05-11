@@ -570,12 +570,24 @@ final class RecordingFlowCoordinator {
         // Audio has stopped, so no new buffers arrive — the recognition task
         // will process all queued buffers once it starts.
         if let task = streamingSetupTask {
-            transcribingMessage = "Compiling model — your recording will be processed shortly"
+            let waitStart = ContinuousClock.now
+            transcribingMessage = "Compiling model — your recording is safe"
             state = .transcribing
             writeState(.transcribing)
+            // Tick the message every second so the wait feels bounded rather
+            // than frozen. Cancelled below regardless of success/failure.
+            let elapsedTicker = Task { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled, let self else { return }
+                    let elapsed = Int((ContinuousClock.now - waitStart).components.seconds)
+                    self.transcribingMessage = "Compiling model · \(elapsed)s — your recording is safe"
+                }
+            }
             do {
                 try await task.value
             } catch {
+                elapsedTicker.cancel()
                 await streaming.cancel()
                 state = .error("Transcription unavailable: \(error.localizedDescription)")
                 writeState(.idle)
@@ -584,6 +596,7 @@ final class RecordingFlowCoordinator {
                 transcribingMessage = ""
                 return
             }
+            elapsedTicker.cancel()
             streamingSetupTask = nil
             transcribingMessage = ""
         }

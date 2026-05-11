@@ -147,11 +147,23 @@ struct RecordingView: View {
                     .tracking(3)
                     .foregroundStyle(theme.onSurfaceVariant)
             }
-            actionCircle(
-                icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
-                label: "RECORD"
-            ) {
-                Task { await coordinator.startRecording() }
+            VStack(spacing: 12) {
+                actionCircle(
+                    icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
+                    label: "RECORD"
+                ) {
+                    Task { await coordinator.startRecording() }
+                }
+                // The recording flow already supports starting before init
+                // completes — audio buffers queue in StreamingAsrManager and
+                // drain once the model is ready. The button has always been
+                // wired; users just don't realize tapping during PREPARING
+                // is fine.
+                Text("Tap to start — transcription resumes when ready")
+                    .font(.system(size: Self.hintFontSize))
+                    .foregroundStyle(theme.onSurfaceVariant.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
             }
         }
     }
