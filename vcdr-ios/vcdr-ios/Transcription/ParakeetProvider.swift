@@ -1,3 +1,4 @@
+@preconcurrency import CoreML
 import Foundation
 import FluidAudio
 import OSLog
@@ -64,7 +65,15 @@ actor ParakeetProvider: TranscriptionProvider {
             Logger.transcription.info("[LaunchProbe] ParakeetProvider after AsrModels.download main=\(Thread.isMainThread)")
             Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
 
-            // Phase 2: Compile CoreML models for Neural Engine (the slow part).
+            // Phase 2: Load CoreML models. The cost here is CoreML's per-process
+            // MLModel(contentsOf:) preparation (ANE/E5RT specialization), not
+            // actual compilation — the .mlmodelc artifacts on disk are already
+            // compiled. FluidAudio's AsrModels.load runs the four loads
+            // serially; we fan them out in parallel via the public AsrModels
+            // init. Best case the OS pipelines the work; worst case it's no
+            // slower than serial. Preprocessor is .cpuOnly and never competes
+            // with the three ANE-bound loads.
+            //
             // .userInitiated (not .utility) because the user is actively staring
             // at the "Compiling..." spinner — .utility gets preempted under
             // thermal/CPU pressure and stretches the visible wait.
@@ -73,7 +82,7 @@ actor ParakeetProvider: TranscriptionProvider {
             let compileStart = ContinuousClock.now
             let models = try await Task.detached(priority: .userInitiated) {
                 Logger.transcription.info("[LaunchProbe] ParakeetProvider compile detached body start main=\(Thread.isMainThread)")
-                let result = try await AsrModels.load(from: modelDir, version: .v3)
+                let result = try await Self.loadModelsInParallel(from: modelDir)
                 Logger.transcription.info("[LaunchProbe] ParakeetProvider compile detached body end main=\(Thread.isMainThread)")
                 return result
             }.value
@@ -124,5 +133,80 @@ actor ParakeetProvider: TranscriptionProvider {
             Logger.transcription.error("Transcription failed: \(error)")
             throw TranscriptionError.transcriptionFailed(error.localizedDescription)
         }
+    }
+
+    // MARK: - Parallel Model Loading
+
+    /// Replacement for FluidAudio's `AsrModels.load(from:version:)` that loads
+    /// the four `.mlmodelc` artifacts and the vocabulary file concurrently
+    /// rather than serially. Constructs `AsrModels` via FluidAudio's public
+    /// init so the result is API-compatible with `AsrManager.initialize(models:)`.
+    ///
+    /// Trade-off vs. upstream: we skip the wipe-on-failure recovery wrapper
+    /// in `DownloadUtils.loadModels`. A corrupted cache here surfaces as an
+    /// init error rather than auto-healing; acceptable because the only known
+    /// failure mode is partial download, which the user can resolve by
+    /// reinstalling the app or clearing model storage.
+    private static func loadModelsInParallel(from repoDirectory: URL) async throws -> AsrModels {
+        let preprocessorConfig = MLModelConfiguration()
+        preprocessorConfig.allowLowPrecisionAccumulationOnGPU = true
+        // Preprocessor ops map to CPU-only across all platforms (per FluidAudio's
+        // own ASR/AsrModels.swift comment), so pinning here avoids needless ANE
+        // dispatch and lets this load run alongside the three ANE-bound ones.
+        preprocessorConfig.computeUnits = .cpuOnly
+
+        let aneConfig = MLModelConfiguration()
+        aneConfig.allowLowPrecisionAccumulationOnGPU = true
+        aneConfig.computeUnits = .cpuAndNeuralEngine
+
+        let preprocessorURL = repoDirectory.appendingPathComponent(ModelNames.ASR.preprocessorFile)
+        let encoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.encoderFile)
+        let decoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.decoderFile)
+        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointFile)
+        let vocabularyURL = repoDirectory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
+
+        async let preprocessor = timedLoadModel(name: "Preprocessor", url: preprocessorURL, configuration: preprocessorConfig)
+        async let encoder = timedLoadModel(name: "Encoder", url: encoderURL, configuration: aneConfig)
+        async let decoder = timedLoadModel(name: "Decoder", url: decoderURL, configuration: aneConfig)
+        async let joint = timedLoadModel(name: "JointDecision", url: jointURL, configuration: aneConfig)
+        async let vocabulary = loadVocabulary(from: vocabularyURL)
+
+        return AsrModels(
+            encoder: try await encoder,
+            preprocessor: try await preprocessor,
+            decoder: try await decoder,
+            joint: try await joint,
+            configuration: aneConfig,
+            vocabulary: try await vocabulary,
+            version: .v3
+        )
+    }
+
+    private static func timedLoadModel(
+        name: String,
+        url: URL,
+        configuration: MLModelConfiguration
+    ) async throws -> MLModel {
+        let start = ContinuousClock.now
+        let model = try MLModel(contentsOf: url, configuration: configuration)
+        let duration = ContinuousClock.now - start
+        let ms = Double(duration.components.seconds) * 1000
+            + Double(duration.components.attoseconds) / 1e15
+        Logger.transcription.info("[InitTiming] loaded \(name) in \(String(format: "%.0f", ms))ms")
+        return model
+    }
+
+    private static func loadVocabulary(from url: URL) async throws -> [Int: String] {
+        let data = try Data(contentsOf: url)
+        guard let jsonDict = try JSONSerialization.jsonObject(with: data) as? [String: String] else {
+            return [:]
+        }
+        var vocabulary: [Int: String] = [:]
+        for (key, value) in jsonDict {
+            if let tokenId = Int(key) {
+                vocabulary[tokenId] = value
+            }
+        }
+        return vocabulary
     }
 }
