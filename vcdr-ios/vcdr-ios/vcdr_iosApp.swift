@@ -42,6 +42,12 @@ struct VCDRiOSApp: App {
                     //      the keyboard extension gates its UI on the cached flag.
                     async let historyReady: Void = coordinator.bootstrapHistory()
                     async let afmReady: Bool = AFMAvailabilityCache.shared.refresh()
+                    // Kick off model init alongside history bootstrap rather
+                    // than after it. Neither depends on the other, and history
+                    // bootstrap can block for seconds on first launch waiting
+                    // for iCloud container provisioning — time the model
+                    // load can now overlap with instead of serialize behind.
+                    async let modelReady: Void = coordinator.initializeModel()
                     Logger.app.info("[LaunchProbe] async-lets dispatched")
                     LegacySettingsMigrator.migrateIfNeeded()
                     Logger.app.info("[LaunchProbe] migrateIfNeeded done")
@@ -58,7 +64,7 @@ struct VCDRiOSApp: App {
                     Logger.app.info("[LaunchProbe] setupCommandListener done")
                     await historyReady
                     Logger.app.info("[LaunchProbe] historyReady awaited")
-                    await coordinator.initializeModel()
+                    await modelReady
                     Logger.app.info("[LaunchProbe] initializeModel returned")
                     _ = await afmReady
                     Logger.app.info("[LaunchProbe] afmReady awaited")
