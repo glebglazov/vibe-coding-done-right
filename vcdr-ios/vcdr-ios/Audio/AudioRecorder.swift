@@ -19,10 +19,27 @@ final class AudioRecorder {
 
     private var audioEngine: AVAudioEngine?
     private var audioSessionConfigured = false
+    /// In-flight setup tasks. Concurrent callers join the same Task instead of
+    /// running duplicate AVAudioSession / engine setup bodies. Without these,
+    /// scene-active + prewarm + a record tap landing in the same launch window
+    /// can fire three parallel `setActive(true)` calls, which iOS serializes
+    /// internally — turning a 100ms config into a 10+ second stall.
+    @ObservationIgnored
+    private var prepareSessionTask: Task<Bool, Never>?
+    @ObservationIgnored
+    private var prepareEngineTask: Task<AVAudioEngine?, Never>?
+    @ObservationIgnored
+    private var startHotSessionTask: Task<Bool, Never>?
     /// nonisolated(unsafe) because the audio tap callback reads this from the audio thread.
     /// Safe: only set before starting the engine, cleared after stopping it.
     @ObservationIgnored
     private nonisolated(unsafe) var bufferHandler: (@Sendable (AVAudioPCMBuffer) -> Void)?
+    /// One-shot diagnostic: logs once when the first audio buffer arrives from
+    /// the input tap. If recording shows zero waveform / zero timer, the
+    /// absence of this log line tells us the engine never actually fired the
+    /// render callback (engine.start succeeded but HAL didn't deliver audio).
+    @ObservationIgnored
+    private nonisolated(unsafe) var hasLoggedFirstBuffer = false
     /// Notification observer tokens for audio session interruption and route change.
     @ObservationIgnored
     private var interruptionObservers: [Any] = []
@@ -107,37 +124,50 @@ final class AudioRecorder {
             Logger.app.info("[LaunchProbe] prepareAudioSession already-configured")
             return
         }
+        if let inflight = prepareSessionTask {
+            Logger.app.info("[LaunchProbe] prepareAudioSession joining in-flight")
+            _ = await inflight.value
+            return
+        }
         // AVAudioSession configuration is thread-safe — run off main thread
         // to avoid blocking UI during setCategory/setActive (~50-200ms).
-        let success = await Task.detached {
-            Logger.app.info("[LaunchProbe] prepareAudioSession detached body start main=\(Thread.isMainThread)")
-            let session = AVAudioSession.sharedInstance()
-            let forceBuiltIn = Self.useBuiltInMicOnly
-            do {
-                var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
-                if !forceBuiltIn {
-                    options.insert(.allowBluetoothHFP)
+        // The Task itself flips audioSessionConfigured before completing so
+        // a joining caller observes the property already set on resume.
+        let task = Task<Bool, Never> { [weak self] in
+            let success = await Task.detached(priority: .userInitiated) { () -> Bool in
+                Logger.app.info("[LaunchProbe] prepareAudioSession detached body start main=\(Thread.isMainThread)")
+                let session = AVAudioSession.sharedInstance()
+                let forceBuiltIn = Self.useBuiltInMicOnly
+                do {
+                    var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
+                    if !forceBuiltIn {
+                        options.insert(.allowBluetoothHFP)
+                    }
+                    try session.setCategory(.playAndRecord, mode: .default, options: options)
+                    // Set the preferred input BEFORE setActive so iOS honours it
+                    // while picking the initial route. A post-activation call is
+                    // just a hint iOS may ignore.
+                    if forceBuiltIn, let builtIn = Self.builtInInputPort(session: session) {
+                        try? session.setPreferredInput(builtIn)
+                    }
+                    try session.setActive(true)
+                    Logger.app.info("[LaunchProbe] prepareAudioSession detached body end main=\(Thread.isMainThread)")
+                    return true
+                } catch {
+                    Logger.recording.warning("Failed to pre-configure audio session: \(error)")
+                    return false
                 }
-                try session.setCategory(.playAndRecord, mode: .default, options: options)
-                // Set the preferred input BEFORE setActive so iOS honours it
-                // while picking the initial route. A post-activation call is
-                // just a hint iOS may ignore.
-                if forceBuiltIn, let builtIn = Self.builtInInputPort(session: session) {
-                    try? session.setPreferredInput(builtIn)
-                }
-                try session.setActive(true)
-                Logger.app.info("[LaunchProbe] prepareAudioSession detached body end main=\(Thread.isMainThread)")
-                return true
-            } catch {
-                Logger.recording.warning("Failed to pre-configure audio session: \(error)")
-                return false
+            }.value
+            if success, let self {
+                self.audioSessionConfigured = true
+                self.setupInterruptionObservers()
+                Logger.recording.info("Audio session pre-configured")
             }
-        }.value
-
-        guard success else { return }
-        audioSessionConfigured = true
-        setupInterruptionObservers()
-        Logger.recording.info("Audio session pre-configured")
+            return success
+        }
+        prepareSessionTask = task
+        _ = await task.value
+        prepareSessionTask = nil
         Logger.app.info("[LaunchProbe] prepareAudioSession exit main=\(Thread.isMainThread)")
     }
 
@@ -155,35 +185,50 @@ final class AudioRecorder {
             Logger.app.info("[LaunchProbe] prepareEngine skip configured=\(self.audioSessionConfigured) hasEngine=\(self.audioEngine != nil)")
             return
         }
+        if let inflight = prepareEngineTask {
+            Logger.app.info("[LaunchProbe] prepareEngine joining in-flight")
+            _ = await inflight.value
+            return
+        }
 
-        let engine = await Task.detached { [weak self] () -> AVAudioEngine in
-            Logger.app.info("[LaunchProbe] prepareEngine detached body start main=\(Thread.isMainThread)")
-            let engine = AVAudioEngine()
-            Logger.app.info("[LaunchProbe] prepareEngine after AVAudioEngine() main=\(Thread.isMainThread)")
-            let inputNode = engine.inputNode
-            let format = inputNode.outputFormat(forBus: 0)
-            Logger.app.info("[LaunchProbe] prepareEngine after outputFormat main=\(Thread.isMainThread)")
+        let task = Task<AVAudioEngine?, Never> { [weak self] in
+            let engine = await Task.detached(priority: .userInitiated) { [weak self] () -> AVAudioEngine in
+                Logger.app.info("[LaunchProbe] prepareEngine detached body start main=\(Thread.isMainThread)")
+                let engine = AVAudioEngine()
+                Logger.app.info("[LaunchProbe] prepareEngine after AVAudioEngine() main=\(Thread.isMainThread)")
+                let inputNode = engine.inputNode
+                let format = inputNode.outputFormat(forBus: 0)
+                Logger.app.info("[LaunchProbe] prepareEngine after outputFormat main=\(Thread.isMainThread)")
 
-            inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
-                buffer, _ in
-                guard let self else { return }
+                inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
+                    buffer, _ in
+                    guard let self else { return }
 
-                let level = Self.computeLevel(from: buffer)
-                Task { @MainActor [weak self] in
-                    self?.appendLevel(level)
+                    if !self.hasLoggedFirstBuffer {
+                        self.hasLoggedFirstBuffer = true
+                        Logger.app.info("[LaunchProbe] first audio buffer from tap (prepareEngine) handler=\(self.bufferHandler != nil)")
+                    }
+
+                    let level = Self.computeLevel(from: buffer)
+                    Task { @MainActor [weak self] in
+                        self?.appendLevel(level)
+                    }
+
+                    self.bufferHandler?(buffer)
                 }
+                Logger.app.info("[LaunchProbe] prepareEngine after installTap main=\(Thread.isMainThread)")
 
-                self.bufferHandler?(buffer)
-            }
-            Logger.app.info("[LaunchProbe] prepareEngine after installTap main=\(Thread.isMainThread)")
-
-            engine.prepare()
-            Logger.app.info("[LaunchProbe] prepareEngine after engine.prepare main=\(Thread.isMainThread)")
-            Logger.recording.info("Audio engine prepared (format: \(format))")
+                engine.prepare()
+                Logger.app.info("[LaunchProbe] prepareEngine after engine.prepare main=\(Thread.isMainThread)")
+                Logger.recording.info("Audio engine prepared (format: \(format))")
+                return engine
+            }.value
+            self?.audioEngine = engine
             return engine
-        }.value
-
-        audioEngine = engine
+        }
+        prepareEngineTask = task
+        _ = await task.value
+        prepareEngineTask = nil
         Logger.app.info("[LaunchProbe] prepareEngine exit main=\(Thread.isMainThread)")
     }
 
@@ -200,7 +245,22 @@ final class AudioRecorder {
             Logger.recording.debug("startHotSession: engine already running — no-op")
             return true
         }
+        if let inflight = startHotSessionTask {
+            Logger.recording.debug("startHotSession: joining in-flight")
+            return await inflight.value
+        }
 
+        let task = Task<Bool, Never> { [weak self] in
+            guard let self else { return false }
+            return await self._performStartHotSession()
+        }
+        startHotSessionTask = task
+        let result = await task.value
+        startHotSessionTask = nil
+        return result
+    }
+
+    private func _performStartHotSession() async -> Bool {
         guard await requestMicrophonePermission() else {
             Logger.recording.warning("Microphone permission denied")
             return false
@@ -229,6 +289,7 @@ final class AudioRecorder {
     ///   captured buffer. Must be lightweight — enqueue for processing elsewhere.
     /// - Returns: true if capture started successfully.
     func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
+        Logger.app.info("[LaunchProbe] startCapture entry isHot=\(self.isHot)")
         if !isHot {
             guard await startHotSession() else {
                 Logger.recording.error("startCapture: startHotSession() failed")
@@ -237,7 +298,7 @@ final class AudioRecorder {
         }
         bufferHandler = onBuffer
         isRecording = true
-        Logger.recording.info("Capture started (isHot=\(self.isHot))")
+        Logger.recording.info("Capture started (isHot=\(self.isHot)) engineRunning=\(self.audioEngine?.isRunning == true)")
         return true
     }
 
@@ -250,6 +311,7 @@ final class AudioRecorder {
     /// Returns true on success. Does NOT flip `isRecording` — that's the
     /// caller's decision, since hot-session startup runs with no buffer handler.
     private func startEngine() async -> Bool {
+        Logger.app.info("[LaunchProbe] startEngine entry preExistingEngine=\(self.audioEngine != nil)")
         // Reuse pre-prepared engine — tap is already installed, resources allocated.
         if let engine = audioEngine, !engine.isRunning {
             if await Self.startEngineOffMain(engine) {
@@ -263,13 +325,20 @@ final class AudioRecorder {
             // Fall through to create fresh engine
         }
 
+        Logger.app.info("[LaunchProbe] startEngine creating fresh engine")
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+        Logger.app.info("[LaunchProbe] startEngine after outputFormat fresh format=\(format)")
 
         inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
             [weak self] buffer, _ in
             guard let self else { return }
+
+            if !self.hasLoggedFirstBuffer {
+                self.hasLoggedFirstBuffer = true
+                Logger.app.info("[LaunchProbe] first audio buffer from tap (startEngine fresh) handler=\(self.bufferHandler != nil)")
+            }
 
             let level = Self.computeLevel(from: buffer)
             Task { @MainActor [weak self] in
@@ -278,6 +347,7 @@ final class AudioRecorder {
 
             self.bufferHandler?(buffer)
         }
+        Logger.app.info("[LaunchProbe] startEngine after installTap fresh")
 
         if await Self.startEngineOffMain(engine) {
             audioEngine = engine
@@ -285,6 +355,7 @@ final class AudioRecorder {
             return true
         }
         inputNode.removeTap(onBus: 0)
+        Logger.recording.error("startEngine: fresh engine failed to start")
         return false
     }
 

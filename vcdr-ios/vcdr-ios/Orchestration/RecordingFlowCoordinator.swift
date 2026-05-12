@@ -85,6 +85,13 @@ final class RecordingFlowCoordinator {
     private var currentConversationID: UUID = UUID()
 
     private var streamingManager: StreamingAsrManager?
+    /// Set to true while `startRecording` is between its UI flip and
+    /// `audioRecorder.startCapture` returning. A second tap arriving in that
+    /// window would otherwise pass the `!audioRecorder.isRecording` guard
+    /// (which is only set inside `startCapture`'s tail) and spawn a duplicate
+    /// streamingManager + bufferHandler — the second tap stomps the first's
+    /// closure, leaving the first stream subscribed to no audio.
+    private var isStartingRecording = false
     private var updateTask: Task<Void, Never>?
     /// Background task that waits for model initialization and starts the streaming
     /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
@@ -163,12 +170,16 @@ final class RecordingFlowCoordinator {
     /// once hot. Pairs with `rescheduleHotSessionTimeout()` so the session
     /// ends automatically after the user-configured inactivity window.
     ///
-    /// Skipped while the model is still initializing or after an init failure
-    /// (recording can't work in those states; lighting the mic indicator
-    /// would confuse users). Also skipped when the user picked `.never`
-    /// — that mode means "no warm engine unless actually recording".
-    /// `.recording` / `.transcribing` are no-ops because `isHot` is already
-    /// true from the capture path.
+    /// Skipped while the model is still initializing or after an init failure.
+    /// During `.initializing` the bootstrap (`prewarmAudioResources`) is the
+    /// authoritative path that warms the engine — scene-active firing here
+    /// in parallel would race that work and serialize behind it on
+    /// `AVAudioSession.setActive`. Heartbeat/LiveActivity only make sense
+    /// after init completes anyway, so deferring until `.ready` is correct.
+    /// Also skipped when the user picked `.never` — that mode means
+    /// "no warm engine unless actually recording". `.recording` /
+    /// `.transcribing` are no-ops because `isHot` is already true from the
+    /// capture path.
     func startHotSessionIfNeeded() async {
         let timeout = HotSessionTimeout.current()
         Logger.app.info("startHotSessionIfNeeded: state=\(String(describing: self.state)), timeout=\(timeout.displayName), wasHot=\(self.audioRecorder.isHot)")
@@ -360,17 +371,20 @@ final class RecordingFlowCoordinator {
         }
 
         do {
-            // Permission + session + engine all pre-warmed concurrently with
-            // model init. Without this, a record tap landing during init hits
-            // a cold engine.start() while CoreML compile has all the CPU —
-            // a multi-second stall that looks like the UI has frozen.
+            // Permission + session + engine pre-warmed concurrently with model
+            // init. On fresh-install first launch the iOS audio HAL cold-start
+            // (`inputNode.outputFormat` queries) can block 30-40s; serializing
+            // prewarm before compile would make that a visible prefix instead
+            // of overlapping with the ~15s encoder load. Concurrent execution
+            // makes the total wall-clock = max(audioPrep, modelInit), and the
+            // AudioRecorder dedups guarantee a record tap landing mid-prewarm
+            // joins the in-flight task rather than spawning a duplicate body.
             async let audioPrep: Void = prewarmAudioResources()
             Logger.app.info("[LaunchProbe] before transcriptionProvider.initialize await main=\(Thread.isMainThread)")
             try await transcriptionProvider.initialize()
             Logger.app.info("[LaunchProbe] after transcriptionProvider.initialize main=\(Thread.isMainThread)")
             Logger.app.info("[InitTiming] transcriptionProvider.initialize() done at +\(ContinuousClock.now - initStart)")
             await audioPrep
-            Logger.app.info("[LaunchProbe] after audioPrep await main=\(Thread.isMainThread)")
             Logger.app.info("[InitTiming] audio prewarm done at +\(ContinuousClock.now - initStart)")
 
             pollTask.cancel()
@@ -398,10 +412,18 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    /// Requests mic permission, configures the audio session, and pre-allocates
-    /// the engine. Resolving permission during init means the first record tap
-    /// never triggers the system permission prompt mid-flow, and the engine is
-    /// already hot so a tap during model compile doesn't pay a cold-start cost.
+    /// Requests mic permission, configures the audio session, pre-allocates
+    /// the engine, and starts it. Resolving permission during init means the
+    /// first record tap never triggers the system permission prompt mid-flow,
+    /// and the engine is already hot (running) so a tap during model compile
+    /// hits `isHot=true` and skips the cold-start cost entirely — capture
+    /// flips on synchronously and audio buffers queue into StreamingAsrManager
+    /// while transcription waits for the model.
+    ///
+    /// `startHotSession()` is called directly (not via `startHotSessionIfNeeded`)
+    /// because the latter skips during `.initializing` — heartbeat/LiveActivity
+    /// are deliberately deferred to the post-init call. We just want the
+    /// engine warm here, nothing else.
     private func prewarmAudioResources() async {
         Logger.app.info("[LaunchProbe] prewarmAudioResources entry main=\(Thread.isMainThread)")
         _ = await audioRecorder.requestMicrophonePermission()
@@ -409,7 +431,9 @@ final class RecordingFlowCoordinator {
         await audioRecorder.prepareAudioSession()
         Logger.app.info("[LaunchProbe] prewarmAudioResources after prepareAudioSession main=\(Thread.isMainThread)")
         await audioRecorder.prepareEngine()
-        Logger.app.info("[LaunchProbe] prewarmAudioResources exit main=\(Thread.isMainThread)")
+        Logger.app.info("[LaunchProbe] prewarmAudioResources after prepareEngine main=\(Thread.isMainThread)")
+        _ = await audioRecorder.startHotSession()
+        Logger.app.info("[LaunchProbe] prewarmAudioResources exit main=\(Thread.isMainThread) isHot=\(self.audioRecorder.isHot)")
     }
 
     /// Sets state to `.recording` synchronously so the view shows "LISTENING"
@@ -472,7 +496,14 @@ final class RecordingFlowCoordinator {
         // Check audioRecorder.isRecording (not state) because the deep link flow
         // sets state = .recording synchronously in prepareForDeepLinkRecording()
         // before this method runs — blocking on state would prevent actual startup.
-        guard !audioRecorder.isRecording else { return }
+        // `isStartingRecording` covers the window between the UI flip and
+        // `startCapture` returning, when `isRecording` is still false but a
+        // setup is already in progress.
+        guard !audioRecorder.isRecording, !isStartingRecording else {
+            Logger.app.info("[RecordTiming] startRecording bailed — already recording or starting")
+            return
+        }
+        isStartingRecording = true
         let recordStart = ContinuousClock.now
         Logger.app.info("[RecordTiming] startRecording entered")
 
@@ -554,6 +585,7 @@ final class RecordingFlowCoordinator {
             streamingSetupTask?.cancel()
             streamingSetupTask = nil
             state = .error("Failed to start recording — check microphone permission")
+            isStartingRecording = false
             return
         }
 
@@ -561,6 +593,7 @@ final class RecordingFlowCoordinator {
         // demand (cold path) without going through `startHotSessionIfNeeded`.
         startHeartbeat()
         await liveActivity.start()
+        isStartingRecording = false
     }
 
     /// Stops recording and shows the result immediately from the live transcript.
