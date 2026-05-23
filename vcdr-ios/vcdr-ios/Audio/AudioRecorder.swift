@@ -62,6 +62,85 @@ final class AudioRecorder {
         session.availableInputs?.first(where: { $0.portType == .builtInMic })
     }
 
+    /// Applies our recording category + options to the session. Factored out so
+    /// the first-time configure AND every re-activate go through the same path.
+    /// A bare `setActive(true)` after the session went inactive (idle timeout /
+    /// interruption) does NOT reliably re-assert the category options, and a
+    /// dropped `.mixWithOthers` flips us from "mix with other audio" to
+    /// "interrupt other audio" — which silences the user's music. Because we
+    /// also never told the other app it could resume, the music then stays
+    /// paused until VCDR is force-quit. Re-applying the category on every
+    /// activation closes that hole.
+    private nonisolated static func applyRecordingCategory(to session: AVAudioSession) throws {
+        let forceBuiltIn = useBuiltInMicOnly
+        // `.mixWithOthers`: record without interrupting the user's music.
+        // `.allowBluetoothA2DP`: KEEP AirPods / BT headphones as the OUTPUT route
+        //   while `.playAndRecord` is active. Without it, iOS drops A2DP on
+        //   activation and forces output to the earpiece/speaker — which is why
+        //   opening the app yanked music off the user's AirPods onto the phone
+        //   speaker. A2DP output-only coexists fine with a built-in-mic INPUT;
+        //   the "A2DP can't record" duplex limit only applies if we also wanted
+        //   the BT device's mic (HFP), which we don't when forcing built-in.
+        // `.defaultToSpeaker` is deliberately OMITTED: it fires a `categoryChange`
+        //   route event on every (re)activation and is a documented aggravator
+        //   that can stop other apps' audio even with `.mixWithOthers`. The quiet-
+        //   earpiece case (no headphones) is handled by a transient speaker
+        //   override in `activateMixingSession`.
+        var options: AVAudioSession.CategoryOptions = [.mixWithOthers, .allowBluetoothA2DP]
+        if !forceBuiltIn {
+            options.insert(.allowBluetoothHFP)
+        }
+        try session.setCategory(.playAndRecord, mode: .default, options: options)
+        // Set the preferred input BEFORE setActive so iOS honours it while
+        // picking the route. A post-activation call is just a hint iOS may ignore.
+        if forceBuiltIn, let builtIn = builtInInputPort(session: session) {
+            try? session.setPreferredInput(builtIn)
+        }
+    }
+
+    /// Activates our session so it MIXES with (never interrupts) other apps'
+    /// audio, then logs the resolved session state so we can confirm
+    /// `.mixWithOthers` actually took effect and whether activation is what
+    /// silences other audio. Output is bumped to the speaker (transiently — not
+    /// via the `.defaultToSpeaker` category flag) only when forcing the built-in
+    /// mic AND no external output is attached, so mixed music doesn't get stuck
+    /// on the quiet earpiece. With headphones / AirPods present the route is
+    /// left untouched so we don't yank the user's audio onto the phone speaker.
+    private nonisolated static func activateMixingSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        let otherBefore = session.isOtherAudioPlaying
+        try applyRecordingCategory(to: session)
+        try session.setActive(true)
+        // `.playAndRecord` parks shared output on the quiet earpiece when nothing
+        // external is attached. Bump it to the speaker so mixed audio stays
+        // audible — but ONLY when there's no headphones / Bluetooth / AirPlay
+        // output, or we'd steal the user's music off their AirPods onto the phone
+        // speaker (and kick off a route-change → engine-restart cycle).
+        if useBuiltInMicOnly, !hasExternalOutput(session) {
+            try? session.overrideOutputAudioPort(.speaker)
+        }
+        let outputs = session.currentRoute.outputs.map(\.portType.rawValue).joined(separator: ",")
+        Logger.recording.info(
+            "Session active: mix=\(session.categoryOptions.contains(.mixWithOthers)) opts=\(session.categoryOptions.rawValue) otherBefore=\(otherBefore) otherNow=\(session.isOtherAudioPlaying) silenceHint=\(session.secondaryAudioShouldBeSilencedHint) out=\(outputs)"
+        )
+    }
+
+    /// True when the current output route is something other than the built-in
+    /// speaker/earpiece — headphones, Bluetooth, USB, CarPlay, AirPlay, HDMI.
+    /// Used to decide whether forcing the speaker would steal the user's audio
+    /// from an external device they're actually listening on. Denylist (not
+    /// allowlist) so future external port types default to "leave it alone".
+    private nonisolated static func hasExternalOutput(_ session: AVAudioSession) -> Bool {
+        session.currentRoute.outputs.contains { output in
+            switch output.portType {
+            case .builtInSpeaker, .builtInReceiver:
+                return false
+            default:
+                return true
+            }
+        }
+    }
+
     /// Pins the built-in mic on an already-active session when the user has
     /// opted to force it. Called after route changes (e.g. a wired headset is
     /// plugged in mid-recording) so iOS doesn't silently swap inputs. When the
@@ -136,21 +215,8 @@ final class AudioRecorder {
         let task = Task<Bool, Never> { [weak self] in
             let success = await Task.detached(priority: .userInitiated) { () -> Bool in
                 Logger.app.info("[LaunchProbe] prepareAudioSession detached body start main=\(Thread.isMainThread)")
-                let session = AVAudioSession.sharedInstance()
-                let forceBuiltIn = Self.useBuiltInMicOnly
                 do {
-                    var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker, .mixWithOthers]
-                    if !forceBuiltIn {
-                        options.insert(.allowBluetoothHFP)
-                    }
-                    try session.setCategory(.playAndRecord, mode: .default, options: options)
-                    // Set the preferred input BEFORE setActive so iOS honours it
-                    // while picking the initial route. A post-activation call is
-                    // just a hint iOS may ignore.
-                    if forceBuiltIn, let builtIn = Self.builtInInputPort(session: session) {
-                        try? session.setPreferredInput(builtIn)
-                    }
-                    try session.setActive(true)
+                    try Self.activateMixingSession()
                     Logger.app.info("[LaunchProbe] prepareAudioSession detached body end main=\(Thread.isMainThread)")
                     return true
                 } catch {
@@ -275,11 +341,12 @@ final class AudioRecorder {
         } else {
             // Session was configured before, but after idle timeout or
             // interruption it may be inactive or the route may have changed
-            // while we had no engine running. Re-activate and pin the input
-            // so the engine starts on a clean, active session.
+            // while we had no engine running. Re-apply the category (so
+            // `.mixWithOthers` can't have been silently dropped) and re-activate
+            // so the engine starts on a clean, mixing, active session.
             do {
                 try await Task.detached(priority: .userInitiated) {
-                    try AVAudioSession.sharedInstance().setActive(true)
+                    try Self.activateMixingSession()
                 }.value
             } catch {
                 Logger.recording.warning("Failed to re-activate audio session: \(error)")
@@ -424,19 +491,26 @@ final class AudioRecorder {
         Logger.recording.info("Capture stopped (hot session alive)")
     }
 
-    /// Fully ends the hot session: removes the tap, stops the engine, drops
-    /// the mic indicator. The audio session itself stays active so the next
-    /// cold start only pays engine startup, not session activation.
+    /// Fully ends the hot session: removes the tap, stops the engine, drops the
+    /// mic indicator, and deactivates the audio session so other audio apps can
+    /// take over. We deactivate with `.notifyOthersOnDeactivation` so a media
+    /// app we interrupted — or one the user wants to start while we sit idle —
+    /// resumes instead of staying paused until VCDR is force-quit. The next
+    /// record tap re-prepares the session, paying ~50-200ms activation, an
+    /// acceptable cost for not holding system audio hostage between recordings.
     func endHotSession() {
         let wasRunning = isHot
-        guard let engine = audioEngine else { return }
 
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        audioEngine = nil
+        if let engine = audioEngine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            audioEngine = nil
+        }
         bufferHandler = nil
         isRecording = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
+
+        deactivateSession()
 
         Logger.recording.info("Hot audio session ended (engine was running: \(wasRunning))")
     }
