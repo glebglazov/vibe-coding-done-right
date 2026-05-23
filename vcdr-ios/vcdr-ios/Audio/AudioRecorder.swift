@@ -272,7 +272,27 @@ final class AudioRecorder {
                 Logger.recording.error("Failed to configure audio session for hot session")
                 return false
             }
+        } else {
+            // Session was configured before, but after idle timeout or
+            // interruption it may be inactive or the route may have changed
+            // while we had no engine running. Re-activate and pin the input
+            // so the engine starts on a clean, active session.
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try AVAudioSession.sharedInstance().setActive(true)
+                }.value
+            } catch {
+                Logger.recording.warning("Failed to re-activate audio session: \(error)")
+                audioSessionConfigured = false
+                await prepareAudioSession()
+                guard audioSessionConfigured else {
+                    Logger.recording.error("Failed to configure audio session for hot session")
+                    return false
+                }
+            }
         }
+
+        applyPreferredInput()
 
         guard await startEngine() else {
             Logger.recording.error("startHotSession: startEngine() failed")
@@ -511,11 +531,9 @@ final class AudioRecorder {
 
         switch type {
         case .began:
-            // iOS stops the engine for us during interruption. Drop our
-            // reference so the next start path creates a fresh engine on
-            // the recovered audio session. `isHot` is derived from the
-            // engine's `isRunning`, so nulling the reference is enough —
-            // no parallel flag to clear.
+            // iOS stops the engine for us during interruption and deactivates
+            // the audio session. Drop our reference AND reset the configured
+            // flag so the next start path re-activates the session cleanly.
             Logger.recording.warning("Audio session interrupted — dropping engine reference (was isHot=\(self.isHot), isRecording=\(self.isRecording))")
             if let engine = audioEngine {
                 engine.inputNode.removeTap(onBus: 0)
@@ -523,6 +541,7 @@ final class AudioRecorder {
             audioEngine = nil
             bufferHandler = nil
             isRecording = false
+            audioSessionConfigured = false
 
         case .ended:
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue ?? 0)
