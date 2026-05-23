@@ -25,8 +25,6 @@ actor ClipboardMonitor {
         pollingTask = Task { [weak self] in
             let pasteboard = NSPasteboard.general
             var lastChangeCount = baselineChangeCount ?? pasteboard.changeCount
-            var lastContent = await MainActor.run { pasteboard.string(forType: .string) }
-
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.pollInterval)
                 guard !Task.isCancelled else { break }
@@ -38,14 +36,8 @@ actor ClipboardMonitor {
                 lastChangeCount = currentChangeCount
 
                 guard let newContent = currentContent,
-                      !newContent.isEmpty,
-                      newContent != lastContent else { continue }
+                      !newContent.isEmpty else { continue }
 
-                // Deduplicate against the last captured text
-                let lastCapture = await self?.captures.last
-                guard newContent != lastCapture else { continue }
-
-                lastContent = newContent
                 await self?.appendCapture(newContent)
                 Logger.recording.info("ClipboardMonitor: captured \(newContent.count) chars: \"\(newContent.prefix(80))\"")
 
