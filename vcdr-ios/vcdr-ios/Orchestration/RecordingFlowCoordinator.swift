@@ -81,26 +81,18 @@ final class RecordingFlowCoordinator {
     /// can take seconds on first launch after install. `nil` until the
     /// bootstrap task completes; callers must tolerate the transient gap.
     private(set) var history: (any HistoryStore)?
-    /// UUID stamped at recording start; reused as the Conversation.id on record().
-    private var currentConversationID: UUID = UUID()
-
-    private var streamingManager: StreamingAsrManager?
+    private var recordingSession: RecordingSession?
     /// Set to true while `startRecording` is between its UI flip and
     /// `audioRecorder.startCapture` returning. A second tap arriving in that
     /// window would otherwise pass the `!audioRecorder.isRecording` guard
     /// (which is only set inside `startCapture`'s tail) and spawn a duplicate
-    /// streamingManager + bufferHandler — the second tap stomps the first's
-    /// closure, leaving the first stream subscribed to no audio.
+    /// session + buffer handler — the second tap stomps the first's closure,
+    /// leaving the first stream subscribed to no audio.
     private var isStartingRecording = false
     /// Stop can be tapped while `startRecording` is suspended in audio session /
     /// engine startup. Those callers wait here so they don't observe the
     /// half-started state as a missing streaming session.
     private var startWaiters: [CheckedContinuation<Bool, Never>] = []
-    private var updateTask: Task<Void, Never>?
-    /// Background task that waits for model initialization and starts the streaming
-    /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
-    /// until this task completes and the recognition task begins consuming them.
-    private var streamingSetupTask: Task<Void, Error>?
     /// Fires when the user has been idle for the configured hot-session
     /// timeout, and tears down the mic engine. Cancelled while recording so
     /// long recordings never time out, and re-armed after every stop.
@@ -347,7 +339,7 @@ final class RecordingFlowCoordinator {
 
     func initializeModel() async {
         Logger.app.info("[LaunchProbe] initializeModel entry main=\(Thread.isMainThread) state=\(String(describing: self.state))")
-        // If recording already started, model init is handled by streamingSetupTask
+        // If recording already started, model init is handled by the active session setup task.
         guard state != .recording else { return }
 
         let initStart = ContinuousClock.now
@@ -518,8 +510,8 @@ final class RecordingFlowCoordinator {
         // `isStartingRecording` covers the window between the UI flip and
         // `startCapture` returning, when `isRecording` is still false but a
         // setup is already in progress.
-        guard !audioRecorder.isRecording, !isStartingRecording else {
-            Logger.app.info("[RecordTiming] startRecording bailed — already recording or starting")
+        guard !audioRecorder.isRecording, !isStartingRecording, recordingSession == nil else {
+            Logger.app.info("[RecordTiming] startRecording bailed — session already active or starting")
             return
         }
         isStartingRecording = true
@@ -531,7 +523,6 @@ final class RecordingFlowCoordinator {
         launchedViaDeepLink = fromDeepLink
         stoppedViaDeepLink = false
         aiProcessingStatus = .idle
-        currentConversationID = UUID()
         state = .recording
         setIdleTimerDisabled(true)
         Logger.app.info("[RecordTiming] state=recording set at +\(ContinuousClock.now - recordStart)")
@@ -568,24 +559,29 @@ final class RecordingFlowCoordinator {
         // Create streaming manager immediately — no models needed for construction.
         // Its internal AsyncStream buffers audio until start() begins consuming.
         let streaming = StreamingAsrManager(config: .streaming)
-        self.streamingManager = streaming
-
-        // Start consuming transcription updates (sets updateContinuation on the actor)
-        liveTranscript = ""
-        startConsumingUpdates(from: streaming)
 
         // Begin model init + streaming setup in a detached task to avoid
         // competing with MainActor for scheduling. Audio buffers accumulate
         // in the AsyncStream until start() launches the recognition task,
         // which then drains all queued buffers.
-        streamingSetupTask = Task.detached { [transcriptionProvider] in
+        let setupTask = Task.detached { [transcriptionProvider] in
             try await transcriptionProvider.initialize()
             guard let models = await transcriptionProvider.loadedModels else {
                 throw TranscriptionError.providerUnavailable
             }
             try await streaming.start(models: models, source: .microphone)
         }
-        Logger.app.info("[RecordTiming] streamingSetupTask created at +\(ContinuousClock.now - recordStart)")
+        let sessionContext = RecordingSessionContext(
+            conversationID: UUID(),
+            streaming: streaming,
+            setupTask: setupTask
+        )
+        recordingSession = .starting(sessionContext)
+        Logger.app.info("[RecordTiming] session setup task created at +\(ContinuousClock.now - recordStart)")
+
+        // Start consuming transcription updates (sets updateContinuation on the actor)
+        liveTranscript = ""
+        sessionContext.updateTask = startConsumingUpdates(from: streaming)
 
         // Cancel any pending hot-session teardown — we're about to record.
         hotSessionIdleTask?.cancel()
@@ -598,11 +594,18 @@ final class RecordingFlowCoordinator {
         }
         Logger.app.info("[RecordTiming] audioRecorder.startCapture returned at +\(ContinuousClock.now - recordStart)")
 
+        guard case .starting(let activeContext) = recordingSession, activeContext === sessionContext else {
+            if started {
+                audioRecorder.stopCapture()
+            }
+            sessionContext.cancel()
+            finishRecordingStart(false)
+            return
+        }
+
         guard started else {
-            self.streamingManager = nil
-            updateTask?.cancel()
-            streamingSetupTask?.cancel()
-            streamingSetupTask = nil
+            sessionContext.cancel()
+            recordingSession = nil
             state = .error("Failed to start recording — check microphone permission")
             finishRecordingStart(false)
             return
@@ -612,6 +615,7 @@ final class RecordingFlowCoordinator {
         // demand (cold path) without going through `startHotSessionIfNeeded`.
         startHeartbeat()
         await liveActivity.start()
+        recordingSession = .recording(sessionContext)
         finishRecordingStart(true)
     }
 
@@ -639,7 +643,6 @@ final class RecordingFlowCoordinator {
         audioRecorder.stopCapture()
         rescheduleHotSessionTimeout()
         setIdleTimerDisabled(false)
-        updateTask?.cancel()
 
         // Re-read the captures array — the keyboard may have added more during recording.
         if sendToKeyboard {
@@ -654,48 +657,52 @@ final class RecordingFlowCoordinator {
             sd.removeObject(forKey: SharedConstants.capturedTextsKey)
         }
 
-        guard let streaming = streamingManager else {
-            streamingSetupTask?.cancel()
-            streamingSetupTask = nil
+        let sessionContext: RecordingSessionContext
+        switch recordingSession {
+        case .recording(let context):
+            sessionContext = context
+        case .stopping:
+            Logger.app.info("[RecordTiming] stopAndTranscribe ignored — already stopping")
+            return
+        case .starting, .none:
             state = .error("Recording was interrupted before audio started")
             writeState(.idle)
             return
         }
+        recordingSession = .stopping(sessionContext)
+        sessionContext.updateTask?.cancel()
+        let streaming = sessionContext.streaming
 
         // Wait for model init + streaming start if still in progress.
         // Audio has stopped, so no new buffers arrive — the recognition task
         // will process all queued buffers once it starts.
-        if let task = streamingSetupTask {
-            let waitStart = ContinuousClock.now
-            transcribingMessage = "Loading model — your recording is safe"
-            state = .transcribing
-            writeState(.transcribing)
-            // Tick the message every second so the wait feels bounded rather
-            // than frozen. Cancelled below regardless of success/failure.
-            let elapsedTicker = Task { @MainActor [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(1))
-                    guard !Task.isCancelled, let self else { return }
-                    let elapsed = Int((ContinuousClock.now - waitStart).components.seconds)
-                    self.transcribingMessage = "Loading model · \(elapsed)s — your recording is safe"
-                }
+        let waitStart = ContinuousClock.now
+        transcribingMessage = "Loading model — your recording is safe"
+        state = .transcribing
+        writeState(.transcribing)
+        // Tick the message every second so the wait feels bounded rather
+        // than frozen. Cancelled below regardless of success/failure.
+        let elapsedTicker = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { return }
+                let elapsed = Int((ContinuousClock.now - waitStart).components.seconds)
+                self.transcribingMessage = "Loading model · \(elapsed)s — your recording is safe"
             }
-            do {
-                try await task.value
-            } catch {
-                elapsedTicker.cancel()
-                await streaming.cancel()
-                state = .error("Transcription unavailable: \(error.localizedDescription)")
-                writeState(.idle)
-                streamingManager = nil
-                streamingSetupTask = nil
-                transcribingMessage = ""
-                return
-            }
-            elapsedTicker.cancel()
-            streamingSetupTask = nil
-            transcribingMessage = ""
         }
+        do {
+            try await sessionContext.setupTask.value
+        } catch {
+            elapsedTicker.cancel()
+            await streaming.cancel()
+            state = .error("Transcription unavailable: \(error.localizedDescription)")
+            writeState(.idle)
+            recordingSession = nil
+            transcribingMessage = ""
+            return
+        }
+        elapsedTicker.cancel()
+        transcribingMessage = ""
 
         // Refresh mode/style from shared defaults — keyboard may have flipped
         // mid-recording. Live-flip semantics: latest user intent wins.
@@ -745,7 +752,7 @@ final class RecordingFlowCoordinator {
                 if bgTaskID != .invalid {
                     UIApplication.shared.endBackgroundTask(bgTaskID)
                 }
-                streamingManager = nil
+                recordingSession = nil
                 return
             }
 
@@ -787,6 +794,7 @@ final class RecordingFlowCoordinator {
             }
 
             recordHistory(
+                conversationID: sessionContext.conversationID,
                 transcript: cleanedText,
                 processed: useAI ? processedText : nil,
                 finalText: resultText,
@@ -804,7 +812,7 @@ final class RecordingFlowCoordinator {
         if bgTaskID != .invalid {
             UIApplication.shared.endBackgroundTask(bgTaskID)
         }
-        streamingManager = nil
+        recordingSession = nil
     }
 
     // MARK: - Cross-process settings sync
@@ -827,6 +835,7 @@ final class RecordingFlowCoordinator {
     /// `processed` is nil when AI was not used; `finalText` is the styled/
     /// terminated text actually delivered to the user.
     private func recordHistory(
+        conversationID: UUID,
         transcript: String,
         processed: String?,
         finalText: String,
@@ -843,7 +852,7 @@ final class RecordingFlowCoordinator {
         // finish a recording in practice. Optional-chain so an edge-case race
         // drops the write rather than crashing.
         history?.record(
-            conversationID: currentConversationID,
+            conversationID: conversationID,
             inputSegments: segments,
             output: processed != nil ? finalText : nil,
             label: label
@@ -872,10 +881,11 @@ final class RecordingFlowCoordinator {
         currentTextStyle = SessionSettings.effectiveTextStyle()
         aiInputText = ""
         capturedTexts = []
-        updateTask?.cancel()
-        streamingSetupTask?.cancel()
-        streamingSetupTask = nil
-        streamingManager = nil
+        recordingSession?.context.cancel()
+        recordingSession = nil
+        if isStartingRecording {
+            finishRecordingStart(false)
+        }
         aiRetryTask?.cancel()
         aiRetryTask = nil
         // Re-arm the inactivity timer so a reset counts as fresh activity
@@ -1054,9 +1064,8 @@ final class RecordingFlowCoordinator {
     /// into at most one SwiftUI render per frame, keeping the waveform smooth.
     private static let transcriptUpdateInterval: Duration = .milliseconds(16)
 
-    private func startConsumingUpdates(from streaming: StreamingAsrManager) {
-        updateTask?.cancel()
-        updateTask = Task {
+    private func startConsumingUpdates(from streaming: StreamingAsrManager) -> Task<Void, Never> {
+        Task {
             let updates = await streaming.transcriptionUpdates
             var lastUpdateTime: ContinuousClock.Instant = .now
             for await _ in updates {
