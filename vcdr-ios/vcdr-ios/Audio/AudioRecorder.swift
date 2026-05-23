@@ -139,7 +139,7 @@ final class AudioRecorder {
                 let session = AVAudioSession.sharedInstance()
                 let forceBuiltIn = Self.useBuiltInMicOnly
                 do {
-                    var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
+                    var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker, .mixWithOthers]
                     if !forceBuiltIn {
                         options.insert(.allowBluetoothHFP)
                     }

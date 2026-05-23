@@ -92,6 +92,10 @@ final class RecordingFlowCoordinator {
     /// streamingManager + bufferHandler — the second tap stomps the first's
     /// closure, leaving the first stream subscribed to no audio.
     private var isStartingRecording = false
+    /// Stop can be tapped while `startRecording` is suspended in audio session /
+    /// engine startup. Those callers wait here so they don't observe the
+    /// half-started state as a missing streaming session.
+    private var startWaiters: [CheckedContinuation<Bool, Never>] = []
     private var updateTask: Task<Void, Never>?
     /// Background task that waits for model initialization and starts the streaming
     /// transcription engine. Audio buffers queue in StreamingAsrManager's AsyncStream
@@ -157,6 +161,21 @@ final class RecordingFlowCoordinator {
             return "\(base) · \(elapsedSeconds)s"
         }
         return base
+    }
+
+    private func waitForRecordingStart() async -> Bool {
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    private func finishRecordingStart(_ started: Bool) {
+        isStartingRecording = false
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume(returning: started)
+        }
     }
 
     var isRecording: Bool { audioRecorder.isRecording }
@@ -585,7 +604,7 @@ final class RecordingFlowCoordinator {
             streamingSetupTask?.cancel()
             streamingSetupTask = nil
             state = .error("Failed to start recording — check microphone permission")
-            isStartingRecording = false
+            finishRecordingStart(false)
             return
         }
 
@@ -593,13 +612,23 @@ final class RecordingFlowCoordinator {
         // demand (cold path) without going through `startHotSessionIfNeeded`.
         startHeartbeat()
         await liveActivity.start()
-        isStartingRecording = false
+        finishRecordingStart(true)
     }
 
     /// Stops recording and shows the result immediately from the live transcript.
     /// Finalizes streaming in the background and updates the result if it differs.
     /// - Parameter sendToKeyboard: When true, the transcription result is delivered to the keyboard extension via state bundling.
     func stopAndTranscribe(sendToKeyboard: Bool = false) async {
+        if isStartingRecording {
+            Logger.app.info("[RecordTiming] stopAndTranscribe waiting for in-flight recording start")
+            guard await waitForRecordingStart() else {
+                Logger.app.info("[RecordTiming] stopAndTranscribe aborted because recording start failed")
+                setIdleTimerDisabled(false)
+                writeState(.idle)
+                return
+            }
+        }
+
         // Fire haptics as a separate task so CHHapticEngine init (which connects
         // to a system daemon) doesn't block recording start. Under heavy CoreML
         // compilation load the daemon can take seconds to respond.
@@ -628,7 +657,7 @@ final class RecordingFlowCoordinator {
         guard let streaming = streamingManager else {
             streamingSetupTask?.cancel()
             streamingSetupTask = nil
-            state = .error("No streaming session")
+            state = .error("Recording was interrupted before audio started")
             writeState(.idle)
             return
         }
