@@ -1,6 +1,5 @@
 import Foundation
 import FluidAudio
-import FoundationModels
 import OSLog
 import UIKit
 
@@ -48,12 +47,6 @@ final class RecordingFlowCoordinator {
     var selectedPromptMode: AIPromptMode = SessionSettings.effectiveAIMode()
     /// Per-session text style — initialized from the current effective setting.
     var currentTextStyle: TextStyle = SessionSettings.effectiveTextStyle()
-
-    /// Whether the static style rules (capitalization, punctuation) should be
-    /// applied. Assistant output is the only case we leave untouched.
-    private var shouldApplyStaticStyles: Bool {
-        selectedPromptMode.appliesStyles
-    }
 
     // MARK: - In-Session Settings (written to session_* storage)
 
@@ -122,10 +115,6 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
-    /// Time budget for the primary AI provider (including retries)
-    private static let aiProcessingTimeout: Duration = .seconds(5)
-    /// Maximum retry attempts for cloud providers within the timeout budget
-    private static let maxRetries = 3
     /// Cadence for the app-alive heartbeat. Small enough that the keyboard's
     /// freshness threshold can be ~3x this without false negatives, large
     /// enough to keep write overhead negligible.
@@ -718,10 +707,11 @@ final class RecordingFlowCoordinator {
 
         // Show local result immediately unless AI processing will replace it.
         // Verbatim (no AI) still gets the static style transform — the pill
-        // the user toggled during recording has to affect the output.
+        // the user toggled during recording has to affect the output. The
+        // finalizer honors the assistant exception, so the transient display
+        // now matches the final result for every mode.
         if !useAI && !cleanedLive.isEmpty {
-            let styledLive = StyleTransformer.transform(cleanedLive, using: currentTextStyle.style.staticRules)
-            state = .complete(TextPostProcessor.applyTerminator(to: styledLive, style: currentTextStyle.style))
+            state = .complete(TranscriptFinalizer.finalize(cleanedLive, mode: selectedPromptMode, style: currentTextStyle))
         } else {
             transcribingMessage = useAI ? "Enhancing with AI..." : ""
             state = .transcribing
@@ -764,21 +754,12 @@ final class RecordingFlowCoordinator {
                 processedText = cleanedText
             }
             
-            // Stage 3: Apply style transformation (capitalization, punctuation)
-            // Stage 4: Apply terminator (spacing)
-            // Skip style transformations only for AI assistant output — its phrasing
-            // is intentional and shouldn't be restyled. Verbatim and dictation both
-            // produce user-voiced text that benefits from the static style rules.
-            // Re-sync before styling — user may have flipped mode/style during
-            // the AI processing window.
+            // Stage 3+4: Style transformation + terminator, via the finalizer.
+            // Assistant output is delivered as-is (its phrasing is intentional);
+            // verbatim/dictation get the static style rules. Re-sync before
+            // finalizing — user may have flipped mode/style during AI processing.
             resyncSettingsFromSharedDefaults()
-            let resultText: String
-            if shouldApplyStaticStyles {
-                let styledText = StyleTransformer.transform(processedText, using: currentTextStyle.style.staticRules)
-                resultText = TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style)
-            } else {
-                resultText = TextPostProcessor.applyTerminator(to: processedText)
-            }
+            let resultText = TranscriptFinalizer.finalize(processedText, mode: selectedPromptMode, style: currentTextStyle)
 
             transcribingMessage = ""
             state = .complete(resultText)
@@ -895,7 +876,10 @@ final class RecordingFlowCoordinator {
 
     // MARK: - AI Processing
 
-    /// Runs the full AI processing chain: primary provider (with retries) → AFM fallback → local text.
+    /// Runs the AI cascade behind the provider seam. `FallbackProvider` owns
+    /// retry + timeout + primary→AFM fallback; this method builds the input,
+    /// maps the outcome onto `aiProcessingStatus`, and substitutes local text
+    /// on timeout/error.
     private func waitForAIProcessing(localText: String) async -> String {
         // Cross-process staleness guard — pick up any keyboard-side flip that
         // landed between stop-decision and AI dispatch.
@@ -903,131 +887,43 @@ final class RecordingFlowCoordinator {
 
         aiInputText = localText
         aiProcessingStatus = .processing
-        let provider = AIProcessingSettings.provider(for: selectedPromptMode)
-        let apiKey = AIProcessingSettings.apiKey(for: provider)
-        let systemPrompt = BuiltInPrompts.prompt(for: selectedPromptMode)
-        var wrappedText = "<dictation>\(localText)</dictation>"
-        // Append captured selections as <capture> context for assistant mode,
-        // matching the macOS XML format the assistant prompt already expects.
-        if selectedPromptMode == .assistant {
-            for (index, capture) in capturedTexts.enumerated() where !capture.isEmpty {
-                wrappedText += "\n\n<capture id=\"\(index + 1)\">\(capture)</capture>"
-                Logger.ai.info("Capture \(index + 1) included in AI input (\(capture.count) chars)")
-            }
-        }
 
-        Logger.ai.info("AI input [mode=\(self.selectedPromptMode.rawValue), style=\(self.currentTextStyle.rawValue), provider=\(provider.displayName)]: \(wrappedText)")
+        let mode = selectedPromptMode
+        let systemPrompt = BuiltInPrompts.prompt(for: mode)
+        let input = buildAIInput(localText, mode: mode)
+        let provider = AIProviderFactory.make(for: mode)
+
+        Logger.ai.info("AI input [mode=\(mode.rawValue), style=\(self.currentTextStyle.rawValue), provider=\(provider.displayName)]: \(input)")
         Logger.ai.debug("AI system prompt: \(systemPrompt.prefix(100))...")
 
-        let deadline = ContinuousClock.now + Self.aiProcessingTimeout
         let startTime = ContinuousClock.now
-
-        // --- Primary provider ---
-        let primaryResult = await runPrimaryProvider(
-            provider: provider, apiKey: apiKey,
-            text: wrappedText, systemPrompt: systemPrompt,
-            deadline: deadline
-        )
-
-        if let result = primaryResult {
-            let elapsed = ContinuousClock.now - startTime
-            aiProcessingStatus = .completed
-            Logger.ai.info("AI output [\(elapsed)]: \(result)")
-            return result
-        }
-
-        // --- AFM fallback (only when a cloud provider was primary) ---
-        if AIProcessingSettings.afmFallbackEnabled(for: selectedPromptMode), provider != .apple {
-            let fallbackResult = await runAFMFallback(
-                text: wrappedText, systemPrompt: systemPrompt
-            )
-            if let result = fallbackResult {
-                let elapsed = ContinuousClock.now - startTime
-                aiProcessingStatus = .completed
-                Logger.ai.info("AFM fallback output [\(elapsed)]: \(result)")
-                return result
-            }
-        }
-
-        // --- Local text fallback ---
-        let elapsed = ContinuousClock.now - startTime
-        if aiProcessingStatus == .processing {
-            aiProcessingStatus = .timedOut
-            Logger.app.warning("AI processing timed out after \(elapsed)")
-        }
-        return localText
-    }
-
-    /// Attempts the primary provider up to `maxRetries` times within the deadline.
-    /// Cloud providers retry on error; Apple gets a single attempt.
-    /// Returns the AI text on success, or nil on failure/timeout.
-    private func runPrimaryProvider(
-        provider: AIProvider,
-        apiKey: String,
-        text: String,
-        systemPrompt: String,
-        deadline: ContinuousClock.Instant
-    ) async -> String? {
-        let maxAttempts = provider.requiresAPIKey ? Self.maxRetries : 1
-
-        for attempt in 1...maxAttempts {
-            guard ContinuousClock.now < deadline else {
-                Logger.app.warning("AI timeout budget exhausted after \(attempt - 1) attempt(s)")
-                return nil
-            }
-
-            let remaining = deadline - ContinuousClock.now
-
-            do {
-                return try await withThrowingTaskGroup(of: String?.self) { group in
-                    group.addTask {
-                        try await AIClient.process(
-                            text: text, systemPrompt: systemPrompt,
-                            provider: provider, apiKey: apiKey
-                        )
-                    }
-                    group.addTask {
-                        try await Task.sleep(for: remaining)
-                        return nil // timeout sentinel
-                    }
-
-                    for try await result in group {
-                        group.cancelAll()
-                        return result
-                    }
-                    return nil
-                }
-            } catch is CancellationError {
-                return nil
-            } catch {
-                Logger.app.error("AI attempt \(attempt)/\(maxAttempts) failed: \(error)")
-                if attempt == maxAttempts {
-                    aiProcessingStatus = .error(error.localizedDescription)
-                }
-            }
-        }
-        return nil
-    }
-
-    /// Tries Apple Foundation Models once as a fallback. Returns result text or nil.
-    /// On `unsupportedLanguageOrLocale`, returns nil silently (local text will be used).
-    private func runAFMFallback(text: String, systemPrompt: String) async -> String? {
-        guard AIProcessingSettings.isAFMAvailable else { return nil }
-
         do {
-            return try await AFMClient.process(text: text, systemPrompt: systemPrompt)
-        } catch let error as LanguageModelSession.GenerationError {
-            switch error {
-            case .unsupportedLanguageOrLocale:
-                Logger.app.info("AFM fallback: unsupported language, using local text")
-            default:
-                Logger.app.error("AFM fallback generation error: \(error)")
-            }
-            return nil
+            let result = try await provider.process(text: input, systemPrompt: systemPrompt)
+            aiProcessingStatus = .completed
+            Logger.ai.info("AI output [\(ContinuousClock.now - startTime)]: \(result)")
+            return result
+        } catch is FallbackProvider.AITimedOut {
+            aiProcessingStatus = .timedOut
+            Logger.app.warning("AI processing timed out after \(ContinuousClock.now - startTime)")
+            return localText
         } catch {
-            Logger.app.error("AFM fallback failed: \(error)")
-            return nil
+            aiProcessingStatus = .error(error.localizedDescription)
+            Logger.app.error("AI processing failed: \(error)")
+            return localText
         }
+    }
+
+    /// Wraps the local transcript in the `<dictation>` envelope the prompts
+    /// expect, appending captured selections as `<capture>` context for
+    /// assistant mode (matching the macOS XML format the prompt expects).
+    private func buildAIInput(_ localText: String, mode: AIPromptMode) -> String {
+        var wrapped = "<dictation>\(localText)</dictation>"
+        guard mode == .assistant else { return wrapped }
+        for (index, capture) in capturedTexts.enumerated() where !capture.isEmpty {
+            wrapped += "\n\n<capture id=\"\(index + 1)\">\(capture)</capture>"
+            Logger.ai.info("Capture \(index + 1) included in AI input (\(capture.count) chars)")
+        }
+        return wrapped
     }
 
     /// Retries the AI processing request with the previously sent text.
@@ -1038,17 +934,11 @@ final class RecordingFlowCoordinator {
         aiRetryTask = Task {
             let aiResult = await waitForAIProcessing(localText: aiInputText)
             guard !Task.isCancelled else { return }
-            // Pick up any style/mode change the user made during the retry.
+            // Pick up any style/mode change the user made during the retry, then
+            // finalize. Assistant output is excluded; everything else (including
+            // verbatim if the user flipped AI off mid-retry) gets the style rules.
             resyncSettingsFromSharedDefaults()
-            // Re-apply style transformation and terminator on retry. Assistant
-            // output is excluded; everything else (including verbatim if the
-            // user flipped AI off mid-retry) gets the static style rules.
-            if shouldApplyStaticStyles {
-                let styledText = StyleTransformer.transform(aiResult, using: currentTextStyle.style.staticRules)
-                state = .complete(TextPostProcessor.applyTerminator(to: styledText, style: currentTextStyle.style))
-            } else {
-                state = .complete(TextPostProcessor.applyTerminator(to: aiResult))
-            }
+            state = .complete(TranscriptFinalizer.finalize(aiResult, mode: selectedPromptMode, style: currentTextStyle))
         }
     }
 
