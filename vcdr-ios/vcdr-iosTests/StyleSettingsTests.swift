@@ -8,45 +8,33 @@ import Foundation
 @Suite("StyleSettings Tests")
 struct StyleSettingsTests {
 
-    /// Resets the style-related slots in `sharedDefaults` so tests start from
-    /// a known state. Restore afterwards to avoid leaking between suites.
-    private static func clearStyleSlots() {
-        let sd = SharedConstants.sharedDefaults
-        sd.removeObject(forKey: SharedConstants.defaultTextStyleKey)
-        sd.removeObject(forKey: SharedConstants.sessionTextStyleKey)
-    }
-
     @Test("Default style is casual when no value stored")
     func defaultStyleIsCasual() {
-        let original = StyleSettings.defaultStyle
-        Self.clearStyleSlots()
-        defer { DefaultSettings.setTextStyle(original) }
-
-        #expect(StyleSettings.defaultStyle == .casual)
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            #expect(StyleSettings.defaultStyle == .casual)
+        }
     }
 
     @Test("DefaultSettings.setTextStyle persists")
     func canSetFormalAsDefault() {
-        let original = StyleSettings.defaultStyle
-        defer { DefaultSettings.setTextStyle(original) }
-
-        DefaultSettings.setTextStyle(.formal)
-        #expect(StyleSettings.defaultStyle == .formal)
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            DefaultSettings.setTextStyle(.formal)
+            #expect(StyleSettings.defaultStyle == .formal)
+        }
     }
 
     @Test("Default style model returns correct style")
     func defaultStyleModelReturnsCorrectStyle() {
-        let original = StyleSettings.defaultStyle
-        defer { DefaultSettings.setTextStyle(original) }
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            DefaultSettings.setTextStyle(.casual)
+            #expect(StyleSettings.defaultStyleModel.id == Style.casualID)
 
-        DefaultSettings.setTextStyle(.casual)
-        #expect(StyleSettings.defaultStyleModel.id == Style.casualID)
+            DefaultSettings.setTextStyle(.messaging)
+            #expect(StyleSettings.defaultStyleModel.id == Style.messagingID)
 
-        DefaultSettings.setTextStyle(.messaging)
-        #expect(StyleSettings.defaultStyleModel.id == Style.messagingID)
-
-        DefaultSettings.setTextStyle(.formal)
-        #expect(StyleSettings.defaultStyleModel.id == Style.formalID)
+            DefaultSettings.setTextStyle(.formal)
+            #expect(StyleSettings.defaultStyleModel.id == Style.formalID)
+        }
     }
 
     @Test("TextStyle enum has correct display names")
@@ -91,43 +79,40 @@ struct StyleSettingsTests {
 
     @Test("Setting default clears session override")
     func defaultClearsSession() {
-        let original = StyleSettings.defaultStyle
-        defer { DefaultSettings.setTextStyle(original); SessionSettings.clearAll() }
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            // Establish a session override, then change the default — session
+            // should drop so the new default wins immediately.
+            DefaultSettings.setTextStyle(.casual)
+            SessionSettings.setTextStyle(.formal)
+            #expect(SessionSettings.effectiveTextStyle() == .formal)
 
-        // Establish a session override, then change the default — session
-        // should drop so the new default wins immediately.
-        DefaultSettings.setTextStyle(.casual)
-        SessionSettings.setTextStyle(.formal)
-        #expect(SessionSettings.effectiveTextStyle() == .formal)
-
-        DefaultSettings.setTextStyle(.messaging)
-        #expect(SessionSettings.effectiveTextStyle() == .messaging)
+            DefaultSettings.setTextStyle(.messaging)
+            #expect(SessionSettings.effectiveTextStyle() == .messaging)
+        }
     }
 
     @Test("Session override wins over default")
     func sessionBeatsDefault() {
-        let original = StyleSettings.defaultStyle
-        defer { DefaultSettings.setTextStyle(original); SessionSettings.clearAll() }
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            DefaultSettings.setTextStyle(.casual)
+            SessionSettings.setTextStyle(.formal)
+            #expect(SessionSettings.effectiveTextStyle() == .formal)
 
-        DefaultSettings.setTextStyle(.casual)
-        SessionSettings.setTextStyle(.formal)
-        #expect(SessionSettings.effectiveTextStyle() == .formal)
-
-        // Reading default directly still shows the configured default —
-        // confirms the two tiers are stored separately.
-        #expect(StyleSettings.defaultStyle == .casual)
+            // Reading default directly still shows the configured default —
+            // confirms the two tiers are stored separately.
+            #expect(StyleSettings.defaultStyle == .casual)
+        }
     }
 
     @Test("SessionSettings.clearAll drops overrides")
     func clearAllDropsSession() {
-        let original = StyleSettings.defaultStyle
-        defer { DefaultSettings.setTextStyle(original); SessionSettings.clearAll() }
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            DefaultSettings.setTextStyle(.messaging)
+            SessionSettings.setTextStyle(.formal)
+            #expect(SessionSettings.effectiveTextStyle() == .formal)
 
-        DefaultSettings.setTextStyle(.messaging)
-        SessionSettings.setTextStyle(.formal)
-        #expect(SessionSettings.effectiveTextStyle() == .formal)
-
-        SessionSettings.clearAll()
-        #expect(SessionSettings.effectiveTextStyle() == .messaging)
+            SessionSettings.clearAll()
+            #expect(SessionSettings.effectiveTextStyle() == .messaging)
+        }
     }
 }

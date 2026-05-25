@@ -9,48 +9,45 @@ struct StyleSessionStateTests {
     @Test("Coordinator initializes with default style from settings")
     @MainActor
     func coordinatorInitializesWithDefaultStyle() async throws {
-        let originalDefault = StyleSettings.defaultStyle
-        defer { DefaultSettings.setTextStyle(originalDefault); SessionSettings.clearAll() }
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            DefaultSettings.setTextStyle(.formal)
+            SessionSettings.clearAll()
 
-        DefaultSettings.setTextStyle(.formal)
-        SessionSettings.clearAll()
-
-        let coordinator = RecordingFlowCoordinator()
-        #expect(coordinator.currentTextStyle == .formal)
+            let coordinator = RecordingFlowCoordinator()
+            #expect(coordinator.currentTextStyle == .formal)
+        }
     }
 
     @Test("Coordinator defaults to casual when settings undefined")
     @MainActor
     func coordinatorDefaultsToCasual() async throws {
-        let original = StyleSettings.defaultStyle
-        defer { DefaultSettings.setTextStyle(original); SessionSettings.clearAll() }
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.defaultTextStyleKey)
+            SessionSettings.clearAll()
 
-        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.defaultTextStyleKey)
-        SessionSettings.clearAll()
-
-        let coordinator = RecordingFlowCoordinator()
-        #expect(coordinator.currentTextStyle == .casual)
+            let coordinator = RecordingFlowCoordinator()
+            #expect(coordinator.currentTextStyle == .casual)
+        }
     }
 
     @Test("Session override survives scene background")
     @MainActor
     func sessionSurvivesBackground() async throws {
-        let original = StyleSettings.defaultStyle
-        defer { DefaultSettings.setTextStyle(original); SessionSettings.clearAll() }
+        SharedSettingsTestIsolation.withCleanStyleSlots {
+            // User has "Casual" as default, then cycles to Messaging in-session.
+            // No syncAll or other broadcast should be able to revert that without
+            // someone explicitly calling SessionSettings.clearAll() or the user
+            // changing the default.
+            DefaultSettings.setTextStyle(.casual)
+            SessionSettings.setTextStyle(.messaging)
+            #expect(SessionSettings.effectiveTextStyle() == .messaging)
 
-        // User has "Casual" as default, then cycles to Messaging in-session.
-        // No syncAll or other broadcast should be able to revert that without
-        // someone explicitly calling SessionSettings.clearAll() or the user
-        // changing the default.
-        DefaultSettings.setTextStyle(.casual)
-        SessionSettings.setTextStyle(.messaging)
-        #expect(SessionSettings.effectiveTextStyle() == .messaging)
-
-        // Simulate whatever the app might still do on background: the only
-        // settings-writing API available is DefaultSettings.setAIConfigured,
-        // which must not touch session_text_style.
-        DefaultSettings.setAIConfigured(true)
-        #expect(SessionSettings.effectiveTextStyle() == .messaging)
+            // Simulate whatever the app might still do on background: the only
+            // settings-writing API available is DefaultSettings.setAIConfigured,
+            // which must not touch session_text_style.
+            DefaultSettings.setAIConfigured(true)
+            #expect(SessionSettings.effectiveTextStyle() == .messaging)
+        }
     }
     
     @Test("Can toggle style during session")
