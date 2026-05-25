@@ -46,6 +46,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     /// Text waiting to be inserted via tap-to-paste.
     private var pendingText: String?
+    private let keyboardChannel = KeyboardChannel.live
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -60,7 +61,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         // Listen for recording state changes from the main app.
         // Text is delivered via state bundling ("idle|text") on this same channel.
         DarwinNotificationCenter.observe(
-            SharedConstants.stateNotificationName,
+            KeyboardChannel.stateNotificationName,
             localName: .darwinStateChanged
         )
         NotificationCenter.default.addObserver(
@@ -139,16 +140,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Reads the shared state key and updates `dictationState`.
     /// Parses state bundling format: `"idle|transcription text"`.
     private func refreshState() {
-        guard let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey) else {
-            dictationState = .idle
-            pendingText = nil
-            captureCount = 0
-            return
-        }
-
-        let idlePrefix = "\(RecordingState.idle.rawValue)|"
-        if raw.hasPrefix(idlePrefix) {
-            let text = String(raw.dropFirst(idlePrefix.count))
+        switch keyboardChannel.readState() {
+        case .bundledResult(let text):
             if !text.isEmpty {
                 pendingText = text
                 dictationState = .ready
@@ -156,26 +149,25 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 pendingText = nil
                 dictationState = .idle
             }
-        } else if raw == RecordingState.emptyResult.rawValue {
+        case .emptyResult:
             pendingText = nil
             dictationState = .emptyResult
             // Clear the state so it doesn't persist across keyboard appearances
-            SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
+            keyboardChannel.clearResult()
             // Auto-revert to idle after the flash duration
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
                 guard self?.dictationState == .emptyResult else { return }
                 self?.dictationState = .idle
             }
-        } else if let state = RecordingState(rawValue: raw) {
+        case .recording:
             pendingText = nil
-            switch state {
-            case .recording: dictationState = .recording
-            case .transcribing: dictationState = .transcribing
-            case .idle: dictationState = .idle
-            case .emptyResult: break // handled above
-            }
-        } else {
+            dictationState = .recording
+        case .transcribing:
             pendingText = nil
+            dictationState = .transcribing
+        case .idle:
+            pendingText = nil
+            captureCount = 0
             dictationState = .idle
         }
     }
@@ -194,7 +186,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         dictationState = .idle
         captureCount = 0
         // Clear the bundled text so it isn't re-inserted on next keyboard appearance
-        SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
+        keyboardChannel.clearResult()
     }
 
     // MARK: - Constants
@@ -205,11 +197,6 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     private static let pollInterval: TimeInterval = 0.1
     /// Duration to show the yellow empty-result indicator before reverting to idle
     private static let emptyResultFlashDuration: TimeInterval = 2
-    /// Heartbeat-freshness window. If the app's heartbeat is within this many
-    /// seconds of now, we treat the app as alive and send a Darwin command
-    /// (stays in keyboard). Otherwise we go straight to URL. ~3x the app's
-    /// 5-second heartbeat cadence — covers propagation + clock skew.
-    private static let heartbeatFreshnessWindow: TimeInterval = 18
     /// Window to wait for the app to confirm a `startRecording` command by
     /// writing `state = .recording`. If nothing by then, fall back to URL.
     /// Tuned for Darwin roundtrip + a MainActor hop under CoreML load.
@@ -235,80 +222,61 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// without a result; the app's stop pipeline publishes bundled text and the
     /// next `viewWillAppear` auto-pastes it.
     func stopAndWaitForResult() {
-        let sd = SharedConstants.sharedDefaults
-
-        // Stale heartbeat → app is suspended/killed. The Darwin command would
-        // be dropped on the floor; go straight to URL.
-        guard appLikelyAlive(in: sd) else {
+        switch keyboardChannel.stopRecording() {
+        case .commandSent:
+            break
+        case .openURL(let url):
             dictationState = .transcribing
-            openURL(SharedConstants.stopDeepLinkURL)
+            openURL(url)
             return
         }
 
-        // Multi-capture: captures are accumulated explicitly via the Capture button.
-        // No implicit capture on stop — the cursor position at stop time determines
-        // where the result is inserted, independent of capture locations.
-        sd.set(
-            RecordingCommand.stopRecording.rawValue,
-            forKey: SharedConstants.commandKey
-        )
-        sd.synchronize()
-        DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
         dictationState = .transcribing
 
         let postedAt = Date()
         let ackDeadline = postedAt.addingTimeInterval(Self.stopCommandAckTimeout)
         let deadline = postedAt.addingTimeInterval(Self.insertionTimeout)
-        let idlePrefix = "\(RecordingState.idle.rawValue)|"
 
         while Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(Self.pollInterval))
 
-            guard let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey) else { continue }
-
-            // Empty result — break out immediately, show yellow flash
-            if raw == RecordingState.emptyResult.rawValue {
+            switch keyboardChannel.readState() {
+            case .emptyResult:
                 dictationState = .emptyResult
-                SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
+                keyboardChannel.clearResult()
                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
                     guard self?.dictationState == .emptyResult else { return }
                     self?.dictationState = .idle
                 }
                 return
-            }
-
-            // App already idle with no bundled text — recording finished before
-            // the keyboard sent stop. Treat as empty result (brief flash, then reset).
-            if raw == RecordingState.idle.rawValue {
+            case .idle:
                 dictationState = .emptyResult
                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
                     guard self?.dictationState == .emptyResult else { return }
                     self?.dictationState = .idle
                 }
                 return
-            }
-
-            // Ack window passed and state hasn't moved off `.recording` —
-            // the Darwin post landed in a suspended app. Foreground via URL
-            // and exit; the app's stop pipeline takes it from here.
-            if raw == RecordingState.recording.rawValue, Date() >= ackDeadline {
-                openURL(SharedConstants.stopDeepLinkURL)
+            case .recording:
+                // Ack window passed and state hasn't moved off `.recording` —
+                // the Darwin post landed in a suspended app. Foreground via URL
+                // and exit; the app's stop pipeline takes it from here.
+                if Date() >= ackDeadline {
+                    openURL(KeyboardChannel.stopDeepLinkURL)
+                    return
+                }
+            case .transcribing:
+                continue
+            case .bundledResult(let text):
+                guard !text.isEmpty else { continue }
+                // Result arrived — insert while the tap's event context is still active
+                textDocumentProxy.insertText(text)
+                KeyboardHaptics.success()
+                // Space is already added by TextPostProcessor.applyTerminator in the pipeline
+                keyboardChannel.clearResult()
+                pendingText = nil
+                dictationState = .idle
                 return
             }
-
-            guard raw.hasPrefix(idlePrefix) else { continue }
-
-            let text = String(raw.dropFirst(idlePrefix.count))
-            guard !text.isEmpty else { continue }
-
-            // Result arrived — insert while the tap's event context is still active
-            textDocumentProxy.insertText(text)
-            KeyboardHaptics.success()
-            // Space is already added by TextPostProcessor.applyTerminator in the pipeline
-            SharedConstants.sharedDefaults.set(RecordingState.idle.rawValue, forKey: SharedConstants.stateKey)
-            pendingText = nil
-            dictationState = .idle
-            return
         }
 
         // Timeout — show ready button as fallback for manual tap-to-insert
@@ -352,53 +320,35 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// optimistically flipped to `.recording` up front, which misled users
     /// into tapping Stop before anything had actually started.
     func startRecordingFromKeyboard() {
-        let sd = SharedConstants.sharedDefaults
         // Clear legacy single-capture key
-        sd.removeObject(forKey: SharedConstants.selectedTextKey)
+        keyboardChannel.clearLegacySelectedText()
         // Initialize captures array — include current selection as first capture if available
         var captures: [String] = []
         if aiMode == .assistant,
            let selected = textDocumentProxy.selectedText, !selected.isEmpty {
             captures.append(selected)
         }
-        if let data = try? JSONEncoder().encode(captures) {
-            sd.set(data, forKey: SharedConstants.capturedTextsKey)
-        }
-        sd.synchronize()
         captureCount = captures.count
 
-        if appLikelyAlive(in: sd) {
-            tryStartViaDarwinCommand(in: sd)
-        } else {
-            openURL(SharedConstants.recordDeepLinkURL)
+        switch keyboardChannel.startRecording(captures: captures) {
+        case .commandSent:
+            scheduleStartAckFallback()
+        case .openURL(let url):
+            openURL(url)
         }
     }
 
-    /// Returns true if the main app has written a recent heartbeat. Stale or
-    /// missing → app is suspended/killed, skip Darwin entirely.
-    private func appLikelyAlive(in sd: UserDefaults) -> Bool {
-        let beat = sd.double(forKey: SharedConstants.appHeartbeatKey)
-        guard beat > 0 else { return false }
-        return Date().timeIntervalSince1970 - beat < Self.heartbeatFreshnessWindow
-    }
-
-    /// Writes the `startRecording` command, posts the Darwin notification, and
-    /// schedules a fallback to `openURL` if the app doesn't publish
-    /// `state = .recording` within the ack window.
-    private func tryStartViaDarwinCommand(in sd: UserDefaults) {
-        sd.set(RecordingCommand.startRecording.rawValue, forKey: SharedConstants.commandKey)
-        sd.synchronize()
-        DarwinNotificationCenter.post(SharedConstants.commandNotificationName)
-
+    /// Schedules a fallback to `openURL` if the app doesn't publish
+    /// `.recording` within the ack window.
+    private func scheduleStartAckFallback() {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.startCommandAckTimeout) { [weak self] in
             guard let self else { return }
-            let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.stateKey)
-            if raw == RecordingState.recording.rawValue { return }
+            if self.keyboardChannel.readState() == .recording { return }
             // App didn't ack — heartbeat lied (suspended between our read and the
             // command firing) or Darwin was dropped. Wake it via URL; the command
             // + captures we already wrote will be overwritten by the deep-link
             // path, which calls its own `startRecording(fromDeepLink:)`.
-            self.openURL(SharedConstants.recordDeepLinkURL)
+            self.openURL(KeyboardChannel.recordDeepLinkURL)
         }
     }
 
@@ -407,18 +357,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     func captureSelectedText() {
         guard aiMode == .assistant,
               let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
-        let sd = SharedConstants.sharedDefaults
-        sd.synchronize()
-        var captures: [String] = []
-        if let data = sd.data(forKey: SharedConstants.capturedTextsKey) {
-            captures = (try? JSONDecoder().decode([String].self, from: data)) ?? []
-        }
-        captures.append(selected)
-        if let data = try? JSONEncoder().encode(captures) {
-            sd.set(data, forKey: SharedConstants.capturedTextsKey)
-        }
-        sd.synchronize()
-        captureCount = captures.count
+        keyboardChannel.appendCapture(selected)
+        captureCount = keyboardChannel.readCaptures().count
         KeyboardHaptics.light()
     }
 

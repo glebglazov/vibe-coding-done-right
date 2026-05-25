@@ -69,6 +69,7 @@ final class RecordingFlowCoordinator {
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionProvider = ParakeetProvider()
+    private let keyboardChannel = KeyboardChannel.live
     /// Populated asynchronously by `bootstrapHistory()` — the scene construction
     /// path can't block on it, because `FileManager.url(forUbiquityContainerIdentifier:)`
     /// can take seconds on first launch after install. `nil` until the
@@ -96,7 +97,7 @@ final class RecordingFlowCoordinator {
     /// Text sent to AI processing — needed for retry
     private var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
-    /// Populated from the JSON array in SharedConstants.capturedTextsKey.
+    /// Populated from captures published through the Keyboard Channel.
     private var capturedTexts: [String] = []
     /// Tracks the in-flight AI retry so rapid taps cancel the previous attempt.
     private var aiRetryTask: Task<Void, Never>?
@@ -228,9 +229,7 @@ final class RecordingFlowCoordinator {
     }
 
     private nonisolated func writeHeartbeat(alive: Bool) {
-        let value = alive ? Date().timeIntervalSince1970 : 0
-        let sd = SharedConstants.sharedDefaults
-        sd.set(value, forKey: SharedConstants.appHeartbeatKey)
+        KeyboardChannel.live.writeHeartbeat(alive: alive)
     }
 
     /// Starts (or restarts) the inactivity timer. Called after every stop,
@@ -530,13 +529,12 @@ final class RecordingFlowCoordinator {
             guard let self else { return }
             self.selectedPromptMode = SessionSettings.effectiveAIMode()
             self.currentTextStyle = SessionSettings.effectiveTextStyle()
-            let sd = SharedConstants.sharedDefaults
-            if let data = sd.data(forKey: SharedConstants.capturedTextsKey),
-               let texts = try? JSONDecoder().decode([String].self, from: data) {
+            let texts = self.keyboardChannel.readCaptures()
+            if !texts.isEmpty {
                 self.capturedTexts = texts
                 Logger.ai.info("Initial captures on start: \(texts.count) item(s)")
             }
-            sd.removeObject(forKey: SharedConstants.selectedTextKey)
+            self.keyboardChannel.clearLegacySelectedText()
         }
 
         // Shared-defaults write + Darwin post — off the critical path.
@@ -635,15 +633,12 @@ final class RecordingFlowCoordinator {
 
         // Re-read the captures array — the keyboard may have added more during recording.
         if sendToKeyboard {
-            let sd = SharedConstants.sharedDefaults
-            sd.synchronize()
-            if let data = sd.data(forKey: SharedConstants.capturedTextsKey),
-               let texts = try? JSONDecoder().decode([String].self, from: data),
-               !texts.isEmpty {
+            let texts = keyboardChannel.readCaptures()
+            if !texts.isEmpty {
                 capturedTexts = texts
                 Logger.ai.info("Final captures on stop: \(texts.count) item(s)")
             }
-            sd.removeObject(forKey: SharedConstants.capturedTextsKey)
+            keyboardChannel.clearCaptures()
         }
 
         let sessionContext: RecordingSessionContext
@@ -943,7 +938,7 @@ final class RecordingFlowCoordinator {
     }
 
     func cleanupStaleResults() {
-        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
+        keyboardChannel.clearCommand()
         writeState(.idle)
     }
 
@@ -1003,16 +998,12 @@ final class RecordingFlowCoordinator {
     }
 
     private nonisolated static func writeStateRaw(_ recordingState: RecordingState, bundledText: String? = nil) {
-        let value: String
+        let channel = KeyboardChannel.live
         if let bundledText, recordingState == .idle {
-            value = "\(RecordingState.idle.rawValue)|\(bundledText)"
-        } else {
-            value = recordingState.rawValue
+            channel.publishBundledResult(bundledText)
+            return
         }
-        let sd = SharedConstants.sharedDefaults
-        sd.set(value, forKey: SharedConstants.stateKey)
-        sd.synchronize()
-        DarwinNotificationCenter.post(SharedConstants.stateNotificationName)
+        channel.publish(KeyboardChannel.RecordingState(recordingState))
     }
 
     // MARK: - Keyboard Commands
@@ -1027,7 +1018,7 @@ final class RecordingFlowCoordinator {
         }
 
         DarwinNotificationCenter.observe(
-            SharedConstants.commandNotificationName,
+            KeyboardChannel.commandNotificationName,
             localName: .darwinCommand
         )
         commandObserverToken = NotificationCenter.default.addObserver(
@@ -1076,12 +1067,7 @@ final class RecordingFlowCoordinator {
     }
 
     private func handleCommand() async {
-        guard let rawCommand = SharedConstants.sharedDefaults.string(
-            forKey: SharedConstants.commandKey),
-              let command = RecordingCommand(rawValue: rawCommand)
-        else { return }
-
-        SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.commandKey)
+        guard let command = keyboardChannel.readAndClearCommand() else { return }
 
         switch command {
         case .startRecording:
@@ -1090,6 +1076,17 @@ final class RecordingFlowCoordinator {
         case .stopRecording:
             Logger.app.info("Received stop command from keyboard")
             await stopAndTranscribe(sendToKeyboard: true)
+        }
+    }
+}
+
+private extension KeyboardChannel.RecordingState {
+    init(_ state: RecordingState) {
+        switch state {
+        case .idle: self = .idle
+        case .recording: self = .recording
+        case .transcribing: self = .transcribing
+        case .emptyResult: self = .emptyResult
         }
     }
 }
