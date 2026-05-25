@@ -44,12 +44,14 @@ struct KeyboardChannel {
     static let commandNotificationName = "glebglazov.vcdr-ios.command"
     static let stateNotificationName = "glebglazov.vcdr-ios.stateChanged"
 
+    #if os(iOS)
     static var live: KeyboardChannel {
         KeyboardChannel(
             defaults: UserDefaults(suiteName: appGroupID) ?? .standard,
             notify: DarwinNotificationCenter.post
         )
     }
+    #endif
 
     init(
         defaults: UserDefaults,
