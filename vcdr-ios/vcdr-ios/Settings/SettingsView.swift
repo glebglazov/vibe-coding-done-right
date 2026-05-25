@@ -176,7 +176,7 @@ struct SettingsView: View {
         } header: {
             Text("Debug")
         } footer: {
-            Text("Visible in Xcode builds only. Reads the unified logging store for this process.")
+            Text("Visible in Xcode builds only. Reads the persistent log file (App Group), so entries survive app restarts.")
         }
     }
     #endif

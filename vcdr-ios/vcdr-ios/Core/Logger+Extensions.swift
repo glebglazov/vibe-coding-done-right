@@ -3,8 +3,8 @@ import OSLog
 extension Logger {
     static let subsystem = Bundle.main.bundleIdentifier ?? "vcdr-ios"
 
-    static let app = Logger(subsystem: subsystem, category: "app")
-    static let recording = Logger(subsystem: subsystem, category: "recording")
-    static let transcription = Logger(subsystem: subsystem, category: "transcription")
-    static let ai = Logger(subsystem: subsystem, category: "ai")
+    static let app = AppLog(subsystem: subsystem, category: "app")
+    static let recording = AppLog(subsystem: subsystem, category: "recording")
+    static let transcription = AppLog(subsystem: subsystem, category: "transcription")
+    static let ai = AppLog(subsystem: subsystem, category: "ai")
 }

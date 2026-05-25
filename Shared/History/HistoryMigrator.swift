@@ -80,6 +80,6 @@ nonisolated enum HistoryMigrator {
         }
 
         let direction = makeUbiquitous ? "local → iCloud" : "iCloud → local"
-        Logger.history.info("History migration \(direction, privacy: .public): moved \(moved, privacy: .public), failed \(failed, privacy: .public)")
+        Logger.history.info("History migration \(direction): moved \(moved), failed \(failed)")
     }
 }

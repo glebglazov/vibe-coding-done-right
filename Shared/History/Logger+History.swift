@@ -5,7 +5,7 @@ import OSLog
 /// per-target `Logger+Extensions.swift` files aren't compiled into the
 /// keyboard extension.
 extension Logger {
-    static let history = Logger(
+    static let history = AppLog(
         subsystem: Bundle.main.bundleIdentifier ?? "vcdr.history",
         category: "history"
     )

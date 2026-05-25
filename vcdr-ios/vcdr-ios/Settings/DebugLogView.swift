@@ -1,12 +1,14 @@
 #if DEBUG
-import OSLog
 import SwiftUI
 import UIKit
 
+/// Reads the persistent `LogBuffer` files (App Group container) and renders the
+/// merged log, newest writes last. Survives app restarts and includes every
+/// level — unlike the old `OSLogStore` reader, which was scoped to the current
+/// process and dropped `.debug`/`.info` under the system's retention policy.
 struct DebugLogView: View {
     @State private var lines: [String] = []
     @State private var isLoading = false
-    @State private var errorMessage: String?
     @State private var justCopied = false
     @State private var sinceMinutes: Int = 60
 
@@ -17,17 +19,11 @@ struct DebugLogView: View {
             if isLoading {
                 ProgressView("Reading logs…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let errorMessage {
-                ContentUnavailableView(
-                    "Couldn't read logs",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(errorMessage)
-                )
             } else if lines.isEmpty {
                 ContentUnavailableView(
                     "No log entries",
                     systemImage: "doc.text",
-                    description: Text("Nothing from this process in the selected window.")
+                    description: Text("Nothing logged in the selected window.")
                 )
             } else {
                 ScrollView {
@@ -106,54 +102,22 @@ struct DebugLogView: View {
 
     private func fetch() {
         isLoading = true
-        errorMessage = nil
         let window = sinceMinutes
         Task.detached(priority: .userInitiated) {
-            do {
-                let fetched = try Self.readEntries(sinceMinutes: window)
-                await MainActor.run {
-                    self.lines = fetched
-                    self.isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = String(describing: error)
-                    self.lines = []
-                    self.isLoading = false
-                }
+            let fetched = Self.readEntries(sinceMinutes: window)
+            await MainActor.run {
+                self.lines = fetched
+                self.isLoading = false
             }
         }
     }
 
-    nonisolated private static func readEntries(sinceMinutes: Int) throws -> [String] {
-        let store = try OSLogStore(scope: .currentProcessIdentifier)
-        let start = store.position(date: Date().addingTimeInterval(-Double(sinceMinutes * 60)))
-        let subsystem = Logger.subsystem
-        let predicate = NSPredicate(format: "subsystem == %@", subsystem)
-        let entries = try store.getEntries(at: start, matching: predicate)
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss.SSS"
-
-        var out: [String] = []
-        for entry in entries {
-            guard let log = entry as? OSLogEntryLog else { continue }
-            let t = formatter.string(from: log.date)
-            out.append("\(t) [\(log.category)] [\(levelChar(log.level))] \(log.composedMessage)")
-        }
-        return out
-    }
-
-    nonisolated private static func levelChar(_ level: OSLogEntryLog.Level) -> String {
-        switch level {
-        case .debug: "D"
-        case .info: "I"
-        case .notice: "N"
-        case .error: "E"
-        case .fault: "F"
-        case .undefined: "?"
-        @unknown default: "?"
-        }
+    /// Merged lines whose timestamp falls within the window. Stored lines start
+    /// with a fixed-width sortable timestamp, so a plain `>=` against the cutoff
+    /// string filters by age without parsing each line into a `Date`.
+    nonisolated private static func readEntries(sinceMinutes: Int) -> [String] {
+        let cutoff = LogBuffer.timestamp(Date().addingTimeInterval(-Double(sinceMinutes * 60)))
+        return LogBuffer.mergedLines().filter { $0 >= cutoff }
     }
 }
 #endif

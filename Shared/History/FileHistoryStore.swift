@@ -383,15 +383,14 @@ final class FileHistoryStore: HistoryStore {
         let backup = legacyFileURL.deletingLastPathComponent().appendingPathComponent("history.json.migrated-backup")
         try? fm.moveItem(at: legacyFileURL, to: backup)
         try? Data().write(to: conversationsDir.appendingPathComponent(".migrated"))
-        Self.logger.info("FileHistoryStore migrated \(legacyConversations.count, privacy: .public) legacy conversations")
+        Self.logger.info("FileHistoryStore migrated \(legacyConversations.count) legacy conversations")
     }
 
     // MARK: - Logging
 
-    private static let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "vcdr.history",
-        category: "history"
-    )
+    // Routes through the shared `history` channel so these lines land in the
+    // persistent log buffer alongside everything else.
+    private static let logger = Logger.history
 
     // MARK: - Filesystem
 
