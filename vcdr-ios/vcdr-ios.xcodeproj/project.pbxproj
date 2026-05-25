@@ -143,6 +143,12 @@
 			path = ../Shared/LiveActivity;
 			sourceTree = "<group>";
 		};
+		D1D1D10A2F74750000000001 /* Shared (iOS) */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = "Shared (iOS)";
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -203,6 +209,7 @@
 			children = (
 				E57289AB2F74745900E1C61C /* Shared */,
 				E5F00A012F98254400000001 /* LiveActivityShared */,
+				D1D1D10A2F74750000000001 /* Shared (iOS) */,
 				E57289832F74745800E1C61C /* vcdr-ios */,
 				AA0000022F74750000000001 /* vcdr-keyboard */,
 				E57289912F74745900E1C61C /* vcdr-iosTests */,
@@ -243,6 +250,7 @@
 			fileSystemSynchronizedGroups = (
 				AA0000022F74750000000001 /* vcdr-keyboard */,
 				E57289AB2F74745900E1C61C /* Shared */,
+				D1D1D10A2F74750000000001 /* Shared (iOS) */,
 			);
 			name = "vcdr-keyboard";
 			packageProductDependencies = (
@@ -293,6 +301,7 @@
 			fileSystemSynchronizedGroups = (
 				E57289832F74745800E1C61C /* vcdr-ios */,
 				E57289AB2F74745900E1C61C /* Shared */,
+				D1D1D10A2F74750000000001 /* Shared (iOS) */,
 			);
 			name = "vcdr-ios";
 			packageProductDependencies = (
