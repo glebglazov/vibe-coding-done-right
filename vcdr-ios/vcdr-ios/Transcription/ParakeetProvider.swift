@@ -30,6 +30,25 @@ actor ParakeetProvider: TranscriptionProvider {
     private static let millisecondsPerSecond: Double = 1000
     private static let attosecondsPerMillisecond: Double = 1e15
 
+    /// ANE model-load time above which a launch is classified as a cold
+    /// re-specialization rather than a warm cache hit. Warm `MLModel(contentsOf:)`
+    /// loads land sub-second to ~2s; a purged system CoreML/E5RT cache forces
+    /// re-specialization that this file's own comments clock at ~15s for the
+    /// encoder. 3s sits well clear of the warm band.
+    private static let coldSpecializationThresholdMs: Double = 3000
+
+    /// Per-model `MLModel(contentsOf:)` load durations, used to classify a
+    /// launch as warm vs. cold ANE specialization.
+    private struct ModelLoadTimings: Sendable {
+        let preprocessorMs: Double
+        let encoderMs: Double
+        let decoderMs: Double
+        let jointMs: Double
+        /// The dominant cost is the three ANE-bound loads; the preprocessor is
+        /// CPU-only and cheap, so the verdict keys off the slowest ANE load.
+        var maxAneMs: Double { max(encoderMs, max(decoderMs, jointMs)) }
+    }
+
     private func elapsedMs(since start: ContinuousClock.Instant) -> String {
         let duration = ContinuousClock.now - start
         let ms = Double(duration.components.seconds) * Self.millisecondsPerSecond
@@ -55,6 +74,14 @@ actor ParakeetProvider: TranscriptionProvider {
         let totalStart = ContinuousClock.now
         Logger.transcription.info("Initializing Parakeet v3 CoreML model...")
 
+        // Snapshot whether the compiled .mlmodelc artifacts already exist on
+        // disk BEFORE touching the network. Application Support is not purged by
+        // iOS under storage pressure, so onDisk=false means a genuine first run
+        // or reinstall (download is the cost), while onDisk=true means any
+        // slowness below is CoreML re-specialization, not download.
+        let modelsOnDisk = AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .v3))
+        Logger.transcription.info("[InitTiming] artifacts onDisk=\(modelsOnDisk) before download")
+
         do {
             // Phase 1: Download models if not cached (typically instant when cached)
             initPhase = .downloading
@@ -63,7 +90,8 @@ actor ParakeetProvider: TranscriptionProvider {
             Logger.transcription.info("[LaunchProbe] ParakeetProvider before AsrModels.download main=\(Thread.isMainThread)")
             let modelDir = try await AsrModels.download(version: .v3)
             Logger.transcription.info("[LaunchProbe] ParakeetProvider after AsrModels.download main=\(Thread.isMainThread)")
-            Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
+            let downloadMs = self.elapsedMs(since: downloadStart)
+            Logger.transcription.info("Model download/cache check completed in \(downloadMs)")
 
             // Phase 2: Load CoreML models. The cost here is CoreML's per-process
             // MLModel(contentsOf:) preparation (ANE/E5RT specialization), not
@@ -80,13 +108,36 @@ actor ParakeetProvider: TranscriptionProvider {
             initPhase = .compiling
             Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=compiling set main=\(Thread.isMainThread)")
             let compileStart = ContinuousClock.now
-            let models = try await Task.detached(priority: .userInitiated) {
+            let (models, loadTimings) = try await Task.detached(priority: .userInitiated) {
                 Logger.transcription.info("[LaunchProbe] ParakeetProvider compile detached body start main=\(Thread.isMainThread)")
                 let result = try await Self.loadModelsInParallel(from: modelDir)
                 Logger.transcription.info("[LaunchProbe] ParakeetProvider compile detached body end main=\(Thread.isMainThread)")
                 return result
             }.value
             Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: compileStart))")
+
+            // Classify the launch so a fast vs. slow start is self-explanatory
+            // in the logs without diffing across runs:
+            //   COLD_DOWNLOAD   — artifacts were absent on disk (first run /
+            //                     reinstall / App Support eviction); download dominated.
+            //   COLD_SPECIALIZE — artifacts present but ANE load was slow: the
+            //                     system CoreML/E5RT specialization cache was
+            //                     purged or invalidated (reboot, OS update,
+            //                     storage pressure) and had to rebuild.
+            //   WARM            — artifacts present and ANE specialization cached.
+            let verdict: String
+            if !modelsOnDisk {
+                verdict = "COLD_DOWNLOAD"
+            } else if loadTimings.maxAneMs >= Self.coldSpecializationThresholdMs {
+                verdict = "COLD_SPECIALIZE"
+            } else {
+                verdict = "WARM"
+            }
+            Logger.transcription.info(
+                "[InitTiming] launch verdict=\(verdict) onDisk=\(modelsOnDisk) downloadMs=\(downloadMs) "
+                    + "encoderMs=\(String(format: "%.0f", loadTimings.encoderMs)) "
+                    + "maxAneMs=\(String(format: "%.0f", loadTimings.maxAneMs))"
+            )
 
             let initStart = ContinuousClock.now
             let manager = AsrManager(config: .default)
@@ -147,7 +198,9 @@ actor ParakeetProvider: TranscriptionProvider {
     /// init error rather than auto-healing; acceptable because the only known
     /// failure mode is partial download, which the user can resolve by
     /// reinstalling the app or clearing model storage.
-    private static func loadModelsInParallel(from repoDirectory: URL) async throws -> AsrModels {
+    private static func loadModelsInParallel(
+        from repoDirectory: URL
+    ) async throws -> (models: AsrModels, timings: ModelLoadTimings) {
         let preprocessorConfig = MLModelConfiguration()
         preprocessorConfig.allowLowPrecisionAccumulationOnGPU = true
         // Preprocessor ops map to CPU-only across all platforms (per FluidAudio's
@@ -171,29 +224,44 @@ actor ParakeetProvider: TranscriptionProvider {
         async let joint = timedLoadModel(name: "JointDecision", url: jointURL, configuration: aneConfig)
         async let vocabulary = loadVocabulary(from: vocabularyURL)
 
-        return AsrModels(
-            encoder: try await encoder,
-            preprocessor: try await preprocessor,
-            decoder: try await decoder,
-            joint: try await joint,
+        // Awaiting sequentially here does not serialize the loads — each
+        // `async let` already started concurrently; this only collects results.
+        let preprocessorResult = try await preprocessor
+        let encoderResult = try await encoder
+        let decoderResult = try await decoder
+        let jointResult = try await joint
+        let vocab = try await vocabulary
+
+        let models = AsrModels(
+            encoder: encoderResult.model,
+            preprocessor: preprocessorResult.model,
+            decoder: decoderResult.model,
+            joint: jointResult.model,
             configuration: aneConfig,
-            vocabulary: try await vocabulary,
+            vocabulary: vocab,
             version: .v3
         )
+        let timings = ModelLoadTimings(
+            preprocessorMs: preprocessorResult.milliseconds,
+            encoderMs: encoderResult.milliseconds,
+            decoderMs: decoderResult.milliseconds,
+            jointMs: jointResult.milliseconds
+        )
+        return (models, timings)
     }
 
     private static func timedLoadModel(
         name: String,
         url: URL,
         configuration: MLModelConfiguration
-    ) async throws -> MLModel {
+    ) async throws -> (model: MLModel, milliseconds: Double) {
         let start = ContinuousClock.now
         let model = try MLModel(contentsOf: url, configuration: configuration)
         let duration = ContinuousClock.now - start
         let ms = Double(duration.components.seconds) * 1000
             + Double(duration.components.attoseconds) / 1e15
         Logger.transcription.info("[InitTiming] loaded \(name) in \(String(format: "%.0f", ms))ms")
-        return model
+        return (model, ms)
     }
 
     private static func loadVocabulary(from url: URL) async throws -> [Int: String] {
