@@ -10,6 +10,9 @@ struct RecordingView: View {
     @State private var showCopiedConfirmation = false
     @State private var showSettings = false
     @State private var showHistory = false
+    #if DEBUG
+    @State private var showDebugLogs = false
+    #endif
     @State private var recordingStart: Date?
 
     // MARK: - Constants
@@ -60,6 +63,9 @@ struct RecordingView: View {
         } else {
             HStack(spacing: 0) {
                 Spacer()
+                #if DEBUG
+                debugLogsButton
+                #endif
                 historyButton
                 settingsButton
             }
@@ -67,6 +73,27 @@ struct RecordingView: View {
             .padding(.top, 12)
         }
     }
+
+    #if DEBUG
+    private var debugLogsButton: some View {
+        Button {
+            showDebugLogs = true
+        } label: {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 18))
+                .foregroundStyle(theme.onSurfaceVariant)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .sheet(isPresented: $showDebugLogs) {
+            NavigationStack {
+                DebugLogView()
+            }
+            .preferredColorScheme(appearance.colorScheme)
+        }
+        .accessibilityLabel("Debug Logs")
+    }
+    #endif
 
     private var historyButton: some View {
         Button {
