@@ -1,16 +1,16 @@
 import Foundation
+import Darwin
 
 /// Persistent, size-capped log store shared across the app and its extensions
 /// via the App Group container.
 ///
-/// Each process writes its **own** file (named after its bundle identifier) so
-/// the app and keyboard extension never race on the same file handle. The
-/// in-app log viewer merges every `*.log` file in the directory and sorts by
-/// the line's timestamp prefix.
+/// Every process writes to the same timeline file while holding an
+/// interprocess file lock, so the in-app log viewer sees one chronological
+/// stream instead of independently-retained per-process fragments.
 ///
-/// When a process's file exceeds `maxBytes`, the oldest `trimBytes` worth of
-/// **whole lines** are dropped — the cut is aligned to a newline so a line is
-/// never split in half.
+/// When the file exceeds `maxBytes`, the oldest `trimBytes` worth of **whole
+/// lines** are dropped — the cut is aligned to a newline so a line is never
+/// split in half.
 ///
 /// All file state is confined to a single serial queue; logging never throws
 /// into callers and never blocks the calling thread (writes are enqueued).
@@ -19,13 +19,14 @@ final class LogBuffer: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "com.vcdr.logbuffer", qos: .utility)
     private let fileURL: URL
-    private var handle: FileHandle?
-    private var bytesOnDisk = 0
+    private let lockURL: URL
 
-    private let maxBytes = 5 * 1024 * 1024   // 5 MB per-process cap
-    private let trimBytes = 1 * 1024 * 1024  // drop oldest 1 MB (line-aligned) on overflow
+    private static let maxBytes = 20 * 1024 * 1024 // 20 MB global cap
+    private static let trimBytes = maxBytes / 10   // Drop oldest 10% on overflow
 
     private static let appGroupID = "group.glebglazov.vcdr-ios"
+    private static let logFilename = "vcdr.log"
+    private static let lockFilename = "vcdr.log.lock"
 
     /// Fixed-width, lexicographically sortable timestamp — lets the viewer sort
     /// and time-window-filter merged lines with plain string comparison.
@@ -37,8 +38,9 @@ final class LogBuffer: @unchecked Sendable {
     }()
 
     private init() {
-        fileURL = Self.fileURL(forProcess: Bundle.main.bundleIdentifier ?? "vcdr")
-        queue.sync { openHandle() }
+        fileURL = Self.fileURL()
+        lockURL = Self.lockURL()
+        queue.sync { Self.ensureStorage(fileURL: fileURL, lockURL: lockURL) }
     }
 
     // MARK: - Write
@@ -47,49 +49,66 @@ final class LogBuffer: @unchecked Sendable {
         let date = Date()
         queue.async { [self] in
             let line = "\(Self.timestampFormatter.string(from: date)) [\(category)] [\(level)] \(message)\n"
-            write(Data(line.utf8))
+            withExclusiveFileLock {
+                writeLocked(Data(line.utf8))
+            }
         }
     }
 
-    private func write(_ data: Data) {
-        guard let handle else { return }
+    private func writeLocked(_ data: Data) {
+        guard let handle = try? FileHandle(forWritingTo: fileURL) else { return }
         do {
+            try handle.seekToEnd()
             try handle.write(contentsOf: data)
-            bytesOnDisk += data.count
-            if bytesOnDisk > maxBytes { trim() }
+            if Self.fileSize(fileURL) > Self.maxBytes { trimLocked() }
         } catch {
             // Logging must never crash or throw into callers; drop on failure.
         }
+        try? handle.close()
     }
 
     /// Drops the oldest `trimBytes` worth of whole lines from the current file.
-    private func trim() {
-        guard let data = try? Data(contentsOf: fileURL), data.count > trimBytes else { return }
+    private func trimLocked() {
+        guard let data = try? Data(contentsOf: fileURL), data.count > Self.trimBytes else { return }
         let newline = UInt8(0x0A)
-        var cut = trimBytes
+        var cut = Self.trimBytes
         while cut < data.count, data[cut] != newline { cut += 1 }
         if cut < data.count { cut += 1 } // drop the trailing newline too, so we resume on a fresh line
         let kept = data.subdata(in: cut ..< data.count)
-        try? handle?.close()
         try? kept.write(to: fileURL, options: .atomic)
-        openHandle()
     }
 
-    // MARK: - File handle
+    // MARK: - File lock
 
-    private func openHandle() {
+    private func withExclusiveFileLock(_ body: () -> Void) {
+        Self.ensureStorage(fileURL: fileURL, lockURL: lockURL)
+        let fd = lockURL.withUnsafeFileSystemRepresentation { path -> CInt in
+            guard let path else { return -1 }
+            return open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        }
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+
+        guard flock(fd, LOCK_EX) == 0 else { return }
+        defer { flock(fd, LOCK_UN) }
+
+        body()
+    }
+
+    private static func ensureStorage(fileURL: URL, lockURL: URL) {
         let fm = FileManager.default
         try? fm.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         if !fm.fileExists(atPath: fileURL.path) {
             fm.createFile(atPath: fileURL.path, contents: nil)
         }
-        let h = try? FileHandle(forWritingTo: fileURL)
-        handle = h
-        if let h, let end = try? h.seekToEnd() {
-            bytesOnDisk = Int(end)
-        } else {
-            bytesOnDisk = 0
+        if !fm.fileExists(atPath: lockURL.path) {
+            fm.createFile(atPath: lockURL.path, contents: nil)
         }
+    }
+
+    private static func fileSize(_ url: URL) -> Int {
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue
+        return size ?? 0
     }
 
     // MARK: - Read (in-app viewer)
@@ -101,12 +120,13 @@ final class LogBuffer: @unchecked Sendable {
         timestampFormatter.string(from: date)
     }
 
-    /// Every log line across all processes' files, sorted oldest-first.
+    /// Every log line in the shared file, sorted oldest-first.
     static func mergedLines() -> [String] {
-        files()
-            .compactMap { try? String(contentsOf: $0, encoding: .utf8) }
-            .flatMap { $0.split(separator: "\n", omittingEmptySubsequences: true).map(String.init) }
+        (try? String(contentsOf: fileURL(), encoding: .utf8))?
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
             .sorted()
+            ?? []
     }
 
     /// Merged log as a single string, for copy / share.
@@ -127,12 +147,11 @@ final class LogBuffer: @unchecked Sendable {
         return root.appendingPathComponent("Logs")
     }
 
-    private static func fileURL(forProcess id: String) -> URL {
-        directory().appendingPathComponent("\(id).log")
+    private static func fileURL() -> URL {
+        directory().appendingPathComponent(logFilename)
     }
 
-    private static func files() -> [URL] {
-        (try? FileManager.default.contentsOfDirectory(at: directory(), includingPropertiesForKeys: nil))?
-            .filter { $0.pathExtension == "log" } ?? []
+    private static func lockURL() -> URL {
+        directory().appendingPathComponent(lockFilename)
     }
 }

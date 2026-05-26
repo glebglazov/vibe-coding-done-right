@@ -2,8 +2,8 @@
 import SwiftUI
 import UIKit
 
-/// Reads the persistent `LogBuffer` files (App Group container) and renders the
-/// merged log, newest writes last. Survives app restarts and includes every
+/// Reads the persistent `LogBuffer` file (App Group container) and renders the
+/// log, newest writes last. Survives app restarts and includes every
 /// level — unlike the old `OSLogStore` reader, which was scoped to the current
 /// process and dropped `.debug`/`.info` under the system's retention policy.
 struct DebugLogView: View {
