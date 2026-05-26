@@ -13,7 +13,7 @@ Selected host-app text intentionally included as assistant context during a reco
 _Avoid_: selection blob, selected text payload
 
 **Hot Mic Session**:
-The period where the iOS app keeps the audio engine warm so keyboard-driven recording can start without relaunch or cold audio setup.
+The lifecycle of the app's warm audio engine: the period it keeps the engine ready so keyboard-driven recording starts without relaunch or cold audio setup, plus the heartbeat that tells the Keyboard Channel the app is reachable, the Live Activity presence shown beside the system mic indicator while warm, and the inactivity-timeout policy (`.never` / `.always` / finite) that tears it down.
 _Avoid_: warm engine, background mic mode
 
 **Bundled Result**:
