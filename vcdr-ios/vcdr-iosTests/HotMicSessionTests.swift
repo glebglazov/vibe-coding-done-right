@@ -164,6 +164,35 @@ struct HotMicSessionTests {
         await settle()
     }
 
+    @Test("finite policy binds presence to the same idle deadline")
+    func finitePolicySetsPresenceDeadline() async {
+        let env = makeEnv(policy: .fiveMinutes)
+
+        await env.session.start()
+        await settle()
+
+        #expect(env.presence.isShown)
+        #expect(env.presence.staleDate != nil)
+        #expect(env.presence.autoEndAfter == .seconds(HotSessionTimeout.fiveMinutes.rawValue))
+    }
+
+    @Test("recording clears the presence idle deadline")
+    func recordingClearsPresenceDeadline() async {
+        let env = makeEnv(policy: .fiveMinutes)
+
+        await env.session.start()
+        await settle()
+        #expect(env.presence.autoEndAfter != nil)
+
+        env.engine.isRecording = true
+        env.session.recordingStarted()
+        await settle()
+
+        #expect(env.presence.isShown)
+        #expect(env.presence.staleDate == nil)
+        #expect(env.presence.autoEndAfter == nil)
+    }
+
     // MARK: - Environment
 
     @MainActor
@@ -270,17 +299,23 @@ final class SpyPresence: MicPresence {
     private(set) var startCalls = 0
     private(set) var stopCalls = 0
     private(set) var isShown = false
+    private(set) var staleDate: Date?
+    private(set) var autoEndAfter: Duration?
 
-    func start() async {
+    func start(staleDate: Date?, autoEndAfter: Duration?) async {
+        self.staleDate = staleDate
+        self.autoEndAfter = autoEndAfter
         guard !isShown else { return }
-        startCalls += 1
         isShown = true
+        startCalls += 1
     }
 
     func stop() async {
         guard isShown else { return }
         stopCalls += 1
         isShown = false
+        staleDate = nil
+        autoEndAfter = nil
     }
 }
 

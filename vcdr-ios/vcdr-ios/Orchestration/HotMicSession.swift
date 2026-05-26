@@ -23,7 +23,7 @@ protocol WarmEngine: AnyObject {
 /// `HotMicActivityController` is the production adapter; tests use a spy.
 @MainActor
 protocol MicPresence {
-    func start() async
+    func start(staleDate: Date?, autoEndAfter: Duration?) async
     func stop() async
 }
 
@@ -84,6 +84,14 @@ final class HotMicSession {
     /// Single source of truth: the session is alive ⇔ the engine is running.
     var isAlive: Bool { engine.isHot }
 
+    deinit {
+        idleTask?.cancel()
+        heartbeatTask?.cancel()
+        if let timeoutObserverToken {
+            NotificationCenter.default.removeObserver(timeoutObserverToken)
+        }
+    }
+
     /// Production dependencies default to the live adapters. They're passed as
     /// optionals so the defaults can be built inside this `@MainActor` init —
     /// default-argument expressions evaluate in a nonisolated context and so
@@ -138,7 +146,6 @@ final class HotMicSession {
             return
         }
         startHeartbeat()
-        await presence.start()
         armIdleTimer(timeout)
     }
 
@@ -150,7 +157,7 @@ final class HotMicSession {
         idleTask?.cancel()
         idleTask = nil
         startHeartbeat()
-        Task { [presence] in await presence.start() }
+        Task { [presence] in await presence.start(staleDate: nil, autoEndAfter: nil) }
     }
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
@@ -191,12 +198,21 @@ final class HotMicSession {
             if !engine.isRecording { teardown() }
             return
         case .always:
+            Task { [presence] in await presence.start(staleDate: nil, autoEndAfter: nil) }
             return
         default:
             break
         }
 
         guard !engine.isRecording else { return }
+
+        let staleDate = Date(timeIntervalSinceNow: timeout.seconds)
+        Task { [presence] in
+            await presence.start(
+                staleDate: staleDate,
+                autoEndAfter: .seconds(timeout.rawValue)
+            )
+        }
 
         idleTask = Task { [weak self, clock] in
             await clock.sleep(for: .seconds(timeout.rawValue))
