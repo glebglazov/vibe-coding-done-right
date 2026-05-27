@@ -17,6 +17,7 @@ extension AIProvider {
         switch self {
         case .anthropic: AnthropicProvider(apiKey: apiKey)
         case .openai: OpenAIProvider(apiKey: apiKey)
+        case .gemini: GeminiProvider(apiKey: apiKey)
         case .apple: AppleAFMProvider()
         }
     }

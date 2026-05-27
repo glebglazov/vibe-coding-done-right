@@ -22,6 +22,13 @@ struct LLMProviderTests {
         #expect(provider.displayName == AIProvider.openai.displayName)
     }
 
+    @Test("factory maps .gemini to GeminiProvider with matching displayName")
+    func factoryGemini() {
+        let provider = AIProvider.gemini.makeProvider(apiKey: "key")
+        #expect(provider is GeminiProvider)
+        #expect(provider.displayName == AIProvider.gemini.displayName)
+    }
+
     @Test("factory maps .apple to AppleAFMProvider with matching displayName")
     func factoryApple() {
         let provider = AIProvider.apple.makeProvider(apiKey: "")
@@ -42,6 +49,14 @@ struct LLMProviderTests {
     @Test("OpenAI adapter throws on empty API key")
     func openAIMissingKey() async {
         let provider = OpenAIProvider(apiKey: "")
+        await #expect(throws: AIClientError.self) {
+            _ = try await provider.process(text: "hello", systemPrompt: "system")
+        }
+    }
+
+    @Test("Gemini adapter throws on empty API key")
+    func geminiMissingKey() async {
+        let provider = GeminiProvider(apiKey: "")
         await #expect(throws: AIClientError.self) {
             _ = try await provider.process(text: "hello", systemPrompt: "system")
         }

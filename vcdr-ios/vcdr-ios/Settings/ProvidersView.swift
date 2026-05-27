@@ -3,11 +3,13 @@ import SwiftUI
 struct ProvidersView: View {
     @AppStorage(AIProcessingSettings.anthropicApiKeyKey) private var anthropicApiKey = ""
     @AppStorage(AIProcessingSettings.openaiApiKeyKey) private var openaiApiKey = ""
+    @AppStorage(AIProcessingSettings.geminiApiKeyKey) private var geminiApiKey = ""
 
     var body: some View {
         List {
             providerRow(.anthropic, key: $anthropicApiKey)
             providerRow(.openai, key: $openaiApiKey)
+            providerRow(.gemini, key: $geminiApiKey)
             if AIProcessingSettings.isAFMAvailable {
                 appleRow
             }
@@ -16,6 +18,7 @@ struct ProvidersView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: anthropicApiKey) { _, _ in syncAIConfigured() }
         .onChange(of: openaiApiKey) { _, _ in syncAIConfigured() }
+        .onChange(of: geminiApiKey) { _, _ in syncAIConfigured() }
     }
 
     private func providerRow(_ provider: AIProvider, key: Binding<String>) -> some View {

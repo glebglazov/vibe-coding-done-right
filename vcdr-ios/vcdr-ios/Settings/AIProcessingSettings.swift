@@ -46,19 +46,21 @@ enum AIPromptMode: String, CaseIterable, Codable {
 enum AIProvider: String, Codable, CaseIterable {
     case anthropic
     case openai
+    case gemini
     case apple
 
     var displayName: String {
         switch self {
         case .anthropic: "Anthropic"
         case .openai: "OpenAI"
+        case .gemini: "Google Gemini"
         case .apple: "Apple"
         }
     }
 
     var requiresAPIKey: Bool {
         switch self {
-        case .anthropic, .openai: true
+        case .anthropic, .openai, .gemini: true
         case .apple: false
         }
     }
@@ -67,6 +69,7 @@ enum AIProvider: String, Codable, CaseIterable {
         switch self {
         case .anthropic: "ANTHROPIC_API_KEY"
         case .openai: "OPENAI_API_KEY"
+        case .gemini: "GOOGLE_API_KEY"
         case .apple: ""
         }
     }
@@ -77,6 +80,7 @@ enum AIProvider: String, Codable, CaseIterable {
         switch self {
         case .anthropic: !AIProcessingSettings.anthropicApiKey.isEmpty
         case .openai: !AIProcessingSettings.openaiApiKey.isEmpty
+        case .gemini: !AIProcessingSettings.geminiApiKey.isEmpty
         case .apple: AIProcessingSettings.isAFMAvailable
         }
     }
@@ -97,6 +101,7 @@ enum AIProcessingSettings {
     static let assistantProviderKey = "ai_processing_assistant_provider"
     static let anthropicApiKeyKey = "ai_processing_anthropic_api_key"
     static let openaiApiKeyKey = "ai_processing_openai_api_key"
+    static let geminiApiKeyKey = "ai_processing_gemini_api_key"
     static let afmFallbackEnabledKey = "ai_processing_afm_fallback_enabled"
     static let dictationAfmFallbackKey = "ai_processing_dictation_afm_fallback"
     static let assistantAfmFallbackKey = "ai_processing_assistant_afm_fallback"
@@ -144,6 +149,10 @@ enum AIProcessingSettings {
         UserDefaults.standard.string(forKey: openaiApiKeyKey) ?? ""
     }
 
+    static var geminiApiKey: String {
+        UserDefaults.standard.string(forKey: geminiApiKeyKey) ?? ""
+    }
+
     static var afmFallbackEnabled: Bool {
         UserDefaults.standard.bool(forKey: afmFallbackEnabledKey)
     }
@@ -175,6 +184,7 @@ enum AIProcessingSettings {
         switch provider {
         case .anthropic: anthropicApiKey
         case .openai: openaiApiKey
+        case .gemini: geminiApiKey
         case .apple: ""
         }
     }
