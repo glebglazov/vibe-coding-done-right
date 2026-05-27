@@ -81,7 +81,7 @@ final class RecordingFlowCoordinator {
     /// can take seconds on first launch after install. `nil` until the
     /// bootstrap task completes; callers must tolerate the transient gap.
     private(set) var history: (any HistoryStore)?
-    private var recordingSession: RecordingSession?
+    private var recordingRun: RecordingRun?
     /// Set to true while `startRecording` is between its UI flip and
     /// `audioRecorder.startCapture` returning. A second tap arriving in that
     /// window would otherwise pass the `!audioRecorder.isRecording` guard
@@ -93,7 +93,7 @@ final class RecordingFlowCoordinator {
     /// engine startup. Those callers wait here so they don't observe the
     /// half-started state as a missing streaming session.
     private var startWaiters: [CheckedContinuation<Bool, Never>] = []
-    /// Text sent to AI processing — needed for retry
+    /// Text sent to AI processing — retained for the existing Done-page retry action.
     private var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
     /// Populated from captures published through the Keyboard Channel.
@@ -358,7 +358,7 @@ final class RecordingFlowCoordinator {
         // `isStartingRecording` covers the window between the UI flip and
         // `startCapture` returning, when `isRecording` is still false but a
         // setup is already in progress.
-        guard !audioRecorder.isRecording, !isStartingRecording, recordingSession == nil else {
+        guard !audioRecorder.isRecording, !isStartingRecording, recordingRun == nil else {
             Logger.app.info("[RecordTiming] startRecording bailed — session already active or starting")
             return
         }
@@ -403,59 +403,23 @@ final class RecordingFlowCoordinator {
             await self?.writeStateAsync(.recording)
         }
 
-        // Create streaming manager immediately — no models needed for construction.
-        // Its internal AsyncStream buffers audio until start() begins consuming.
-        let streaming = StreamingAsrManager(config: .streaming)
-
-        // Begin model init + streaming setup in a detached task to avoid
-        // competing with MainActor for scheduling. Audio buffers accumulate
-        // in the AsyncStream until start() launches the recognition task,
-        // which then drains all queued buffers.
-        let setupTask = Task.detached { [transcriptionProvider] in
-            try await transcriptionProvider.initialize()
-            guard let models = await transcriptionProvider.loadedModels else {
-                throw TranscriptionError.providerUnavailable
-            }
-            try await streaming.start(models: models, source: .microphone)
-        }
-        let sessionContext = RecordingSessionContext(
-            conversationID: UUID(),
-            streaming: streaming,
-            setupTask: setupTask
-        )
-        recordingSession = .starting(sessionContext)
-        Logger.app.info("[RecordTiming] session setup task created at +\(ContinuousClock.now - recordStart)")
-
-        // Start consuming transcription updates (sets updateContinuation on the actor)
-        liveTranscript = ""
-        sessionContext.updateTask = startConsumingUpdates(from: streaming)
-
         // We're about to record: cancel any pending hot-session teardown and
         // light the heartbeat + presence now. The cold path warms the engine
         // via `startCapture` below without ever going through `start()`, so the
         // session needs telling regardless of how it got hot.
         hotMicSession.recordingStarted()
 
-        // Start audio capture — engine was kept hot between recordings so the
-        // start cost here is ~0 when the session was already warm.
-        let started = await audioRecorder.startCapture { buffer in
-            Task { await streaming.streamAudio(buffer) }
-        }
+        let run = makeRecordingRun(deliversToKeyboard: fromDeepLink)
+        recordingRun = run
+        Logger.app.info("[RecordTiming] recording run created at +\(ContinuousClock.now - recordStart)")
+
+        let started = await run.start()
         Logger.app.info("[RecordTiming] audioRecorder.startCapture returned at +\(ContinuousClock.now - recordStart)")
 
-        guard case .starting(let activeContext) = recordingSession, activeContext === sessionContext else {
-            if started {
-                audioRecorder.stopCapture()
-            }
-            sessionContext.cancel()
-            finishRecordingStart(false)
-            return
-        }
-
         guard started else {
-            sessionContext.cancel()
-            recordingSession = nil
             state = .error("Failed to start recording — check microphone permission")
+            writeState(.idle)
+            recordingRun = nil
             // The engine never came up, so tear down the heartbeat/presence we
             // optimistically lit above rather than leaving them orphaned.
             hotMicSession.recordingStopped()
@@ -463,7 +427,6 @@ final class RecordingFlowCoordinator {
             return
         }
 
-        recordingSession = .recording(sessionContext)
         finishRecordingStart(true)
     }
 
@@ -485,10 +448,7 @@ final class RecordingFlowCoordinator {
         // to a system daemon) doesn't block recording start. Under heavy CoreML
         // compilation load the daemon can take seconds to respond.
         Task { @MainActor in UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
-        // Stop consuming buffers but keep the engine running so the next
-        // recording is instant. The inactivity timer (rescheduled below)
-        // tears it down if the user doesn't come back within the window.
-        audioRecorder.stopCapture()
+
         hotMicSession.recordingStopped()
         setIdleTimerDisabled(false)
 
@@ -502,154 +462,84 @@ final class RecordingFlowCoordinator {
             keyboardChannel.clearCaptures()
         }
 
-        let sessionContext: RecordingSessionContext
-        switch recordingSession {
-        case .recording(let context):
-            sessionContext = context
-        case .stopping:
-            Logger.app.info("[RecordTiming] stopAndTranscribe ignored — already stopping")
-            return
-        case .starting, .none:
+        guard let run = recordingRun else {
             state = .error("Recording was interrupted before audio started")
             writeState(.idle)
             return
         }
-        recordingSession = .stopping(sessionContext)
-        sessionContext.updateTask?.cancel()
-        let streaming = sessionContext.streaming
 
-        // Wait for model init + streaming start if still in progress.
-        // Audio has stopped, so no new buffers arrive — the recognition task
-        // will process all queued buffers once it starts.
-        let waitStart = ContinuousClock.now
-        transcribingMessage = "Loading model — your recording is safe"
         state = .transcribing
         writeState(.transcribing)
-        // Tick the message every second so the wait feels bounded rather
-        // than frozen. Cancelled below regardless of success/failure.
-        let elapsedTicker = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled, let self else { return }
-                let elapsed = Int((ContinuousClock.now - waitStart).components.seconds)
-                self.transcribingMessage = "Loading model · \(elapsed)s — your recording is safe"
-            }
+
+        let terminalState = await run.stop(deliversToKeyboard: sendToKeyboard)
+        applyTerminalStateToUI(terminalState)
+        recordingRun = nil
+    }
+
+    private func applyTerminalStateToUI(_ terminalState: RecordingRunTerminalState) {
+        switch terminalState {
+        case .success(let success):
+            state = .complete(success.finalText)
+        case .emptyResult:
+            state = .error("No speech detected")
+        case .cancellation:
+            state = .ready
+        case .processingFailure(let failure):
+            state = .error(failure.message)
         }
-        do {
-            try await sessionContext.setupTask.value
-        } catch {
-            elapsedTicker.cancel()
-            await streaming.cancel()
-            state = .error("Transcription unavailable: \(error.localizedDescription)")
-            writeState(.idle)
-            recordingSession = nil
-            transcribingMessage = ""
-            return
-        }
-        elapsedTicker.cancel()
-        transcribingMessage = ""
+    }
 
-        // Refresh mode/style from shared defaults — keyboard may have flipped
-        // mid-recording. Live-flip semantics: latest user intent wins.
-        resyncSettingsFromSharedDefaults()
-        let useAI = selectedPromptMode != .verbatim && AIProcessingSettings.hasAICapability
-
-        // Stage 1: Filler removal only — terminator is applied after external processing
-        let cleanedLive = TextPostProcessor.removeFillers(from: liveTranscript)
-
-        // Clear auxiliary properties BEFORE changing state so SwiftUI never
-        // renders the new view tree with stale values from the recording phase.
-        liveTranscript = ""
-
-        // Show local result immediately unless AI processing will replace it.
-        // Verbatim (no AI) still gets the static style transform — the pill
-        // the user toggled during recording has to affect the output. The
-        // finalizer honors the assistant exception, so the transient display
-        // now matches the final result for every mode.
-        if !useAI && !cleanedLive.isEmpty {
-            state = .complete(TranscriptFinalizer.finalize(cleanedLive, mode: selectedPromptMode, style: currentTextStyle))
-        } else {
-            transcribingMessage = useAI ? "Enhancing with AI..." : ""
-            state = .transcribing
-        }
-        writeState(.transcribing)
-
-        // Request background execution time so the AI HTTP request isn't
-        // throttled when the user has switched to the keyboard app.
-        let bgTaskID = sendToKeyboard
-            ? UIApplication.shared.beginBackgroundTask()
-            : .invalid
-
-        // Finalize streaming — may refine the last few words.
-        do {
-            let rawText = try await streaming.finish()
-            // Stage 1: Filler removal only — terminator applied after external processing
-            let cleanedText = TextPostProcessor.removeFillers(from: rawText)
-            Logger.app.info("Streaming transcription complete: \(cleanedText.prefix(50))...")
-
-            guard !cleanedText.isEmpty else {
-                transcribingMessage = ""
-                state = .error("No speech detected")
-                if sendToKeyboard {
-                    writeState(.emptyResult)
-                } else {
-                    writeState(.idle)
+    private func makeRecordingRun(deliversToKeyboard: Bool) -> RecordingRun {
+        RecordingRun(
+            audioRecorder: audioRecorder,
+            transcriptionProvider: transcriptionProvider,
+            completionAdapters: [
+                KeyboardChannelRecordingRunCompletionAdapter(
+                    keyboardChannel: keyboardChannel,
+                    deliversToKeyboard: deliversToKeyboard
+                ),
+                HistoryRecordingRunCompletionAdapter(history: history)
+            ],
+            makeAIProvider: { mode in
+                AIProviderFactory.make(for: mode)
+            },
+            currentSettings: { [weak self] in
+                guard let self else {
+                    return RecordingRun.Settings(
+                        promptMode: .verbatim,
+                        textStyle: .casual,
+                        hasAICapability: false
+                    )
                 }
-                if bgTaskID != .invalid {
-                    UIApplication.shared.endBackgroundTask(bgTaskID)
+                self.resyncSettingsFromSharedDefaults()
+                return RecordingRun.Settings(
+                    promptMode: self.selectedPromptMode,
+                    textStyle: self.currentTextStyle,
+                    hasAICapability: AIProcessingSettings.hasAICapability
+                )
+            },
+            currentCaptures: { [weak self] in
+                self?.capturedTexts ?? []
+            },
+            onLiveTranscript: { [weak self] text in
+                self?.liveTranscript = text
+            },
+            onInterimResult: { [weak self] text in
+                self?.state = .complete(text)
+            },
+            onTranscribingMessage: { [weak self] message in
+                self?.transcribingMessage = message
+            },
+            onAIProcessingStatus: { [weak self] status in
+                self?.aiProcessingStatus = AIProcessingStatus(status)
+                if status == .processing {
+                    self?.transcribingMessage = "Enhancing with AI..."
                 }
-                recordingSession = nil
-                return
+            },
+            onAIInputText: { [weak self] text in
+                self?.aiInputText = text
             }
-
-            // Stage 2: External processing (AI)
-            let processedText: String
-            if useAI {
-                processedText = await waitForAIProcessing(localText: cleanedText)
-            } else {
-                processedText = cleanedText
-            }
-            
-            // Stage 3+4: Style transformation + terminator, via the finalizer.
-            // Assistant output is delivered as-is (its phrasing is intentional);
-            // verbatim/dictation get the static style rules. Re-sync before
-            // finalizing — user may have flipped mode/style during AI processing.
-            resyncSettingsFromSharedDefaults()
-            let resultText = TranscriptFinalizer.finalize(processedText, mode: selectedPromptMode, style: currentTextStyle)
-
-            transcribingMessage = ""
-            state = .complete(resultText)
-
-            if sendToKeyboard {
-                // Deliver text via state bundling — piggybacking on the stateKey
-                // is reliable cross-process whereas dedicated keys have sync delays.
-                // Must precede history disk I/O: keyboard polls stateKey on main
-                // runloop, any MainActor block here stalls cross-process delivery.
-                writeState(.idle, bundledText: resultText)
-            } else {
-                writeState(.idle)
-            }
-
-            recordHistory(
-                conversationID: sessionContext.conversationID,
-                transcript: cleanedText,
-                processed: useAI ? processedText : nil,
-                finalText: resultText,
-                captures: capturedTexts
-            )
-        } catch {
-            transcribingMessage = ""
-            if cleanedLive.isEmpty {
-                state = .error("Transcription failed: \(error.localizedDescription)")
-            }
-            writeState(.idle)
-            Logger.app.error("Streaming transcription failed: \(error)")
-        }
-
-        if bgTaskID != .invalid {
-            UIApplication.shared.endBackgroundTask(bgTaskID)
-        }
-        recordingSession = nil
+        )
     }
 
     // MARK: - Cross-process settings sync
@@ -666,46 +556,6 @@ final class RecordingFlowCoordinator {
         currentTextStyle = SessionSettings.effectiveTextStyle()
     }
 
-    // MARK: - History
-
-    /// Records the completed conversation to shared history storage.
-    /// `processed` is nil when AI was not used; `finalText` is the styled/
-    /// terminated text actually delivered to the user.
-    private func recordHistory(
-        conversationID: UUID,
-        transcript: String,
-        processed: String?,
-        finalText: String,
-        captures: [String]
-    ) {
-        let primarySegment = InputSegment(text: transcript)
-        let captureSegments = captures
-            .filter { !$0.isEmpty }
-            .map { InputSegment(capture: CapturedContext(text: $0, source: .selection)) }
-        let segments = [primarySegment] + captureSegments
-        let label = historyLabel()
-        // `history` is nil only during the brief window between app launch
-        // and `bootstrapHistory()` completing — well before the user can
-        // finish a recording in practice. Optional-chain so an edge-case race
-        // drops the write rather than crashing.
-        history?.record(
-            conversationID: conversationID,
-            inputSegments: segments,
-            output: processed != nil ? finalText : nil,
-            label: label
-        )
-    }
-
-    /// Display label for the history entry — mirrors the current AI mode
-    /// and text style when the user enabled AI for this recording.
-    private func historyLabel() -> String? {
-        guard selectedPromptMode != .verbatim else { return nil }
-        let mode = selectedPromptMode.rawValue.capitalized
-        return selectedPromptMode.appliesStyles
-            ? "\(mode) · \(currentTextStyle.rawValue.capitalized)"
-            : mode
-    }
-
     func reset() {
         state = .ready
         writeState(.idle)
@@ -716,10 +566,10 @@ final class RecordingFlowCoordinator {
         aiProcessingStatus = .idle
         selectedPromptMode = SessionSettings.effectiveAIMode()
         currentTextStyle = SessionSettings.effectiveTextStyle()
-        aiInputText = ""
         capturedTexts = []
-        recordingSession?.context.cancel()
-        recordingSession = nil
+        let run = recordingRun
+        recordingRun = nil
+        Task { await run?.cancel() }
         if isStartingRecording {
             finishRecordingStart(false)
         }
@@ -801,36 +651,6 @@ final class RecordingFlowCoordinator {
     func cleanupStaleResults() {
         keyboardChannel.clearCommand()
         writeState(.idle)
-    }
-
-    // MARK: - Streaming Updates
-
-    /// Minimum interval between UI updates for live transcript text.
-    /// Coalesces rapid bursts (e.g. after model init drains queued audio)
-    /// into at most one SwiftUI render per frame, keeping the waveform smooth.
-    private static let transcriptUpdateInterval: Duration = .milliseconds(16)
-
-    private func startConsumingUpdates(from streaming: StreamingAsrManager) -> Task<Void, Never> {
-        Task {
-            let updates = await streaming.transcriptionUpdates
-            var lastUpdateTime: ContinuousClock.Instant = .now
-            for await _ in updates {
-                guard !Task.isCancelled else { break }
-
-                // Throttle: skip intermediate updates that arrive faster than
-                // one per display frame. The next update will pick up the
-                // latest transcript, so no text is lost — only redundant
-                // renders are avoided.
-                let now = ContinuousClock.now
-                guard now - lastUpdateTime >= Self.transcriptUpdateInterval else { continue }
-                lastUpdateTime = now
-
-                let confirmed = await streaming.confirmedTranscript
-                let volatile = await streaming.volatileTranscript
-                let full = confirmed.isEmpty ? volatile : "\(confirmed) \(volatile)"
-                liveTranscript = full.trimmingCharacters(in: .whitespaces)
-            }
-        }
     }
 
     // MARK: - Idle Timer
@@ -948,6 +768,18 @@ private extension KeyboardChannel.RecordingState {
         case .recording: self = .recording
         case .transcribing: self = .transcribing
         case .emptyResult: self = .emptyResult
+        }
+    }
+}
+
+private extension RecordingFlowCoordinator.AIProcessingStatus {
+    init(_ status: RecordingRun.AIProcessingStatus) {
+        switch status {
+        case .idle: self = .idle
+        case .processing: self = .processing
+        case .timedOut: self = .timedOut
+        case .completed: self = .completed
+        case .error(let message): self = .error(message)
         }
     }
 }
