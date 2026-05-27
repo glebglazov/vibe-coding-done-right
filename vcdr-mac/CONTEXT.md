@@ -1,0 +1,157 @@
+# VCDR macOS Context
+
+VCDR macOS is a menu bar dictation product that records speech, captures surrounding app context, processes text through a selected mode, and delivers the result to a chosen destination. This context records macOS-specific language for capture, mode processing, style resolution, preview, and output delivery.
+
+## Language
+
+### Capture Lifecycle
+
+**Capture Session**:
+The lifecycle of one macOS dictation run from hotkey start through recording, transcription, processing, preview or execution, and return to idle. A Capture Session has one active run state at a time.
+_Avoid_: recording coordinator, capture coordinator, workflow
+
+**Capture Panel**:
+The floating macOS UI surface shown during a Capture Session for recording state, captured context indicators, preview, errors, and confirmation controls.
+_Avoid_: overlay, popup, transcription panel
+
+**Recording Indicator**:
+The lightweight menu-bar or pill feedback that communicates capture status outside the Capture Panel. It is not the Capture Session itself.
+_Avoid_: status label, menu icon, recording state
+
+**Suspension**:
+A temporary pause of capture hotkey behavior while another UI flow needs exclusive keyboard focus. Suspension is released explicitly or when its token is discarded.
+_Avoid_: disabled state, pause, lockout
+
+### Context Capture
+
+**Capture**:
+External text intentionally included with the dictation as context. A Capture can come from the initial selection or from clipboard changes collected during recording.
+_Avoid_: snippet, selection blob, copied text
+
+**Selection Capture**:
+The initial attempt to read selected text from the frontmost app at the start of a Capture Session. It may also produce Cursor Context.
+_Avoid_: selected text grab, AX scrape, prefill
+
+**Clipboard Capture**:
+Additional text captured from clipboard changes while a Capture Session is recording. Clipboard Capture is separate from Selection Capture and is appended after the selection capture.
+_Avoid_: copy monitor result, pasteboard sample, clipboard history
+
+**Cursor Context**:
+Text immediately before and after the insertion point in the source app. Context-aware modes may use Cursor Context for formatting and AI input, and it is discarded when it no longer matches the target app.
+_Avoid_: surrounding text, insertion context, AX context
+
+**Initial App**:
+The frontmost app when a Capture Session starts. Paste to Initial App restores this app before delivering output.
+_Avoid_: source app, previous app, target app
+
+### Modes And Processing
+
+**Mode**:
+The selected processing recipe for a Capture Session. A Mode defines how dictated text is transformed, whether preview is shown, which destination is default, which parameters are available, and whether styles or Cursor Context apply.
+_Avoid_: profile, preset, prompt
+
+**Mode Template**:
+A built-in definition used to seed or reset a Mode, such as Verbatim, Dictation, Assistant (Remote), or Assistant (Local). A Mode Template is not the user's live Mode instance.
+_Avoid_: built-in mode, default mode, template preset
+
+**Processing Type**:
+The kind of transformation a Mode applies before output delivery: no external processing, cloud AI, local agent, or bash script. Processing Type is about text transformation, not where the final text is delivered.
+_Avoid_: action type, destination type, provider
+
+**Mode Parameter**:
+A named per-mode choice whose selected option is passed into processing as a `VCDR_PARAM_*` value. A Capture Session may override Mode Parameters without changing the Mode's defaults.
+_Avoid_: setting, option, variable
+
+**Session Override**:
+A temporary per-session choice that supersedes a Mode default, such as a Mode Parameter, Output Destination, or Style. Session Overrides are cleared when the capture lifecycle consumes or cancels them.
+_Avoid_: setting change, temporary default, pending override
+
+**No Instruction**:
+An AI processing outcome meaning the dictation did not contain an actionable instruction. No Instruction is distinct from empty speech because transcription succeeded but the selected Mode declined to act.
+_Avoid_: empty result, AI failure, ignored command
+
+**AI Fallback Preview**:
+A preview shown when AI processing fails and VCDR falls back to locally structured text. It keeps enough retry context for another AI attempt while preserving user-visible text.
+_Avoid_: AI error state, retry panel, fallback result
+
+### Output Delivery
+
+**Output Destination**:
+The chosen delivery target for processed text. Built-in destinations include Paste, Paste to Initial App, and Copy; user-created destinations currently run bash scripts.
+_Avoid_: action, sink, exporter
+
+**Destination Override**:
+A Session Override that selects an Output Destination for the current Capture Session. A Destination Override skips preview even when the Mode normally requires preview.
+_Avoid_: quick action, output shortcut, destination hotkey
+
+**Preview**:
+The confirmation state where processed text is shown before delivery. Preview is controlled by the Mode unless a Destination Override forces immediate execution.
+_Avoid_: review screen, draft, output panel
+
+**Confirmation**:
+The user's approval of a Preview, optionally with a different Output Destination. Confirmation delivers the preview text and records history.
+_Avoid_: submit, accept, execute
+
+**Concealed Paste**:
+Delivery that temporarily writes the result to the clipboard, simulates paste, and restores the previous clipboard contents. Concealed Paste is used when the result should not remain on the clipboard.
+_Avoid_: hidden copy, temporary clipboard, paste trick
+
+### Styles
+
+**Style**:
+The output-shaping choice that controls capitalization, punctuation, trailing spacing, and optional style prompt behavior. Style is orthogonal to Mode and only applies when the Mode allows styles.
+_Avoid_: tone, format, casing preset
+
+**Detected Style**:
+The Style selected from the frontmost app's bundle ID through the style registry. Detected Style is the baseline before any Style Override.
+_Avoid_: app style, automatic style, inferred style
+
+**Style Override**:
+A Session Override that temporarily chooses a Style instead of the Detected Style. Style Override is usually selected from the mode switcher or menu bar.
+_Avoid_: style setting, manual style, forced style
+
+**Context-Aware Formatting**:
+Style behavior that uses Cursor Context to decide leading capitalization and separator insertion. It is available only when the Mode opts into Cursor Context.
+_Avoid_: smart formatting, cursor formatting, adaptive punctuation
+
+### History
+
+**Conversation**:
+A history record for a Capture Session that reaches preview or execution. It stores input segments, optional externally processed output, and the Mode label.
+_Avoid_: transcription record, capture log, history item
+
+**Input Segment**:
+A part of a Conversation's input, either dictated text or a Capture. A Conversation has one or more Input Segments.
+_Avoid_: turn, message, text chunk
+
+## Flagged Ambiguities
+
+**Capture**:
+Use Capture Session for the full recording lifecycle and Capture for contextual text included with the dictation.
+
+**Session**:
+Do not use "session" by itself. Say Capture Session for one macOS dictation lifecycle and Session Override for temporary per-run choices.
+
+**Destination vs Processing**:
+Processing Type transforms text before delivery; Output Destination delivers the processed text afterward. Do not call a destination a processing action.
+
+**Style vs Mode**:
+Mode decides the processing recipe; Style decides final text shape. A Mode may opt out of Style entirely.
+
+## Example Dialogue
+
+Dev: "The user pressed the destination hotkey while recording in a preview Mode."
+
+Domain expert: "That creates a Destination Override. The Capture Session should skip Preview and execute the selected Output Destination directly."
+
+Dev: "The Mode is Assistant (Remote), and the user selected two clipboard captures during recording."
+
+Domain expert: "Those are Captures. Include them as Input Segments in the Conversation, and structure them for the Mode's Processing Type."
+
+Dev: "The frontmost app changed from Safari to Mail during recording."
+
+Domain expert: "Check whether the Cursor Context is still valid for the Initial App or target app. If it is stale, discard it before Context-Aware Formatting or AI input."
+
+Dev: "The user cycled Formal from the mode switcher before stopping."
+
+Domain expert: "That is a Style Override. It affects this Capture Session without changing the Detected Style or Mode defaults."
