@@ -23,7 +23,7 @@ protocol WarmEngine: AnyObject {
 /// `HotMicActivityController` is the production adapter; tests use a spy.
 @MainActor
 protocol MicPresence {
-    func start(staleDate: Date?, autoEndAfter: Duration?) async
+    func start() async
     func stop() async
 }
 
@@ -157,7 +157,7 @@ final class HotMicSession {
         idleTask?.cancel()
         idleTask = nil
         startHeartbeat()
-        Task { [presence] in await presence.start(staleDate: nil, autoEndAfter: nil) }
+        Task { [presence] in await presence.start() }
     }
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
@@ -198,7 +198,7 @@ final class HotMicSession {
             if !engine.isRecording { teardown() }
             return
         case .always:
-            Task { [presence] in await presence.start(staleDate: nil, autoEndAfter: nil) }
+            Task { [presence] in await presence.start() }
             return
         default:
             break
@@ -206,13 +206,7 @@ final class HotMicSession {
 
         guard !engine.isRecording else { return }
 
-        let staleDate = Date(timeIntervalSinceNow: timeout.seconds)
-        Task { [presence] in
-            await presence.start(
-                staleDate: staleDate,
-                autoEndAfter: .seconds(timeout.rawValue)
-            )
-        }
+        Task { [presence] in await presence.start() }
 
         idleTask = Task { [weak self, clock] in
             await clock.sleep(for: .seconds(timeout.rawValue))

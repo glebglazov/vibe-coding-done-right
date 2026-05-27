@@ -10,7 +10,6 @@ import OSLog
 @MainActor
 final class HotMicActivityController {
     private var activity: Activity<HotMicActivityAttributes>?
-    private var autoEndTask: Task<Void, Never>?
 
     init() {
         // End any activity that survived a previous app kill. If the engine
@@ -20,13 +19,12 @@ final class HotMicActivityController {
         }
     }
 
-    func start(staleDate: Date?, autoEndAfter: Duration?) async {
+    func start() async {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             Logger.app.info("Live Activities disabled in Settings")
             return
         }
-        scheduleAutoEnd(after: autoEndAfter)
-        let content = makeContent(staleDate: staleDate)
+        let content = makeContent()
         if let activity {
             await activity.update(content)
             return
@@ -41,30 +39,16 @@ final class HotMicActivityController {
     }
 
     func stop() async {
-        autoEndTask?.cancel()
-        autoEndTask = nil
         guard let activity else { return }
         await activity.end(nil, dismissalPolicy: .immediate)
         self.activity = nil
         Logger.app.info("Hot mic Live Activity ended")
     }
 
-    private func makeContent(staleDate: Date?) -> ActivityContent<HotMicActivityAttributes.ContentState> {
+    private func makeContent() -> ActivityContent<HotMicActivityAttributes.ContentState> {
         ActivityContent(
             state: HotMicActivityAttributes.ContentState(),
-            staleDate: staleDate
+            staleDate: nil
         )
-    }
-
-    private func scheduleAutoEnd(after duration: Duration?) {
-        autoEndTask?.cancel()
-        autoEndTask = nil
-        guard let duration else { return }
-        autoEndTask = Task { [weak self] in
-            try? await Task.sleep(for: duration)
-            guard !Task.isCancelled, let self else { return }
-            await self.stop()
-            Logger.app.info("Hot mic Live Activity auto-ended after idle deadline")
-        }
     }
 }
