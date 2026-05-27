@@ -63,6 +63,13 @@ struct ModeDetailView: View {
                             Text(provider.displayName).tag(provider)
                         }
                     }
+                    .onChange(of: mode.aiProvider) { _, newProvider in
+                        mode.parameters = newProvider.defaultParameters
+                    }
+
+                    if !mode.parameters.isEmpty {
+                        providerParametersSection
+                    }
 
                     Picker("Prompt", selection: $mode.promptType) {
                         ForEach(PromptType.allCases, id: \.self) { promptType in
@@ -170,6 +177,13 @@ struct ModeDetailView: View {
 
     @ViewBuilder
     private var localAgentParametersSection: some View {
+        providerParametersSection
+    }
+
+    // MARK: - Cloud AI Provider Parameters (read-only)
+
+    @ViewBuilder
+    private var providerParametersSection: some View {
         ForEach(mode.parameters) { parameter in
             VStack(alignment: .leading, spacing: 4) {
                 Text(parameter.name)

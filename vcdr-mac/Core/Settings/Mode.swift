@@ -10,11 +10,13 @@ enum ProcessingType: String, Codable, CaseIterable {
 enum AIProvider: String, Codable, CaseIterable {
     case anthropic
     case openai
+    case gemini
 
     var displayName: String {
         switch self {
         case .anthropic: "Anthropic"
         case .openai: "OpenAI"
+        case .gemini: "Google Gemini"
         }
     }
 
@@ -23,7 +25,14 @@ enum AIProvider: String, Codable, CaseIterable {
         switch self {
         case .anthropic: "ANTHROPIC_API_KEY"
         case .openai: "OPENAI_API_KEY"
+        case .gemini: "GOOGLE_API_KEY"
         }
+    }
+
+    /// Default parameters for this provider. Currently no cloud providers
+    /// expose model selection; the model is hardcoded in `AIClient`.
+    var defaultParameters: [ModeParameter] {
+        []
     }
 }
 

@@ -17,6 +17,7 @@ actor ScriptedAIProcessing: AIProcessingPort {
         let structuredText: String
         let modeID: UUID
         let variableEnvironment: [String: String]
+        let parameterValues: [String: String]
     }
 
     private var pending: [Result<String, Error>]
@@ -29,13 +30,15 @@ actor ScriptedAIProcessing: AIProcessingPort {
     func process(
         structuredText: String,
         mode: Mode,
-        variableEnvironment: [String: String]
+        variableEnvironment: [String: String],
+        parameterValues: [String: String]
     ) async throws -> String {
         receivedCalls.append(
             ReceivedCall(
                 structuredText: structuredText,
                 modeID: mode.id,
-                variableEnvironment: variableEnvironment
+                variableEnvironment: variableEnvironment,
+                parameterValues: parameterValues
             )
         )
         guard !pending.isEmpty else {

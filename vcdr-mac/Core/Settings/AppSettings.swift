@@ -251,7 +251,7 @@ final class AppSettings {
         self.variables = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
 
         // Ensure API key variables exist (pre-created with empty values for discoverability)
-        let requiredVariables = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+        let requiredVariables = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"]
         let existingNames = Set(variables.map(\.name))
         for name in requiredVariables where !existingNames.contains(name) {
             variables.append(Variable(id: UUID(), name: name, value: ""))

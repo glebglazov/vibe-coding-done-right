@@ -78,7 +78,8 @@ enum TextProcessingPipeline {
                 let processedText = try await aiPort.process(
                     structuredText: structured,
                     mode: mode,
-                    variableEnvironment: variableEnvironment
+                    variableEnvironment: variableEnvironment,
+                    parameterValues: parameterValues
                 )
                 Logger.textTransform.info("AI output: \"\(processedText)\"")
                 result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)

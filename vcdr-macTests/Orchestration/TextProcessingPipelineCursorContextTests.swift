@@ -8,7 +8,7 @@ import Testing
 final class CapturingMockAI: AIProcessingPort {
     var capturedText: String?
 
-    func process(structuredText: String, mode: Mode, variableEnvironment: [String: String]) async throws -> String {
+    func process(structuredText: String, mode: Mode, variableEnvironment: [String: String], parameterValues: [String: String]) async throws -> String {
         capturedText = structuredText
         return "processed"
     }

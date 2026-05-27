@@ -13,11 +13,14 @@ protocol AIProcessingPort: Sendable {
     ///   - mode: Supplies `aiProvider` and the prompt (via the adapter's prompt resolver).
     ///   - variableEnvironment: User-defined variables; the adapter reads the provider's
     ///     API key from this dictionary.
+    ///   - parameterValues: Resolved parameter values (e.g. model selection overrides)
+    ///     keyed by environment-variable suffix (e.g. "MODEL").
     /// - Returns: The provider's response text.
     func process(
         structuredText: String,
         mode: Mode,
-        variableEnvironment: [String: String]
+        variableEnvironment: [String: String],
+        parameterValues: [String: String]
     ) async throws -> String
 }
 
@@ -27,7 +30,8 @@ struct AIProcessingAdapter: AIProcessingPort {
     func process(
         structuredText: String,
         mode: Mode,
-        variableEnvironment: [String: String]
+        variableEnvironment: [String: String],
+        parameterValues: [String: String]
     ) async throws -> String {
         let systemPrompt = Self.resolvePrompt(mode)
         let apiKey = variableEnvironment[mode.aiProvider.apiKeyVariableName] ?? ""
@@ -35,7 +39,8 @@ struct AIProcessingAdapter: AIProcessingPort {
             text: structuredText,
             systemPrompt: systemPrompt,
             provider: mode.aiProvider,
-            apiKey: apiKey
+            apiKey: apiKey,
+            parameterValues: parameterValues
         )
     }
 

@@ -6,8 +6,10 @@ enum AIClient {
 
     private static let anthropicEndpoint = "https://api.anthropic.com/v1/messages"
     private static let openaiEndpoint = "https://api.openai.com/v1/chat/completions"
+    private static let geminiEndpoint = "https://generativelanguage.googleapis.com/v1beta/models"
     private static let defaultAnthropicModel = "claude-haiku-4-5-20251001"
     private static let defaultOpenAIModel = "gpt-4o-mini"
+    private static let defaultGeminiModel = "gemini-3.1-flash-lite"
     private static let defaultMaxTokens = 1024
     private static let requestTimeout: TimeInterval = 30
 
@@ -17,7 +19,8 @@ enum AIClient {
         text: String,
         systemPrompt: String,
         provider: AIProvider,
-        apiKey: String
+        apiKey: String,
+        parameterValues: [String: String] = [:]
     ) async throws -> String {
         guard !apiKey.isEmpty else {
             throw AIClientError.missingAPIKey(provider: provider)
@@ -28,6 +31,8 @@ enum AIClient {
             return try await callAnthropic(text: text, systemPrompt: systemPrompt, apiKey: apiKey)
         case .openai:
             return try await callOpenAI(text: text, systemPrompt: systemPrompt, apiKey: apiKey)
+        case .gemini:
+            return try await callGemini(text: text, systemPrompt: systemPrompt, apiKey: apiKey, parameterValues: parameterValues)
         }
     }
 
@@ -121,6 +126,65 @@ enum AIClient {
     }
 
     private static func parseOpenAIError(data: Data) -> String {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = json["error"] as? [String: Any],
+              let message = error["message"] as? String else {
+            return "Unknown error"
+        }
+        return message
+    }
+
+    // MARK: - Gemini
+
+    private static func callGemini(text: String, systemPrompt: String, apiKey: String, parameterValues: [String: String]) async throws -> String {
+        let model = defaultGeminiModel
+
+        var components = URLComponents(string: "\(geminiEndpoint)/\(model):generateContent")!
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = requestTimeout
+
+        var body: [String: Any] = [
+            "contents": [
+                ["role": "user", "parts": [["text": text]]]
+            ],
+            "generationConfig": [
+                "maxOutputTokens": defaultMaxTokens
+            ]
+        ]
+        if !systemPrompt.isEmpty {
+            body["systemInstruction"] = ["parts": [["text": systemPrompt]]]
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+        guard statusCode == 200 else {
+            let errorMessage = parseGeminiError(data: data)
+            throw AIClientError.apiError(provider: .gemini, statusCode: statusCode, message: errorMessage)
+        }
+
+        return try parseGeminiResponse(data: data)
+    }
+
+    private static func parseGeminiResponse(data: Data) throws -> String {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let candidates = json["candidates"] as? [[String: Any]],
+              let firstCandidate = candidates.first,
+              let content = firstCandidate["content"] as? [String: Any],
+              let parts = content["parts"] as? [[String: Any]],
+              let firstPart = parts.first,
+              let text = firstPart["text"] as? String else {
+            throw AIClientError.invalidResponse(provider: .gemini)
+        }
+        return text
+    }
+
+    private static func parseGeminiError(data: Data) -> String {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let error = json["error"] as? [String: Any],
               let message = error["message"] as? String else {

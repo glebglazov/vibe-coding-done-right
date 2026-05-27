@@ -210,7 +210,8 @@ final class TextProcessor {
             var processedText = try await ai.process(
                 structuredText: structured,
                 mode: handle.input.mode,
-                variableEnvironment: handle.input.variableEnvironment
+                variableEnvironment: handle.input.variableEnvironment,
+                parameterValues: handle.input.parameterValues
             )
 
             // Apply the same post-processing as the initial pipeline path.
