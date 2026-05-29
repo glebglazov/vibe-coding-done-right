@@ -493,6 +493,7 @@ final class RecordingFlowCoordinator {
         RecordingRun(
             audioRecorder: audioRecorder,
             transcriptionProvider: transcriptionProvider,
+            transcriptProcessor: makeTranscriptProcessor(),
             completionAdapters: [
                 KeyboardChannelRecordingRunCompletionAdapter(
                     keyboardChannel: keyboardChannel,
@@ -500,9 +501,6 @@ final class RecordingFlowCoordinator {
                 ),
                 HistoryRecordingRunCompletionAdapter(history: history)
             ],
-            makeAIProvider: { mode in
-                AIProviderFactory.make(for: mode)
-            },
             currentSettings: { [weak self] in
                 guard let self else {
                     return RecordingRun.Settings(
@@ -529,6 +527,14 @@ final class RecordingFlowCoordinator {
             },
             onTranscribingMessage: { [weak self] message in
                 self?.transcribingMessage = message
+            }
+        )
+    }
+
+    private func makeTranscriptProcessor() -> TranscriptProcessor {
+        TranscriptProcessor(
+            makeAIProvider: { mode in
+                AIProviderFactory.make(for: mode)
             },
             onAIProcessingStatus: { [weak self] status in
                 self?.aiProcessingStatus = AIProcessingStatus(status)
@@ -582,69 +588,36 @@ final class RecordingFlowCoordinator {
 
     // MARK: - AI Processing
 
-    /// Runs the AI cascade behind the provider seam. `FallbackProvider` owns
-    /// retry + timeout + primary→AFM fallback; this method builds the input,
-    /// maps the outcome onto `aiProcessingStatus`, and substitutes local text
-    /// on timeout/error.
-    private func waitForAIProcessing(localText: String) async -> String {
-        // Cross-process staleness guard — pick up any keyboard-side flip that
-        // landed between stop-decision and AI dispatch.
-        resyncSettingsFromSharedDefaults()
-
-        aiInputText = localText
-        aiProcessingStatus = .processing
-
-        let mode = selectedPromptMode
-        let systemPrompt = BuiltInPrompts.prompt(for: mode)
-        let input = buildAIInput(localText, mode: mode)
-        let provider = AIProviderFactory.make(for: mode)
-
-        Logger.ai.info("AI input [mode=\(mode.rawValue), style=\(self.currentTextStyle.rawValue), provider=\(provider.displayName)]: \(input)")
-        Logger.ai.debug("AI system prompt: \(systemPrompt.prefix(100))...")
-
-        let startTime = ContinuousClock.now
-        do {
-            let result = try await provider.process(text: input, systemPrompt: systemPrompt)
-            aiProcessingStatus = .completed
-            Logger.ai.info("AI output [\(ContinuousClock.now - startTime)]: \(result)")
-            return result
-        } catch is FallbackProvider.AITimedOut {
-            aiProcessingStatus = .timedOut
-            Logger.app.warning("AI processing timed out after \(ContinuousClock.now - startTime)")
-            return localText
-        } catch {
-            aiProcessingStatus = .error(error.localizedDescription)
-            Logger.app.error("AI processing failed: \(error)")
-            return localText
-        }
-    }
-
-    /// Wraps the local transcript in the `<dictation>` envelope the prompts
-    /// expect, appending captured selections as `<capture>` context for
-    /// assistant mode (matching the macOS XML format the prompt expects).
-    private func buildAIInput(_ localText: String, mode: AIPromptMode) -> String {
-        var wrapped = "<dictation>\(localText)</dictation>"
-        guard mode == .assistant else { return wrapped }
-        for (index, capture) in capturedTexts.enumerated() where !capture.isEmpty {
-            wrapped += "\n\n<capture id=\"\(index + 1)\">\(capture)</capture>"
-            Logger.ai.info("Capture \(index + 1) included in AI input (\(capture.count) chars)")
-        }
-        return wrapped
-    }
-
     /// Retries the AI processing request with the previously sent text.
     /// Replays the full chain: primary provider (with retries) + AFM fallback.
     func retryAIProcessing() {
         guard !aiInputText.isEmpty else { return }
         aiRetryTask?.cancel()
         aiRetryTask = Task {
-            let aiResult = await waitForAIProcessing(localText: aiInputText)
+            // Cross-process staleness guard — pick up any keyboard-side flip
+            // before retry dispatch and again before finalization.
+            resyncSettingsFromSharedDefaults()
+            let initialSettings = TranscriptProcessor.Settings(
+                promptMode: selectedPromptMode,
+                textStyle: currentTextStyle,
+                hasAICapability: AIProcessingSettings.hasAICapability
+            )
+            let aiResult = await makeTranscriptProcessor().processWithAI(
+                localText: aiInputText,
+                settings: initialSettings,
+                captures: capturedTexts
+            )
             guard !Task.isCancelled else { return }
             // Pick up any style/mode change the user made during the retry, then
             // finalize. Assistant output is excluded; everything else (including
             // verbatim if the user flipped AI off mid-retry) gets the style rules.
             resyncSettingsFromSharedDefaults()
-            state = .complete(TranscriptFinalizer.finalize(aiResult, mode: selectedPromptMode, style: currentTextStyle))
+            let finalSettings = TranscriptProcessor.Settings(
+                promptMode: selectedPromptMode,
+                textStyle: currentTextStyle,
+                hasAICapability: AIProcessingSettings.hasAICapability
+            )
+            state = .complete(TranscriptProcessor.finalize(aiResult, settings: finalSettings))
         }
     }
 
@@ -773,7 +746,7 @@ private extension KeyboardChannel.RecordingState {
 }
 
 private extension RecordingFlowCoordinator.AIProcessingStatus {
-    init(_ status: RecordingRun.AIProcessingStatus) {
+    init(_ status: TranscriptProcessor.AIProcessingStatus) {
         switch status {
         case .idle: self = .idle
         case .processing: self = .processing

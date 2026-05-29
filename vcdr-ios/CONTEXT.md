@@ -71,8 +71,12 @@ A per-session override for an output choice, usually cycled from the recording U
 _Avoid_: temporary default, shared live value
 
 **Transcript Finalization**:
-The deterministic final shaping step before text is shown, inserted, sent to the keyboard, or recorded in history. It combines filler cleanup, mode-gated style transformation, and the trailing terminator.
+The deterministic final shaping step before text is shown, inserted, sent to the keyboard, or recorded in history. It applies mode-gated style transformation and the trailing terminator to filler-cleaned text or AI output.
 _Avoid_: post-processing, formatting pipeline, final cleanup
+
+**Transcript Processing**:
+The Recording Run policy that turns filler-cleaned recognized speech into user-facing output. It may use AI Prompt Mode and Captures, then applies Transcript Finalization and records the label for the output choices that shaped the result.
+_Avoid_: AI retry path, formatter, post-processing
 
 ### History
 

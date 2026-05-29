@@ -5,19 +5,7 @@ import UIKit
 
 @MainActor
 final class RecordingRun {
-    enum AIProcessingStatus: Equatable {
-        case idle
-        case processing
-        case timedOut
-        case completed
-        case error(String)
-    }
-
-    struct Settings: Equatable {
-        let promptMode: AIPromptMode
-        let textStyle: TextStyle
-        let hasAICapability: Bool
-    }
+    typealias Settings = TranscriptProcessor.Settings
 
     private struct TerminalContext {
         let cleanedLiveTranscript: String
@@ -27,47 +15,40 @@ final class RecordingRun {
     private let conversationID = UUID()
     private let audioRecorder: AudioRecorder
     private let transcriptionProvider: any StreamingTranscriptionProvider
+    private let transcriptProcessor: TranscriptProcessor
     private let completionAdapters: [any RecordingRunCompletionAdapter]
-    private let makeAIProvider: @MainActor (AIPromptMode) -> FallbackProvider
     private let currentSettings: @MainActor () -> Settings
     private let currentCaptures: @MainActor () -> [String]
     private let onLiveTranscript: @MainActor (String) -> Void
     private let onInterimResult: @MainActor (String) -> Void
     private let onTranscribingMessage: @MainActor (String) -> Void
-    private let onAIProcessingStatus: @MainActor (AIProcessingStatus) -> Void
-    private let onAIInputText: @MainActor (String) -> Void
 
     private let streaming = StreamingAsrManager(config: .streaming)
     private var setupTask: Task<Void, Error>?
     private var updateTask: Task<Void, Never>?
     private var terminalState: RecordingRunTerminalState?
-    private var aiInputText = ""
     private var latestLiveTranscript = ""
 
     init(
         audioRecorder: AudioRecorder,
         transcriptionProvider: any StreamingTranscriptionProvider,
+        transcriptProcessor: TranscriptProcessor,
         completionAdapters: [any RecordingRunCompletionAdapter],
-        makeAIProvider: @escaping @MainActor (AIPromptMode) -> FallbackProvider,
         currentSettings: @escaping @MainActor () -> Settings,
         currentCaptures: @escaping @MainActor () -> [String],
         onLiveTranscript: @escaping @MainActor (String) -> Void,
         onInterimResult: @escaping @MainActor (String) -> Void,
-        onTranscribingMessage: @escaping @MainActor (String) -> Void,
-        onAIProcessingStatus: @escaping @MainActor (AIProcessingStatus) -> Void,
-        onAIInputText: @escaping @MainActor (String) -> Void
+        onTranscribingMessage: @escaping @MainActor (String) -> Void
     ) {
         self.audioRecorder = audioRecorder
         self.transcriptionProvider = transcriptionProvider
+        self.transcriptProcessor = transcriptProcessor
         self.completionAdapters = completionAdapters
-        self.makeAIProvider = makeAIProvider
         self.currentSettings = currentSettings
         self.currentCaptures = currentCaptures
         self.onLiveTranscript = onLiveTranscript
         self.onInterimResult = onInterimResult
         self.onTranscribingMessage = onTranscribingMessage
-        self.onAIProcessingStatus = onAIProcessingStatus
-        self.onAIInputText = onAIInputText
     }
 
     var isTerminal: Bool { terminalState != nil }
@@ -125,14 +106,10 @@ final class RecordingRun {
         onLiveTranscript("")
 
         let interimSettings = currentSettings()
-        let usesAI = interimSettings.promptMode != .verbatim && interimSettings.hasAICapability
-        if !usesAI && !cleanedLive.isEmpty {
-            onInterimResult(TranscriptFinalizer.finalize(
-                cleanedLive,
-                mode: interimSettings.promptMode,
-                style: interimSettings.textStyle
-            ))
+        if let interimText = transcriptProcessor.interimText(for: cleanedLive, settings: interimSettings) {
+            onInterimResult(interimText)
         } else {
+            let usesAI = interimSettings.promptMode != .verbatim && interimSettings.hasAICapability
             onTranscribingMessage(usesAI ? "Enhancing with AI..." : "")
         }
 
@@ -170,69 +147,22 @@ final class RecordingRun {
             return await finish(.emptyResult, backgroundTaskID: context.backgroundTaskID)
         }
 
-        let settings = currentSettings()
-        let useAI = settings.promptMode != .verbatim && settings.hasAICapability
-        let processedText: String
-        if useAI {
-            processedText = await processWithAI(localText: cleanedText, mode: settings.promptMode)
-        } else {
-            processedText = cleanedText
-        }
-
-        let finalSettings = currentSettings()
-        let resultText = TranscriptFinalizer.finalize(
-            processedText,
-            mode: finalSettings.promptMode,
-            style: finalSettings.textStyle
+        let captures = currentCaptures()
+        let output = await transcriptProcessor.processFinalTranscript(
+            cleanedText,
+            initialSettings: currentSettings(),
+            finalSettings: currentSettings,
+            captures: captures
         )
         let terminal = RecordingRunTerminalState.success(RecordingRunSuccess(
             conversationID: conversationID,
-            transcript: cleanedText,
-            processed: useAI ? processedText : nil,
-            finalText: resultText,
-            captures: currentCaptures(),
-            historyLabel: historyLabel(settings: finalSettings)
+            transcript: output.transcript,
+            processed: output.processed,
+            finalText: output.finalText,
+            captures: captures,
+            historyLabel: output.historyLabel
         ))
         return await finish(terminal, backgroundTaskID: context.backgroundTaskID)
-    }
-
-    private func processWithAI(localText: String, mode: AIPromptMode) async -> String {
-        aiInputText = localText
-        onAIInputText(localText)
-        onAIProcessingStatus(.processing)
-
-        let systemPrompt = BuiltInPrompts.prompt(for: mode)
-        let input = buildAIInput(localText, mode: mode)
-        let provider = makeAIProvider(mode)
-
-        Logger.ai.info("AI input [mode=\(mode.rawValue), provider=\(provider.displayName)]: \(input)")
-        Logger.ai.debug("AI system prompt: \(systemPrompt.prefix(100))...")
-
-        let startTime = ContinuousClock.now
-        do {
-            let result = try await provider.process(text: input, systemPrompt: systemPrompt)
-            onAIProcessingStatus(.completed)
-            Logger.ai.info("AI output [\(ContinuousClock.now - startTime)]: \(result)")
-            return result
-        } catch is FallbackProvider.AITimedOut {
-            onAIProcessingStatus(.timedOut)
-            Logger.app.warning("AI processing timed out after \(ContinuousClock.now - startTime)")
-            return localText
-        } catch {
-            onAIProcessingStatus(.error(error.localizedDescription))
-            Logger.app.error("AI processing failed: \(error)")
-            return localText
-        }
-    }
-
-    private func buildAIInput(_ localText: String, mode: AIPromptMode) -> String {
-        var wrapped = "<dictation>\(localText)</dictation>"
-        guard mode == .assistant else { return wrapped }
-        for (index, capture) in currentCaptures().enumerated() where !capture.isEmpty {
-            wrapped += "\n\n<capture id=\"\(index + 1)\">\(capture)</capture>"
-            Logger.ai.info("Capture \(index + 1) included in AI input (\(capture.count) chars)")
-        }
-        return wrapped
     }
 
     private func finish(
@@ -285,14 +215,6 @@ final class RecordingRun {
                 onLiveTranscript(text)
             }
         }
-    }
-
-    private func historyLabel(settings: Settings) -> String? {
-        guard settings.promptMode != .verbatim else { return nil }
-        let mode = settings.promptMode.rawValue.capitalized
-        return settings.promptMode.appliesStyles
-            ? "\(mode) · \(settings.textStyle.rawValue.capitalized)"
-            : mode
     }
 
     private static let transcriptUpdateInterval: Duration = .milliseconds(16)

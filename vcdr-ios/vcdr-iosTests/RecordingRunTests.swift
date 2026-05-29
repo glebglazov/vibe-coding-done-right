@@ -12,15 +12,19 @@ struct RecordingRunTests {
         let run = RecordingRun(
             audioRecorder: AudioRecorder(),
             transcriptionProvider: FakeStreamingTranscriptionProvider(),
+            transcriptProcessor: TranscriptProcessor(
+                makeAIProvider: { _ in
+                    FallbackProvider(
+                        primary: FakeLLMProvider(behavior: .alwaysSucceed(output: "unused")),
+                        fallback: nil,
+                        maxAttempts: 1,
+                        timeout: .seconds(1)
+                    )
+                },
+                onAIProcessingStatus: { _ in },
+                onAIInputText: { _ in }
+            ),
             completionAdapters: [adapter],
-            makeAIProvider: { _ in
-                FallbackProvider(
-                    primary: FakeLLMProvider(behavior: .alwaysSucceed(output: "unused")),
-                    fallback: nil,
-                    maxAttempts: 1,
-                    timeout: .seconds(1)
-                )
-            },
             currentSettings: {
                 RecordingRun.Settings(
                     promptMode: .verbatim,
@@ -31,9 +35,7 @@ struct RecordingRunTests {
             currentCaptures: { [] },
             onLiveTranscript: { _ in },
             onInterimResult: { _ in },
-            onTranscribingMessage: { _ in },
-            onAIProcessingStatus: { _ in },
-            onAIInputText: { _ in }
+            onTranscribingMessage: { _ in }
         )
 
         let terminalState = await run.cancel()
