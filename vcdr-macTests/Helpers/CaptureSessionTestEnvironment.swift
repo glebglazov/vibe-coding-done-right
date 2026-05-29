@@ -58,6 +58,9 @@ struct CaptureSessionTestEnvironment {
         mode.systemPrompt = "test prompt"
         if let idx = settings.modes.firstIndex(where: { $0.id == mode.id }) {
             settings.modes[idx] = mode
+        } else {
+            settings.modes = [mode]
+            settings.activeModeID = mode.id
         }
         // Pre-populate Anthropic API key so AIClient fallback path isn't hit.
         if let idx = settings.variables.firstIndex(where: { $0.name == "ANTHROPIC_API_KEY" }) {

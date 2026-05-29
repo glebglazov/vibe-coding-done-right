@@ -24,8 +24,9 @@ protocol AIProcessingPort: Sendable {
     ) async throws -> String
 }
 
-/// Production adapter. Owns prompt resolution + provider dispatch so the retry path
-/// cannot drift away from the initial call.
+/// Production adapter. Owns prompt resolution and routes provider construction
+/// through `AIProviderFactory` so the initial call and retry path share the
+/// same timeout/retry/fallback policy.
 struct AIProcessingAdapter: AIProcessingPort {
     func process(
         structuredText: String,
@@ -34,13 +35,13 @@ struct AIProcessingAdapter: AIProcessingPort {
         parameterValues: [String: String]
     ) async throws -> String {
         let systemPrompt = Self.resolvePrompt(mode)
-        let apiKey = variableEnvironment[mode.aiProvider.apiKeyVariableName] ?? ""
-        return try await AIClient.process(
+        let provider = AIProviderFactory.make(
+            for: mode,
+            variableEnvironment: variableEnvironment
+        )
+        return try await provider.process(
             text: structuredText,
-            systemPrompt: systemPrompt,
-            provider: mode.aiProvider,
-            apiKey: apiKey,
-            parameterValues: parameterValues
+            systemPrompt: systemPrompt
         )
     }
 
