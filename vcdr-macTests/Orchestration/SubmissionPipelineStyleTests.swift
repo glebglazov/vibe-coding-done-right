@@ -92,7 +92,7 @@ struct SubmissionPipelineStyleTests {
     @Test("Style applied after bash processing in Bash modes")
     func styleAppliedAfterBashProcessing() async throws {
         let context = SubmissionPipeline.Context(
-            text: "HELLO WORLD",
+            text: "Hello World",
             mode: Mode(
                 id: UUID(),
                 name: "Bash Test",
@@ -115,7 +115,7 @@ struct SubmissionPipelineStyleTests {
 
         // Bash output transformed by casual style + trailing space
         #expect(result.hadExternalProcessing == true)
-        #expect(result.processedText == "hello world ")
+        #expect(result.processedText == "hello World ")
     }
 
     @Test("Empty dynamicPrompt appends nothing in AI modes")

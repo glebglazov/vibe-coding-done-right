@@ -231,7 +231,8 @@ enum TextProcessingPipeline {
         var result = ""
 
         // Add cursor context if available
-        if let context = cursorContext {
+        if let context = cursorContext,
+           context.beforeText != nil || context.afterText != nil {
             result += formatCursorContextXML(context)
             result += "\n"
         }

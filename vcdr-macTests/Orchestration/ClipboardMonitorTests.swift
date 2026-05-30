@@ -11,39 +11,30 @@ struct ClipboardMonitorTests {
 
     @Test("Captures same text again when pasteboard changeCount changes")
     func capturesSameTextOnNewPasteboardChange() async {
-        let snapshot = ClipboardHelper.saveContents()
-        defer {
-            if snapshot.isEmpty {
-                NSPasteboard.general.clearContents()
-            } else {
-                ClipboardHelper.restoreContents(snapshot)
-            }
-        }
-
-        let pasteboard = NSPasteboard.general
+        let pasteboard = NSPasteboard(name: .init("vcdr.test.\(UUID().uuidString)"))
         let text = "same copied text \(UUID().uuidString)"
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        let monitor = ClipboardMonitor()
+        let monitor = ClipboardMonitor(pasteboardName: pasteboard.name.rawValue)
         var captures: [String] = []
         await monitor.start(baselineChangeCount: pasteboard.changeCount) { capturedText in
             captures.append(capturedText)
         }
 
-        writeStringToPasteboard(text)
+        writeStringToPasteboard(text, pasteboard: pasteboard)
         await waitForMatchingCaptureCount(1, text: text, captures: { captures })
 
-        writeStringToPasteboard(text)
+        writeStringToPasteboard(text, pasteboard: pasteboard)
         await waitForMatchingCaptureCount(2, text: text, captures: { captures })
 
         _ = await monitor.stop()
         #expect(captures.filter { $0 == text } == [text, text])
     }
 
-    private func writeStringToPasteboard(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+    private func writeStringToPasteboard(_ text: String, pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 
     private func waitForMatchingCaptureCount(

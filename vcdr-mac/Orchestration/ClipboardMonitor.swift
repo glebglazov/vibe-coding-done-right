@@ -7,11 +7,16 @@ import OSLog
 actor ClipboardMonitor {
     // MARK: - Constants
 
-    /// How often to check NSPasteboard.general.changeCount.
+    /// How often to check the monitored pasteboard's changeCount.
     private static let pollInterval: Duration = .milliseconds(250)
 
+    private let pasteboardName: String
     private var pollingTask: Task<Void, Never>?
     private var captures: [String] = []
+
+    init(pasteboardName: String = NSPasteboard.Name.general.rawValue) {
+        self.pasteboardName = pasteboardName
+    }
 
     /// Starts monitoring clipboard changes. Calls `onCapture` on each new capture.
     /// The callback receives the captured text.
@@ -22,15 +27,23 @@ actor ClipboardMonitor {
     func start(baselineChangeCount: Int? = nil, onCapture: @MainActor @Sendable @escaping (String) -> Void) {
         stop()
 
-        pollingTask = Task { [weak self] in
-            let pasteboard = NSPasteboard.general
-            var lastChangeCount = baselineChangeCount ?? pasteboard.changeCount
+        let pasteboardName = self.pasteboardName
+        pollingTask = Task<Void, Never> { [weak self] in
+            var lastChangeCount: Int
+            if let baselineChangeCount {
+                lastChangeCount = baselineChangeCount
+            } else {
+                lastChangeCount = await MainActor.run {
+                    NSPasteboard(name: NSPasteboard.Name(pasteboardName)).changeCount
+                }
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.pollInterval)
                 guard !Task.isCancelled else { break }
 
                 let (currentChangeCount, currentContent) = await MainActor.run {
-                    (pasteboard.changeCount, pasteboard.string(forType: .string))
+                    let pasteboard = NSPasteboard(name: NSPasteboard.Name(pasteboardName))
+                    return (pasteboard.changeCount, pasteboard.string(forType: .string))
                 }
                 guard currentChangeCount != lastChangeCount else { continue }
                 lastChangeCount = currentChangeCount
@@ -39,7 +52,9 @@ actor ClipboardMonitor {
                       !newContent.isEmpty else { continue }
 
                 await self?.appendCapture(newContent)
-                Logger.recording.info("ClipboardMonitor: captured \(newContent.count) chars: \"\(newContent.prefix(80))\"")
+                await MainActor.run {
+                    Logger.recording.info("ClipboardMonitor: captured \(newContent.count) chars: \"\(newContent.prefix(80))\"")
+                }
 
                 await onCapture(newContent)
             }

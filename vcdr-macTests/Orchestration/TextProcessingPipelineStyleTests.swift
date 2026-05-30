@@ -107,8 +107,8 @@ struct TextProcessingPipelineStyleTests {
             style: .casual
         )
 
-        // Casual style: lowercased, final period removed, trailing space
-        #expect(result.text == "hello world ")
+        // Casual style: lowercase sentence start, preserve internal caps, remove final period, trailing space
+        #expect(result.text == "hello World ")
         #expect(result.hadExternalProcessing == true)
     }
 
