@@ -3,6 +3,19 @@ import FluidAudio
 import OSLog
 import UIKit
 
+/// Orchestrates the iOS recording lifecycle: initialization, the recording
+/// state machine, and start/stop. Each surrounding concern lives in its own
+/// same-type extension file, mirroring how the macOS Capture Session is split:
+///
+/// - `RecordingFlowCoordinator+DeepLink` — deep-link entry points.
+/// - `RecordingFlowCoordinator+KeyboardCommands` — Keyboard Channel command +
+///   settings listeners.
+/// - `RecordingFlowCoordinator+AIProcessing` — AI processing + retry.
+/// - `RecordingFlowCoordinator+StatePublishing` — recording-state publishing.
+///
+/// Members shared across those files are `internal` (or `private(set)`) rather
+/// than `private` because Swift scopes `private` to a single file; the
+/// coordinator's observable surface is unchanged — views still only read it.
 @MainActor
 @Observable
 final class RecordingFlowCoordinator {
@@ -24,23 +37,23 @@ final class RecordingFlowCoordinator {
         case error(String)
     }
 
-    private(set) var state: State = .idle
+    var state: State = .idle
     private(set) var initProgress: String = "Preparing"
     /// Live transcription text updated in real-time during recording
     private(set) var liveTranscript: String = ""
     /// Shown in the transcribing state — describes what the app is waiting on
-    private(set) var transcribingMessage: String = ""
+    var transcribingMessage: String = ""
     /// When true, the current recording was started via deep link from keyboard.
     /// Exposed for the view to show/hide the back button.
-    private(set) var launchedViaDeepLink = false
+    var launchedViaDeepLink = false
     /// When true, the app was foregrounded by the keyboard's stop-deep-link
     /// fallback (`vcdr-ios://stop`). Drives the Done-page "Swipe to paste"
     /// hint, which is only meaningful in that path — every other way of
     /// landing on the Done page leaves the user already where they want
     /// the text to appear, or with no host app to swipe back to.
-    private(set) var stoppedViaDeepLink = false
+    var stoppedViaDeepLink = false
     /// Status of the AI post-processing request
-    private(set) var aiProcessingStatus: AIProcessingStatus = .idle
+    var aiProcessingStatus: AIProcessingStatus = .idle
     /// Per-session prompt mode — initialized from the current effective setting.
     /// `.verbatim` is the canonical "AI off" value; mode is the single source of
     /// truth for whether AI runs and which prompt it uses.
@@ -67,7 +80,7 @@ final class RecordingFlowCoordinator {
         SessionSettings.setTextStyle(currentTextStyle)
     }
 
-    private let audioRecorder: AudioRecorder
+    let audioRecorder: AudioRecorder
     /// Owns the *Hot Mic Session* lifecycle — warm engine, heartbeat, Live
     /// Activity presence, and the inactivity-timeout state machine. This
     /// coordinator drives it via lifecycle notifications (`prewarm`, `start`,
@@ -75,7 +88,7 @@ final class RecordingFlowCoordinator {
     /// touches the engine's warmth directly.
     private let hotMicSession: HotMicSession
     private let transcriptionProvider = ParakeetProvider()
-    private let keyboardChannel = KeyboardChannel.live
+    let keyboardChannel = KeyboardChannel.live
     /// Populated asynchronously by `bootstrapHistory()` — the scene construction
     /// path can't block on it, because `FileManager.url(forUbiquityContainerIdentifier:)`
     /// can take seconds on first launch after install. `nil` until the
@@ -94,16 +107,16 @@ final class RecordingFlowCoordinator {
     /// half-started state as a missing streaming session.
     private var startWaiters: [CheckedContinuation<Bool, Never>] = []
     /// Text sent to AI processing — retained for the existing Done-page retry action.
-    private var aiInputText: String = ""
+    var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
     /// Populated from captures published through the Keyboard Channel.
-    private var capturedTexts: [String] = []
+    private(set) var capturedTexts: [String] = []
     /// Tracks the in-flight AI retry so rapid taps cancel the previous attempt.
-    private var aiRetryTask: Task<Void, Never>?
+    var aiRetryTask: Task<Void, Never>?
     /// Token for the keyboard command NotificationCenter observer, stored so we can
     /// remove it before re-registering to prevent observer accumulation on scene re-entry.
-    private var commandObserverToken: (any NSObjectProtocol)?
-    private var settingsObserverToken: (any NSObjectProtocol)?
+    var commandObserverToken: (any NSObjectProtocol)?
+    var settingsObserverToken: (any NSObjectProtocol)?
 
     init() {
         let recorder = AudioRecorder()
@@ -295,55 +308,7 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    /// Sets state to `.recording` synchronously so the view shows "LISTENING"
-    /// on the very first frame after a deep link opens the app.
-    /// Called from `onOpenURL` before the async recording flow begins.
-    func prepareForDeepLinkRecording() {
-        guard state != .recording && state != .transcribing else { return }
-        state = .recording
-        launchedViaDeepLink = true
-        stoppedViaDeepLink = false
-    }
-
-    /// Called when a deep link arrives. Starts recording immediately (user stays in VCDR app).
-    /// Audio capture begins right away; model initialization is awaited in the background.
-    func handleRecordDeepLink() async {
-        switch state {
-        case .recording where audioRecorder.isRecording:
-            // Already recording, ignore duplicate deep link
-            break
-        case .transcribing:
-            break
-        default:
-            await startRecording(fromDeepLink: true)
-        }
-    }
-
-    /// Called when the keyboard's stop fallback opens `vcdr-ios://stop`. Drives
-    /// the same `stopAndTranscribe(sendToKeyboard:)` path the Darwin command
-    /// would have, plus flags the run as deep-linked so the Done page shows
-    /// the swipe-to-paste hint. The `sendToKeyboard: true` write is what flips
-    /// the keyboard's stuck "transcribing" pill to either bundled text (auto-
-    /// pasted on next viewWillAppear) or an empty-result flash.
-    func handleStopDeepLink() async {
-        guard audioRecorder.isRecording else {
-            // Cold-launch / orphaned path: nothing was recording, audio
-            // buffers are gone. Surface emptyResult so the keyboard's 15s
-            // polling doesn't time out staring at "transcribing". Skip when
-            // a stop is already mid-flight or just finished — that pipeline
-            // will publish its own result.
-            switch state {
-            case .transcribing, .complete:
-                break
-            default:
-                writeState(.emptyResult)
-            }
-            return
-        }
-        launchedViaDeepLink = true
-        stoppedViaDeepLink = true
-        await stopAndTranscribe(sendToKeyboard: true)
-    }
+    // MARK: - Recording State Machine
 
     /// Starts recording with real-time streaming transcription.
     /// Audio capture begins immediately; model initialization and streaming setup
@@ -531,23 +496,6 @@ final class RecordingFlowCoordinator {
         )
     }
 
-    private func makeTranscriptProcessor() -> TranscriptProcessor {
-        TranscriptProcessor(
-            makeAIProvider: { mode in
-                AIProviderFactory.make(for: mode)
-            },
-            onAIProcessingStatus: { [weak self] status in
-                self?.aiProcessingStatus = AIProcessingStatus(status)
-                if status == .processing {
-                    self?.transcribingMessage = "Enhancing with AI..."
-                }
-            },
-            onAIInputText: { [weak self] text in
-                self?.aiInputText = text
-            }
-        )
-    }
-
     // MARK: - Cross-process settings sync
 
     /// Re-reads mode/style from shared defaults right before a pipeline
@@ -556,7 +504,7 @@ final class RecordingFlowCoordinator {
     /// landed, and `handleSettingsChanged`'s MainActor task may still be
     /// queued. `synchronize()` forces the current process to pull the latest
     /// cross-process writes. Cheap (µs) — safe to call on hot paths.
-    private func resyncSettingsFromSharedDefaults() {
+    func resyncSettingsFromSharedDefaults() {
         SharedConstants.sharedDefaults.synchronize()
         selectedPromptMode = SessionSettings.effectiveAIMode()
         currentTextStyle = SessionSettings.effectiveTextStyle()
@@ -586,46 +534,6 @@ final class RecordingFlowCoordinator {
         hotMicSession.recordingStopped()
     }
 
-    // MARK: - AI Processing
-
-    /// Retries the AI processing request with the previously sent text.
-    /// Replays the full chain: primary provider (with retries) + AFM fallback.
-    func retryAIProcessing() {
-        guard !aiInputText.isEmpty else { return }
-        aiRetryTask?.cancel()
-        aiRetryTask = Task {
-            // Cross-process staleness guard — pick up any keyboard-side flip
-            // before retry dispatch and again before finalization.
-            resyncSettingsFromSharedDefaults()
-            let initialSettings = TranscriptProcessor.Settings(
-                promptMode: selectedPromptMode,
-                textStyle: currentTextStyle,
-                hasAICapability: AIProcessingSettings.hasAICapability
-            )
-            let aiResult = await makeTranscriptProcessor().processWithAI(
-                localText: aiInputText,
-                settings: initialSettings,
-                captures: capturedTexts
-            )
-            guard !Task.isCancelled else { return }
-            // Pick up any style/mode change the user made during the retry, then
-            // finalize. Assistant output is excluded; everything else (including
-            // verbatim if the user flipped AI off mid-retry) gets the style rules.
-            resyncSettingsFromSharedDefaults()
-            let finalSettings = TranscriptProcessor.Settings(
-                promptMode: selectedPromptMode,
-                textStyle: currentTextStyle,
-                hasAICapability: AIProcessingSettings.hasAICapability
-            )
-            state = .complete(TranscriptProcessor.finalize(aiResult, settings: finalSettings))
-        }
-    }
-
-    func cleanupStaleResults() {
-        keyboardChannel.clearCommand()
-        writeState(.idle)
-    }
-
     // MARK: - Idle Timer
 
     /// Prevents the screen from auto-locking while recording is active.
@@ -633,126 +541,5 @@ final class RecordingFlowCoordinator {
     private func setIdleTimerDisabled(_ disabled: Bool) {
         UIApplication.shared.isIdleTimerDisabled = disabled
         Logger.app.info("Idle timer \(disabled ? "disabled" : "enabled")")
-    }
-
-    // MARK: - State Publishing
-
-    /// Writes recording state to App Group so the keyboard extension can read it.
-    /// When `bundledText` is provided, the value is written as `"idle|text"` so the
-    /// keyboard can reliably receive the transcription via the same key that syncs state.
-    private func writeState(_ recordingState: RecordingState, bundledText: String? = nil) {
-        Self.writeStateRaw(recordingState, bundledText: bundledText)
-    }
-
-    /// Non-MainActor version so callers can dispatch disk-flush + Darwin post
-    /// off the critical path. Shared UserDefaults + DarwinNotificationCenter
-    /// are thread-safe. Performs no instance state reads.
-    nonisolated func writeStateAsync(_ recordingState: RecordingState, bundledText: String? = nil) async {
-        Self.writeStateRaw(recordingState, bundledText: bundledText)
-    }
-
-    private nonisolated static func writeStateRaw(_ recordingState: RecordingState, bundledText: String? = nil) {
-        let channel = KeyboardChannel.live
-        if let bundledText, recordingState == .idle {
-            channel.publishBundledResult(bundledText)
-            return
-        }
-        channel.publish(KeyboardChannel.RecordingState(recordingState))
-    }
-
-    // MARK: - Keyboard Commands
-
-    /// Listens for commands from the keyboard extension via Darwin notifications.
-    /// Safe to call multiple times — removes the previous observer before re-registering.
-    func setupCommandListener() {
-        // Remove previous observer if present (e.g. on scene re-entry)
-        if let token = commandObserverToken {
-            NotificationCenter.default.removeObserver(token)
-            commandObserverToken = nil
-        }
-
-        DarwinNotificationCenter.observe(
-            KeyboardChannel.commandNotificationName,
-            localName: .darwinCommand
-        )
-        commandObserverToken = NotificationCenter.default.addObserver(
-            forName: .darwinCommand,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.handleCommand()
-            }
-        }
-
-        // Listen for settings changes from the keyboard extension
-        if let token = settingsObserverToken {
-            NotificationCenter.default.removeObserver(token)
-            settingsObserverToken = nil
-        }
-        DarwinNotificationCenter.observe(
-            SharedConstants.settingsNotificationName,
-            localName: .darwinSettingsChanged
-        )
-        settingsObserverToken = NotificationCenter.default.addObserver(
-            forName: .darwinSettingsChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor in
-                self.handleSettingsChanged()
-            }
-        }
-    }
-
-    private func handleSettingsChanged() {
-        SharedConstants.sharedDefaults.synchronize()
-        selectedPromptMode = SessionSettings.effectiveAIMode()
-        currentTextStyle = SessionSettings.effectiveTextStyle()
-    }
-
-    /// Re-reads session/default state from shared storage. Called after the
-    /// cold-launch boot sequence runs (migration + session clear) so any state
-    /// that landed after `@State` initialized the coordinator is picked up.
-    func refreshSettingsFromStorage() {
-        handleSettingsChanged()
-    }
-
-    private func handleCommand() async {
-        guard let command = keyboardChannel.readAndClearCommand() else { return }
-
-        switch command {
-        case .startRecording:
-            Logger.app.info("Received start command from keyboard")
-            await startRecording(fromDeepLink: true)
-        case .stopRecording:
-            Logger.app.info("Received stop command from keyboard")
-            await stopAndTranscribe(sendToKeyboard: true)
-        }
-    }
-}
-
-private extension KeyboardChannel.RecordingState {
-    init(_ state: RecordingState) {
-        switch state {
-        case .idle: self = .idle
-        case .recording: self = .recording
-        case .transcribing: self = .transcribing
-        case .emptyResult: self = .emptyResult
-        }
-    }
-}
-
-private extension RecordingFlowCoordinator.AIProcessingStatus {
-    init(_ status: TranscriptProcessor.AIProcessingStatus) {
-        switch status {
-        case .idle: self = .idle
-        case .processing: self = .processing
-        case .timedOut: self = .timedOut
-        case .completed: self = .completed
-        case .error(let message): self = .error(message)
-        }
     }
 }
