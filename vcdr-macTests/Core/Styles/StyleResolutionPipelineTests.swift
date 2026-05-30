@@ -181,6 +181,25 @@ struct StyleResolutionPipelineTests {
         #expect(callbackInvoked == true)
         #expect(receivedStyle?.id == Style.formalID)
     }
+
+    @Test("cycleToNextStyle activates override then clears back to detected")
+    func cycleToNextStyleActivatesThenClears() async throws {
+        let registry = StyleRegistry()
+        let monitor = MockFrontmostAppMonitor()
+        let pipeline = StyleResolutionPipeline(
+            styleRegistry: registry,
+            frontmostAppMonitor: monitor,
+            availableStyles: [.casual, .formal]
+        )
+
+        await pipeline.start()
+
+        pipeline.cycleToNextStyle()
+        #expect(pipeline.hasActiveOverride == true)
+
+        pipeline.cycleToNextStyle()
+        #expect(pipeline.hasActiveOverride == false)
+    }
 }
 
 // MARK: - Integration Tests

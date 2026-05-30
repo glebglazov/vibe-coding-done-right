@@ -63,7 +63,7 @@ A named per-mode choice whose selected option is passed into processing as a `VC
 _Avoid_: setting, option, variable
 
 **Session Override**:
-A temporary per-session choice that supersedes a Mode default, such as a Mode Parameter, Output Destination, or Style. Session Overrides are cleared when the capture lifecycle consumes or cancels them.
+A temporary per-Capture-Session choice that supersedes a Mode default, such as a Mode Parameter or Output Destination. Session Overrides are cleared when that Capture Session completes or is cancelled.
 _Avoid_: setting change, temporary default, pending override
 
 **No Instruction**:
@@ -103,12 +103,16 @@ The output-shaping choice that controls capitalization, punctuation, trailing sp
 _Avoid_: tone, format, casing preset
 
 **Detected Style**:
-The Style selected from the frontmost app's bundle ID through the style registry. Detected Style is the baseline before any Style Override.
+The Style selected from the frontmost app's bundle ID through the style registry. Detected Style is the baseline before any Style Override. Detected Style keeps updating as the frontmost app changes even when a Style Override is active.
 _Avoid_: app style, automatic style, inferred style
 
+**Effective Style**:
+The Style actually used for output: Style Override when active, otherwise Detected Style. Capture Session reads Effective Style at processing time.
+_Avoid_: current style, resolved style, active style
+
 **Style Override**:
-A Session Override that temporarily chooses a Style instead of the Detected Style. Style Override is usually selected from the mode switcher or menu bar.
-_Avoid_: style setting, manual style, forced style
+A user-chosen Style that replaces Detected Style as the effective Style until cleared. Style Override persists across Capture Sessions for as long as the app is running; it is cleared when the user cycles back to Detected Style or chooses Clear from the menu bar. Style Override is not a Session Override. Capture Session processing reads Effective Style at processing time, not at recording start.
+_Avoid_: style setting, manual style, forced style, session override
 
 **Context-Aware Formatting**:
 Style behavior that uses Cursor Context to decide leading capitalization and separator insertion. It is available only when the Mode opts into Cursor Context.
@@ -130,13 +134,16 @@ _Avoid_: turn, message, text chunk
 Use Capture Session for the full recording lifecycle and Capture for contextual text included with the dictation.
 
 **Session**:
-Do not use "session" by itself. Say Capture Session for one macOS dictation lifecycle and Session Override for temporary per-run choices.
+Do not use "session" by itself. Say Capture Session for one macOS dictation lifecycle and Session Override for temporary per-Capture-Session choices. Style Override spans the app run, not a single Capture Session.
 
 **Destination vs Processing**:
 Processing Type transforms text before delivery; Output Destination delivers the processed text afterward. Do not call a destination a processing action.
 
 **Style vs Mode**:
 Mode decides the processing recipe; Style decides final text shape. A Mode may opt out of Style entirely.
+
+**Style Override vs Detected Style**:
+Style Override masks Detected Style for output but does not stop Detected Style from updating. Clearing Style Override restores the current Detected Style, not the one from when the override was set.
 
 ## Example Dialogue
 
@@ -154,4 +161,8 @@ Domain expert: "Check whether the Cursor Context is still valid for the Initial 
 
 Dev: "The user cycled Formal from the mode switcher before stopping."
 
-Domain expert: "That is a Style Override. It affects this Capture Session without changing the Detected Style or Mode defaults."
+Domain expert: "That is a Style Override. It stays in effect for the next Capture Session too, until they cycle back to Detected Style. It does not change Mode defaults or the Style registry mapping for the frontmost app."
+
+Dev: "The user cancelled mid-recording with an active Style Override."
+
+Domain expert: "Style Override survives cancel — it is not a Session Override. Only destination and parameter overrides reset with that Capture Session."

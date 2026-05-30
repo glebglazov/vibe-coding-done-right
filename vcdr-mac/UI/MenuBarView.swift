@@ -7,7 +7,6 @@ struct MenuBarView: View {
     private static let previewLineLimit = 2
     @State private var showCopied = false
     @State private var allStyles: [Style] = []
-    @State private var showStyleOverrideIndicator = false
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -57,15 +56,8 @@ struct MenuBarView: View {
 
             // Style section with current style and submenu
             StyleSection(
-                currentStyle: dependencies.currentStyle,
-                hasOverride: dependencies.hasStyleOverride,
-                allStyles: allStyles,
-                onSelectStyle: { style in
-                    dependencies.setStyleOverride(style.id)
-                },
-                onClearOverride: {
-                    dependencies.clearStyleOverride()
-                }
+                styleResolution: dependencies.styleResolution,
+                allStyles: allStyles
             )
             .task {
                 await loadStyles()
@@ -106,18 +98,14 @@ struct MenuBarView: View {
 // MARK: - Style Section
 
 private struct StyleSection: View {
-    let currentStyle: Style
-    let hasOverride: Bool
+    let styleResolution: StyleResolutionPipeline
     let allStyles: [Style]
-    let onSelectStyle: (Style) -> Void
-    let onClearOverride: () -> Void
 
     var body: some View {
         Menu {
-            // Clear override option (only shown when override is active)
-            if hasOverride {
+            if styleResolution.hasActiveOverride {
                 Button {
-                    onClearOverride()
+                    styleResolution.clearOverride()
                 } label: {
                     Label("Reset to App Style", systemImage: "arrow.uturn.backward")
                 }
@@ -125,15 +113,14 @@ private struct StyleSection: View {
                 Divider()
             }
 
-            // List all styles with checkmark on current
             ForEach(allStyles) { style in
                 Button {
-                    onSelectStyle(style)
+                    styleResolution.activateOverride(style)
                 } label: {
                     HStack {
                         Text(style.name)
                         Spacer()
-                        if style.id == currentStyle.id {
+                        if style.id == styleResolution.currentStyle.id {
                             Image(systemName: "checkmark")
                         }
                     }
@@ -143,7 +130,7 @@ private struct StyleSection: View {
             HStack {
                 Text("Style: \(styleDisplayText)")
                     .foregroundStyle(.secondary)
-                if hasOverride {
+                if styleResolution.hasActiveOverride {
                     Image(systemName: "lock.fill")
                         .foregroundStyle(Color.accentColor)
                         .font(.caption2)
@@ -153,10 +140,10 @@ private struct StyleSection: View {
     }
 
     private var styleDisplayText: String {
-        if hasOverride {
-            return "\(currentStyle.name) (Override)"
+        if styleResolution.hasActiveOverride {
+            return "\(styleResolution.currentStyle.name) (Override)"
         }
-        return currentStyle.name
+        return styleResolution.currentStyle.name
     }
 }
 

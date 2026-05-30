@@ -4,69 +4,70 @@ import OSLog
 
 // MARK: - StyleResolution Protocol
 
-/// Protocol for style resolution operations.
-/// Allows for mocking in tests.
+/// Single authority for Detected Style, Style Override, and Effective Style.
 public protocol StyleResolution: Sendable {
-    /// The currently resolved effective style.
+    /// Effective Style: override when active, otherwise Detected Style.
     var currentStyle: Style { get }
 
-    /// The style that would be active without any override (based on frontmost app).
+    /// Detected Style from the frontmost app, ignoring any override.
     var resolvedStyleWithoutOverride: Style { get }
 
-    /// Whether a temporary style override is currently active.
+    /// Whether a Style Override is currently active.
     var hasActiveOverride: Bool { get }
 
-    /// Stream of resolved style changes.
+    /// Stream of Effective Style changes.
     var styleStream: AsyncStream<Style> { get }
 
-    /// Sets a temporary style override.
-    /// - Parameter styleID: The style ID to override with, or nil to clear.
+    /// Sets a Style Override by ID, or clears it when nil.
     func setStyleOverride(_ styleID: UUID?)
 
-    /// Clears any active style override.
+    /// Activates a Style Override with a resolved Style value.
+    func activateOverride(_ style: Style)
+
+    /// Clears any active Style Override.
     func clearOverride()
 
-    /// Starts the resolution pipeline.
+    /// Cycles Style Override through detected and built-in styles.
+    @discardableResult
+    func cycleToNextStyle() -> Style
+
+    /// Starts frontmost-app monitoring and style resolution.
     func start() async
 
-    /// Stops the resolution pipeline.
+    /// Stops frontmost-app monitoring and style resolution.
     func stop()
 }
 
 // MARK: - StyleResolutionPipeline
 
-/// Resolves the effective style based on frontmost app and user overrides.
+/// Owns Detected Style, Style Override, and Effective Style for the app run.
 ///
-/// Resolution priority:
-/// 1. Temporary override (if active)
+/// Resolution priority for Effective Style:
+/// 1. Style Override (if active)
 /// 2. App-specific style match (from StyleRegistry)
-/// 3. Default style (first in registry)
-///
-/// This class bridges the FrontmostAppMonitor with the StyleRegistry,
-/// providing a unified stream of resolved styles for UI consumption.
+/// 3. Default style
 @MainActor
 public final class StyleResolutionPipeline: StyleResolution {
 
     // MARK: - Properties
 
-    /// The currently resolved effective style (including any override).
+    /// Effective Style (override when active, otherwise Detected Style).
     @Published
     public private(set) var currentStyle: Style
 
-    /// The style that would be active without any override.
+    /// Detected Style from the frontmost app, ignoring any override.
     @Published
     public private(set) var resolvedStyleWithoutOverride: Style
 
-    /// Whether a temporary style override is currently active.
+    /// Whether a Style Override is currently active.
     public var hasActiveOverride: Bool { activeOverrideID != nil }
 
-    /// Stream of resolved style changes.
+    /// Stream of Effective Style changes.
     public var styleStream: AsyncStream<Style> {
         AsyncStream { [weak self] continuation in
             guard let self else { return }
             let id = UUID()
             self.streamContinuations[id] = continuation
-            // Yield current value immediately
             continuation.yield(self.currentStyle)
 
             continuation.onTermination = { [weak self] _ in
@@ -78,19 +79,20 @@ public final class StyleResolutionPipeline: StyleResolution {
         }
     }
 
-    /// Callback invoked when the effective style changes.
+    /// Callback invoked when Effective Style changes.
     public var onStyleChanged: ((Style) -> Void)?
 
     /// Callback invoked when accessibility permission state changes.
     public var onAccessibilityPermissionChanged: ((Bool) -> Void)?
 
     private let styleRegistry: StyleRegistry
+    private let availableStyles: [Style]
     private var frontmostAppMonitor: any FrontmostAppMonitoring
     private var streamContinuations: [UUID: AsyncStream<Style>.Continuation] = [:]
     private var monitorTask: Task<Void, Never>?
     private var isRunning = false
 
-    /// The active temporary override style ID, if any.
+    /// Active Style Override ID, if any.
     private var activeOverrideID: UUID?
 
     /// The current frontmost app bundle ID, if known.
@@ -98,20 +100,16 @@ public final class StyleResolutionPipeline: StyleResolution {
 
     // MARK: - Initialization
 
-    /// Creates a new style resolution pipeline.
-    /// - Parameters:
-    ///   - styleRegistry: The style registry for looking up styles.
-    ///   - frontmostAppMonitor: The monitor for frontmost app changes.
-    ///   - initialStyle: The initial style to use before resolution starts (defaults to Casual).
     public init(
         styleRegistry: StyleRegistry,
         frontmostAppMonitor: any FrontmostAppMonitoring,
+        availableStyles: [Style]? = nil,
         initialStyle: Style? = nil
     ) {
         self.styleRegistry = styleRegistry
         self.frontmostAppMonitor = frontmostAppMonitor
+        self.availableStyles = availableStyles ?? Style.builtIn
 
-        // Initialize with provided or default style
         let style = initialStyle ?? Style.casual
         self.currentStyle = style
         self.resolvedStyleWithoutOverride = style
@@ -119,34 +117,24 @@ public final class StyleResolutionPipeline: StyleResolution {
 
     // MARK: - Public Methods
 
-    /// Starts the resolution pipeline.
-    ///
-    /// Begins monitoring frontmost app changes and resolving styles.
     public func start() async {
         guard !isRunning else { return }
         isRunning = true
 
-        // Set up permission change callback
-        self.frontmostAppMonitor.onPermissionChanged = { [weak self] granted in
+        frontmostAppMonitor.onPermissionChanged = { [weak self] granted in
             guard let self else { return }
             Task { @MainActor in
                 self.handlePermissionChanged(granted)
             }
         }
 
-        // Start the frontmost app monitor
         await frontmostAppMonitor.startMonitoring()
-
-        // Start consuming the bundle ID stream
         startMonitoringStream()
-
-        // Perform initial resolution
         await performResolution()
 
         Logger.styles.info("StyleResolutionPipeline started")
     }
 
-    /// Stops the resolution pipeline.
     public func stop() {
         isRunning = false
 
@@ -154,11 +142,10 @@ public final class StyleResolutionPipeline: StyleResolution {
         monitorTask = nil
 
         frontmostAppMonitor.stopMonitoring()
-        self.frontmostAppMonitor.onPermissionChanged = nil
+        frontmostAppMonitor.onPermissionChanged = nil
         onStyleChanged = nil
         onAccessibilityPermissionChanged = nil
 
-        // Finish all stream continuations
         for (_, continuation) in streamContinuations {
             continuation.finish()
         }
@@ -167,32 +154,68 @@ public final class StyleResolutionPipeline: StyleResolution {
         Logger.styles.info("StyleResolutionPipeline stopped")
     }
 
-    /// Sets a temporary style override.
-    ///
-    /// The override takes precedence over app-specific styles until cleared.
-    /// This is used for the style switcher (TAB key) and menu bar selection.
-    ///
-    /// - Parameter styleID: The style ID to override with, or nil to clear.
     public func setStyleOverride(_ styleID: UUID?) {
         let previousOverride = activeOverrideID
         activeOverrideID = styleID
 
-        if styleID != previousOverride {
-            if let id = styleID {
-                Logger.styles.info("Style override set: \(id)")
-            } else {
-                Logger.styles.info("Style override cleared")
-            }
+        guard styleID != previousOverride else { return }
 
-            Task {
-                await performResolution()
-            }
+        if let id = styleID {
+            Logger.styles.info("Style override set: \(id)")
+        } else {
+            Logger.styles.info("Style override cleared")
+            applyEffectiveStyle(resolvedStyleWithoutOverride)
+            return
+        }
+
+        Task {
+            await performResolution()
         }
     }
 
-    /// Clears any active style override.
+    public func activateOverride(_ style: Style) {
+        let previousOverride = activeOverrideID
+        activeOverrideID = style.id
+
+        guard style.id != previousOverride else { return }
+
+        Logger.styles.info("Style override activated: \(style.name)")
+        applyEffectiveStyle(style)
+    }
+
     public func clearOverride() {
-        setStyleOverride(nil)
+        guard activeOverrideID != nil else { return }
+        activeOverrideID = nil
+        Logger.styles.info("Style override cleared")
+        applyEffectiveStyle(resolvedStyleWithoutOverride)
+    }
+
+    @discardableResult
+    public func cycleToNextStyle() -> Style {
+        var cycleOrder: [Style] = [resolvedStyleWithoutOverride]
+        for style in availableStyles where style.id != resolvedStyleWithoutOverride.id {
+            cycleOrder.append(style)
+        }
+
+        let current = hasActiveOverride ? currentStyle : resolvedStyleWithoutOverride
+        let currentIndex = cycleOrder.firstIndex(where: { $0.id == current.id }) ?? 0
+        let nextIndex = (currentIndex + 1) % cycleOrder.count
+
+        if nextIndex == 0 {
+            clearOverride()
+        } else {
+            activateOverride(cycleOrder[nextIndex])
+        }
+
+        return currentStyle
+    }
+
+    /// Returns the display name for the current Effective Style state.
+    public func styleDisplayName() -> String {
+        if hasActiveOverride {
+            return "\(currentStyle.name) (overridden)"
+        }
+        return currentStyle.name
     }
 
     // MARK: - Private Methods
@@ -221,53 +244,47 @@ public final class StyleResolutionPipeline: StyleResolution {
             Logger.styles.warning("Accessibility permission denied, falling back to default style")
         }
 
-        // Re-resolve in case we need to fall back to default
         Task {
             await performResolution()
         }
     }
 
     private func performResolution() async {
-        // Determine the style based on resolution priority:
-        // 1. Override (if active)
-        // 2. App match from registry
-        // 3. Default style
-
-        let resolvedStyle: Style
-
-        if let overrideID = self.activeOverrideID,
-           let overrideStyle = await styleRegistry.style(withID: overrideID) {
-            // Priority 1: Temporary override
-            resolvedStyle = overrideStyle
-        } else if let bundleID = currentFrontmostBundleID {
-            // Priority 2: App-specific style match
-            resolvedStyle = await styleRegistry.style(forBundleID: bundleID)
-        } else {
-            // Priority 3: Default style (when no bundle ID available)
-            resolvedStyle = await styleRegistry.defaultStyle()
-        }
-
-        // Update the "without override" style (what the app match would be)
+        let detectedStyle: Style
         if let bundleID = currentFrontmostBundleID {
-            resolvedStyleWithoutOverride = await styleRegistry.style(forBundleID: bundleID)
+            detectedStyle = await styleRegistry.style(forBundleID: bundleID)
         } else {
-            resolvedStyleWithoutOverride = await styleRegistry.defaultStyle()
+            detectedStyle = await styleRegistry.defaultStyle()
+        }
+        resolvedStyleWithoutOverride = detectedStyle
+
+        let effectiveStyle: Style
+        if let overrideID = activeOverrideID,
+           let overrideStyle = await styleRegistry.style(withID: overrideID) {
+            effectiveStyle = overrideStyle
+        } else {
+            effectiveStyle = detectedStyle
         }
 
-        // Only notify if the effective style changed
-        guard resolvedStyle.id != currentStyle.id else { return }
+        applyEffectiveStyle(effectiveStyle)
 
-        currentStyle = resolvedStyle
+        Logger.styles.info(
+            "Resolved style: \(effectiveStyle.name) (override: \(self.activeOverrideID != nil))"
+        )
+    }
 
-        // Notify stream continuations
+    private func applyEffectiveStyle(_ style: Style) {
+        guard style.id != currentStyle.id else { return }
+
+        currentStyle = style
+        notifyEffectiveStyleChanged(style)
+    }
+
+    private func notifyEffectiveStyleChanged(_ style: Style) {
         for (_, continuation) in streamContinuations {
-            continuation.yield(resolvedStyle)
+            continuation.yield(style)
         }
-
-        // Notify callback
-        onStyleChanged?(resolvedStyle)
-
-        Logger.styles.info("Resolved style: \(resolvedStyle.name) (override: \(self.activeOverrideID != nil))")
+        onStyleChanged?(style)
     }
 }
 
@@ -308,49 +325,81 @@ public final class MockStyleResolutionPipeline: StyleResolution {
 
     private var streamContinuations: [UUID: AsyncStream<Style>.Continuation] = [:]
     private var overrideID: UUID?
+    private let availableStyles: [Style]
 
-    /// Creates a mock pipeline with an initial style.
-    /// - Parameter initialStyle: The initial style to use. Defaults to Casual if not specified.
-    public init(initialStyle: Style? = nil) {
+    public init(initialStyle: Style? = nil, availableStyles: [Style]? = nil) {
         let style = initialStyle ?? Style.casual
         self.currentStyle = style
         self.resolvedStyleWithoutOverride = style
+        self.availableStyles = availableStyles ?? Style.builtIn
     }
 
-    /// Simulate a style change (as if from frontmost app change).
     public func simulateStyleChange(_ style: Style) {
-        currentStyle = style
         resolvedStyleWithoutOverride = style
-
-        for (_, continuation) in streamContinuations {
-            continuation.yield(style)
+        if !hasActiveOverride {
+            currentStyle = style
+            notifyEffectiveStyleChanged(style)
+        } else {
+            onStyleChanged?(currentStyle)
         }
-
-        onStyleChanged?(style)
     }
 
     public func setStyleOverride(_ styleID: UUID?) {
-        self.overrideID = styleID
-        self.hasActiveOverride = styleID != nil
+        overrideID = styleID
+        hasActiveOverride = styleID != nil
 
-        // In a real scenario, we'd re-resolve, but for mock we just track the override
-        Logger.styles.debug("Mock override set: \(String(describing: styleID))")
+        if let styleID,
+           let style = availableStyles.first(where: { $0.id == styleID }) {
+            currentStyle = style
+            notifyEffectiveStyleChanged(style)
+        } else if !hasActiveOverride {
+            currentStyle = resolvedStyleWithoutOverride
+            notifyEffectiveStyleChanged(currentStyle)
+        }
+    }
+
+    public func activateOverride(_ style: Style) {
+        setStyleOverride(style.id)
     }
 
     public func clearOverride() {
         setStyleOverride(nil)
     }
 
-    public func start() async {
-        // No-op for mock
+    @discardableResult
+    public func cycleToNextStyle() -> Style {
+        var cycleOrder: [Style] = [resolvedStyleWithoutOverride]
+        for style in availableStyles where style.id != resolvedStyleWithoutOverride.id {
+            cycleOrder.append(style)
+        }
+
+        let current = hasActiveOverride ? currentStyle : resolvedStyleWithoutOverride
+        let currentIndex = cycleOrder.firstIndex(where: { $0.id == current.id }) ?? 0
+        let nextIndex = (currentIndex + 1) % cycleOrder.count
+
+        if nextIndex == 0 {
+            clearOverride()
+        } else {
+            activateOverride(cycleOrder[nextIndex])
+        }
+
+        return currentStyle
     }
 
+    public func start() async {}
+
     public func stop() {
-        // Finish all continuations
         for (_, continuation) in streamContinuations {
             continuation.finish()
         }
         streamContinuations.removeAll()
+    }
+
+    private func notifyEffectiveStyleChanged(_ style: Style) {
+        for (_, continuation) in streamContinuations {
+            continuation.yield(style)
+        }
+        onStyleChanged?(style)
     }
 }
 

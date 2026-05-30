@@ -10,18 +10,18 @@ final class ModeSwitcherCoordinator {
     private let hotkeyManager = GlobalHotkeyManager()
     private let panel = ModeSwitcherPanel()
     private let overrides: SessionOverrides
-    private let styleOverrideController: StyleOverrideController
+    private let styleResolution: StyleResolutionPipeline
 
     @ObservationIgnored weak var delegate: ModeSwitcherCoordinatorDelegate?
 
     init(
         settings: AppSettings,
         overrides: SessionOverrides,
-        styleOverrideController: StyleOverrideController
+        styleResolution: StyleResolutionPipeline
     ) {
         self.settings = settings
         self.overrides = overrides
-        self.styleOverrideController = styleOverrideController
+        self.styleResolution = styleResolution
     }
 
     func setupHotkey() {
@@ -32,9 +32,6 @@ final class ModeSwitcherCoordinator {
             return
         }
 
-        // Use assumeIsolated instead of Task { @MainActor in } to execute
-        // synchronously. The CGEvent tap callback runs on the main thread, but
-        // Task scheduling can be starved by key-repeat events during recording.
         hotkeyManager.onKeyDown = { [weak self] in
             MainActor.assumeIsolated {
                 self?.toggleSwitcher()
@@ -53,17 +50,13 @@ final class ModeSwitcherCoordinator {
         let modes = settings.switcherModes
         let activeIndex = modes.firstIndex(where: { $0.id == settings.activeModeID }) ?? 0
 
-        // Get current style information from the override controller
-        let currentStyle = styleOverrideController.currentEffectiveStyle
-        let isStyleOverridden = styleOverrideController.isOverridden
-
         let vm = ModeSwitcherViewModel(
             modes: modes,
             highlightedIndex: activeIndex,
             activeModeID: settings.activeModeID,
             parameterOverrides: overrides.parameterOverrides,
-            currentStyleName: currentStyle.name,
-            isStyleOverridden: isStyleOverridden,
+            currentStyleName: styleResolution.currentStyle.name,
+            isStyleOverridden: styleResolution.hasActiveOverride,
             onSelect: { [weak self] id in
                 guard let self else { return }
                 self.settings.activeModeID = id
@@ -84,7 +77,6 @@ final class ModeSwitcherCoordinator {
 
         vm.onParameterOverride = { [weak self, weak vm] parameterID, value in
             guard let self else { return }
-            // Activate the mode whose parameters are being changed
             if let vm, vm.modes[vm.highlightedIndex].id != self.settings.activeModeID {
                 let modeID = vm.modes[vm.highlightedIndex].id
                 self.settings.activeModeID = modeID
@@ -94,10 +86,10 @@ final class ModeSwitcherCoordinator {
             self.overrides.parameterOverrides[parameterID] = value
         }
 
-        // Set up callback to update view model when style changes
-        vm.onStyleOverrideChanged = { [weak vm] newStyle in
-            vm?.currentStyleName = newStyle.name
-            vm?.isStyleOverridden = (newStyle.id != self.styleOverrideController.detectedStyle.id)
+        styleResolution.onStyleChanged = { [weak vm, weak self] newStyle in
+            guard let vm, let self else { return }
+            vm.currentStyleName = newStyle.name
+            vm.isStyleOverridden = self.styleResolution.hasActiveOverride
         }
 
         return vm
@@ -105,24 +97,17 @@ final class ModeSwitcherCoordinator {
 
     // MARK: - Style Cycling
 
-    /// Cycles to the next style in the rotation (called when the style pill is clicked).
     private func cycleStyle() {
-        let newStyle = styleOverrideController.cycleToNextStyle()
+        let newStyle = styleResolution.cycleToNextStyle()
 
-        // Update SessionOverrides to reflect the new style override
-        if styleOverrideController.isOverridden {
-            overrides.styleOverride = newStyle.id
-        } else {
-            overrides.styleOverride = nil
-        }
-
-        // Update the view model if the panel is visible
         if let viewModel = panel.viewModel {
             viewModel.currentStyleName = newStyle.name
-            viewModel.isStyleOverridden = styleOverrideController.isOverridden
+            viewModel.isStyleOverridden = styleResolution.hasActiveOverride
         }
 
-        Logger.settings.info("Style cycled to: \(newStyle.name) (overridden: \(self.styleOverrideController.isOverridden))")
+        Logger.settings.info(
+            "Style cycled to: \(newStyle.name) (overridden: \(self.styleResolution.hasActiveOverride))"
+        )
     }
 
     func showSwitcher() {
@@ -152,14 +137,12 @@ final class ModeSwitcherCoordinator {
     }
 
     private func toggleSwitcher() {
-        // 1. If standalone panel is showing, hide it
         if panel.isVisible {
             panel.hide()
             delegate?.modeSwitcherDidHide()
             return
         }
 
-        // 2. Show standalone panel
         showSwitcher()
     }
 
@@ -175,8 +158,6 @@ final class ModeSwitcherCoordinator {
         setupHotkey()
     }
 
-    /// Used while the user is recording a new shortcut in the UI so this hotkey
-    /// passes through unconsumed.
     func setHotkeySuppressed(_ suppressed: Bool) {
         hotkeyManager.isSuppressed = suppressed
     }
