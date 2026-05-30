@@ -11,8 +11,13 @@ struct DebugLogView: View {
     @State private var isLoading = false
     @State private var justCopied = false
     @State private var sinceMinutes: Int = 60
+    @State private var isAtBottom = true
+    @State private var bottomScrollRequest = 0
 
     private static let windowOptions: [Int] = [15, 60, 240, 1440]
+    private static let bottomAnchorID = "debug-log-bottom"
+    private static let bottomDetectionTolerance: CGFloat = 8
+    private static let pollInterval: Duration = .seconds(1)
 
     var body: some View {
         Group {
@@ -26,17 +31,33 @@ struct DebugLogView: View {
                     description: Text("Nothing logged in the selected window.")
                 )
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                            Text(line)
-                                .font(.system(size: 11, weight: .regular, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            Color.clear
+                                .frame(height: 1)
+                                .id(Self.bottomAnchorID)
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .onScrollGeometryChange(for: Bool.self) { geometry in
+                        geometry.visibleRect.maxY >= geometry.contentSize.height - Self.bottomDetectionTolerance
+                    } action: { _, newValue in
+                        isAtBottom = newValue
+                    }
+                    .onAppear {
+                        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+                    }
+                    .onChange(of: bottomScrollRequest) {
+                        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+                    }
                 }
             }
         }
@@ -72,14 +93,14 @@ struct DebugLogView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    fetch()
+                    Task { await fetch() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .disabled(isLoading)
             }
         }
-        .task(id: sinceMinutes) { fetch() }
+        .task(id: sinceMinutes) { await pollLogs() }
     }
 
     private func copyAll() {
@@ -100,15 +121,32 @@ struct DebugLogView: View {
         }
     }
 
-    private func fetch() {
-        isLoading = true
+    private func pollLogs() async {
+        await fetch()
+        while !Task.isCancelled {
+            try? await Task.sleep(for: Self.pollInterval)
+            guard !Task.isCancelled else { return }
+            await fetch()
+        }
+    }
+
+    private func fetch() async {
+        let shouldShowLoadingIndicator = lines.isEmpty
+        if shouldShowLoadingIndicator {
+            isLoading = true
+        }
         let window = sinceMinutes
-        Task.detached(priority: .userInitiated) {
-            let fetched = Self.readEntries(sinceMinutes: window)
-            await MainActor.run {
-                self.lines = fetched
-                self.isLoading = false
-            }
+        let fetched = await Task.detached(priority: .userInitiated) {
+            Self.readEntries(sinceMinutes: window)
+        }.value
+        guard !Task.isCancelled else { return }
+        let shouldScrollToBottom = isAtBottom && fetched != lines
+        lines = fetched
+        if shouldScrollToBottom {
+            bottomScrollRequest += 1
+        }
+        if shouldShowLoadingIndicator {
+            isLoading = false
         }
     }
 
