@@ -85,6 +85,19 @@ struct RecordingRunTests {
         #expect(conversation.label == "Dictation · Casual")
     }
 
+    @Test("history adapter holds successful runs until bootstrap completes")
+    func historyAdapterFlushesPendingSuccesses() async {
+        let history = FileHistoryStore(storageRoot: temporaryHistoryRoot())
+        let adapter = HistoryRecordingRunCompletionAdapter()
+
+        await adapter.complete(.success(success(finalText: "pending text")))
+        #expect(history.conversations.isEmpty)
+
+        adapter.setHistory(history)
+
+        #expect(history.conversations.first?.copyableText == "pending text")
+    }
+
     private func success(
         transcript: String = "raw",
         processed: String? = nil,

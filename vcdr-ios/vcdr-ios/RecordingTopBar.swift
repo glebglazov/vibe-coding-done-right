@@ -50,14 +50,10 @@ struct RecordingTopBar: View {
             showHistory = true
         } label: {
             topBarIcon("clock.arrow.circlepath")
-                .opacity(history == nil ? 0.3 : 1)
         }
-        .disabled(history == nil)
         .sheet(isPresented: $showHistory) {
-            if let history {
-                HistoryView(history: history)
-                    .preferredColorScheme(appearance.colorScheme)
-            }
+            HistorySheet(history: history)
+                .preferredColorScheme(appearance.colorScheme)
         }
     }
 
@@ -86,5 +82,35 @@ struct RecordingTopBar: View {
             .foregroundStyle(theme.onSurfaceVariant)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
+    }
+}
+
+private struct HistorySheet: View {
+    let history: (any HistoryStore)?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
+
+    private var theme: Theme { Theme.current(for: colorScheme) }
+
+    var body: some View {
+        if let history {
+            HistoryView(history: history)
+        } else {
+            NavigationStack {
+                ProgressView()
+                    .tint(theme.primary)
+                    .scaleEffect(1.2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(theme.surfaceLowest)
+                    .navigationTitle("HISTORY")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Done") { dismiss() }
+                                .foregroundStyle(theme.onSurface)
+                        }
+                    }
+            }
+        }
     }
 }

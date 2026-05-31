@@ -94,6 +94,8 @@ final class RecordingFlowCoordinator {
     /// can take seconds on first launch after install. `nil` until the
     /// bootstrap task completes; callers must tolerate the transient gap.
     private(set) var history: (any HistoryStore)?
+    private var isHistoryBootstrapRunning = false
+    private let historyCompletionAdapter = HistoryRecordingRunCompletionAdapter()
     private var recordingRun: RecordingRun?
     /// Set to true while `startRecording` is between its UI flip and
     /// `audioRecorder.startCapture` returning. A second tap arriving in that
@@ -204,10 +206,12 @@ final class RecordingFlowCoordinator {
     /// the user staring at the blank launch screen.
     func bootstrapHistory() async {
         Logger.app.info("[LaunchProbe] bootstrapHistory entry main=\(Thread.isMainThread)")
-        guard history == nil else {
+        guard history == nil, !isHistoryBootstrapRunning else {
             Logger.app.info("[LaunchProbe] bootstrapHistory already-bootstrapped")
             return
         }
+        isHistoryBootstrapRunning = true
+        defer { isHistoryBootstrapRunning = false }
         let defaults = SharedConstants.sharedDefaults
         let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
         Logger.app.info("[LaunchProbe] bootstrapHistory before reconcile detached")
@@ -217,7 +221,9 @@ final class RecordingFlowCoordinator {
             Logger.app.info("[LaunchProbe] bootstrapHistory reconcile detached body done main=\(Thread.isMainThread)")
         }.value
         Logger.app.info("[LaunchProbe] bootstrapHistory after reconcile main=\(Thread.isMainThread)")
-        history = HistoryStoreFactory.make(defaults: defaults)
+        let history = HistoryStoreFactory.make(defaults: defaults)
+        self.history = history
+        historyCompletionAdapter.setHistory(history)
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
 
@@ -464,7 +470,7 @@ final class RecordingFlowCoordinator {
                     keyboardChannel: keyboardChannel,
                     deliversToKeyboard: deliversToKeyboard
                 ),
-                HistoryRecordingRunCompletionAdapter(history: history)
+                historyCompletionAdapter
             ],
             currentSettings: { [weak self] in
                 guard let self else {
