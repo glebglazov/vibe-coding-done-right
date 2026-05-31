@@ -2,12 +2,12 @@ import Foundation
 import os
 @testable import vcdr_ios
 
-/// Scriptable fake `LLMProvider` for driving the factory / FallbackProvider
+/// Scriptable fake `LLMAdapter` for driving Recording Run integration tests
 /// suites without touching the network. The attempt counter is lock-guarded so
-/// it stays correct across the timeout race task group inside FallbackProvider.
+/// it stays correct across the timeout race task group inside ProviderCascade.
 /// Uses `OSAllocatedUnfairLock` because its `withLock` is async-context-safe,
 /// unlike `NSLock.lock()`.
-final class FakeLLMProvider: LLMProvider {
+final class FakeLLMProvider: LLMAdapter {
     enum Behavior: Sendable {
         /// Return `output` on every call.
         case alwaysSucceed(output: String)

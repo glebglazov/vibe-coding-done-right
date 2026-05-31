@@ -33,7 +33,7 @@
       "file": "04-ios-cloud-and-apple-through-shared-seam.md",
       "title": "iOS cloud + Apple through Shared seam",
       "type": "AFK",
-      "status": "open",
+      "status": "done",
       "blocked_by": [
         "03-macos-full-cloud-migration"
       ]

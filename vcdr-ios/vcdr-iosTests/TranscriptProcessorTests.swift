@@ -36,7 +36,7 @@ struct TranscriptProcessorTests {
     func finalTranscriptUsesAIResultAndFinalSettings() async {
         let processor = TranscriptProcessor(
             makeAIProvider: { _ in
-                FallbackProvider(
+                ProviderCascade(
                     primary: FakeLLMProvider(behavior: .alwaysSucceed(output: "Hello world.")),
                     fallback: nil,
                     maxAttempts: 1,
@@ -66,7 +66,7 @@ struct TranscriptProcessorTests {
     func aiTimeoutFallsBackToLocalTranscript() async {
         let processor = TranscriptProcessor(
             makeAIProvider: { _ in
-                FallbackProvider(
+                ProviderCascade(
                     primary: FakeLLMProvider(behavior: .hang),
                     fallback: nil,
                     maxAttempts: 1,

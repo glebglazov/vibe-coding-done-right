@@ -14,7 +14,7 @@ struct RecordingRunTests {
             transcriptionProvider: FakeStreamingTranscriptionProvider(),
             transcriptProcessor: TranscriptProcessor(
                 makeAIProvider: { _ in
-                    FallbackProvider(
+                    ProviderCascade(
                         primary: FakeLLMProvider(behavior: .alwaysSucceed(output: "unused")),
                         fallback: nil,
                         maxAttempts: 1,

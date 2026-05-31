@@ -42,34 +42,67 @@ enum AIPromptMode: String, CaseIterable, Codable {
 
 }
 
-/// AI provider selection — matches the macOS AIProvider enum.
-enum AIProvider: String, Codable, CaseIterable {
-    case anthropic
-    case openai
-    case gemini
+/// iOS AI provider selection. Cloud backends come from the shared seam; Apple
+/// remains an iOS-only backend registered when AFM is available.
+enum AIProvider: RawRepresentable, Codable, Hashable, Sendable {
+    case cloud(CloudAIBackend)
     case apple
+
+    static let anthropic = AIProvider.cloud(.anthropic)
+    static let openai = AIProvider.cloud(.openai)
+    static let gemini = AIProvider.cloud(.gemini)
+
+    init?(rawValue: String) {
+        if let cloud = CloudAIBackend(rawValue: rawValue) {
+            self = .cloud(cloud)
+        } else if rawValue == "apple" {
+            self = .apple
+        } else {
+            return nil
+        }
+    }
+
+    var rawValue: String {
+        switch self {
+        case .cloud(let backend): backend.rawValue
+        case .apple: "apple"
+        }
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        guard let provider = Self(rawValue: rawValue) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown AI provider: \(rawValue)"
+            )
+        }
+        self = provider
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 
     var displayName: String {
         switch self {
-        case .anthropic: "Anthropic"
-        case .openai: "OpenAI"
-        case .gemini: "Google Gemini"
+        case .cloud(let backend): backend.displayName
         case .apple: "Apple"
         }
     }
 
     var requiresAPIKey: Bool {
         switch self {
-        case .anthropic, .openai, .gemini: true
+        case .cloud: true
         case .apple: false
         }
     }
 
     var apiKeyVariableName: String {
         switch self {
-        case .anthropic: "ANTHROPIC_API_KEY"
-        case .openai: "OPENAI_API_KEY"
-        case .gemini: "GOOGLE_API_KEY"
+        case .cloud(let backend): backend.apiKeyVariableName
         case .apple: ""
         }
     }
@@ -78,9 +111,7 @@ enum AIProvider: String, Codable, CaseIterable {
     @MainActor
     var isConfigured: Bool {
         switch self {
-        case .anthropic: !AIProcessingSettings.anthropicApiKey.isEmpty
-        case .openai: !AIProcessingSettings.openaiApiKey.isEmpty
-        case .gemini: !AIProcessingSettings.geminiApiKey.isEmpty
+        case .cloud: !AIProcessingSettings.apiKey(for: self).isEmpty
         case .apple: AIProcessingSettings.isAFMAvailable
         }
     }
@@ -88,7 +119,18 @@ enum AIProvider: String, Codable, CaseIterable {
     /// Providers that are configured and available for selection.
     @MainActor
     static var configuredProviders: [AIProvider] {
-        allCases.filter(\.isConfigured)
+        configuredProviders(isAFMAvailable: AIProcessingSettings.isAFMAvailable)
+    }
+
+    @MainActor
+    static func configuredProviders(isAFMAvailable: Bool) -> [AIProvider] {
+        var providers = CloudAIBackend.allCases
+            .map(AIProvider.cloud)
+            .filter(\.isConfigured)
+        if isAFMAvailable {
+            providers.append(.apple)
+        }
+        return providers
     }
 }
 
@@ -182,9 +224,9 @@ enum AIProcessingSettings {
 
     static func apiKey(for provider: AIProvider) -> String {
         switch provider {
-        case .anthropic: anthropicApiKey
-        case .openai: openaiApiKey
-        case .gemini: geminiApiKey
+        case .cloud(.anthropic): anthropicApiKey
+        case .cloud(.openai): openaiApiKey
+        case .cloud(.gemini): geminiApiKey
         case .apple: ""
         }
     }

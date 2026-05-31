@@ -27,12 +27,12 @@ struct TranscriptProcessor {
         let historyLabel: String?
     }
 
-    private let makeAIProvider: @MainActor (AIPromptMode) -> FallbackProvider
+    private let makeAIProvider: @MainActor (AIPromptMode) -> ProviderCascade
     private let onAIProcessingStatus: @MainActor (AIProcessingStatus) -> Void
     private let onAIInputText: @MainActor (String) -> Void
 
     init(
-        makeAIProvider: @escaping @MainActor (AIPromptMode) -> FallbackProvider,
+        makeAIProvider: @escaping @MainActor (AIPromptMode) -> ProviderCascade,
         onAIProcessingStatus: @escaping @MainActor (AIProcessingStatus) -> Void,
         onAIInputText: @escaping @MainActor (String) -> Void
     ) {
@@ -124,7 +124,7 @@ struct TranscriptProcessor {
             onAIProcessingStatus(.completed)
             Logger.ai.info("AI output [\(ContinuousClock.now - startTime)]: \(result)")
             return result
-        } catch is FallbackProvider.AITimedOut {
+        } catch is ProviderCascade.AITimedOut {
             onAIProcessingStatus(.timedOut)
             Logger.app.warning("AI processing timed out after \(ContinuousClock.now - startTime)")
             return localText
