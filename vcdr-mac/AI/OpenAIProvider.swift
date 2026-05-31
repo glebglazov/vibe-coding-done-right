@@ -4,7 +4,7 @@ import Foundation
 /// `AIClient.callOpenAI` — same endpoint, model, parse, and error mapping.
 /// Stays platform-agnostic (Foundation/URLSession only — no AppKit) and mirrors
 /// the proven iOS `OpenAIProvider`.
-struct OpenAIProvider: LLMProvider {
+struct OpenAIProvider: LLMAdapter {
     let apiKey: String
 
     var displayName: String { AIProvider.openai.displayName }
@@ -15,7 +15,7 @@ struct OpenAIProvider: LLMProvider {
     private static let requestTimeout: TimeInterval = 30
 
     func process(text: String, systemPrompt: String) async throws -> String {
-        guard !apiKey.isEmpty else { throw AIClientError.missingAPIKey(provider: .openai) }
+        guard !apiKey.isEmpty else { throw CloudAIClientError.missingAPIKey(provider: .openai) }
 
         var request = URLRequest(url: URL(string: Self.endpoint)!)
         request.httpMethod = "POST"
@@ -38,7 +38,7 @@ struct OpenAIProvider: LLMProvider {
 
         guard statusCode == 200 else {
             let errorMessage = Self.parseError(data: data)
-            throw AIClientError.apiError(provider: .openai, statusCode: statusCode, message: errorMessage)
+            throw CloudAIClientError.apiError(provider: .openai, statusCode: statusCode, message: errorMessage)
         }
 
         return try Self.parseResponse(data: data)
@@ -50,7 +50,7 @@ struct OpenAIProvider: LLMProvider {
               let firstChoice = choices.first,
               let message = firstChoice["message"] as? [String: Any],
               let content = message["content"] as? String else {
-            throw AIClientError.invalidResponse(provider: .openai)
+            throw CloudAIClientError.invalidResponse(provider: .openai)
         }
         return content
     }

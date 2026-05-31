@@ -7,30 +7,11 @@ enum ProcessingType: String, Codable, CaseIterable {
     case bashScript
 }
 
-enum AIProvider: String, Codable, CaseIterable {
-    case anthropic
-    case openai
-    case gemini
+typealias AIProvider = CloudAIBackend
 
-    var displayName: String {
-        switch self {
-        case .anthropic: "Anthropic"
-        case .openai: "OpenAI"
-        case .gemini: "Google Gemini"
-        }
-    }
-
-    /// The variable name the user must set in Variables for this provider.
-    var apiKeyVariableName: String {
-        switch self {
-        case .anthropic: "ANTHROPIC_API_KEY"
-        case .openai: "OPENAI_API_KEY"
-        case .gemini: "GOOGLE_API_KEY"
-        }
-    }
-
+extension CloudAIBackend {
     /// Default parameters for this provider. Currently no cloud providers
-    /// expose model selection; the model is hardcoded in `AIClient`.
+    /// expose model selection; each adapter keeps its Phase 1 default model.
     var defaultParameters: [ModeParameter] {
         []
     }

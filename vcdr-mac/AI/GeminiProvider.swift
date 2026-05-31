@@ -4,7 +4,7 @@ import Foundation
 /// `AIClient.callGemini` — same endpoint, model, parse, and error mapping.
 /// Stays platform-agnostic (Foundation/URLSession only — no AppKit) and mirrors
 /// the proven iOS `GeminiProvider`.
-struct GeminiProvider: LLMProvider {
+struct GeminiProvider: LLMAdapter {
     let apiKey: String
 
     var displayName: String { AIProvider.gemini.displayName }
@@ -15,7 +15,7 @@ struct GeminiProvider: LLMProvider {
     private static let requestTimeout: TimeInterval = 30
 
     func process(text: String, systemPrompt: String) async throws -> String {
-        guard !apiKey.isEmpty else { throw AIClientError.missingAPIKey(provider: .gemini) }
+        guard !apiKey.isEmpty else { throw CloudAIClientError.missingAPIKey(provider: .gemini) }
 
         let model = Self.defaultModel
         var components = URLComponents(string: "\(Self.endpoint)/\(model):generateContent")!
@@ -44,7 +44,7 @@ struct GeminiProvider: LLMProvider {
 
         guard statusCode == 200 else {
             let errorMessage = Self.parseError(data: data)
-            throw AIClientError.apiError(provider: .gemini, statusCode: statusCode, message: errorMessage)
+            throw CloudAIClientError.apiError(provider: .gemini, statusCode: statusCode, message: errorMessage)
         }
 
         return try Self.parseResponse(data: data)
@@ -58,7 +58,7 @@ struct GeminiProvider: LLMProvider {
               let parts = content["parts"] as? [[String: Any]],
               let firstPart = parts.first,
               let text = firstPart["text"] as? String else {
-            throw AIClientError.invalidResponse(provider: .gemini)
+            throw CloudAIClientError.invalidResponse(provider: .gemini)
         }
         return text
     }

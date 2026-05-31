@@ -13,8 +13,10 @@
       "file": "02-macos-cloud-ai-anthropic-tracer.md",
       "title": "macOS cloud AI through Shared (Anthropic tracer)",
       "type": "AFK",
-      "status": "open",
-      "blocked_by": ["01-shared-provider-cascade-foundation"]
+      "status": "done",
+      "blocked_by": [
+        "01-shared-provider-cascade-foundation"
+      ]
     },
     {
       "id": "03-macos-full-cloud-migration",
@@ -22,7 +24,9 @@
       "title": "macOS full cloud migration (OpenAI + Gemini)",
       "type": "AFK",
       "status": "open",
-      "blocked_by": ["02-macos-cloud-ai-anthropic-tracer"]
+      "blocked_by": [
+        "02-macos-cloud-ai-anthropic-tracer"
+      ]
     },
     {
       "id": "04-ios-cloud-and-apple-through-shared-seam",
@@ -30,7 +34,9 @@
       "title": "iOS cloud + Apple through Shared seam",
       "type": "AFK",
       "status": "open",
-      "blocked_by": ["03-macos-full-cloud-migration"]
+      "blocked_by": [
+        "03-macos-full-cloud-migration"
+      ]
     }
   ]
 }

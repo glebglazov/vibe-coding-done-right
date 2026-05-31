@@ -3,3 +3,6 @@ Added the cross-platform Shared LLM Adapter Seam foundation: CloudAIBackend, LLM
 Moved macOS cascade and cloud-adapter behavior tests into SharedTests, added explicit cancellation fallback/terminal coverage, removed the migrated macOS-local test copies, and wired SharedTests into the macOS test bundle.
 Verified `xcodebuild test -scheme vcdr-mac -destination 'platform=macOS' -quiet`, `xcodebuild -project vcdr-ios/vcdr-ios.xcodeproj -scheme vcdr-ios -destination 'generic/platform=iOS Simulator' build -quiet`, and `git diff --check`.
 ---
+2026-05-31T10:40:05Z [02-macos-cloud-ai-anthropic-tracer.md] DONE
+<one or more lines describing what you did>
+---

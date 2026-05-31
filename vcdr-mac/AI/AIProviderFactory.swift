@@ -16,12 +16,12 @@ enum AIProviderFactory {
     static func make(
         for mode: Mode,
         variableEnvironment: [String: String]
-    ) -> FallbackProvider {
+    ) -> ProviderCascade {
         let provider = mode.aiProvider
         let apiKey = variableEnvironment[provider.apiKeyVariableName] ?? ""
-        let primary = provider.makeProvider(apiKey: apiKey)
+        let primary = makePrimaryAdapter(for: provider, apiKey: apiKey)
 
-        return FallbackProvider(
+        return ProviderCascade(
             primary: primary,
             fallback: fallbackProvider(for: mode, variableEnvironment: variableEnvironment),
             maxAttempts: maxAttempts(for: provider),
@@ -32,8 +32,16 @@ enum AIProviderFactory {
     private static func fallbackProvider(
         for _: Mode,
         variableEnvironment _: [String: String]
-    ) -> (any LLMProvider)? {
+    ) -> (any LLMAdapter)? {
         nil
+    }
+
+    private static func makePrimaryAdapter(for provider: AIProvider, apiKey: String) -> any LLMAdapter {
+        switch provider {
+        case .anthropic: AnthropicAdapter(apiKey: apiKey)
+        case .openai: OpenAIProvider(apiKey: apiKey)
+        case .gemini: GeminiProvider(apiKey: apiKey)
+        }
     }
 
     private static func maxAttempts(for provider: AIProvider) -> Int {
