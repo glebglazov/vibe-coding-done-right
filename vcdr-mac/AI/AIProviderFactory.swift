@@ -19,7 +19,7 @@ enum AIProviderFactory {
     ) -> ProviderCascade {
         let provider = mode.aiProvider
         let apiKey = variableEnvironment[provider.apiKeyVariableName] ?? ""
-        let primary = makePrimaryAdapter(for: provider, apiKey: apiKey)
+        let primary = provider.makeAdapter(apiKey: apiKey)
 
         return ProviderCascade(
             primary: primary,
@@ -34,14 +34,6 @@ enum AIProviderFactory {
         variableEnvironment _: [String: String]
     ) -> (any LLMAdapter)? {
         nil
-    }
-
-    private static func makePrimaryAdapter(for provider: AIProvider, apiKey: String) -> any LLMAdapter {
-        switch provider {
-        case .anthropic: AnthropicAdapter(apiKey: apiKey)
-        case .openai: OpenAIProvider(apiKey: apiKey)
-        case .gemini: GeminiProvider(apiKey: apiKey)
-        }
     }
 
     private static func maxAttempts(for provider: AIProvider) -> Int {

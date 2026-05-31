@@ -23,7 +23,7 @@
       "file": "03-macos-full-cloud-migration.md",
       "title": "macOS full cloud migration (OpenAI + Gemini)",
       "type": "AFK",
-      "status": "open",
+      "status": "done",
       "blocked_by": [
         "02-macos-cloud-ai-anthropic-tracer"
       ]

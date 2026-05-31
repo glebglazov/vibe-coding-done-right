@@ -6,3 +6,6 @@ Verified `xcodebuild test -scheme vcdr-mac -destination 'platform=macOS' -quiet`
 2026-05-31T10:40:05Z [02-macos-cloud-ai-anthropic-tracer.md] DONE
 <one or more lines describing what you did>
 ---
+2026-05-31T10:45:33Z [03-macos-full-cloud-migration.md] DONE
+<one or more lines describing what you did>
+---
