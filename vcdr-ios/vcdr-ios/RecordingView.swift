@@ -1,18 +1,11 @@
 import SwiftUI
 import UIKit
-import OSLog
 
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
     @Environment(\.colorScheme) private var colorScheme
     private var theme: Theme { Theme.current(for: colorScheme) }
-    @AppStorage("appearance") private var appearance: Appearance = .system
     @State private var showCopiedConfirmation = false
-    @State private var showSettings = false
-    @State private var showHistory = false
-    #if DEBUG
-    @State private var showDebugLogs = false
-    #endif
     @State private var recordingStart: Date?
 
     // MARK: - Constants
@@ -61,79 +54,7 @@ struct RecordingView: View {
         if case .recording = coordinator.state {
             EmptyView()
         } else {
-            HStack(spacing: 0) {
-                Spacer()
-                #if DEBUG
-                debugLogsButton
-                #endif
-                historyButton
-                settingsButton
-            }
-            .padding(.trailing, 12)
-            .padding(.top, 12)
-        }
-    }
-
-    #if DEBUG
-    private var debugLogsButton: some View {
-        Button {
-            showDebugLogs = true
-        } label: {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 18))
-                .foregroundStyle(theme.onSurfaceVariant)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .sheet(isPresented: $showDebugLogs) {
-            NavigationStack {
-                DebugLogView()
-            }
-            .preferredColorScheme(appearance.colorScheme)
-        }
-        .accessibilityLabel("Debug Logs")
-    }
-    #endif
-
-    private var historyButton: some View {
-        Button {
-            showHistory = true
-        } label: {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 18))
-                .foregroundStyle(theme.onSurfaceVariant.opacity(coordinator.history == nil ? 0.3 : 1))
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .disabled(coordinator.history == nil)
-        .sheet(isPresented: $showHistory) {
-            if let history = coordinator.history {
-                HistoryView(history: history)
-                    .preferredColorScheme(appearance.colorScheme)
-            }
-        }
-    }
-
-    private var settingsButton: some View {
-        Button {
-            Logger.app.info("[LaunchProbe] settings button tapped main=\(Thread.isMainThread)")
-            showSettings = true
-            Logger.app.info("[LaunchProbe] settings showSettings=true main=\(Thread.isMainThread)")
-        } label: {
-            Image(systemName: "gearshape")
-                .font(.system(size: 18))
-                .foregroundStyle(theme.onSurfaceVariant)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .padding(.leading, 4)
-        .sheet(isPresented: $showSettings) {
-            let _ = Logger.app.info("[LaunchProbe] settings sheet content built main=\(Thread.isMainThread)")
-            SettingsView()
-                .preferredColorScheme(appearance.colorScheme)
-                .onAppear {
-                    Logger.app.info("[LaunchProbe] SettingsView onAppear main=\(Thread.isMainThread)")
-                }
+            RecordingTopBar(history: coordinator.history)
         }
     }
 
@@ -169,10 +90,7 @@ struct RecordingView: View {
                 ProgressView()
                     .tint(theme.primary)
                     .scaleEffect(1.2)
-                Text(coordinator.initProgress.uppercased())
-                    .font(.system(size: 12, weight: .bold))
-                    .tracking(3)
-                    .foregroundStyle(theme.onSurfaceVariant)
+                InitProgressLabel(coordinator: coordinator, theme: theme)
             }
             VStack(spacing: 12) {
                 actionCircle(
@@ -650,5 +568,17 @@ struct RecordingView: View {
         let m = (total % 3600) / 60
         let s = total % 60
         return String(format: "%02d:%02d:%02d", h, m, s)
+    }
+}
+
+private struct InitProgressLabel: View {
+    let coordinator: RecordingFlowCoordinator
+    let theme: Theme
+
+    var body: some View {
+        Text(coordinator.initProgress.uppercased())
+            .font(.system(size: 12, weight: .bold))
+            .tracking(3)
+            .foregroundStyle(theme.onSurfaceVariant)
     }
 }

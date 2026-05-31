@@ -45,7 +45,7 @@ The lifecycle of one user-initiated recording from start through finalization an
 _Avoid_: recording service, transcription pipeline, coordinator helper
 
 **Completion Delivery**:
-The handoff that applies a Recording Run terminal state to outside destinations such as the Keyboard Channel and conversation history. Completion Delivery must preserve the run result without making the Recording Run know which destinations are active.
+The handoff that applies a Recording Run terminal state to outside destinations such as the Keyboard Channel and conversation history. Completion Delivery must preserve the run result without making the Recording Run know which destinations are active. When History Bootstrap has not finished yet, a successful run's Conversation may be held and written once the history store is ready.
 _Avoid_: callback, post-processing hook, output side effect
 
 **Empty Result**:
@@ -87,6 +87,20 @@ _Avoid_: LLM adapter, cloud enum, shared backend list
 **Apple Backend**:
 The on-device AFM backend available only on iOS when Apple Intelligence is ready. It is registered through AI Provider selection and AI Provider Selection; it is not part of the shared Cloud AI Backend enum or Model Catalog. Its LLM Adapter implementation stays in the iOS target.
 _Avoid_: Apple provider case in Shared, AFM model picker, cloud adapter
+
+### App Readiness
+
+**Transcription Readiness**:
+The point at which the on-device speech recognition model is loaded and ready to transcribe. A Recording Run may start before Transcription Readiness; audio is captured immediately and transcription catches up once the model is ready.
+_Avoid_: PREPARING, model init, compiling state
+
+**App Shell**:
+The parts of the main app that do not depend on Transcription Readiness — navigation, settings, conversation history, and debug tools. The App Shell stays fully usable while Transcription Readiness is pending.
+_Avoid_: launch screen, boot gate, init blocker
+
+**History Bootstrap**:
+The one-time launch step that reconciles local and iCloud conversation storage before the active history store is constructed. It runs before Conversations can be browsed when a reconcile migration may be needed; otherwise it completes quickly enough to be invisible. While History Bootstrap is pending, the history screen is reachable and shows a loading state rather than blocking navigation.
+_Avoid_: iCloud init, bootstrapHistory, store factory
 
 ### History
 
