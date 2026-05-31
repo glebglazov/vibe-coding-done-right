@@ -32,10 +32,6 @@ DerivedData/
 
 thoughts
 
-# Local planning docs
-docs/prds/
-docs/issues/
-
 # Ralph autonomous agent loop
 scripts/ralph/
 
