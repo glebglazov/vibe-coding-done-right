@@ -90,12 +90,50 @@ struct RecordingRunTests {
         let history = FileHistoryStore(storageRoot: temporaryHistoryRoot())
         let adapter = HistoryRecordingRunCompletionAdapter()
 
-        await adapter.complete(.success(success(finalText: "pending text")))
+        let pendingSuccess = success(
+            transcript: "raw text",
+            processed: "processed text",
+            finalText: "pending text",
+            captures: ["selected context", ""],
+            historyLabel: "Dictation · Formal"
+        )
+        await adapter.complete(.success(pendingSuccess))
         #expect(history.conversations.isEmpty)
 
         adapter.setHistory(history)
 
-        #expect(history.conversations.first?.copyableText == "pending text")
+        let conversation = try! #require(history.conversations.first)
+        #expect(history.conversations.count == 1)
+        #expect(conversation.id == pendingSuccess.conversationID)
+        #expect(conversation.inputSegments.map(\.text) == ["raw text", "selected context"])
+        #expect(conversation.inputSegments[1].capture?.source == .selection)
+        #expect(conversation.output == "pending text")
+        #expect(conversation.label == "Dictation · Formal")
+    }
+
+    @Test("history adapter does not duplicate runs when bootstrap finishes first")
+    func historyAdapterRecordsOnceAfterBootstrap() async {
+        let history = FileHistoryStore(storageRoot: temporaryHistoryRoot())
+        let adapter = HistoryRecordingRunCompletionAdapter()
+        adapter.setHistory(history)
+
+        await adapter.complete(.success(success(finalText: "normal path")))
+
+        #expect(history.conversations.count == 1)
+        #expect(history.conversations.first?.copyableText == "normal path")
+    }
+
+    @Test("history adapter does not buffer unsuccessful terminal states")
+    func historyAdapterDoesNotBufferUnsuccessfulStates() async {
+        let history = FileHistoryStore(storageRoot: temporaryHistoryRoot())
+        let adapter = HistoryRecordingRunCompletionAdapter()
+
+        await adapter.complete(.emptyResult)
+        await adapter.complete(.cancellation)
+        await adapter.complete(.processingFailure(RecordingRunFailure(message: "failed")))
+        adapter.setHistory(history)
+
+        #expect(history.conversations.isEmpty)
     }
 
     private func success(
