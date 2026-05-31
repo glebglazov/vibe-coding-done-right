@@ -58,6 +58,10 @@ _Avoid_: built-in mode, default mode, template preset
 The kind of transformation a Mode applies before output delivery: no external processing, cloud AI, local agent, or bash script. Processing Type is about text transformation, not where the final text is delivered.
 _Avoid_: action type, destination type, provider
 
+**Cloud AI Provider**:
+The macOS name for a cloud backend on a Mode with Processing Type cloud AI. It is a typealias to the shared Cloud AI Backend — not a separate enum. Mode pickers and persistence use the shared identity directly.
+_Avoid_: AIProvider enum, platform backend list, LLM adapter
+
 **Mode Parameter**:
 A named per-mode choice whose selected option is passed into processing as a `VCDR_PARAM_*` value. A Capture Session may override Mode Parameters without changing the Mode's defaults.
 _Avoid_: setting, option, variable

@@ -78,6 +78,16 @@ _Avoid_: post-processing, formatting pipeline, final cleanup
 The Recording Run policy that turns filler-cleaned recognized speech into user-facing output. It may use AI Prompt Mode and Captures, then applies Transcript Finalization and records the label for the output choices that shaped the result.
 _Avoid_: AI retry path, formatter, post-processing
 
+### AI Backends
+
+**AI Provider**:
+The iOS-selectable backend for AI Prompt Mode processing. Cloud providers wrap the shared Cloud AI Backend; Apple is a platform-only case registered when AFM is available. Settings pickers use configured providers — not an unfiltered list of all cases. Persisted settings keep flat raw strings (`"anthropic"`, `"apple"`) for backward compatibility.
+_Avoid_: LLM adapter, cloud enum, shared backend list
+
+**Apple Backend**:
+The on-device AFM backend available only on iOS when Apple Intelligence is ready. It is registered through AI Provider selection and AI Provider Selection; it is not part of the shared Cloud AI Backend enum or Model Catalog. Its LLM Adapter implementation stays in the iOS target.
+_Avoid_: Apple provider case in Shared, AFM model picker, cloud adapter
+
 ### History
 
 **Conversation**:
