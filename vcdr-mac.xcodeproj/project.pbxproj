@@ -25,6 +25,16 @@
 		E5D6B8272F466C83002066AA /* vcdr-macTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "vcdr-macTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AA11BB22CC33DD44EE550002 /* Exceptions for "Shared" folder in "vcdr-mac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				CONTEXT.md,
+			);
+			target = E5D6B8192F466C82002066AA /* vcdr-mac */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E5D6B81C2F466C82002066AA /* vcdr-mac */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -38,7 +48,15 @@
 		};
 		E5D6B8602F466C83002066AA /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AA11BB22CC33DD44EE550002 /* Exceptions for "Shared" folder in "vcdr-mac" target */,
+			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		AA11BB22CC33DD44EE550001 /* SharedTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SharedTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -66,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				E5D6B8602F466C83002066AA /* Shared */,
+				AA11BB22CC33DD44EE550001 /* SharedTests */,
 				E5D6B81C2F466C82002066AA /* vcdr-mac */,
 				E5D6B82A2F466C83002066AA /* vcdr-macTests */,
 				E5D6B81B2F466C82002066AA /* Products */,
@@ -124,6 +143,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				E5D6B82A2F466C83002066AA /* vcdr-macTests */,
+				AA11BB22CC33DD44EE550001 /* SharedTests */,
 			);
 			name = "vcdr-macTests";
 			packageProductDependencies = (

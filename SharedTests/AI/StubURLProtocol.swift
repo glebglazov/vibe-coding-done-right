@@ -1,9 +1,9 @@
 import Foundation
 
-/// Intercepts `URLSession.shared` traffic so adapter tests can assert the
+/// Intercepts `URLSession.shared` traffic so cloud adapter tests can assert the
 /// request that was actually sent and feed back a canned response — no live
 /// network. Register/unregister around each test; the static state means the
-/// adapter suites run `.serialized`.
+/// adapter suites run `.serialized`. Consolidates the platform copies.
 final class StubURLProtocol: URLProtocol {
     struct Stub {
         let statusCode: Int

@@ -1,13 +1,17 @@
 import Foundation
 import os
+#if os(macOS)
 @testable import vcdr_mac
+#elseif os(iOS)
+@testable import vcdr_ios
+#endif
 
-/// Scriptable fake `LLMProvider` for driving the `FallbackProvider` suite
-/// without touching the network. The attempt counter is lock-guarded so it
-/// stays correct across the timeout race task group inside FallbackProvider.
-/// Uses `OSAllocatedUnfairLock` because its `withLock` is async-context-safe,
-/// unlike `NSLock.lock()`. Mirrors the iOS test fake.
-final class FakeLLMProvider: LLMProvider {
+/// Scriptable fake `LLMAdapter` for driving the `ProviderCascade` suite without
+/// touching the network. The attempt counter is lock-guarded so it stays correct
+/// across the timeout race task group inside `ProviderCascade`. Uses
+/// `OSAllocatedUnfairLock` because its `withLock` is async-context-safe, unlike
+/// `NSLock.lock()`. Consolidates the platform `FakeLLMProvider` test doubles.
+final class FakeLLMAdapter: LLMAdapter {
     enum Behavior: Sendable {
         /// Return `output` on every call.
         case alwaysSucceed(output: String)
@@ -15,6 +19,8 @@ final class FakeLLMProvider: LLMProvider {
         case succeedAfter(failures: Int, output: String)
         /// Throw on every call.
         case alwaysThrow
+        /// Simulate a cancelled primary call.
+        case cancel
         /// Sleep far past any realistic timeout (never returns within a budget).
         case hang
     }
@@ -49,6 +55,8 @@ final class FakeLLMProvider: LLMProvider {
             return output
         case .alwaysThrow:
             throw FakeError()
+        case .cancel:
+            throw CancellationError()
         case .hang:
             try await Task.sleep(for: .seconds(3600))
             return ""

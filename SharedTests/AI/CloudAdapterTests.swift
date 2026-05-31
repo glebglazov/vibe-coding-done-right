@@ -1,11 +1,15 @@
 import Foundation
 import Testing
+#if os(macOS)
 @testable import vcdr_mac
+#elseif os(iOS)
+@testable import vcdr_ios
+#endif
 
-/// Asserts each cloud adapter's constructed request (endpoint, auth, headers,
-/// body) for a fixed input, plus success and error decode — all against the
+/// Asserts each shared cloud adapter's constructed request (endpoint, auth,
+/// headers, body) for a fixed input, plus success and error decode — all against
 /// `StubURLProtocol` so no live network is touched. Request shapes mirror the
-/// monolith `AIClient` byte-for-byte. Serialized because `StubURLProtocol`
+/// platform adapter prior art byte-for-byte. Serialized because `StubURLProtocol`
 /// holds the captured request / canned response in static state.
 
 private func jsonBody(_ data: Data?) -> [String: Any] {
@@ -17,12 +21,12 @@ private func jsonBody(_ data: Data?) -> [String: Any] {
 
 // MARK: - Anthropic
 
-@Suite("AnthropicProvider request + decode", .serialized)
-final class AnthropicProviderTests {
+@Suite("AnthropicAdapter request + decode", .serialized)
+final class AnthropicAdapterTests {
     init() { URLProtocol.registerClass(StubURLProtocol.self) }
     deinit { URLProtocol.unregisterClass(StubURLProtocol.self) }
 
-    @Test("constructed request matches the monolith for a fixed input")
+    @Test("constructed request matches the prior art for a fixed input")
     func requestShape() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.stub = .init(
@@ -30,7 +34,7 @@ final class AnthropicProviderTests {
             data: Data(#"{"content":[{"text":"ok"}]}"#.utf8)
         )
 
-        _ = try await AnthropicProvider(apiKey: "secret-key")
+        _ = try await AnthropicAdapter(apiKey: "secret-key")
             .process(text: "hello", systemPrompt: "be brief")
 
         let request = try #require(StubURLProtocol.lastRequest)
@@ -57,7 +61,7 @@ final class AnthropicProviderTests {
             data: Data(#"{"content":[{"type":"text","text":"processed text"}]}"#.utf8)
         )
 
-        let result = try await AnthropicProvider(apiKey: "k").process(text: "x", systemPrompt: "y")
+        let result = try await AnthropicAdapter(apiKey: "k").process(text: "x", systemPrompt: "y")
         #expect(result == "processed text")
     }
 
@@ -70,9 +74,9 @@ final class AnthropicProviderTests {
         )
 
         await #expect {
-            _ = try await AnthropicProvider(apiKey: "k").process(text: "x", systemPrompt: "y")
+            _ = try await AnthropicAdapter(apiKey: "k").process(text: "x", systemPrompt: "y")
         } throws: { error in
-            guard case let .apiError(provider, statusCode, message) = error as? AIClientError else { return false }
+            guard case let .apiError(provider, statusCode, message) = error as? CloudAIClientError else { return false }
             return provider == .anthropic && statusCode == 401 && message == "invalid x-api-key"
         }
     }
@@ -80,12 +84,12 @@ final class AnthropicProviderTests {
 
 // MARK: - OpenAI
 
-@Suite("OpenAIProvider request + decode", .serialized)
-final class OpenAIProviderTests {
+@Suite("OpenAIAdapter request + decode", .serialized)
+final class OpenAIAdapterTests {
     init() { URLProtocol.registerClass(StubURLProtocol.self) }
     deinit { URLProtocol.unregisterClass(StubURLProtocol.self) }
 
-    @Test("constructed request matches the monolith for a fixed input")
+    @Test("constructed request matches the prior art for a fixed input")
     func requestShape() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.stub = .init(
@@ -93,7 +97,7 @@ final class OpenAIProviderTests {
             data: Data(#"{"choices":[{"message":{"content":"ok"}}]}"#.utf8)
         )
 
-        _ = try await OpenAIProvider(apiKey: "secret-key")
+        _ = try await OpenAIAdapter(apiKey: "secret-key")
             .process(text: "hello", systemPrompt: "be brief")
 
         let request = try #require(StubURLProtocol.lastRequest)
@@ -121,7 +125,7 @@ final class OpenAIProviderTests {
             data: Data(#"{"choices":[{"message":{"role":"assistant","content":"processed text"}}]}"#.utf8)
         )
 
-        let result = try await OpenAIProvider(apiKey: "k").process(text: "x", systemPrompt: "y")
+        let result = try await OpenAIAdapter(apiKey: "k").process(text: "x", systemPrompt: "y")
         #expect(result == "processed text")
     }
 
@@ -134,9 +138,9 @@ final class OpenAIProviderTests {
         )
 
         await #expect {
-            _ = try await OpenAIProvider(apiKey: "k").process(text: "x", systemPrompt: "y")
+            _ = try await OpenAIAdapter(apiKey: "k").process(text: "x", systemPrompt: "y")
         } throws: { error in
-            guard case let .apiError(provider, statusCode, message) = error as? AIClientError else { return false }
+            guard case let .apiError(provider, statusCode, message) = error as? CloudAIClientError else { return false }
             return provider == .openai && statusCode == 429 && message == "rate limit exceeded"
         }
     }
@@ -144,12 +148,12 @@ final class OpenAIProviderTests {
 
 // MARK: - Gemini
 
-@Suite("GeminiProvider request + decode", .serialized)
-final class GeminiProviderTests {
+@Suite("GeminiAdapter request + decode", .serialized)
+final class GeminiAdapterTests {
     init() { URLProtocol.registerClass(StubURLProtocol.self) }
     deinit { URLProtocol.unregisterClass(StubURLProtocol.self) }
 
-    @Test("constructed request matches the monolith for a fixed input")
+    @Test("constructed request matches the prior art for a fixed input")
     func requestShape() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.stub = .init(
@@ -157,7 +161,7 @@ final class GeminiProviderTests {
             data: Data(#"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#.utf8)
         )
 
-        _ = try await GeminiProvider(apiKey: "secret-key")
+        _ = try await GeminiAdapter(apiKey: "secret-key")
             .process(text: "hello", systemPrompt: "be brief")
 
         let request = try #require(StubURLProtocol.lastRequest)
@@ -190,7 +194,7 @@ final class GeminiProviderTests {
             data: Data(#"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#.utf8)
         )
 
-        _ = try await GeminiProvider(apiKey: "k").process(text: "hello", systemPrompt: "")
+        _ = try await GeminiAdapter(apiKey: "k").process(text: "hello", systemPrompt: "")
 
         let body = jsonBody(StubURLProtocol.lastBody)
         #expect(body["systemInstruction"] == nil)
@@ -204,7 +208,7 @@ final class GeminiProviderTests {
             data: Data(#"{"candidates":[{"content":{"role":"model","parts":[{"text":"processed text"}]}}]}"#.utf8)
         )
 
-        let result = try await GeminiProvider(apiKey: "k").process(text: "x", systemPrompt: "y")
+        let result = try await GeminiAdapter(apiKey: "k").process(text: "x", systemPrompt: "y")
         #expect(result == "processed text")
     }
 
@@ -217,9 +221,9 @@ final class GeminiProviderTests {
         )
 
         await #expect {
-            _ = try await GeminiProvider(apiKey: "k").process(text: "x", systemPrompt: "y")
+            _ = try await GeminiAdapter(apiKey: "k").process(text: "x", systemPrompt: "y")
         } throws: { error in
-            guard case let .apiError(provider, statusCode, message) = error as? AIClientError else { return false }
+            guard case let .apiError(provider, statusCode, message) = error as? CloudAIClientError else { return false }
             return provider == .gemini && statusCode == 400 && message == "API key not valid"
         }
     }
