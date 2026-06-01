@@ -69,17 +69,51 @@ struct HotMicSessionTests {
         #expect(!env.engine.isHot)
     }
 
-    @Test(".never prepares the engine but never warms it (regression: orange mic at launch)")
-    func neverPolicyDoesNotWarm() async {
+    @Test("automatic prewarm skips audio setup when permission is unresolved")
+    func automaticPrewarmDoesNotRequestPermission() async {
         let env = makeEnv(policy: .never)
 
-        await env.session.prewarm()
+        await env.session.prewarmIfPermitted()
 
-        // Permission + session + engine are prepared (the launch-latency win)…
-        #expect(env.engine.permissionRequests == 1)
+        #expect(env.engine.permissionRequests == 0)
+        #expect(env.engine.prepareSessionCalls == 0)
+        #expect(env.engine.prepareEngineCalls == 0)
+        #expect(env.engine.startHotSessionCalls == 0)
+        #expect(!env.engine.isHot)
+    }
+
+    @Test("automatic warm-session renewal skips unresolved microphone permission")
+    func automaticRenewalDoesNotRequestPermission() async {
+        let env = makeEnv(policy: .fiveMinutes)
+
+        await env.session.startIfPermitted()
+
+        #expect(env.engine.permissionRequests == 0)
+        #expect(env.engine.startHotSessionCalls == 0)
+        #expect(!env.engine.isHot)
+    }
+
+    @Test("foreground renewal does not start a cold engine")
+    func renewalDoesNotStartColdEngine() async {
+        let env = makeEnv(policy: .fiveMinutes)
+        env.engine.hasMicrophonePermission = true
+
+        await env.session.renewIfAlive()
+
+        #expect(env.engine.startHotSessionCalls == 0)
+        #expect(!env.engine.isHot)
+    }
+
+    @Test(".never prepares the engine without warming when permission is already granted")
+    func neverPolicyDoesNotWarm() async {
+        let env = makeEnv(policy: .never)
+        env.engine.hasMicrophonePermission = true
+
+        await env.session.prewarmIfPermitted()
+
+        #expect(env.engine.permissionRequests == 0)
         #expect(env.engine.prepareSessionCalls == 1)
         #expect(env.engine.prepareEngineCalls == 1)
-        // …but the engine is NOT started, so no mic indicator appears.
         #expect(env.engine.startHotSessionCalls == 0)
         #expect(!env.engine.isHot)
 
@@ -91,15 +125,17 @@ struct HotMicSessionTests {
         #expect(!env.presence.isShown)
     }
 
-    @Test("finite policy warms the engine during prewarm, deferring heartbeat/presence")
-    func finitePrewarmWarms() async {
+    @Test("finite policy preparation defers warming to start")
+    func finitePrewarmDefersWarming() async {
         let env = makeEnv(policy: .fiveMinutes)
+        env.engine.hasMicrophonePermission = true
 
-        await env.session.prewarm()
+        await env.session.prewarmIfPermitted()
 
-        #expect(env.engine.startHotSessionCalls == 1)
-        #expect(env.engine.isHot)
-        // prewarm warms the engine only; heartbeat + presence are start()'s job.
+        #expect(env.engine.prepareSessionCalls == 1)
+        #expect(env.engine.prepareEngineCalls == 1)
+        #expect(env.engine.startHotSessionCalls == 0)
+        #expect(!env.engine.isHot)
         #expect(!env.channel.isAppLikelyAlive())
         #expect(env.presence.startCalls == 0)
     }
@@ -132,7 +168,7 @@ struct HotMicSessionTests {
         #expect(env.engine.isHot)
 
         env.holder.value = .never
-        env.session.policyChanged()
+        await env.session.policyChanged()
         await waitUntil { env.engine.endHotSessionCalls == 1 }
 
         #expect(!env.engine.isHot)
@@ -141,6 +177,19 @@ struct HotMicSessionTests {
         // Drain the now-cancelled finite sleeper so no continuation leaks.
         env.clock.advance()
         await settle()
+    }
+
+    @Test("opting into a warm policy starts the session")
+    func policyChangeFromNeverStartsSession() async {
+        let env = makeEnv(policy: .never)
+
+        env.holder.value = .fiveMinutes
+        await env.session.policyChanged()
+        await settle()
+
+        #expect(env.engine.startHotSessionCalls == 1)
+        #expect(env.engine.isHot)
+        #expect(env.channel.isAppLikelyAlive())
     }
 
     @Test("start is idempotent — presence is shown once across repeated calls")
@@ -314,6 +363,7 @@ final class PolicyHolder {
 final class FakeWarmEngine: WarmEngine {
     var isHot = false
     var isRecording = false
+    var hasMicrophonePermission = false
 
     var permissionRequests = 0
     var prepareSessionCalls = 0
@@ -325,6 +375,7 @@ final class FakeWarmEngine: WarmEngine {
 
     func requestMicrophonePermission() async -> Bool {
         permissionRequests += 1
+        hasMicrophonePermission = true
         return true
     }
 

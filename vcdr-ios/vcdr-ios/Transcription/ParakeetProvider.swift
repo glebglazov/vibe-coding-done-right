@@ -57,6 +57,10 @@ actor ParakeetProvider: TranscriptionProvider {
     }
 
     func initialize() async throws {
+        try await initialize(priority: .userInitiated)
+    }
+
+    func initialize(priority: TaskPriority) async throws {
         Logger.transcription.info("[LaunchProbe] ParakeetProvider.initialize entry main=\(Thread.isMainThread)")
         guard !isReady else { return }
 
@@ -102,15 +106,15 @@ actor ParakeetProvider: TranscriptionProvider {
             // slower than serial. Preprocessor is .cpuOnly and never competes
             // with the three ANE-bound loads.
             //
-            // .userInitiated (not .utility) because the user is actively staring
-            // at the "Compiling..." spinner — .utility gets preempted under
-            // thermal/CPU pressure and stretches the visible wait.
+            // Automatic launch uses utility priority to preserve App Shell
+            // responsiveness. A Recording Run uses user-initiated priority.
             initPhase = .compiling
             Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=compiling set main=\(Thread.isMainThread)")
             let compileStart = ContinuousClock.now
-            let (models, loadTimings) = try await Task.detached(priority: .userInitiated) {
+            let qos = DispatchQoS.QoSClass(priority)
+            let (models, loadTimings) = try await Task.detached(priority: priority) {
                 Logger.transcription.info("[LaunchProbe] ParakeetProvider compile detached body start main=\(Thread.isMainThread)")
-                let result = try await Self.loadModelsInParallel(from: modelDir)
+                let result = try await Self.loadModelsInParallel(from: modelDir, qos: qos)
                 Logger.transcription.info("[LaunchProbe] ParakeetProvider compile detached body end main=\(Thread.isMainThread)")
                 return result
             }.value
@@ -199,15 +203,9 @@ actor ParakeetProvider: TranscriptionProvider {
     /// failure mode is partial download, which the user can resolve by
     /// reinstalling the app or clearing model storage.
     private static func loadModelsInParallel(
-        from repoDirectory: URL
+        from repoDirectory: URL,
+        qos: DispatchQoS.QoSClass
     ) async throws -> (models: AsrModels, timings: ModelLoadTimings) {
-        let preprocessorConfig = MLModelConfiguration()
-        preprocessorConfig.allowLowPrecisionAccumulationOnGPU = true
-        // Preprocessor ops map to CPU-only across all platforms (per FluidAudio's
-        // own ASR/AsrModels.swift comment), so pinning here avoids needless ANE
-        // dispatch and lets this load run alongside the three ANE-bound ones.
-        preprocessorConfig.computeUnits = .cpuOnly
-
         let aneConfig = MLModelConfiguration()
         aneConfig.allowLowPrecisionAccumulationOnGPU = true
         aneConfig.computeUnits = .cpuAndNeuralEngine
@@ -218,10 +216,13 @@ actor ParakeetProvider: TranscriptionProvider {
         let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointFile)
         let vocabularyURL = repoDirectory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
 
-        async let preprocessor = timedLoadModel(name: "Preprocessor", url: preprocessorURL, configuration: preprocessorConfig)
-        async let encoder = timedLoadModel(name: "Encoder", url: encoderURL, configuration: aneConfig)
-        async let decoder = timedLoadModel(name: "Decoder", url: decoderURL, configuration: aneConfig)
-        async let joint = timedLoadModel(name: "JointDecision", url: jointURL, configuration: aneConfig)
+        // Preprocessor ops map to CPU-only across all platforms (per FluidAudio's
+        // own ASR/AsrModels.swift comment), so pinning it avoids needless ANE
+        // dispatch and lets it run alongside the three ANE-bound loads.
+        async let preprocessor = timedLoadModel(name: "Preprocessor", url: preprocessorURL, computeUnits: .cpuOnly, qos: qos)
+        async let encoder = timedLoadModel(name: "Encoder", url: encoderURL, computeUnits: .cpuAndNeuralEngine, qos: qos)
+        async let decoder = timedLoadModel(name: "Decoder", url: decoderURL, computeUnits: .cpuAndNeuralEngine, qos: qos)
+        async let joint = timedLoadModel(name: "JointDecision", url: jointURL, computeUnits: .cpuAndNeuralEngine, qos: qos)
         async let vocabulary = loadVocabulary(from: vocabularyURL)
 
         // Awaiting sequentially here does not serialize the loads — each
@@ -253,10 +254,22 @@ actor ParakeetProvider: TranscriptionProvider {
     private static func timedLoadModel(
         name: String,
         url: URL,
-        configuration: MLModelConfiguration
+        computeUnits: MLComputeUnits,
+        qos: DispatchQoS.QoSClass
     ) async throws -> (model: MLModel, milliseconds: Double) {
         let start = ContinuousClock.now
-        let model = try MLModel(contentsOf: url, configuration: configuration)
+        // `MLModel(contentsOf:)` blocks its thread for the full ANE/E5RT
+        // specialization (~15s cold for the encoder). Run it on a GCD queue so
+        // it never holds a cooperative-pool thread and starve the main actor.
+        // The config is rebuilt inside the Sendable closure — MLModelConfiguration
+        // is a non-Sendable class, but MLComputeUnits is a value type that crosses
+        // the boundary cleanly.
+        let model = try await withThrowingBlockingTask(qos: qos) {
+            let configuration = MLModelConfiguration()
+            configuration.allowLowPrecisionAccumulationOnGPU = true
+            configuration.computeUnits = computeUnits
+            return try MLModel(contentsOf: url, configuration: configuration)
+        }
         let duration = ContinuousClock.now - start
         let ms = Double(duration.components.seconds) * 1000
             + Double(duration.components.attoseconds) / 1e15

@@ -30,6 +30,13 @@ final class AudioRecorder {
     private var prepareEngineTask: Task<AVAudioEngine?, Never>?
     @ObservationIgnored
     private var startHotSessionTask: Task<Bool, Never>?
+    /// Route notifications can arrive in bursts while an engine restart is
+    /// suspended in audio setup. Keep one worker alive and collapse any burst
+    /// into at most one follow-up restart against the latest route.
+    @ObservationIgnored
+    private var routeRestartTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var routeRestartPending = false
     /// nonisolated(unsafe) because the audio tap callback reads this from the audio thread.
     /// Safe: only set before starting the engine, cleared after stopping it.
     @ObservationIgnored
@@ -51,6 +58,10 @@ final class AudioRecorder {
     /// sharply on Bluetooth HFP audio (16 kHz narrowband) and varies a lot
     /// across wired / USB accessories.
     static let useBuiltInMicOnlyKey = "useBuiltInMicOnly"
+
+    var hasMicrophonePermission: Bool {
+        AVAudioApplication.shared.recordPermission == .granted
+    }
 
     private nonisolated static var useBuiltInMicOnly: Bool {
         let defaults = UserDefaults.standard
@@ -213,7 +224,9 @@ final class AudioRecorder {
         // The Task itself flips audioSessionConfigured before completing so
         // a joining caller observes the property already set on resume.
         let task = Task<Bool, Never> { [weak self] in
-            let success = await Task.detached(priority: .userInitiated) { () -> Bool in
+            // `setActive` blocks on mediaserverd — keep it off the cooperative
+            // pool so it can't stall the main actor during launch.
+            let success = await withBlockingTask(qos: .userInitiated) { () -> Bool in
                 Logger.app.info("[LaunchProbe] prepareAudioSession detached body start main=\(Thread.isMainThread)")
                 do {
                     try Self.activateMixingSession()
@@ -223,7 +236,7 @@ final class AudioRecorder {
                     Logger.recording.warning("Failed to pre-configure audio session: \(error)")
                     return false
                 }
-            }.value
+            }
             if success, let self {
                 self.audioSessionConfigured = true
                 self.setupInterruptionObservers()
@@ -258,7 +271,10 @@ final class AudioRecorder {
         }
 
         let task = Task<AVAudioEngine?, Never> { [weak self] in
-            let engine = await Task.detached(priority: .userInitiated) { [weak self] () -> AVAudioEngine in
+            // First `inputNode` access lazily inits the input audio unit, a
+            // blocking HAL call that can take many seconds cold. Off the
+            // cooperative pool so it can't freeze the shell (gesture-gate timeout).
+            let engine = await withBlockingTask(qos: .userInitiated) { [weak self] () -> AVAudioEngine in
                 Logger.app.info("[LaunchProbe] prepareEngine detached body start main=\(Thread.isMainThread)")
                 let engine = AVAudioEngine()
                 Logger.app.info("[LaunchProbe] prepareEngine after AVAudioEngine() main=\(Thread.isMainThread)")
@@ -288,7 +304,7 @@ final class AudioRecorder {
                 Logger.app.info("[LaunchProbe] prepareEngine after engine.prepare main=\(Thread.isMainThread)")
                 Logger.recording.info("Audio engine prepared (format: \(format))")
                 return engine
-            }.value
+            }
             self?.audioEngine = engine
             return engine
         }
@@ -345,9 +361,9 @@ final class AudioRecorder {
             // `.mixWithOthers` can't have been silently dropped) and re-activate
             // so the engine starts on a clean, mixing, active session.
             do {
-                try await Task.detached(priority: .userInitiated) {
+                try await withThrowingBlockingTask(qos: .userInitiated) {
                     try Self.activateMixingSession()
-                }.value
+                }
             } catch {
                 Logger.recording.warning("Failed to re-activate audio session: \(error)")
                 audioSessionConfigured = false
@@ -449,7 +465,9 @@ final class AudioRecorder {
     /// Runs `engine.start()` on a `.userInitiated` background task so MainActor
     /// stays free. AVAudioEngine.start() is thread-safe per Apple's audio framework docs.
     private nonisolated static func startEngineOffMain(_ engine: AVAudioEngine) async -> Bool {
-        await Task.detached(priority: .userInitiated) {
+        // `engine.start()` blocks on the audio HAL — keep it off the cooperative
+        // pool so it can't stall the main actor under concurrent CoreML load.
+        await withBlockingTask(qos: .userInitiated) {
             do {
                 try engine.start()
                 return true
@@ -457,7 +475,7 @@ final class AudioRecorder {
                 Logger.recording.error("engine.start failed: \(error)")
                 return false
             }
-        }.value
+        }
     }
 
     /// Tears down the current engine and starts a fresh one on the new audio route.
@@ -479,6 +497,25 @@ final class AudioRecorder {
             deactivateSession()
             Logger.recording.error("Failed to restart audio engine after route change")
         }
+    }
+
+    private func requestRouteRestart() {
+        if routeRestartTask != nil {
+            routeRestartPending = true
+            return
+        }
+
+        routeRestartTask = Task { [weak self] in
+            await self?.runRouteRestartWorker()
+        }
+    }
+
+    private func runRouteRestartWorker() async {
+        repeat {
+            routeRestartPending = false
+            await restartEngine()
+        } while routeRestartPending
+        routeRestartTask = nil
     }
 
     /// Stops consuming audio buffers but leaves the engine running so the
@@ -642,9 +679,13 @@ final class AudioRecorder {
         guard isHot else { return }
 
         switch reason {
-        case .newDeviceAvailable, .oldDeviceUnavailable, .override, .routeConfigurationChange:
+        case .newDeviceAvailable, .oldDeviceUnavailable, .routeConfigurationChange:
             // Device/route change — restart engine to re-apply input and pick up new format.
-            Task { await restartEngine() }
+            requestRouteRestart()
+        case .override:
+            // Produced by our own speaker override in activateMixingSession().
+            // Restarting for it creates a self-sustaining route-change loop.
+            Logger.recording.debug("Ignoring speaker-output override route notification")
         default:
             break
         }

@@ -42,12 +42,10 @@ struct VCDRiOSApp: App {
                     //      the keyboard extension gates its UI on the cached flag.
                     async let historyReady: Void = coordinator.bootstrapHistory()
                     async let afmReady: Bool = AFMAvailabilityCache.shared.refresh()
-                    // Kick off model init alongside history bootstrap rather
-                    // than after it. Neither depends on the other, and history
-                    // bootstrap can block for seconds on first launch waiting
-                    // for iCloud container provisioning — time the model
-                    // load can now overlap with instead of serialize behind.
-                    async let modelReady: Void = coordinator.initializeModel()
+                    // Let the shell render before automatic model
+                    // specialization begins. History bootstrap still overlaps
+                    // model loading after that short grace period.
+                    async let modelReady: Void = coordinator.initializeModelAutomatically()
                     Logger.app.info("[LaunchProbe] async-lets dispatched")
                     LegacySettingsMigrator.migrateIfNeeded()
                     Logger.app.info("[LaunchProbe] migrateIfNeeded done")
@@ -82,12 +80,10 @@ struct VCDRiOSApp: App {
                         // Re-apply idle timer state — iOS can reset it on scene transitions
                         let shouldDisable = coordinator.state == .recording
                         UIApplication.shared.isIdleTimerDisabled = shouldDisable
-                        // Renew the hot session (no-op if already hot) and
-                        // restart the idle timer so each return to the app
-                        // counts as fresh activity. `startHotSessionIfNeeded`
-                        // self-heals stale `isHot` state internally, so a mic
-                        // that died during background time rebuilds on foreground.
-                        Task { await coordinator.startHotSessionIfNeeded() }
+                        // Renew an existing Hot Mic Session without starting a
+                        // cold audio engine during shell rendering. Automatic
+                        // startup, when configured, happens after model-ready.
+                        Task { await coordinator.renewHotSessionIfAlive() }
                     case .background:
                         Logger.app.info("Scene entering background — isHot=\(coordinator.isHotSessionActive), isRecording=\(coordinator.isRecording)")
                         // Intentionally NOT tearing down the hot session:

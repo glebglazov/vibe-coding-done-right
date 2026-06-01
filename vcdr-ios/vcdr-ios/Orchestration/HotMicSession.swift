@@ -11,6 +11,7 @@ import OSLog
 protocol WarmEngine: AnyObject {
     var isHot: Bool { get }
     var isRecording: Bool { get }
+    var hasMicrophonePermission: Bool { get }
     func requestMicrophonePermission() async -> Bool
     func prepareAudioSession() async
     func prepareEngine() async
@@ -121,22 +122,16 @@ final class HotMicSession {
 
     // MARK: - Interface
 
-    /// Gets the engine ready per policy, meant to run concurrently with model
-    /// init. Resolves mic permission and pre-allocates the engine so the first
-    /// record tap skips the audio-HAL cold-start. Under `.never` it stops there:
-    /// the engine is *prepared* but NOT *started*, so no mic indicator appears
-    /// until an actual recording — honouring `.never`'s contract. Any other
-    /// policy warms the engine. Heartbeat and presence are deliberately left to
-    /// `start()`, which the caller defers until after model init.
-    func prewarm() async {
-        _ = await engine.requestMicrophonePermission()
-        await engine.prepareAudioSession()
-        await engine.prepareEngine()
-        guard policy() != .never else {
-            Logger.app.info("HotMicSession.prewarm: timeout is .never — prepared engine, not warming")
+    /// Opportunistically prepares audio after Transcription Readiness without
+    /// prompting. Explicit Record intent and opting into a warm timeout policy
+    /// are the only paths allowed to request microphone permission.
+    func prewarmIfPermitted() async {
+        guard engine.hasMicrophonePermission else {
+            Logger.app.info("HotMicSession.prewarmIfPermitted: skipping without microphone permission")
             return
         }
-        _ = await engine.startHotSession()
+        await engine.prepareAudioSession()
+        await engine.prepareEngine()
     }
 
     /// Brings the full session up per policy: warms the engine, lights the
@@ -155,6 +150,25 @@ final class HotMicSession {
         }
         startHeartbeat()
         armIdleTimer(timeout)
+    }
+
+    /// Renews an already-authorized warm session during launch or foreground
+    /// activation. Automatic lifecycle work must never trigger the system
+    /// microphone permission prompt.
+    func startIfPermitted() async {
+        guard engine.hasMicrophonePermission else {
+            Logger.app.info("HotMicSession.startIfPermitted: skipping without microphone permission")
+            return
+        }
+        await start()
+    }
+
+    /// Re-arms lifecycle state for an engine that is already warm. Scene
+    /// activation uses this narrow path so cold launch does not start audio
+    /// work before Transcription Readiness.
+    func renewIfAlive() async {
+        guard engine.isHot else { return }
+        await start()
     }
 
     /// A recording has begun. Cancel the inactivity teardown so long recordings
@@ -177,9 +191,14 @@ final class HotMicSession {
 
     /// The timeout setting changed — re-evaluate the live timer immediately
     /// instead of waiting for the next stop.
-    func policyChanged() {
+    func policyChanged() async {
         idleDeadline = nil  // recalculate from now with the new duration
-        armIdleTimer(policy())
+        let timeout = policy()
+        if timeout == .never {
+            armIdleTimer(timeout)
+        } else {
+            await start()
+        }
     }
 
     // MARK: - Idle-timeout state machine
@@ -305,7 +324,7 @@ final class HotMicSession {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.policyChanged()
+                await self?.policyChanged()
             }
         }
     }

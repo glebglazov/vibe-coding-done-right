@@ -2,8 +2,9 @@ import OSLog
 
 /// Logging facade. Every call fans out to two sinks:
 ///   1. Apple's unified log (`os.Logger`) — visible in Console.app / Xcode.
-///   2. `LogBuffer` — a persistent, size-capped file in the App Group container,
-///      read back by the in-app debug log viewer.
+///   2. `LogBuffer` — a best-effort persistent, size-capped file in the App
+///      Group container, read back by the in-app debug log viewer. Its storage
+///      setup and writes stay off the calling thread.
 ///
 /// Call sites are unchanged from raw `os.Logger`: `Logger.recording.info("…")`.
 /// The named channels live on `extension Logger` purely as a namespace, so the

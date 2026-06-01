@@ -18,8 +18,12 @@ final class LogBuffer: @unchecked Sendable {
     static let shared = LogBuffer()
 
     private let queue = DispatchQueue(label: "com.vcdr.logbuffer", qos: .utility)
-    private let fileURL: URL
-    private let lockURL: URL
+    private var storage: Storage?
+
+    private struct Storage {
+        let fileURL: URL
+        let lockURL: URL
+    }
 
     private static let maxBytes = 20 * 1024 * 1024 // 20 MB global cap
     private static let trimBytes = maxBytes / 10   // Drop oldest 10% on overflow
@@ -27,6 +31,11 @@ final class LogBuffer: @unchecked Sendable {
     private static let appGroupID = "group.glebglazov.vcdr-ios"
     private static let logFilename = "vcdr.log"
     private static let lockFilename = "vcdr.log.lock"
+    /// App Group container resolution can contend with launch-time system
+    /// services even when dispatched off-main. Persistent capture is
+    /// best-effort, so leave the first shell frame completely free and drop
+    /// early file lines until storage is ready.
+    private static let bootstrapDelay: DispatchTimeInterval = .seconds(2)
 
     /// Fixed-width, lexicographically sortable timestamp — lets the viewer sort
     /// and time-window-filter merged lines with plain string comparison.
@@ -38,9 +47,9 @@ final class LogBuffer: @unchecked Sendable {
     }()
 
     private init() {
-        fileURL = Self.fileURL()
-        lockURL = Self.lockURL()
-        queue.sync { Self.ensureStorage(fileURL: fileURL, lockURL: lockURL) }
+        queue.asyncAfter(deadline: .now() + Self.bootstrapDelay) { [self] in
+            _ = prepareStorageIfNeeded()
+        }
     }
 
     // MARK: - Write
@@ -48,19 +57,20 @@ final class LogBuffer: @unchecked Sendable {
     func append(category: String, level: String, message: String) {
         let date = Date()
         queue.async { [self] in
+            guard let storage else { return }
             let line = "\(Self.timestampFormatter.string(from: date)) [\(category)] [\(level)] \(message)\n"
-            withExclusiveFileLock {
-                writeLocked(Data(line.utf8))
+            withExclusiveFileLock(storage: storage) {
+                writeLocked(Data(line.utf8), fileURL: storage.fileURL)
             }
         }
     }
 
-    private func writeLocked(_ data: Data) {
+    private func writeLocked(_ data: Data, fileURL: URL) {
         guard let handle = try? FileHandle(forWritingTo: fileURL) else { return }
         do {
             try handle.seekToEnd()
             try handle.write(contentsOf: data)
-            if Self.fileSize(fileURL) > Self.maxBytes { trimLocked() }
+            if Self.fileSize(fileURL) > Self.maxBytes { trimLocked(fileURL: fileURL) }
         } catch {
             // Logging must never crash or throw into callers; drop on failure.
         }
@@ -68,7 +78,7 @@ final class LogBuffer: @unchecked Sendable {
     }
 
     /// Drops the oldest `trimBytes` worth of whole lines from the current file.
-    private func trimLocked() {
+    private func trimLocked(fileURL: URL) {
         guard let data = try? Data(contentsOf: fileURL), data.count > Self.trimBytes else { return }
         let newline = UInt8(0x0A)
         var cut = Self.trimBytes
@@ -80,9 +90,9 @@ final class LogBuffer: @unchecked Sendable {
 
     // MARK: - File lock
 
-    private func withExclusiveFileLock(_ body: () -> Void) {
-        Self.ensureStorage(fileURL: fileURL, lockURL: lockURL)
-        let fd = lockURL.withUnsafeFileSystemRepresentation { path -> CInt in
+    private func withExclusiveFileLock(storage: Storage, _ body: () -> Void) {
+        Self.ensureStorage(fileURL: storage.fileURL, lockURL: storage.lockURL)
+        let fd = storage.lockURL.withUnsafeFileSystemRepresentation { path -> CInt in
             guard let path else { return -1 }
             return open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
         }
@@ -93,6 +103,14 @@ final class LogBuffer: @unchecked Sendable {
         defer { flock(fd, LOCK_UN) }
 
         body()
+    }
+
+    private func prepareStorageIfNeeded() -> Storage? {
+        if let storage { return storage }
+        let storage = Storage(fileURL: Self.fileURL(), lockURL: Self.lockURL())
+        Self.ensureStorage(fileURL: storage.fileURL, lockURL: storage.lockURL)
+        self.storage = storage
+        return storage
     }
 
     private static func ensureStorage(fileURL: URL, lockURL: URL) {

@@ -130,6 +130,9 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Constants
     private static let initPollInterval: Duration = .milliseconds(200)
+    /// Leaves the cooperative executor free for the App Shell's first frame
+    /// and immediate navigation before automatic CoreML specialization starts.
+    private static let shellRenderGracePeriod: Duration = .milliseconds(500)
     /// Seconds the model can spend in a single init phase before the
     /// progress label starts appending elapsed time. Fast inits stay quiet;
     /// slow ones get a visible tick so the wait reads as bounded.
@@ -177,14 +180,11 @@ final class RecordingFlowCoordinator {
     // MARK: - Hot Session Lifecycle
 
     /// Brings the hot mic session up so the next recording begins instantly.
-    /// Idempotent — safe to call on every scene-active. The `.never` /
+    /// Idempotent — safe to call after model-ready. The `.never` /
     /// `.always` / finite policy, the heartbeat, the Live Activity presence,
     /// and the idle-timeout teardown all live inside `HotMicSession`.
     ///
-    /// Skipped while the model is still initializing or after an init failure:
-    /// during `.initializing` the bootstrap (`hotMicSession.prewarm()`) is the
-    /// authoritative path that warms the engine, and heartbeat/presence only
-    /// make sense after init completes.
+    /// Skipped while the model is still initializing or after an init failure.
     func startHotSessionIfNeeded() async {
         switch state {
         case .initializing, .error:
@@ -193,7 +193,13 @@ final class RecordingFlowCoordinator {
         default:
             break
         }
-        await hotMicSession.start()
+        await hotMicSession.startIfPermitted()
+    }
+
+    /// Foreground lifecycle hook. A live Hot Mic Session gets its heartbeat and
+    /// idle deadline renewed, but cold launch does not start audio preparation.
+    func renewHotSessionIfAlive() async {
+        await hotMicSession.renewIfAlive()
     }
 
     /// Resolves the iCloud container and reconciles local ↔︎ ubiquity storage
@@ -229,7 +235,18 @@ final class RecordingFlowCoordinator {
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
 
-    func initializeModel() async {
+    /// Automatic launch path: render the App Shell first, then initialize below
+    /// interactive UI priority. A Recording Run bypasses this delay and asks the
+    /// provider to initialize promptly through its own setup task.
+    func initializeModelAutomatically() async {
+        try? await Task.sleep(for: Self.shellRenderGracePeriod)
+        guard !Task.isCancelled else { return }
+        await Task(priority: .utility) { [weak self] in
+            await self?.initializeModel(priority: .utility)
+        }.value
+    }
+
+    func initializeModel(priority: TaskPriority = .userInitiated) async {
         Logger.app.info("[LaunchProbe] initializeModel entry main=\(Thread.isMainThread) state=\(String(describing: self.state))")
         // If recording already started, model init is handled by the active session setup task.
         guard state != .recording else { return }
@@ -274,21 +291,10 @@ final class RecordingFlowCoordinator {
         }
 
         do {
-            // Permission + session + engine pre-warmed concurrently with model
-            // init. On fresh-install first launch the iOS audio HAL cold-start
-            // (`inputNode.outputFormat` queries) can block 30-40s; serializing
-            // prewarm before compile would make that a visible prefix instead
-            // of overlapping with the ~15s encoder load. Concurrent execution
-            // makes the total wall-clock = max(audioPrep, modelInit), and the
-            // AudioRecorder dedups guarantee a record tap landing mid-prewarm
-            // joins the in-flight task rather than spawning a duplicate body.
-            async let audioPrep: Void = hotMicSession.prewarm()
             Logger.app.info("[LaunchProbe] before transcriptionProvider.initialize await main=\(Thread.isMainThread)")
-            try await transcriptionProvider.initialize()
+            try await transcriptionProvider.initialize(priority: priority)
             Logger.app.info("[LaunchProbe] after transcriptionProvider.initialize main=\(Thread.isMainThread)")
             Logger.app.info("[InitTiming] transcriptionProvider.initialize() done at +\(ContinuousClock.now - initStart)")
-            await audioPrep
-            Logger.app.info("[InitTiming] audio prewarm done at +\(ContinuousClock.now - initStart)")
 
             pollTask.cancel()
             // Don't overwrite state if recording started while we were initializing
@@ -298,15 +304,13 @@ final class RecordingFlowCoordinator {
             initProgress = "Ready"
             Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
 
-            // Light the hot mic session per the user's timeout policy. The
-            // default is `.never` — no warm engine until an actual recording —
-            // so this is a no-op until the user opts into a finite or `.always`
-            // window. When they do, the engine stays running (foreground and
-            // background, under UIBackgroundModes=audio) so every record tap,
-            // including keyboard-driven taps over the Darwin command channel,
-            // has zero audio startup cost. HotMicSession owns the timeout-policy
-            // observer, so a Settings change re-evaluates the timer on its own.
-            await startHotSessionIfNeeded()
+            // Audio preparation is opportunistic follow-up work. It must not
+            // delay Transcription Readiness or prompt on automatic launch.
+            Task { [weak self] in
+                guard let self else { return }
+                await self.hotMicSession.prewarmIfPermitted()
+                await self.startHotSessionIfNeeded()
+            }
         } catch {
             pollTask.cancel()
             if state == .initializing {
