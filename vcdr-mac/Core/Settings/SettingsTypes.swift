@@ -7,7 +7,7 @@ struct HotkeySettings: Codable, Equatable {
     var cancelRecordingHotkey: HotkeyBinding
 
     static let `default` = HotkeySettings(
-        modeSwitcherHotkey: .unassigned,
+        modeSwitcherHotkey: .defaultModeSwitcher,
         toggleRecordingHotkey: .defaultToggleRecording,
         copyLatestCaptureHotkey: .unassigned,
         cancelRecordingHotkey: .defaultCancelRecording

@@ -25,13 +25,22 @@ struct HotkeyBinding: Codable, Equatable {
 
     static let unassigned = HotkeyBinding(keyCode: 0, modifiers: 0)
 
-    /// Default cancel recording: Escape, no modifiers
-    static let defaultCancelRecording = HotkeyBinding(keyCode: KeyCodeMap.escapeKeyCode, modifiers: 0)
+    /// Default cancel recording: Shift+Escape
+    static let defaultCancelRecording = HotkeyBinding(
+        keyCode: KeyCodeMap.escapeKeyCode,
+        modifiers: UInt64(CGEventFlags.maskShift.rawValue)
+    )
 
-    /// Default toggle recording: Cmd+Option+Space
+    /// Default toggle recording: Option+/
     static let defaultToggleRecording = HotkeyBinding(
-        keyCode: KeyCodeMap.spaceKeyCode,
-        modifiers: UInt64(CGEventFlags.maskCommand.rawValue | CGEventFlags.maskAlternate.rawValue)
+        keyCode: KeyCodeMap.slashKeyCode,
+        modifiers: UInt64(CGEventFlags.maskAlternate.rawValue)
+    )
+
+    /// Default mode switcher: Shift+Option+/
+    static let defaultModeSwitcher = HotkeyBinding(
+        keyCode: KeyCodeMap.slashKeyCode,
+        modifiers: UInt64(CGEventFlags.maskShift.rawValue | CGEventFlags.maskAlternate.rawValue)
     )
 
     var isAssigned: Bool {
