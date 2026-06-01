@@ -3,15 +3,15 @@ import OSLog
 extension Logger {
     static let subsystem = Bundle.main.bundleIdentifier ?? "glebglazov.vcdr-mac"
 
-    static let app = Logger(subsystem: subsystem, category: "app")
-    static let recording = Logger(subsystem: subsystem, category: "recording")
-    static let transcription = Logger(subsystem: subsystem, category: "transcription")
-    static let hotkeys = Logger(subsystem: subsystem, category: "hotkeys")
-    static let actions = Logger(subsystem: subsystem, category: "actions")
-    static let settings = Logger(subsystem: subsystem, category: "settings")
-    static let audio = Logger(subsystem: subsystem, category: "audio")
-    static let ui = Logger(subsystem: subsystem, category: "ui")
-    static let consistency = Logger(subsystem: subsystem, category: "consistency")
-    static let styles = Logger(subsystem: subsystem, category: "styles")
-    static let textTransform = Logger(subsystem: subsystem, category: "textTransform")
+    static let app = AppLog(subsystem: subsystem, category: "app")
+    static let recording = AppLog(subsystem: subsystem, category: "recording")
+    static let transcription = AppLog(subsystem: subsystem, category: "transcription")
+    static let hotkeys = AppLog(subsystem: subsystem, category: "hotkeys")
+    static let actions = AppLog(subsystem: subsystem, category: "actions")
+    static let settings = AppLog(subsystem: subsystem, category: "settings")
+    static let audio = AppLog(subsystem: subsystem, category: "audio")
+    static let ui = AppLog(subsystem: subsystem, category: "ui")
+    static let consistency = AppLog(subsystem: subsystem, category: "consistency")
+    static let styles = AppLog(subsystem: subsystem, category: "styles")
+    static let textTransform = AppLog(subsystem: subsystem, category: "textTransform")
 }
