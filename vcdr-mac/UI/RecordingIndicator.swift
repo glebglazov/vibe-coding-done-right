@@ -180,6 +180,12 @@ final class RecordingIndicatorPanel {
         showEphemeral(content: CopyErrorIndicatorView(message: message), duration: Self.copyErrorDisplayDuration)
     }
 
+    /// Show a brief "not ready" indicator when the user tries to record before
+    /// the transcription backend has finished initializing. Implements Backend Rejection.
+    func showNotReady() {
+        showEphemeral(content: InfoPillView(icon: "exclamationmark.triangle", iconColor: .orange, label: "Not ready"), duration: Self.copyErrorDisplayDuration)
+    }
+
     // MARK: - Private Helpers
 
     private func showEphemeral<V: View>(content: V, duration: Duration, topOffset: CGFloat = 0) {

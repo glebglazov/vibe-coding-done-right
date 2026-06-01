@@ -170,3 +170,15 @@ Domain expert: "That is a Style Override. It stays in effect for the next Captur
 Dev: "The user cancelled mid-recording with an active Style Override."
 
 Domain expert: "Style Override survives cancel — it is not a Session Override. Only destination and parameter overrides reset with that Capture Session."
+
+Dev: "The user pressed the recording hotkey while the menu bar still shows an orange dot."
+
+Domain expert: "That is Backend Rejection. The shell must reject the action immediately with visual feedback — a buzz on the indicator and a 'Not ready' message — rather than starting a Capture Session that would hang at Transcribing waiting for the model."
+
+Dev: "The app was launched for the first time and iCloud container provisioning is still in progress."
+
+Domain expert: "Shell-first Initialization means the MenuBarExtra and Settings window render regardless. The menu bar tracks transcription readiness as the gating factor for recording. History and audio device enumeration catch up in the background."
+
+Dev: "A Capture Session completed before the history store finished initializing."
+
+Domain expert: "The shell queued the history write in memory and flushed it once the store became ready. The Conversation is not lost."

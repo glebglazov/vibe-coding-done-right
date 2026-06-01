@@ -12,7 +12,7 @@ final class AppDependencies {
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
     let mediaPlaybackController: MediaPlaybackController
-    let transcriptionHistory: any HistoryStore
+    let transcriptionHistory: HistoryStoreProxy
     let styleRegistry: StyleRegistry
     let frontmostAppMonitor: FrontmostAppMonitor
     let styleResolution: StyleResolutionPipeline
@@ -46,10 +46,7 @@ final class AppDependencies {
         self.transcriptionProvider = provider
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
-        let defaults = UserDefaults.standard
-        let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
-        let history = HistoryStoreFactory.make(defaults: defaults)
+        let history = HistoryStoreProxy()
         self.transcriptionHistory = history
         let audioRecorder = AudioRecorder()
         #if DEBUG
@@ -159,6 +156,11 @@ final class AppDependencies {
 
         await styleResolution.start()
 
+        // Shell-first Initialization: deferred backend init.
+        // History store and audio device enumeration must not block the shell.
+        await bootstrapHistory()
+        await audioDeviceMonitor.start()
+
         do {
             let phasePoller = Task {
                 while !Task.isCancelled {
@@ -185,6 +187,35 @@ final class AppDependencies {
             initializationStatus = "Failed: \(error.localizedDescription)"
             Logger.app.error("Initialization failed: \(error)")
         }
+    }
+
+    /// Deferred history bootstrap: resolves the iCloud ubiquity container off-main
+    /// (can block for seconds on first launch) and then creates the real store.
+    /// Writes that arrived before the store was ready are queued in the proxy and
+    /// flushed once the real store is set.
+    private func bootstrapHistory() async {
+        let defaults = UserDefaults.standard
+        let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
+
+        // Run migration off-main — iCloud container resolution can block for seconds.
+        await Task.detached(priority: .userInitiated) {
+            HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
+        }.value
+
+        // Resolve the ubiquity container off-main; creating the store itself
+        // still runs on MainActor but the blocking resolution is already done.
+        let ubiquityRoot = await Task.detached(priority: .userInitiated) {
+            UbiquityHistoryStore.resolveStorageRoot()
+        }.value
+
+        let store: any HistoryStore
+        if syncEnabled, let ubiquityRoot {
+            store = UbiquityHistoryStore(storageRoot: ubiquityRoot) ?? FileHistoryStore()
+        } else {
+            store = FileHistoryStore()
+        }
+
+        await transcriptionHistory.setRealStore(store)
     }
 
     private func checkPermissions() {

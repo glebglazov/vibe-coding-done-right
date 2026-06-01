@@ -21,8 +21,14 @@ final class AudioDeviceMonitor {
     init(settings: AppSettings, skipHardware: Bool = false) {
         self.settings = settings
         guard !skipHardware else { return }
-        refreshDevices()
         startObserving()
+    }
+
+    /// Deferred hardware enumeration — called after the shell has rendered.
+    /// `refreshDevices()` queries `AVCaptureDevice.DiscoverySession` which can
+    /// stall; it must not run during synchronous init.
+    func start() {
+        refreshDevices()
     }
 
     /// The currently selected device ID (empty string = system default)

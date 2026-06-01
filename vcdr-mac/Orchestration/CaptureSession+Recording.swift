@@ -32,6 +32,16 @@ extension CaptureSession {
             return
         }
 
+        // Backend Rejection: if the transcription provider is not ready, reject
+        // immediately with visual feedback rather than starting a session that
+        // would hang at transcribing.
+        if !(await transcription.isReady) {
+            panel.buzz()
+            indicator.showNotReady()
+            Logger.app.info("Recording rejected: transcription not ready")
+            return
+        }
+
         setStatus(.preparingToRecord)
 
         // If we bail out early we must drop back to idle — defer ensures it.

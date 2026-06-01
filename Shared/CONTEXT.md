@@ -42,6 +42,24 @@ _Avoid_: AIProvider, full backend list, selectable provider enum
 Each platform publishes which backends appear in settings and mode pickers. iOS may register Apple when AFM is available; macOS registers local-agent backends separately. Registration is explicit — never derived from `CaseIterable.allCases` on a shared enum.
 _Avoid_: allCases picker, shared Apple case, automatic backend discovery
 
+## Initialization
+
+**Shell-first Initialization**:
+The guarantee that the platform's visible shell renders before any backend dependency is initialized. Backend work — transcription models, history stores, iCloud container resolution, hardware enumeration — is deferred to post-shell tasks, and readiness is surfaced asynchronously via state changes.
+_Avoid_: lazy loading, deferred init, responsive launch
+
+**Backend Rejection**:
+When the user attempts an action that requires a backend that is not yet ready, the shell must reject the action with immediate visual feedback rather than accepting the action and blocking later.
+_Avoid_: queueing, pending state, silent hang
+
+**Shell-Critical Init**:
+The minimal synchronous work required for the shell to render its first frame correctly. On macOS this includes `AppSettings`, `SessionOverrides`, and `StyleRegistry`; on iOS this includes the `RecordingFlowCoordinator` shell. Everything else is backend init and must be deferred.
+_Avoid_: early init, pre-render setup, blocking startup
+
+**Backend Init**:
+All initialization that can be deferred until after the shell has rendered. Includes transcription model download/compile, iCloud container resolution, history store construction, audio device enumeration, and hotkey registration.
+_Avoid_: startup sequence, launch bootstrap, app ready
+
 ## Flagged Ambiguities
 
 **Processing Type vs AI Prompt Mode vs LLM Adapter Seam**:

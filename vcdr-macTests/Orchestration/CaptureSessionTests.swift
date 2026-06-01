@@ -58,20 +58,21 @@ struct CaptureSessionSingleCycleTests {
         #expect(env.history.conversations.isEmpty)
     }
 
-    @Test("Provider not ready does not block recording start")
+    @Test("Provider not ready rejects recording with Backend Rejection")
     @MainActor
-    func providerNotReadyStartsRecording() async {
-        // Recording start must not gate on model readiness — audio capture is the
-        // hot path. If the model isn't ready by stop, processTranscription waits
-        // for it. The mock stays not-ready so we only assert the recording phase
-        // is reachable.
+    func providerNotReadyRejectsRecording() async {
+        // Shell-first Initialization: recording is rejected immediately when the
+        // transcription provider is not ready, with visual feedback, rather than
+        // starting a session that would hang at transcribing.
         let env = CaptureSessionTestEnvironment(
             mockProvider: MockTranscriptionProvider(isReady: false)
         )
         defer { env.cleanup() }
 
         env.session.toggle()
-        #expect(await env.waitForPhase { $0 == .recording })
+        // Should stay idle — not transition to recording
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(env.session.status.phase == .idle)
     }
 
     @Test("Transcription error transitions to error state")
