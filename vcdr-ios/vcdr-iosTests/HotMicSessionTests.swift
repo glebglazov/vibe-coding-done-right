@@ -164,6 +164,56 @@ struct HotMicSessionTests {
         await settle()
     }
 
+    @Test("foreground re-entry after idle window has elapsed tears down immediately")
+    func startAfterDeadlineTearsDown() async {
+        var fakeNow = Date(timeIntervalSince1970: 0)
+        let env = makeEnv(policy: .fiveMinutes, now: { fakeNow })
+
+        await env.session.start()
+        await settle()
+        #expect(env.engine.isHot)
+
+        // Simulate wall clock advancing past the full timeout while backgrounded.
+        fakeNow = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.fiveMinutes.rawValue) + 1)
+
+        // Foreground re-entry: start() should detect expiry and tear down without sleeping.
+        await env.session.start()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+
+        #expect(!env.engine.isHot)
+        #expect(!env.channel.isAppLikelyAlive())
+        await waitUntil { env.presence.stopCalls == 1 }
+
+        // Drain any parked sleepers from the initial arm.
+        env.clock.advance()
+        await settle()
+    }
+
+    @Test("foreground re-entry mid-window uses remaining time, not the full duration")
+    func startMidWindowUsesRemainingTime() async {
+        var fakeNow = Date(timeIntervalSince1970: 0)
+        let env = makeEnv(policy: .fiveMinutes, now: { fakeNow })
+
+        await env.session.start()
+        await settle()
+        #expect(env.engine.isHot)
+        let sleepsAfterFirstStart = env.clock.sleepCount
+
+        // Advance wall clock by 1 minute — still within the 5-minute window.
+        fakeNow = Date(timeIntervalSince1970: 60)
+
+        // Foreground re-entry: should schedule a new sleep for the remaining ~4 min.
+        await env.session.start()
+        await settle()
+        #expect(env.clock.sleepCount == sleepsAfterFirstStart + 1)
+
+        // The session is still alive; it tears down only when the remaining sleep elapses.
+        #expect(env.engine.isHot)
+        env.clock.advance()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+        #expect(!env.engine.isHot)
+    }
+
     @Test("finite policy keeps presence visible until session teardown")
     func finitePolicyKeepsPresenceUntilTeardown() async {
         let env = makeEnv(policy: .fiveMinutes)
@@ -207,7 +257,7 @@ struct HotMicSessionTests {
         let session: HotMicSession
     }
 
-    private func makeEnv(policy: HotSessionTimeout) -> Env {
+    private func makeEnv(policy: HotSessionTimeout, now: (() -> Date)? = nil) -> Env {
         let engine = FakeWarmEngine()
         let presence = SpyPresence()
         let clock = TestClock()
@@ -221,7 +271,8 @@ struct HotMicSessionTests {
             presence: presence,
             keyboard: channel,
             clock: clock,
-            policy: { holder.value }
+            policy: { holder.value },
+            now: now
         )
         return Env(
             engine: engine,

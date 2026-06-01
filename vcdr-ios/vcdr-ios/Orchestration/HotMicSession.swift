@@ -63,11 +63,17 @@ final class HotMicSession {
     private let keyboard: KeyboardChannel
     private let clock: HotMicClock
     private let policy: () -> HotSessionTimeout
+    private let now: () -> Date
 
     /// Fires when the user has been idle for the configured timeout, tearing the
     /// session down. Cancelled while recording so long recordings never time
     /// out, and re-armed after every stop.
     private var idleTask: Task<Void, Never>?
+    /// Wall-clock deadline for the current idle window. Persists across
+    /// foreground/background transitions so the timer isn't reset each time
+    /// the app returns to the foreground. Cleared when recording starts,
+    /// when the session tears down, or when the policy changes.
+    private var idleDeadline: Date?
     /// Periodic heartbeat loop. Runs only while the session is alive — if the app
     /// suspends, it pauses and the last-written timestamp ages out, signalling
     /// "dead" to the keyboard.
@@ -101,13 +107,15 @@ final class HotMicSession {
         presence: MicPresence? = nil,
         keyboard: KeyboardChannel? = nil,
         clock: HotMicClock? = nil,
-        policy: (() -> HotSessionTimeout)? = nil
+        policy: (() -> HotSessionTimeout)? = nil,
+        now: (() -> Date)? = nil
     ) {
         self.engine = engine
         self.presence = presence ?? HotMicActivityController()
         self.keyboard = keyboard ?? .live
         self.clock = clock ?? SystemHotMicClock()
         self.policy = policy ?? { HotSessionTimeout.current() }
+        self.now = now ?? { Date() }
         installTimeoutObserver()
     }
 
@@ -156,18 +164,21 @@ final class HotMicSession {
     func recordingStarted() {
         idleTask?.cancel()
         idleTask = nil
+        idleDeadline = nil
         startHeartbeat()
         Task { [presence] in await presence.start() }
     }
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
     func recordingStopped() {
+        idleDeadline = nil  // fresh countdown from when recording actually stopped
         armIdleTimer(policy())
     }
 
     /// The timeout setting changed — re-evaluate the live timer immediately
     /// instead of waiting for the next stop.
     func policyChanged() {
+        idleDeadline = nil  // recalculate from now with the new duration
         armIdleTimer(policy())
     }
 
@@ -180,7 +191,15 @@ final class HotMicSession {
     /// - `.never`: tear the session down now if idle (no timer scheduled).
     /// - `.always`: no timer — the session lives for the app lifetime (including
     ///   background, where the audio entitlement keeps it alive).
-    /// - finite: sleep N seconds, then tear down if still idle.
+    /// - finite: sleep until the wall-clock deadline, then tear down if still idle.
+    ///
+    /// The deadline is a `Date` rather than a raw duration so that foreground
+    /// re-entries (which call `start()` → `armIdleTimer`) use the *remaining*
+    /// time instead of restarting the full window. Callers that represent a
+    /// genuine new idle period (e.g. `recordingStopped`) clear `idleDeadline`
+    /// before calling here; callers that are simply re-syncing state (e.g.
+    /// `start()` on foreground return) leave it intact so the original expiry
+    /// is honoured.
     ///
     /// If the engine isn't actually hot there is nothing to keep alive, so the
     /// heartbeat and presence are torn down too rather than left orphaned.
@@ -195,9 +214,11 @@ final class HotMicSession {
 
         switch timeout {
         case .never:
+            idleDeadline = nil
             if !engine.isRecording { teardown() }
             return
         case .always:
+            idleDeadline = nil
             Task { [presence] in await presence.start() }
             return
         default:
@@ -208,10 +229,25 @@ final class HotMicSession {
 
         Task { [presence] in await presence.start() }
 
+        let currentTime = now()
+        if idleDeadline == nil {
+            idleDeadline = currentTime.addingTimeInterval(TimeInterval(timeout.rawValue))
+        }
+        let deadline = idleDeadline!
+        let remaining = deadline.timeIntervalSince(currentTime)
+
+        guard remaining > 0 else {
+            idleDeadline = nil
+            teardown()
+            Logger.app.info("Hot session expired while backgrounded — tearing down on foreground")
+            return
+        }
+
         idleTask = Task { [weak self, clock] in
-            await clock.sleep(for: .seconds(timeout.rawValue))
+            await clock.sleep(for: .seconds(remaining))
             guard !Task.isCancelled, let self else { return }
             guard self.engine.isHot, !self.engine.isRecording else { return }
+            self.idleDeadline = nil
             self.teardown()
             Logger.app.info("Hot session auto-ended after \(timeout.rawValue)s inactivity")
         }
@@ -223,6 +259,7 @@ final class HotMicSession {
     private func teardown() {
         idleTask?.cancel()
         idleTask = nil
+        idleDeadline = nil
         engine.endHotSession()
         stopHeartbeat()
         Task { [presence] in await presence.stop() }
