@@ -2,10 +2,10 @@ import Foundation
 
 @MainActor
 final class KeyboardChannelRecordingRunCompletionAdapter: RecordingRunCompletionAdapter {
-    private let keyboardChannel: KeyboardChannel
+    private let keyboardChannel: any KeyboardChannelProtocol
     private let deliversToKeyboard: Bool
 
-    init(keyboardChannel: KeyboardChannel, deliversToKeyboard: Bool) {
+    init(keyboardChannel: any KeyboardChannelProtocol, deliversToKeyboard: Bool) {
         self.keyboardChannel = keyboardChannel
         self.deliversToKeyboard = deliversToKeyboard
     }

@@ -1,7 +1,7 @@
 import Foundation
 
 enum DarwinNotificationCenter {
-    static func post(_ name: String) {
+    nonisolated static func post(_ name: String) {
         guard let center = CFNotificationCenterGetDarwinNotifyCenter() else { return }
         CFNotificationCenterPostNotification(center, CFNotificationName(name as CFString), nil, nil, true)
     }

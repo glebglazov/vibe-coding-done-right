@@ -1,6 +1,29 @@
 import Foundation
 
-struct KeyboardChannel {
+nonisolated protocol KeyboardChannelProtocol: Sendable {
+    func publish(_ state: KeyboardChannel.RecordingState)
+    func publishBundledResult(_ text: String)
+    func readAndClearCommand() -> KeyboardChannel.Command?
+    func clearCommand()
+    func readCaptures() -> [String]
+    func replaceCaptures(_ captures: [String])
+    func clearCaptures()
+    func clearLegacySelectedText()
+    func writeHeartbeat(alive: Bool, now: Date)
+    func isAppLikelyAlive(now: Date) -> Bool
+}
+
+nonisolated extension KeyboardChannelProtocol {
+    func writeHeartbeat(alive: Bool) {
+        writeHeartbeat(alive: alive, now: Date())
+    }
+
+    func isAppLikelyAlive() -> Bool {
+        isAppLikelyAlive(now: Date())
+    }
+}
+
+nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
     enum Command: String, Equatable {
         case startRecording
         case stopRecording
@@ -35,7 +58,7 @@ struct KeyboardChannel {
     }
 
     private let defaults: UserDefaults
-    private let notify: (String) -> Void
+    private let notify: @Sendable (String) -> Void
     private let heartbeatFreshnessWindow: TimeInterval
 
     static let appGroupID = "group.glebglazov.vcdr-ios"
@@ -53,7 +76,7 @@ struct KeyboardChannel {
 
     init(
         defaults: UserDefaults,
-        notify: @escaping (String) -> Void = { _ in },
+        notify: @escaping @Sendable (String) -> Void = { _ in },
         heartbeatFreshnessWindow: TimeInterval = 18
     ) {
         self.defaults = defaults

@@ -88,7 +88,7 @@ final class RecordingFlowCoordinator {
     /// touches the engine's warmth directly.
     private let hotMicSession: HotMicSession
     private let transcriptionProvider = ParakeetProvider()
-    let keyboardChannel = KeyboardChannel.live
+    let keyboardChannel: any KeyboardChannelProtocol
     /// Populated asynchronously by `bootstrapHistory()` — the scene construction
     /// path can't block on it, because `FileManager.url(forUbiquityContainerIdentifier:)`
     /// can take seconds on first launch after install. `nil` until the
@@ -120,10 +120,12 @@ final class RecordingFlowCoordinator {
     var commandObserverToken: (any NSObjectProtocol)?
     var settingsObserverToken: (any NSObjectProtocol)?
 
-    init() {
+    init(keyboardChannel: (any KeyboardChannelProtocol)? = nil) {
         let recorder = AudioRecorder()
+        let keyboardChannel = keyboardChannel ?? KeyboardChannel.live
         audioRecorder = recorder
-        hotMicSession = HotMicSession(engine: recorder)
+        self.keyboardChannel = keyboardChannel
+        hotMicSession = HotMicSession(engine: recorder, keyboard: keyboardChannel)
     }
 
     // MARK: - Constants

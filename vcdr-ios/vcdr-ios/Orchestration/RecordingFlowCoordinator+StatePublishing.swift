@@ -9,23 +9,22 @@ extension RecordingFlowCoordinator {
     /// When `bundledText` is provided, the value is written as `"idle|text"` so the
     /// keyboard can reliably receive the transcription via the same key that syncs state.
     func writeState(_ recordingState: RecordingState, bundledText: String? = nil) {
-        Self.writeStateRaw(recordingState, bundledText: bundledText)
+        writeStateRaw(recordingState, bundledText: bundledText)
     }
 
     /// Non-MainActor version so callers can dispatch disk-flush + Darwin post
     /// off the critical path. Shared UserDefaults + DarwinNotificationCenter
     /// are thread-safe. Performs no instance state reads.
     nonisolated func writeStateAsync(_ recordingState: RecordingState, bundledText: String? = nil) async {
-        Self.writeStateRaw(recordingState, bundledText: bundledText)
+        writeStateRaw(recordingState, bundledText: bundledText)
     }
 
-    private nonisolated static func writeStateRaw(_ recordingState: RecordingState, bundledText: String? = nil) {
-        let channel = KeyboardChannel.live
+    private nonisolated func writeStateRaw(_ recordingState: RecordingState, bundledText: String? = nil) {
         if let bundledText, recordingState == .idle {
-            channel.publishBundledResult(bundledText)
+            keyboardChannel.publishBundledResult(bundledText)
             return
         }
-        channel.publish(KeyboardChannel.RecordingState(recordingState))
+        keyboardChannel.publish(KeyboardChannel.RecordingState(recordingState))
     }
 
     func cleanupStaleResults() {
@@ -35,7 +34,7 @@ extension RecordingFlowCoordinator {
 }
 
 private extension KeyboardChannel.RecordingState {
-    init(_ state: RecordingState) {
+    nonisolated init(_ state: RecordingState) {
         switch state {
         case .idle: self = .idle
         case .recording: self = .recording

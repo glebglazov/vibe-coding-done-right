@@ -60,7 +60,7 @@ extension HotMicActivityController: MicPresence {}
 final class HotMicSession {
     private let engine: WarmEngine
     private let presence: MicPresence
-    private let keyboard: KeyboardChannel
+    private let keyboard: any KeyboardChannelProtocol
     private let clock: HotMicClock
     private let policy: () -> HotSessionTimeout
     private let now: () -> Date
@@ -105,14 +105,14 @@ final class HotMicSession {
     init(
         engine: WarmEngine,
         presence: MicPresence? = nil,
-        keyboard: KeyboardChannel? = nil,
+        keyboard: (any KeyboardChannelProtocol)? = nil,
         clock: HotMicClock? = nil,
         policy: (() -> HotSessionTimeout)? = nil,
         now: (() -> Date)? = nil
     ) {
         self.engine = engine
         self.presence = presence ?? HotMicActivityController()
-        self.keyboard = keyboard ?? .live
+        self.keyboard = keyboard ?? KeyboardChannel.live
         self.clock = clock ?? SystemHotMicClock()
         self.policy = policy ?? { HotSessionTimeout.current() }
         self.now = now ?? { Date() }
