@@ -1,7 +1,24 @@
+import AVFoundation
 import FluidAudio
 import Foundation
 import OSLog
 import UIKit
+
+@MainActor
+protocol RecordingAudioCapturing: AnyObject {
+    func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool
+    func stopCapture()
+}
+
+extension AudioRecorder: RecordingAudioCapturing {}
+
+protocol RecordingStreamingSession: Sendable {
+    func start(using transcriptionProvider: any StreamingTranscriptionProvider) async throws
+    func streamAudio(_ buffer: AVAudioPCMBuffer) async
+    func cancel() async
+    func finish() async throws -> String
+    func liveTranscriptUpdates() async -> AsyncStream<String>
+}
 
 @MainActor
 final class RecordingRun {
@@ -13,8 +30,9 @@ final class RecordingRun {
     }
 
     private let conversationID = UUID()
-    private let audioRecorder: AudioRecorder
+    private let audioRecorder: any RecordingAudioCapturing
     private let transcriptionProvider: any StreamingTranscriptionProvider
+    private let streaming: any RecordingStreamingSession
     private let transcriptProcessor: TranscriptProcessor
     private let completionAdapters: [any RecordingRunCompletionAdapter]
     private let currentSettings: @MainActor () -> Settings
@@ -23,15 +41,15 @@ final class RecordingRun {
     private let onInterimResult: @MainActor (String) -> Void
     private let onTranscribingMessage: @MainActor (String) -> Void
 
-    private let streaming = StreamingAsrManager(config: .streaming)
     private var setupTask: Task<Void, Error>?
     private var updateTask: Task<Void, Never>?
     private var terminalState: RecordingRunTerminalState?
     private var latestLiveTranscript = ""
 
     init(
-        audioRecorder: AudioRecorder,
+        audioRecorder: any RecordingAudioCapturing,
         transcriptionProvider: any StreamingTranscriptionProvider,
+        streaming: any RecordingStreamingSession = LiveRecordingStreamingSession(),
         transcriptProcessor: TranscriptProcessor,
         completionAdapters: [any RecordingRunCompletionAdapter],
         currentSettings: @escaping @MainActor () -> Settings,
@@ -42,6 +60,7 @@ final class RecordingRun {
     ) {
         self.audioRecorder = audioRecorder
         self.transcriptionProvider = transcriptionProvider
+        self.streaming = streaming
         self.transcriptProcessor = transcriptProcessor
         self.completionAdapters = completionAdapters
         self.currentSettings = currentSettings
@@ -55,11 +74,7 @@ final class RecordingRun {
 
     func start() async -> Bool {
         setupTask = Task.detached { [transcriptionProvider, streaming] in
-            try await transcriptionProvider.initialize()
-            guard let models = await transcriptionProvider.loadedModels else {
-                throw TranscriptionError.providerUnavailable
-            }
-            try await streaming.start(models: models, source: .microphone)
+            try await streaming.start(using: transcriptionProvider)
         }
 
         latestLiveTranscript = ""
@@ -71,9 +86,9 @@ final class RecordingRun {
         }
         if !started {
             cancelSetup()
-            terminalState = .processingFailure(
+            _ = await finish(.processingFailure(
                 RecordingRunFailure(message: "Failed to start recording — check microphone permission")
-            )
+            ))
         }
         return started
     }
@@ -138,6 +153,19 @@ final class RecordingRun {
         return await finish(.cancellation)
     }
 
+    /// DEBUG / test-only: polls until this run reaches its terminal resting
+    /// state and returns the recorded outcome. Production code never reads it.
+    func waitForIdle(timeout: Duration = .seconds(10)) async -> RecordingRunTerminalState? {
+        let start = ContinuousClock.now
+        while start.duration(to: .now) < timeout {
+            if let terminalState {
+                return terminalState
+            }
+            try? await Task.sleep(for: Self.idlePollInterval)
+        }
+        return nil
+    }
+
     private func finishStreaming(context: TerminalContext) async throws -> RecordingRunTerminalState {
         let rawText = try await streaming.finish()
         let cleanedText = TextPostProcessor.removeFillers(from: rawText)
@@ -198,24 +226,21 @@ final class RecordingRun {
 
     private func startConsumingUpdates() -> Task<Void, Never> {
         Task {
-            let updates = await streaming.transcriptionUpdates
+            let updates = await streaming.liveTranscriptUpdates()
             var lastUpdateTime: ContinuousClock.Instant = .now
-            for await _ in updates {
+            for await text in updates {
                 guard !Task.isCancelled else { break }
 
                 let now = ContinuousClock.now
                 guard now - lastUpdateTime >= Self.transcriptUpdateInterval else { continue }
                 lastUpdateTime = now
 
-                let confirmed = await streaming.confirmedTranscript
-                let volatile = await streaming.volatileTranscript
-                let full = confirmed.isEmpty ? volatile : "\(confirmed) \(volatile)"
-                let text = full.trimmingCharacters(in: .whitespaces)
                 latestLiveTranscript = text
                 onLiveTranscript(text)
             }
         }
     }
 
+    private static let idlePollInterval: Duration = .milliseconds(20)
     private static let transcriptUpdateInterval: Duration = .milliseconds(16)
 }
