@@ -14,7 +14,9 @@ extension AudioRecorder: RecordingAudioCapturing {}
 
 protocol RecordingStreamingSession: Sendable {
     func start(using transcriptionProvider: any StreamingTranscriptionProvider) async throws
-    func streamAudio(_ buffer: AVAudioPCMBuffer) async
+    /// Synchronous + ordered: callers feed buffers FIFO from the audio thread.
+    /// Implementations must not block.
+    func streamAudio(_ buffer: AVAudioPCMBuffer)
     func cancel() async
     func finish() async throws -> String
     func liveTranscriptUpdates() async -> AsyncStream<String>
@@ -82,7 +84,7 @@ final class RecordingRun {
         updateTask = startConsumingUpdates()
 
         let started = await audioRecorder.startCapture { [streaming] buffer in
-            Task { await streaming.streamAudio(buffer) }
+            streaming.streamAudio(buffer)
         }
         if !started {
             cancelSetup()

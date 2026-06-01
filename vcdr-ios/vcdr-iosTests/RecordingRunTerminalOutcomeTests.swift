@@ -149,7 +149,7 @@ private actor FakeRecordingStreamingSession: RecordingStreamingSession {
 
     func start(using transcriptionProvider: any StreamingTranscriptionProvider) async throws {}
 
-    func streamAudio(_ buffer: AVAudioPCMBuffer) async {}
+    nonisolated func streamAudio(_ buffer: AVAudioPCMBuffer) {}
 
     func cancel() async {}
 
