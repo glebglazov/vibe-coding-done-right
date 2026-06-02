@@ -53,6 +53,12 @@ On iOS specifically:
    its own speaker-output override notification while still responding to real
    device and route-configuration changes.
 
+See also [ADR-0003](0003-blocking-work-off-the-cooperative-pool.md): the
+blocking syscalls deferred here (CoreML load, audio engine/session setup) must
+also run off Swift's cooperative thread pool, or they stall the shell even after
+init is deferred. Both ADRs are instances of the Responsiveness-First tenet
+(`docs/architecture/rules.md`, Rule 11).
+
 ## Consequences
 
 - The macOS app now matches the iOS initialization pattern: lightweight coordinator init, heavy work in `.task`.

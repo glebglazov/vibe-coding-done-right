@@ -84,6 +84,8 @@ Logger.settings.info("Settings saved")
 - When `Task.sleep` is used as a workaround for a system API (clipboard, focus, window), add a comment explaining *why* the delay is necessary and what it's waiting for
 - Prefer polling with timeout over fixed delays when waiting for system state changes (clipboard changeCount, window availability, focus confirmation)
 
+**Carve-out — blocking syscalls do NOT belong on the cooperative pool.** The "prefer Task over DispatchQueue" guidance above is about *timers and structured async*. It does **not** apply to *blocking synchronous* system calls (CoreML `MLModel(contentsOf:)`, `AVAudioEngine` input-node init, `AVAudioSession.setActive`, `engine.start()`). `Task.detached` schedules onto Swift's cooperative thread pool, which the runtime assumes tasks only *suspend* on; a call that blocks for seconds holds one of its scarce threads and starves the main actor. Bridge such calls to a GCD global queue via `withBlockingTask` / `withThrowingBlockingTask` (`Concurrency/BlockingWork.swift`). Do not "simplify" `withBlockingTask` back to `Task.detached` — that reintroduces the App Shell freeze. See [ADR-0003](../adr/0003-blocking-work-off-the-cooperative-pool.md).
+
 ## 7. No Force Unwraps in Production Code
 
 **Problem:** The previous version had force unwraps (`as!`, `!`) in production code paths, risking runtime crashes.
@@ -116,3 +118,15 @@ Logger.settings.info("Settings saved")
 - One primary type per file
 - If a view needs helper views, extract them to separate files when they exceed ~50 lines
 - Settings tabs should be separate files if the settings UI grows
+
+## 11. Responsiveness First
+
+**Problem:** Cold-launch device traces showed the App Shell frozen for tens of seconds while heavy work (CoreML model specialization, audio engine warm-up) ran "in the background" but still starved the foreground. Perceived responsiveness, not raw throughput, is what the user feels.
+
+**Rule:** Perceived responsiveness is the overriding priority. The visible shell renders before any backend dependency initializes, and every heavy or blocking operation runs off the foreground so the UI never stalls. Readiness is surfaced asynchronously via state changes, never by blocking the user behind a spinner.
+
+This is a tenet, not a single mechanism — its concrete applications are recorded as ADRs:
+- [ADR-0002](../adr/0002-shell-first-initialization.md) — defer heavy *initialization* past the first frame (shell-first).
+- [ADR-0003](../adr/0003-blocking-work-off-the-cooperative-pool.md) — keep *blocking syscalls* off the cooperative thread pool (see the Rule 6 carve-out).
+
+When you add code that does heavy or blocking work, the burden is on you to show it cannot stall the foreground.
