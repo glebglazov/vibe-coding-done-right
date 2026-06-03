@@ -23,6 +23,14 @@ final class RecordingFlowCoordinator {
         case idle
         case initializing
         case ready
+        /// Recording Run phase: the record intent is acknowledged and the audio
+        /// engine is warming, but no audio is captured yet. Honest facade — the
+        /// UI shows the tap registered ("STARTING…") without a timer or waveform.
+        /// About the audio engine, never the transcription model.
+        case arming
+        /// Recording Run phase: audio is flowing (Capturing). Timer + waveform
+        /// are truthful. May precede Transcription Readiness; transcription
+        /// catches up at Finalizing (`.transcribing`).
         case recording
         case transcribing
         case complete(String)
@@ -88,6 +96,18 @@ final class RecordingFlowCoordinator {
     /// touches the engine's warmth directly.
     private let hotMicSession: HotMicSession
     private let transcriptionProvider = ParakeetProvider()
+    /// Reused, prewarmed haptic generator. A freshly constructed generator
+    /// connects to the haptic daemon lazily on its first `impactOccurred()`,
+    /// and that connect blocks the *main thread* for seconds under the
+    /// concurrent CoreML ANE compile — the cold-launch freeze that swallowed
+    /// the record tap and starved every other main-actor task. Prewarmed via
+    /// `prepare()` once the model is ready (system idle); the record/stop paths
+    /// skip it until then.
+    private let recordHaptic = UIImpactFeedbackGenerator(style: .medium)
+    /// Cached transcription-model readiness for synchronous checks on the hot
+    /// path (the authoritative flag lives in the `ParakeetProvider` actor).
+    /// Gates the haptic so a cold first-use connect never blocks recording.
+    private var isModelReady = false
     let keyboardChannel: any KeyboardChannelProtocol
     /// Populated asynchronously by `bootstrapHistory()` — the scene construction
     /// path can't block on it, because `FileManager.url(forUbiquityContainerIdentifier:)`
@@ -104,10 +124,6 @@ final class RecordingFlowCoordinator {
     /// session + buffer handler — the second tap stomps the first's closure,
     /// leaving the first stream subscribed to no audio.
     private var isStartingRecording = false
-    /// Stop can be tapped while `startRecording` is suspended in audio session /
-    /// engine startup. Those callers wait here so they don't observe the
-    /// half-started state as a missing streaming session.
-    private var startWaiters: [CheckedContinuation<Bool, Never>] = []
     /// Text sent to AI processing — retained for the existing Done-page retry action.
     var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
@@ -158,21 +174,6 @@ final class RecordingFlowCoordinator {
         return base
     }
 
-    private func waitForRecordingStart() async -> Bool {
-        await withCheckedContinuation { continuation in
-            startWaiters.append(continuation)
-        }
-    }
-
-    private func finishRecordingStart(_ started: Bool) {
-        isStartingRecording = false
-        let waiters = startWaiters
-        startWaiters.removeAll()
-        for waiter in waiters {
-            waiter.resume(returning: started)
-        }
-    }
-
     var isRecording: Bool { audioRecorder.isRecording }
     var isHotSessionActive: Bool { hotMicSession.isAlive }
     var audioLevels: [Float] { audioRecorder.audioLevels }
@@ -206,12 +207,15 @@ final class RecordingFlowCoordinator {
     /// off the main actor, then constructs the active store on the main actor
     /// (stores are `@Observable` / `@MainActor`, so init must hop back).
     ///
-    /// Previously this ran inside the `history` stored-property initializer,
-    /// which executes during SwiftUI scene construction on the main actor —
-    /// the synchronous `FileManager.url(forUbiquityContainerIdentifier:)`
-    /// call blocks for seconds on first launch after install while iCloud
-    /// provisions the container, holding back the first frame and leaving
-    /// the user staring at the blank launch screen.
+    /// The iCloud resolve — `FileManager.url(forUbiquityContainerIdentifier:)`,
+    /// reached via `resolveStorageRoot()` — blocks for seconds while iCloud
+    /// provisions the container. It must run on a GCD thread via
+    /// `withBlockingTask`, NOT on a `Task.detached` (cooperative pool): a
+    /// blocking syscall there pins one of the pool's few threads for its whole
+    /// duration and starves other launch work — notably model init, which then
+    /// can't even start until the resolve returns (see ADR-0002 / `BlockingWork`).
+    /// Resolve exactly once and reuse the root for both reconcile and store
+    /// construction so `make` never blocks the main actor a second time.
     func bootstrapHistory() async {
         Logger.app.info("[LaunchProbe] bootstrapHistory entry main=\(Thread.isMainThread)")
         guard history == nil, !isHistoryBootstrapRunning else {
@@ -222,14 +226,14 @@ final class RecordingFlowCoordinator {
         defer { isHistoryBootstrapRunning = false }
         let defaults = SharedConstants.sharedDefaults
         let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        Logger.app.info("[LaunchProbe] bootstrapHistory before reconcile detached")
-        await Task.detached(priority: .userInitiated) {
-            Logger.app.info("[LaunchProbe] bootstrapHistory reconcile detached body main=\(Thread.isMainThread)")
-            HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
-            Logger.app.info("[LaunchProbe] bootstrapHistory reconcile detached body done main=\(Thread.isMainThread)")
-        }.value
-        Logger.app.info("[LaunchProbe] bootstrapHistory after reconcile main=\(Thread.isMainThread)")
-        let history = HistoryStoreFactory.make(defaults: defaults)
+        Logger.app.info("[LaunchProbe] bootstrapHistory before resolve+reconcile (GCD)")
+        let ubiquityRoot: URL? = await withBlockingTask(qos: .userInitiated) {
+            let root = UbiquityHistoryStore.resolveStorageRoot()
+            HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled, ubiquityRoot: root)
+            return root
+        }
+        Logger.app.info("[LaunchProbe] bootstrapHistory after resolve+reconcile main=\(Thread.isMainThread) iCloud=\(ubiquityRoot != nil)")
+        let history = HistoryStoreFactory.make(defaults: defaults, ubiquityRoot: ubiquityRoot)
         self.history = history
         historyCompletionAdapter.setHistory(history)
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
@@ -302,6 +306,11 @@ final class RecordingFlowCoordinator {
                 state = .ready
             }
             initProgress = "Ready"
+            isModelReady = true
+            // Warm the haptic daemon now that the ANE compile is done and the
+            // system is idle, so the first record-tap haptic fires instantly
+            // instead of connecting under load on the main thread.
+            recordHaptic.prepare()
             Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
 
             // Audio preparation is opportunistic follow-up work. It must not
@@ -348,13 +357,12 @@ final class RecordingFlowCoordinator {
         launchedViaDeepLink = fromDeepLink
         stoppedViaDeepLink = false
         aiProcessingStatus = .idle
-        state = .recording
+        // Arming, not Capturing: the tap is acknowledged instantly, but the
+        // audio engine isn't up yet. The UI shows "STARTING…" with no timer or
+        // waveform until audio actually flows (see the `.arming` guard below).
+        state = .arming
         setIdleTimerDisabled(true)
-        Logger.app.info("[RecordTiming] state=recording set at +\(ContinuousClock.now - recordStart)")
-
-        // Haptics on detached task — CHHapticEngine daemon connect can block
-        // for seconds under concurrent CoreML load.
-        Task { @MainActor in UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+        Logger.app.info("[RecordTiming] state=arming set at +\(ContinuousClock.now - recordStart)")
 
         // Session snapshot from shared defaults — fields are only consumed on stop /
         // AI processing, so schedule them after the audio start rather than blocking
@@ -391,20 +399,41 @@ final class RecordingFlowCoordinator {
         Logger.app.info("[RecordTiming] recording run created at +\(ContinuousClock.now - recordStart)")
 
         let started = await run.start()
-        Logger.app.info("[RecordTiming] audioRecorder.startCapture returned at +\(ContinuousClock.now - recordStart)")
+        Logger.app.info("[RecordTiming] audioRecorder.startCapture returned (Capturing) at +\(ContinuousClock.now - recordStart)")
 
         guard started else {
-            state = .error("Failed to start recording — check microphone permission")
+            // Engine warmup failed (mic seized, route/HAL error). The Recording
+            // Run already terminated in processing failure inside `run.start()`.
+            // Surface it briefly and return the keyboard to idle — never Empty
+            // Result, because no audio was ever captured.
+            state = .error("Microphone unavailable — couldn't start recording")
             writeState(.idle)
             recordingRun = nil
             // The engine never came up, so tear down the heartbeat/presence we
             // optimistically lit above rather than leaving them orphaned.
             hotMicSession.recordingStopped()
-            finishRecordingStart(false)
+            isStartingRecording = false
             return
         }
 
-        finishRecordingStart(true)
+        // Stop landed while we were Arming: the stop handler flipped state off
+        // `.arming` (to `.idle`). The engine is up now, but the user already
+        // cancelled — tear the run down instead of entering Capturing.
+        guard state == .arming else {
+            _ = await run.cancel()
+            recordingRun = nil
+            hotMicSession.recordingStopped()
+            isStartingRecording = false
+            return
+        }
+
+        // Capturing: audio is flowing. Flip to the truthful recording UI (timer
+        // + waveform) and fire the "go" haptic — the auto-start signal. Skipped
+        // while the model is cold so a first-use haptic-daemon connect can't
+        // block the main thread under the concurrent ANE compile.
+        state = .recording
+        if isModelReady { recordHaptic.impactOccurred() }
+        isStartingRecording = false
     }
 
     /// Stops recording and shows the result immediately from the live transcript.
@@ -412,19 +441,21 @@ final class RecordingFlowCoordinator {
     /// - Parameter sendToKeyboard: When true, the transcription result is delivered to the keyboard extension via state bundling.
     func stopAndTranscribe(sendToKeyboard: Bool = false) async {
         if isStartingRecording {
-            Logger.app.info("[RecordTiming] stopAndTranscribe waiting for in-flight recording start")
-            guard await waitForRecordingStart() else {
-                Logger.app.info("[RecordTiming] stopAndTranscribe aborted because recording start failed")
-                setIdleTimerDisabled(false)
-                writeState(.idle)
-                return
-            }
+            // Stop landed during Arming — no audio ever flowed. Flip to idle
+            // instantly (responsiveness-first); the in-flight start sees state
+            // is no longer `.arming` and tears the run down. This is a
+            // cancellation, not an Empty Result, so the keyboard returns to
+            // idle rather than flashing "no speech detected".
+            Logger.app.info("[RecordTiming] stopAndTranscribe during Arming — cancelling")
+            state = .idle
+            writeState(.idle)
+            setIdleTimerDisabled(false)
+            return
         }
 
-        // Fire haptics as a separate task so CHHapticEngine init (which connects
-        // to a system daemon) doesn't block recording start. Under heavy CoreML
-        // compilation load the daemon can take seconds to respond.
-        Task { @MainActor in UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+        // Haptic only when the model is warm — a cold first-use connect blocks
+        // the main thread for seconds under ANE-compile load (see startRecording).
+        if isModelReady { recordHaptic.impactOccurred() }
 
         hotMicSession.recordingStopped()
         setIdleTimerDisabled(false)
@@ -536,9 +567,7 @@ final class RecordingFlowCoordinator {
         let run = recordingRun
         recordingRun = nil
         Task { await run?.cancel() }
-        if isStartingRecording {
-            finishRecordingStart(false)
-        }
+        isStartingRecording = false
         aiRetryTask?.cancel()
         aiRetryTask = nil
         // Re-arm the inactivity timer so a reset counts as fresh activity

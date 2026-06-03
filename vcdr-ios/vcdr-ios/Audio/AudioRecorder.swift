@@ -429,35 +429,46 @@ final class AudioRecorder {
         }
 
         Logger.app.info("[LaunchProbe] startEngine creating fresh engine")
-        let engine = AVAudioEngine()
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        Logger.app.info("[LaunchProbe] startEngine after outputFormat fresh format=\(format)")
+        // Build the engine off the cooperative pool. `AVAudioEngine()` +
+        // `inputNode.outputFormat(forBus:)` are blocking audio-HAL calls that
+        // cost up to ~9s when they contend with the concurrent ANE model
+        // compile. This path is reached from `RecordingRun.start`'s
+        // `Task.detached`, so running them inline both starves the cooperative
+        // pool (ADR-0003) and stretches the Arming phase. At `.userInitiated`
+        // the warmup outranks the `.utility` compile, so the mic arms fast
+        // (vcdr-ios ADR-0001). Mirrors `prepareEngine`.
+        let engine = await withBlockingTask(qos: .userInitiated) { [weak self] () -> AVAudioEngine in
+            let engine = AVAudioEngine()
+            let inputNode = engine.inputNode
+            let format = inputNode.outputFormat(forBus: 0)
+            Logger.app.info("[LaunchProbe] startEngine after outputFormat fresh format=\(format)")
 
-        inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
-            [weak self] buffer, _ in
-            guard let self else { return }
+            inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
+                buffer, _ in
+                guard let self else { return }
 
-            if !self.hasLoggedFirstBuffer {
-                self.hasLoggedFirstBuffer = true
-                Logger.app.info("[LaunchProbe] first audio buffer from tap (startEngine fresh) handler=\(self.bufferHandler != nil)")
+                if !self.hasLoggedFirstBuffer {
+                    self.hasLoggedFirstBuffer = true
+                    Logger.app.info("[LaunchProbe] first audio buffer from tap (startEngine fresh) handler=\(self.bufferHandler != nil)")
+                }
+
+                let level = Self.computeLevel(from: buffer)
+                Task { @MainActor [weak self] in
+                    self?.appendLevel(level)
+                }
+
+                self.bufferHandler?(buffer)
             }
-
-            let level = Self.computeLevel(from: buffer)
-            Task { @MainActor [weak self] in
-                self?.appendLevel(level)
-            }
-
-            self.bufferHandler?(buffer)
+            Logger.app.info("[LaunchProbe] startEngine after installTap fresh")
+            return engine
         }
-        Logger.app.info("[LaunchProbe] startEngine after installTap fresh")
 
         if await Self.startEngineOffMain(engine) {
             audioEngine = engine
-            Logger.recording.info("Audio engine started (format: \(format))")
+            Logger.recording.info("Audio engine started (fresh)")
             return true
         }
-        inputNode.removeTap(onBus: 0)
+        engine.inputNode.removeTap(onBus: 0)
         Logger.recording.error("startEngine: fresh engine failed to start")
         return false
     }

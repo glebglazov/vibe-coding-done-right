@@ -51,9 +51,10 @@ struct RecordingView: View {
 
     @ViewBuilder
     private var topBar: some View {
-        if case .recording = coordinator.state {
+        switch coordinator.state {
+        case .arming, .recording:
             EmptyView()
-        } else {
+        default:
             RecordingTopBar(history: coordinator.history)
         }
     }
@@ -68,6 +69,9 @@ struct RecordingView: View {
 
         case .ready:
             readyContent
+
+        case .arming:
+            armingContent
 
         case .recording:
             recordingContent
@@ -121,6 +125,34 @@ struct RecordingView: View {
                 label: "RECORD"
             ) {
                 Task { await coordinator.startRecording() }
+            }
+        }
+    }
+
+    /// Arming phase: the tap is acknowledged and the audio engine is warming.
+    /// Deliberately shows NO timer and NO waveform — nothing is being captured
+    /// yet, so a running timer or moving waveform would be a lie. STOP cancels
+    /// the warming engine (cancellation, no result).
+    private var armingContent: some View {
+        VStack(spacing: 40) {
+            VStack(spacing: 24) {
+                heroTitle("STARTING…")
+                ProgressView()
+                    .tint(theme.primary)
+                    .scaleEffect(1.2)
+                Text("Warming up the mic")
+                    .font(.system(size: Self.hintFontSize))
+                    .foregroundStyle(theme.onSurfaceVariant.opacity(0.7))
+            }
+            actionCircle(
+                icon: {
+                    Rectangle()
+                        .fill(theme.onSurface)
+                        .frame(width: Self.stopIconSize, height: Self.stopIconSize)
+                },
+                label: "STOP"
+            ) {
+                Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) }
             }
         }
     }

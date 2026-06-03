@@ -31,7 +31,17 @@ final class HotMicActivityController {
         }
         do {
             let attrs = HotMicActivityAttributes()
-            activity = try Activity.request(attributes: attrs, content: content)
+            // `Activity.request` is synchronous and talks to the ActivityKit
+            // daemon; under cold-launch contention (parallel ANE model compile)
+            // that IPC has been observed to block for ~8s. Running it directly
+            // would pin this `@MainActor` call for that whole time, stalling the
+            // recording-start path and freezing SwiftUI updates. Offload to a GCD
+            // thread via the blocking-task bridge — same pattern as model load —
+            // so the main actor stays free. `Activity` and its attributes/content
+            // are Sendable, so the value crosses back cleanly.
+            activity = try await withThrowingBlockingTask(qos: .userInitiated) {
+                try Activity.request(attributes: attrs, content: content)
+            }
             Logger.app.info("Hot mic Live Activity started")
         } catch {
             Logger.app.error("Live Activity request failed: \(error)")

@@ -42,7 +42,20 @@ _Avoid_: idle pipe text, state string payload
 
 **Recording Run**:
 The lifecycle of one user-initiated recording from start through finalization and completion delivery. A Recording Run has exactly one terminal state: success, empty result, cancellation, or processing failure.
+A Recording Run begins at the user's record intent — the tap — not when audio starts, and moves through three phases: **Arming**, **Capturing**, **Finalizing** (below). A run cancelled while still Arming (the user stops before audio ever flows) terminates in cancellation, having captured nothing.
 _Avoid_: recording service, transcription pipeline, coordinator helper
+
+**Arming**:
+The first phase of a Recording Run: the record intent has been acknowledged and the audio engine is warming, but no audio is being captured yet. Arming is about the audio engine, never the transcription model — it is unrelated to Transcription Readiness. The UI shows the tap was registered (pressed, "preparing") but must not show a running timer or live waveform, because nothing is being captured.
+_Avoid_: PREPARING (that is reserved against Transcription Readiness), warming, engine init state
+
+**Capturing**:
+The Recording Run phase where audio is actually flowing into the buffer and the live recording UI is truthful: timer running, waveform moving. Capturing may begin before Transcription Readiness; the transcription model catches up at Finalizing.
+_Avoid_: recording state, live mic, listening
+
+**Finalizing**:
+The Recording Run phase after the user stops: capture has ended and the buffered audio awaits transcription, which may still be waiting on Transcription Readiness. The UI is truthful about the stop (button released, timer stopped, waveform frozen) and surfaces that transcription is pending rather than presenting a result that does not exist yet. If the model fails to load, the run terminates in processing failure.
+_Avoid_: post-processing, finishing, transcribing state
 
 **Completion Delivery**:
 The handoff that applies a Recording Run terminal state to outside destinations such as the Keyboard Channel and conversation history. Completion Delivery must preserve the run result without making the Recording Run know which destinations are active. When History Bootstrap has not finished yet, a successful run's Conversation may be held and written once the history store is ready.

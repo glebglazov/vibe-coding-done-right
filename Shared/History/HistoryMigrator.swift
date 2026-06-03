@@ -10,27 +10,32 @@ import OSLog
 /// guards against overwriting an authoritative copy when the user has
 /// toggled the setting multiple times.
 ///
-/// Nonisolated on purpose: this runs during app launch and the first call to
-/// `UbiquityHistoryStore.resolveStorageRoot()` synchronously provisions the
-/// iCloud container, which can block for seconds on the first launch after
-/// install. Callers dispatch this to a detached task so the main actor stays
-/// free to render the first frame. The explicit `nonisolated` overrides the
+/// Nonisolated on purpose: this runs during app launch and resolving the
+/// iCloud container (`UbiquityHistoryStore.resolveStorageRoot()`) synchronously
+/// provisions it, which can block for seconds on the first launch after
+/// install. Callers must keep that work off the cooperative pool — pass a
+/// `ubiquityRoot` pre-resolved on a GCD thread (`withBlockingTask`), or accept
+/// the blocking resolve below. The explicit `nonisolated` overrides the
 /// target-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` setting.
 nonisolated enum HistoryMigrator {
 
-    static func reconcileAtLaunch(syncEnabled: Bool) {
+    /// - Parameter ubiquityRoot: the resolved `Documents/VCDR` root, or nil if
+    ///   iCloud is unavailable. When omitted, this resolves it itself — which
+    ///   blocks, so only the omitted form must run off the cooperative pool.
+    static func reconcileAtLaunch(syncEnabled: Bool, ubiquityRoot: URL? = nil) {
         let localRoot = FileHistoryStore.localStorageRoot
             .appendingPathComponent("conversations")
-        guard let ubiquityRoot = UbiquityHistoryStore.resolveStorageRoot()?
+        let storageRoot = ubiquityRoot ?? UbiquityHistoryStore.resolveStorageRoot()
+        guard let ubiquityConversations = storageRoot?
             .appendingPathComponent("conversations") else {
             // No iCloud — nothing to reconcile.
             return
         }
 
-        if syncEnabled, isEmpty(ubiquityRoot), !isEmpty(localRoot) {
-            migrate(from: localRoot, to: ubiquityRoot, makeUbiquitous: true)
-        } else if !syncEnabled, isEmpty(localRoot), !isEmpty(ubiquityRoot) {
-            migrate(from: ubiquityRoot, to: localRoot, makeUbiquitous: false)
+        if syncEnabled, isEmpty(ubiquityConversations), !isEmpty(localRoot) {
+            migrate(from: localRoot, to: ubiquityConversations, makeUbiquitous: true)
+        } else if !syncEnabled, isEmpty(localRoot), !isEmpty(ubiquityConversations) {
+            migrate(from: ubiquityConversations, to: localRoot, makeUbiquitous: false)
         }
     }
 

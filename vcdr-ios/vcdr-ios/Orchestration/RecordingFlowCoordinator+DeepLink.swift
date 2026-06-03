@@ -5,12 +5,15 @@ import OSLog
 /// extension drives when the Darwin command channel is unavailable or stale.
 extension RecordingFlowCoordinator {
 
-    /// Sets state to `.recording` synchronously so the view shows "LISTENING"
-    /// on the very first frame after a deep link opens the app.
+    /// Sets state to `.arming` synchronously so the very first frame after a
+    /// deep link shows the tap was registered ("STARTING…") — not a fake
+    /// "LISTENING" with no audio behind it. On a cold launch the engine may be
+    /// seconds from ready; the async flow warms it and flips to `.recording`
+    /// (Capturing) only once audio actually flows.
     /// Called from `onOpenURL` before the async recording flow begins.
     func prepareForDeepLinkRecording() {
-        guard state != .recording && state != .transcribing else { return }
-        state = .recording
+        guard state != .arming && state != .recording && state != .transcribing else { return }
+        state = .arming
         launchedViaDeepLink = true
         stoppedViaDeepLink = false
     }
@@ -36,22 +39,27 @@ extension RecordingFlowCoordinator {
     /// the keyboard's stuck "transcribing" pill to either bundled text (auto-
     /// pasted on next viewWillAppear) or an empty-result flash.
     func handleStopDeepLink() async {
-        guard audioRecorder.isRecording else {
-            // Cold-launch / orphaned path: nothing was recording, audio
-            // buffers are gone. Surface emptyResult so the keyboard's 15s
-            // polling doesn't time out staring at "transcribing". Skip when
-            // a stop is already mid-flight or just finished — that pipeline
-            // will publish its own result.
-            switch state {
-            case .transcribing, .complete:
-                break
-            default:
-                writeState(.emptyResult)
-            }
+        // Arming (engine not up yet, so `audioRecorder.isRecording` is still
+        // false) or actively Capturing → drive the normal stop path. It cancels
+        // during Arming (no audio ever flowed → cancellation, keyboard idle) and
+        // finalizes during Capturing.
+        if state == .arming || audioRecorder.isRecording {
+            launchedViaDeepLink = true
+            stoppedViaDeepLink = true
+            await stopAndTranscribe(sendToKeyboard: true)
             return
         }
-        launchedViaDeepLink = true
-        stoppedViaDeepLink = true
-        await stopAndTranscribe(sendToKeyboard: true)
+        // Truly orphaned cold-launch / stale stop: nothing was recording and
+        // nothing is arming. Return the keyboard to idle. Skip when a stop is
+        // already mid-flight or just finished — that pipeline publishes its own
+        // result. Idle, not Empty Result: no audio was captured. (The keyboard
+        // currently flashes the same no-speech state for both wire values;
+        // keyboard-side honesty for cancellation is the deferred follow-up.)
+        switch state {
+        case .transcribing, .complete:
+            break
+        default:
+            writeState(.idle)
+        }
     }
 }

@@ -21,9 +21,13 @@ enum HistoryStoreFactory {
     /// agree on first launch.
     static let syncEnabledDefault = true
 
-    static func make(defaults: UserDefaults = .standard) -> any HistoryStore {
+    /// - Parameter ubiquityRoot: the iCloud `Documents/VCDR` root, pre-resolved
+    ///   off the main actor by the caller (nil if iCloud is unavailable). Taken
+    ///   as a parameter rather than resolved here because the resolve blocks for
+    ///   seconds, and `make` runs on the main actor — see `bootstrapHistory`.
+    static func make(defaults: UserDefaults = .standard, ubiquityRoot: URL?) -> any HistoryStore {
         let syncEnabled = effectiveSyncEnabled(defaults: defaults)
-        if syncEnabled, let store = UbiquityHistoryStore() {
+        if syncEnabled, let ubiquityRoot, let store = UbiquityHistoryStore(storageRoot: ubiquityRoot) {
             return store
         }
         return FileHistoryStore()
