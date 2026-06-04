@@ -23,6 +23,15 @@ protocol WarmEngine: AnyObject {
     func endHotSession() throws
 }
 
+/// Production recording + hot-mic engine. `AudioRecorder` is the adapter;
+/// tests inject a spy that implements this seam and `RecordingAudioCapturing`.
+@MainActor
+protocol RecordingEngine: AnyObject, WarmEngine, RecordingAudioCapturing {
+    var audioLevels: [Float] { get }
+}
+
+extension AudioRecorder: RecordingEngine {}
+
 /// The lock-screen / Dynamic Island presence shown while the engine is warm,
 /// giving the un-suppressable system mic indicator app identity.
 /// `HotMicActivityController` is the production adapter; tests use a spy.
@@ -52,7 +61,6 @@ struct SystemHotMicClock: HotMicClock {
     }
 }
 
-extension AudioRecorder: WarmEngine {}
 extension HotMicActivityController: MicPresence {}
 
 // MARK: - HotMicSession

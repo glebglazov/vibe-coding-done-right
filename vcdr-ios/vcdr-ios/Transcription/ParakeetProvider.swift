@@ -146,6 +146,13 @@ actor ParakeetProvider: TranscriptionProvider {
             throw TranscriptionError.initializationFailed("Core models must be loaded before the encoder")
         }
 
+        if ParakeetProviderTestSupport.simulateEncoderLoadDuration > .zero {
+            try await Task.sleep(for: ParakeetProviderTestSupport.simulateEncoderLoadDuration)
+        }
+        if let hook = ParakeetProviderTestSupport.onFinishWithEncoderEntered {
+            await hook()
+        }
+
         let totalStart = ContinuousClock.now
         do {
             let qos = initQoS

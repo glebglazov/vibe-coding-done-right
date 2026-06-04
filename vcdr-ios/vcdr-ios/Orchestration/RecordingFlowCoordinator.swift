@@ -88,14 +88,14 @@ final class RecordingFlowCoordinator {
         SessionSettings.setTextStyle(currentTextStyle)
     }
 
-    let audioRecorder: AudioRecorder
+    private let recordingEngine: any RecordingEngine
     /// Owns the *Hot Mic Session* lifecycle — warm engine, heartbeat, Live
     /// Activity presence, and the inactivity-timeout state machine. This
     /// coordinator drives it via lifecycle notifications (`prewarm`, `start`,
     /// `recordingStarted` / `recordingStopped`, `policyChanged`) and never
     /// touches the engine's warmth directly.
     private let hotMicSession: HotMicSession
-    private let transcriptionProvider = ParakeetProvider()
+    private let transcriptionProvider: ParakeetProvider
     /// Reused, prewarmed haptic generator. A freshly constructed generator
     /// connects to the haptic daemon lazily on its first `impactOccurred()`,
     /// and that connect blocks the *main thread* for seconds under the
@@ -136,12 +136,18 @@ final class RecordingFlowCoordinator {
     var commandObserverToken: (any NSObjectProtocol)?
     var settingsObserverToken: (any NSObjectProtocol)?
 
-    init(keyboardChannel: (any KeyboardChannelProtocol)? = nil) {
-        let recorder = AudioRecorder()
+    init(
+        keyboardChannel: (any KeyboardChannelProtocol)? = nil,
+        recordingEngine: (any RecordingEngine)? = nil,
+        transcriptionProvider: ParakeetProvider? = nil,
+        hotMicSession: HotMicSession? = nil
+    ) {
+        let engine = recordingEngine ?? AudioRecorder()
         let keyboardChannel = keyboardChannel ?? KeyboardChannel.live
-        audioRecorder = recorder
+        self.recordingEngine = engine
+        self.transcriptionProvider = transcriptionProvider ?? ParakeetProvider()
         self.keyboardChannel = keyboardChannel
-        hotMicSession = HotMicSession(engine: recorder, keyboard: keyboardChannel)
+        self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, keyboard: keyboardChannel)
     }
 
     // MARK: - Constants
@@ -175,9 +181,9 @@ final class RecordingFlowCoordinator {
         return base
     }
 
-    var isRecording: Bool { audioRecorder.isRecording }
+    var isRecording: Bool { recordingEngine.isRecording }
     var isHotSessionActive: Bool { hotMicSession.isAlive }
-    var audioLevels: [Float] { audioRecorder.audioLevels }
+    var audioLevels: [Float] { recordingEngine.audioLevels }
 
     // MARK: - Hot Session Lifecycle
 
@@ -296,8 +302,16 @@ final class RecordingFlowCoordinator {
         }
 
         do {
+            // HAL warm runs in parallel with the cheap core loads and must
+            // finish before the encoder grind (ADR-0001). Prewarm does not call
+            // `engine.start()` — no microphone indicator.
+            let prewarmTask = Task { [hotMicSession] in
+                await hotMicSession.prewarmIfPermitted()
+            }
             Logger.app.info("[LaunchProbe] before transcriptionProvider.loadCoreModels await main=\(Thread.isMainThread)")
             try await transcriptionProvider.loadCoreModels(priority: priority)
+            Logger.app.info("[LaunchProbe] before engine prewarm barrier main=\(Thread.isMainThread)")
+            await prewarmTask.value
             Logger.app.info("[LaunchProbe] before transcriptionProvider.finishWithEncoder await main=\(Thread.isMainThread)")
             try await transcriptionProvider.finishWithEncoder()
             Logger.app.info("[LaunchProbe] after transcriptionProvider.finishWithEncoder main=\(Thread.isMainThread)")
@@ -316,11 +330,10 @@ final class RecordingFlowCoordinator {
             recordHaptic.prepare()
             Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
 
-            // Audio preparation is opportunistic follow-up work. It must not
-            // delay Transcription Readiness or prompt on automatic launch.
+            // Hot-session policy (may call `start()`) is follow-up only; HAL
+            // preparation already ran before the encoder phase.
             Task { [weak self] in
                 guard let self else { return }
-                await self.hotMicSession.prewarmIfPermitted()
                 await self.startHotSessionIfNeeded()
             }
         } catch {
@@ -347,7 +360,7 @@ final class RecordingFlowCoordinator {
         // `isStartingRecording` covers the window between the UI flip and
         // `startCapture` returning, when `isRecording` is still false but a
         // setup is already in progress.
-        guard !audioRecorder.isRecording, !isStartingRecording, recordingRun == nil else {
+        guard !recordingEngine.isRecording, !isStartingRecording, recordingRun == nil else {
             Logger.app.info("[RecordTiming] startRecording bailed — session already active or starting")
             return
         }
@@ -502,7 +515,7 @@ final class RecordingFlowCoordinator {
 
     private func makeRecordingRun(deliversToKeyboard: Bool) -> RecordingRun {
         RecordingRun(
-            audioRecorder: audioRecorder,
+            audioRecorder: recordingEngine,
             transcriptionProvider: transcriptionProvider,
             transcriptProcessor: makeTranscriptProcessor(),
             completionAdapters: [

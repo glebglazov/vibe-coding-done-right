@@ -22,7 +22,7 @@ extension RecordingFlowCoordinator {
     /// Audio capture begins right away; model initialization is awaited in the background.
     func handleRecordDeepLink() async {
         switch state {
-        case .recording where audioRecorder.isRecording:
+        case .recording where isRecording:
             // Already recording, ignore duplicate deep link
             break
         case .transcribing:
@@ -43,7 +43,7 @@ extension RecordingFlowCoordinator {
         // false) or actively Capturing → drive the normal stop path. It cancels
         // during Arming (no audio ever flowed → cancellation, keyboard idle) and
         // finalizes during Capturing.
-        if state == .arming || audioRecorder.isRecording {
+        if state == .arming || isRecording {
             launchedViaDeepLink = true
             stoppedViaDeepLink = true
             await stopAndTranscribe(sendToKeyboard: true)

@@ -14,6 +14,13 @@ enum ParakeetProviderTestSupport {
     /// Artificial delay inside `loadCoreModels` (after download) for reentrancy tests.
     static var simulateCoreLoadDuration: Duration = .zero
 
+    /// Artificial delay at the start of `finishWithEncoder` for coordinator
+    /// prewarm / record-during-grind tests.
+    static var simulateEncoderLoadDuration: Duration = .zero
+
+    /// Invoked when `finishWithEncoder` begins (after the core phase barrier).
+    static var onFinishWithEncoderEntered: (@Sendable () async -> Void)?
+
     /// Number of times `timedLoadModel` ran (incremented even when bypassing).
     static var modelLoadInvocationCount = 0
 
@@ -27,6 +34,8 @@ enum ParakeetProviderTestSupport {
         onModelLoadStarted = nil
         bypassRealMLLoad = false
         simulateCoreLoadDuration = .zero
+        simulateEncoderLoadDuration = .zero
+        onFinishWithEncoderEntered = nil
         modelLoadInvocationCount = 0
         recordedInitPhases = []
         recordInitPhases = false
