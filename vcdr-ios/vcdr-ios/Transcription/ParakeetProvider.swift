@@ -87,13 +87,26 @@ actor ParakeetProvider: TranscriptionProvider {
         Logger.transcription.info("[InitTiming] artifacts onDisk=\(modelsOnDisk) before download")
 
         do {
-            // Phase 1: Download models if not cached (typically instant when cached)
+            // Phase 1: Fetch model BYTES only if not cached. We deliberately call
+            // `DownloadUtils.downloadRepo` (pure URLSession, "does not load models")
+            // instead of `AsrModels.download`. The latter's convenience path runs a
+            // blocking `MLModel(contentsOf:)` ANE compile per model right after the
+            // fetch (`DownloadUtils.loadModels`) — on the cooperative pool, since this
+            // `await` is on the actor's executor. On a reinstall that starves the pool
+            // for ~15s×4 cold compiles AND duplicates the compile that the offloaded
+            // `.compiling` phase below already does correctly. Bytes only here; the
+            // single compile happens off-pool in `loadModelsInParallel`.
+            // Trade-off: we depend on FluidAudio's on-disk cache layout (downloadRepo
+            // writes into `parent/<repo.folderName>`, which equals defaultCacheDirectory).
             initPhase = .downloading
             Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=downloading set main=\(Thread.isMainThread)")
             let downloadStart = ContinuousClock.now
-            Logger.transcription.info("[LaunchProbe] ParakeetProvider before AsrModels.download main=\(Thread.isMainThread)")
-            let modelDir = try await AsrModels.download(version: .v3)
-            Logger.transcription.info("[LaunchProbe] ParakeetProvider after AsrModels.download main=\(Thread.isMainThread)")
+            let modelDir = AsrModels.defaultCacheDirectory(for: .v3)
+            Logger.transcription.info("[LaunchProbe] ParakeetProvider before downloadRepo main=\(Thread.isMainThread)")
+            if !AsrModels.modelsExist(at: modelDir) {
+                try await DownloadUtils.downloadRepo(.parakeet, to: modelDir.deletingLastPathComponent())
+            }
+            Logger.transcription.info("[LaunchProbe] ParakeetProvider after downloadRepo main=\(Thread.isMainThread)")
             let downloadMs = self.elapsedMs(since: downloadStart)
             Logger.transcription.info("Model download/cache check completed in \(downloadMs)")
 
