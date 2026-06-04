@@ -546,7 +546,12 @@ final class AudioRecorder {
     /// resumes instead of staying paused until VCDR is force-quit. The next
     /// record tap re-prepares the session, paying ~50-200ms activation, an
     /// acceptable cost for not holding system audio hostage between recordings.
-    func endHotSession() {
+    /// Throws if the audio session could not be deactivated. The engine-side
+    /// teardown (tap removal, engine stop, state reset) always completes first,
+    /// so a thrown error means a *partial* release: the mic indicator is down
+    /// but the session deactivation didn't take. `HotMicSession` treats this as
+    /// fail-closed — it withdraws readiness regardless and logs the trouble.
+    func endHotSession() throws {
         let wasRunning = isHot
 
         if let engine = audioEngine {
@@ -558,24 +563,31 @@ final class AudioRecorder {
         isRecording = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
 
-        deactivateSession()
+        let releaseError = deactivateSession()
 
         Logger.recording.info("Hot audio session ended (engine was running: \(wasRunning))")
+
+        if let releaseError { throw releaseError }
     }
 
-    /// Deactivates the audio session and cleans up observers.
-    /// Used by `restartEngine()` as a last resort when the new engine fails
-    /// to start after a route change, so the session isn't left half-alive.
-    func deactivateSession() {
-        guard audioSessionConfigured else { return }
+    /// Deactivates the audio session and cleans up observers, returning the
+    /// failure (if any) so callers can decide whether a partial release matters.
+    /// `restartEngine()` uses it best-effort and ignores the result; `endHotSession()`
+    /// propagates it so the Hot Mic Session can fail closed.
+    @discardableResult
+    func deactivateSession() -> (any Error)? {
+        guard audioSessionConfigured else { return nil }
+        var releaseError: (any Error)?
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         } catch {
             Logger.recording.warning("Failed to deactivate audio session: \(error)")
+            releaseError = error
         }
         audioSessionConfigured = false
         removeInterruptionObservers()
         Logger.recording.info("Audio session deactivated")
+        return releaseError
     }
 
     // MARK: - Level Metering

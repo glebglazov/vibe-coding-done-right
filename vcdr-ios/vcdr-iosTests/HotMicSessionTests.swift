@@ -30,6 +30,28 @@ struct HotMicSessionTests {
         #expect(!env.presence.isShown)
     }
 
+    @Test("teardown fails closed: readiness still closes when audio release fails")
+    func teardownFailsClosedOnAudioReleaseFailure() async {
+        let env = makeEnv(policy: .fiveMinutes)
+        env.engine.endHotSessionError = FakeAudioReleaseError()
+
+        await env.session.start()
+        await settle()
+
+        #expect(env.channel.isAppLikelyAlive())
+        #expect(env.presence.isShown)
+
+        env.clock.advance() // idle window elapses → teardown with a failing release
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+
+        // Audio release threw, but the user-visible readiness signals must close:
+        // the Heartbeat goes stale (keyboard falls back to Deep-Link Fallback)
+        // and Mic Presence stops advertising readiness.
+        #expect(!env.channel.isAppLikelyAlive())
+        await waitUntil { env.presence.stopCalls == 1 }
+        #expect(!env.presence.isShown)
+    }
+
     @Test("a recording cancels the pending teardown")
     func recordingCancelsIdleTimer() async {
         let env = makeEnv(policy: .fiveMinutes)
@@ -418,6 +440,10 @@ final class FakeWarmEngine: WarmEngine {
     var endHotSessionCalls = 0
     /// When false, `startHotSession` reports failure and leaves the engine cold.
     var startSucceeds = true
+    /// When set, `endHotSession` still completes its local teardown (clears
+    /// `isHot`) but throws — modeling a partial audio-release failure so tests
+    /// can assert the session fails closed.
+    var endHotSessionError: (any Error)?
 
     func requestMicrophonePermission() async -> Bool {
         permissionRequests += 1
@@ -434,12 +460,17 @@ final class FakeWarmEngine: WarmEngine {
         return startSucceeds
     }
 
-    func endHotSession() {
+    func endHotSession() throws {
         endHotSessionCalls += 1
         isHot = false
         isRecording = false
+        if let endHotSessionError { throw endHotSessionError }
     }
 }
+
+/// Stand-in for a partial audio-release failure (e.g. the audio session
+/// refusing to deactivate) surfaced by `endHotSession`.
+struct FakeAudioReleaseError: Error {}
 
 /// Spy `MicPresence` that mirrors `HotMicActivityController`'s idempotency: a
 /// second `start()` while already shown is a no-op, so `startCalls` counts

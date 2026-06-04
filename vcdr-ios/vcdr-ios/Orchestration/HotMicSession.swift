@@ -16,7 +16,11 @@ protocol WarmEngine: AnyObject {
     func prepareAudioSession() async
     func prepareEngine() async
     func startHotSession() async -> Bool
-    func endHotSession()
+    /// Fully releases the warm engine and audio session. Throws on a *partial*
+    /// release (e.g. the audio session won't deactivate) after the engine-side
+    /// teardown has already completed. The Hot Mic Session withdraws readiness
+    /// regardless — see `teardown()`.
+    func endHotSession() throws
 }
 
 /// The lock-screen / Dynamic Island presence shown while the engine is warm,
@@ -287,13 +291,26 @@ final class HotMicSession {
     }
 
     /// Brings the whole session down atomically: stops the engine, clears the
-    /// heartbeat (so the keyboard falls back to its URL-launch path), and ends
-    /// the presence. Idempotent.
+    /// heartbeat (so the keyboard falls back to its Deep-Link Fallback path), and
+    /// ends the presence. Idempotent.
+    ///
+    /// Readiness Fail-Closed: audio release can report a partial failure (e.g.
+    /// the audio session refuses to deactivate), but the user-visible readiness
+    /// signals must come down regardless — VCDR must never keep advertising a
+    /// warm mic it can no longer honor. So the Heartbeat and Mic Presence are
+    /// cleared whether or not `endHotSession()` succeeds; a failed release is
+    /// surfaced through diagnostics, not allowed to leave readiness visible.
     private func teardown() {
         idleTask?.cancel()
         idleTask = nil
         idleDeadline = nil
-        engine.endHotSession()
+        do {
+            try engine.endHotSession()
+        } catch {
+            Logger.app.error(
+                "HotMicSession.teardown: audio release failed (\(error.localizedDescription)); withdrawing readiness anyway"
+            )
+        }
         stopHeartbeat()
         Task { [presence] in await presence.stop() }
     }
