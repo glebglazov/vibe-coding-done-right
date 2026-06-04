@@ -24,7 +24,13 @@ protocol WarmEngine: AnyObject {
 /// `HotMicActivityController` is the production adapter; tests use a spy.
 @MainActor
 protocol MicPresence {
-    func start() async
+    /// Shows the presence. `deadline`, when non-nil, is the *Presence Deadline*:
+    /// the wall-clock instant past which readiness must no longer be advertised.
+    /// The adapter only reflects this deadline (e.g. as a Live Activity stale
+    /// date) — it never computes timeout policy itself; that lives in the Hot
+    /// Mic Session. `nil` means no inactivity deadline (`.always`, or while a
+    /// recording is in progress).
+    func start(deadline: Date?) async
     func stop() async
 }
 
@@ -180,7 +186,9 @@ final class HotMicSession {
         idleTask = nil
         idleDeadline = nil
         startHeartbeat()
-        Task { [presence] in await presence.start() }
+        // No Presence Deadline while recording — a long recording must not let
+        // readiness go stale mid-capture; the timer re-arms on stop.
+        Task { [presence] in await presence.start(deadline: nil) }
     }
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
@@ -237,16 +245,16 @@ final class HotMicSession {
             if !engine.isRecording { teardown() }
             return
         case .always:
+            // No inactivity Presence Deadline — readiness lives for the app
+            // lifetime, so the presence carries no stale date.
             idleDeadline = nil
-            Task { [presence] in await presence.start() }
+            Task { [presence] in await presence.start(deadline: nil) }
             return
         default:
             break
         }
 
         guard !engine.isRecording else { return }
-
-        Task { [presence] in await presence.start() }
 
         let currentTime = now()
         if idleDeadline == nil {
@@ -261,6 +269,12 @@ final class HotMicSession {
             Logger.app.info("Hot session expired while backgrounded — tearing down on foreground")
             return
         }
+
+        // Hand the presence the same wall-clock deadline as the idle timer, so
+        // readiness stops being advertised around the promised window even if
+        // the app is backgrounded or suspended and the in-process timer below
+        // never fires.
+        Task { [presence, deadline] in await presence.start(deadline: deadline) }
 
         idleTask = Task { [weak self, clock] in
             await clock.sleep(for: .seconds(remaining))

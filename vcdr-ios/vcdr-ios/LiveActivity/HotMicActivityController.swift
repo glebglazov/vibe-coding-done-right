@@ -19,12 +19,12 @@ final class HotMicActivityController {
         }
     }
 
-    func start() async {
+    func start(deadline: Date?) async {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             Logger.app.info("Live Activities disabled in Settings")
             return
         }
-        let content = makeContent()
+        let content = makeContent(deadline: deadline)
         if let activity {
             await activity.update(content)
             return
@@ -55,10 +55,15 @@ final class HotMicActivityController {
         Logger.app.info("Hot mic Live Activity ended")
     }
 
-    private func makeContent() -> ActivityContent<HotMicActivityAttributes.ContentState> {
+    /// The Presence Deadline maps directly onto the Live Activity stale date:
+    /// the system flips the activity to its stale rendering at that wall-clock
+    /// instant even while the app is suspended, so "Ready to record" cannot
+    /// outlive the finite Hot-Session Timeout. `nil` (e.g. `.always`, or while
+    /// recording) leaves the activity with no expiry.
+    private func makeContent(deadline: Date?) -> ActivityContent<HotMicActivityAttributes.ContentState> {
         ActivityContent(
             state: HotMicActivityAttributes.ContentState(),
-            staleDate: nil
+            staleDate: deadline
         )
     }
 }

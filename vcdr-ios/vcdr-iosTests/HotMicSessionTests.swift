@@ -279,6 +279,52 @@ struct HotMicSessionTests {
         #expect(!env.presence.isShown)
     }
 
+    @Test("finite policy hands presence a deadline matching the idle window")
+    func finitePolicyGivesPresenceMatchingDeadline() async {
+        let fixedNow = Date(timeIntervalSince1970: 1000)
+        let env = makeEnv(policy: .fiveMinutes, now: { fixedNow })
+
+        await env.session.start()
+        await settle()
+
+        let expected = fixedNow.addingTimeInterval(TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
+        #expect(env.presence.deadline == expected)
+        #expect(env.presence.isShown)
+
+        // Cleanup: drain the parked idle sleeper.
+        env.clock.advance()
+        await settle()
+    }
+
+    @Test(".always gives presence no deadline but keeps the heartbeat alive")
+    func alwaysPolicyHasNoPresenceDeadline() async {
+        let env = makeEnv(policy: .always)
+
+        await env.session.start()
+        await settle()
+
+        #expect(env.presence.isShown)
+        #expect(env.presence.deadline == nil)
+        // Reachability contract is unweakened: heartbeat still signals alive.
+        #expect(env.channel.isAppLikelyAlive())
+    }
+
+    @Test("recording clears the presence deadline so readiness can't go stale mid-capture")
+    func recordingClearsPresenceDeadline() async {
+        let env = makeEnv(policy: .fiveMinutes)
+
+        await env.session.start()
+        await settle()
+        #expect(env.presence.deadline != nil)
+
+        env.engine.isRecording = true
+        env.session.recordingStarted()
+        await settle()
+
+        #expect(env.presence.deadline == nil)
+        #expect(env.presence.isShown)
+    }
+
     @Test("recording keeps presence visible")
     func recordingKeepsPresenceVisible() async {
         let env = makeEnv(policy: .fiveMinutes)
@@ -403,8 +449,13 @@ final class SpyPresence: MicPresence {
     private(set) var startCalls = 0
     private(set) var stopCalls = 0
     private(set) var isShown = false
+    /// The most recent Presence Deadline handed to `start` — mirrors
+    /// `HotMicActivityController` updating the stale date even when already
+    /// shown, so tests can assert the deadline tracks the idle window.
+    private(set) var deadline: Date?
 
-    func start() async {
+    func start(deadline: Date?) async {
+        self.deadline = deadline
         guard !isShown else { return }
         isShown = true
         startCalls += 1

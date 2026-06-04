@@ -11,12 +11,16 @@ The app-group channel between the iOS app and its custom keyboard extension. It 
 _Avoid_: keyboard transport, IPC layer, shared defaults protocol
 
 **Heartbeat**:
-The app-alive signal written by the main app while the Hot Mic Session is alive. The keyboard uses the heartbeat to choose between sending an in-place command and opening the app through a deep link.
+The app-alive signal written by the main app while the Hot Mic Session is alive and reachable. The keyboard uses the heartbeat to choose whether to attempt an in-place command; command acknowledgement is still required to prove the path is working right now.
 _Avoid_: ping, liveness flag, alive bit
 
 **Deep-Link Fallback**:
 The keyboard's recovery path when the heartbeat is stale or a command is not acknowledged quickly enough. It opens the main app to start or stop recording when the in-keyboard command path cannot be trusted.
 _Avoid_: URL workaround, app bounce, launch fallback
+
+**Command Acknowledgement**:
+The app's confirmation that a Keyboard Channel command was received and accepted. Acknowledgement proves command reachability; it does not by itself mean audio is already Capturing.
+_Avoid_: recording state, start state, command sent
 
 ### Recording And Delivery
 
@@ -29,11 +33,19 @@ The app-level warm-microphone lifecycle that makes keyboard-driven recording sta
 _Avoid_: warm engine, background mic mode
 
 **Mic Presence**:
-The user-visible indication that VCDR is responsible for the active microphone while the Hot Mic Session is warm. It exists to identify VCDR beside the system microphone indicator even when the user is not actively recording.
+The user-visible indication that VCDR is responsible for the active microphone while the Hot Mic Session is warm and reachable for keyboard-driven recording. If Mic Presence says VCDR is ready, a keyboard start should be expected to record in place rather than require Deep-Link Fallback. For a finite Hot-Session Timeout, Mic Presence should end around the timeout deadline rather than remain visible as a stale readiness signal.
 _Avoid_: live activity implementation, orange-dot label, mic badge
 
+**Readiness Fail-Closed**:
+The Hot Mic Session teardown rule that user-visible readiness must disappear when the app can no longer uphold keyboard-driven recording. Teardown intends to stop the engine, clear the Heartbeat, and end Mic Presence together; if lower-level audio release fails, Heartbeat and Mic Presence still close so VCDR does not advertise readiness it cannot honor.
+_Avoid_: partial teardown, best-effort cleanup
+
+**Presence Deadline**:
+The wall-clock deadline after which Mic Presence must stop advertising readiness. For a finite Hot-Session Timeout, the Presence Deadline is the Hot-Session Timeout deadline; for Always, there is no inactivity Presence Deadline, but Mic Presence still depends on keyboard reachability.
+_Avoid_: stale date, widget expiry, live activity timeout
+
 **Hot-Session Timeout**:
-The user's policy for how long the Hot Mic Session stays warm after recording stops. It can mean never keep the mic warm, keep it warm for a finite idle window, or keep it warm for the app lifetime.
+The user's wall-clock policy for how long the Hot Mic Session stays warm after recording stops. It can mean never keep the mic warm, keep it warm for a finite idle window, or keep it warm for the app lifetime. A finite timeout is measured from the start of idleness even while the app is backgrounded; once it expires, Mic Presence should stop saying VCDR is ready.
 _Avoid_: idle timer, warm timeout, background duration
 
 **Bundled Result**:
