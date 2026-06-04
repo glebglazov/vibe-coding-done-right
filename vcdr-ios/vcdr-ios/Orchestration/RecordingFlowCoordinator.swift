@@ -153,11 +153,12 @@ final class RecordingFlowCoordinator {
     /// progress label starts appending elapsed time. Fast inits stay quiet;
     /// slow ones get a visible tick so the wait reads as bounded.
     private static let initElapsedRevealThreshold: Int = 2
+    private nonisolated static let initElapsedRevealThresholdForLabel: Int = 2
 
     /// Renders the init progress label for the given phase + elapsed time.
     /// Past `initElapsedRevealThreshold` seconds the label gains a "· Ns"
     /// suffix so a stuck-looking spinner gains a visible heartbeat.
-    private static func formatInitProgress(
+    nonisolated static func formatInitProgress(
         phase: ParakeetProvider.InitPhase,
         elapsedSeconds: Int
     ) -> String {
@@ -168,7 +169,7 @@ final class RecordingFlowCoordinator {
         case .compiling: base = "Loading model"
         case .ready: return "Ready"
         }
-        if elapsedSeconds >= initElapsedRevealThreshold {
+        if elapsedSeconds >= initElapsedRevealThresholdForLabel {
             return "\(base) · \(elapsedSeconds)s"
         }
         return base
@@ -295,10 +296,12 @@ final class RecordingFlowCoordinator {
         }
 
         do {
-            Logger.app.info("[LaunchProbe] before transcriptionProvider.initialize await main=\(Thread.isMainThread)")
-            try await transcriptionProvider.initialize(priority: priority)
-            Logger.app.info("[LaunchProbe] after transcriptionProvider.initialize main=\(Thread.isMainThread)")
-            Logger.app.info("[InitTiming] transcriptionProvider.initialize() done at +\(ContinuousClock.now - initStart)")
+            Logger.app.info("[LaunchProbe] before transcriptionProvider.loadCoreModels await main=\(Thread.isMainThread)")
+            try await transcriptionProvider.loadCoreModels(priority: priority)
+            Logger.app.info("[LaunchProbe] before transcriptionProvider.finishWithEncoder await main=\(Thread.isMainThread)")
+            try await transcriptionProvider.finishWithEncoder()
+            Logger.app.info("[LaunchProbe] after transcriptionProvider.finishWithEncoder main=\(Thread.isMainThread)")
+            Logger.app.info("[InitTiming] transcriptionProvider two-phase init done at +\(ContinuousClock.now - initStart)")
 
             pollTask.cancel()
             // Don't overwrite state if recording started while we were initializing

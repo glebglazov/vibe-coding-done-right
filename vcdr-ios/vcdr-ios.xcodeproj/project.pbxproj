@@ -105,6 +105,11 @@
 			path = "vcdr-keyboard";
 			sourceTree = "<group>";
 		};
+		AA11BB22CC33DD44EE660001 /* ../SharedTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ../SharedTests;
+			sourceTree = "<group>";
+		};
 		D1D1D10A2F74750000000001 /* Shared (iOS) */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = "Shared (iOS)";
@@ -147,11 +152,6 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			name = LiveActivityShared;
 			path = ../Shared/LiveActivity;
-			sourceTree = "<group>";
-		};
-		AA11BB22CC33DD44EE660001 /* SharedTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ../SharedTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -218,7 +218,7 @@
 				E57289832F74745800E1C61C /* vcdr-ios */,
 				AA0000022F74750000000001 /* vcdr-keyboard */,
 				E57289912F74745900E1C61C /* vcdr-iosTests */,
-				AA11BB22CC33DD44EE660001 /* SharedTests */,
+				AA11BB22CC33DD44EE660001 /* ../SharedTests */,
 				E572899B2F74745900E1C61C /* vcdr-iosUITests */,
 				E5157DF32F982543004CFE53 /* vcdr-widgets */,
 				E5157DEE2F982543004CFE53 /* Frameworks */,
@@ -332,8 +332,8 @@
 				E57289902F74745900E1C61C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
+				AA11BB22CC33DD44EE660001 /* ../SharedTests */,
 				E57289912F74745900E1C61C /* vcdr-iosTests */,
-				AA11BB22CC33DD44EE660001 /* SharedTests */,
 			);
 			name = "vcdr-iosTests";
 			packageProductDependencies = (
