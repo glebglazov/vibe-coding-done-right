@@ -64,6 +64,32 @@ struct KeyboardChannelTests {
         #expect(channel.stopRecording(now: fixedNow) == .openURL(KeyboardChannel.stopDeepLinkURL))
     }
 
+    @Test("stale heartbeat prefers Deep-Link Fallback over trusting visible readiness")
+    func staleHeartbeatPrefersDeepLinkFallback() {
+        let defaults = makeDefaults()
+        let fixedNow = Date(timeIntervalSince1970: 1_000)
+        let channel = KeyboardChannel(defaults: defaults, heartbeatFreshnessWindow: 18)
+
+        // Mic Presence may still be advertising "Ready to record" (visible
+        // readiness), but the keyboard trusts only the Heartbeat. A beat older
+        // than the freshness window is stale and must route through the
+        // Deep-Link Fallback — never a Darwin command that assumes the app is
+        // listening.
+        channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-19))
+        #expect(channel.startRecording(captures: [], now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
+        #expect(channel.stopRecording(now: fixedNow) == .openURL(KeyboardChannel.stopDeepLinkURL))
+
+        // Fail-closed teardown clears the Heartbeat (alive: false → 0); the
+        // keyboard reads that as stale and still falls back to the deep link.
+        channel.writeHeartbeat(alive: false, now: fixedNow)
+        #expect(channel.startRecording(captures: [], now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
+        #expect(channel.stopRecording(now: fixedNow) == .openURL(KeyboardChannel.stopDeepLinkURL))
+
+        // Only a beat inside the freshness window earns the fast Darwin path.
+        channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-1))
+        #expect(channel.startRecording(captures: [], now: fixedNow) == .commandSent)
+    }
+
     @Test("command is read once")
     func commandReadOnce() {
         let defaults = makeDefaults()
