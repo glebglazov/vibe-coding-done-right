@@ -173,6 +173,9 @@ struct SettingsView: View {
             NavigationLink("View Logs") {
                 DebugLogView()
             }
+            NavigationLink("Launch History") {
+                LaunchHistoryView()
+            }
         } header: {
             Text("Debug")
         } footer: {

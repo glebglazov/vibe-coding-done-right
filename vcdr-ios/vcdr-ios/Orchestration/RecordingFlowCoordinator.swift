@@ -329,6 +329,9 @@ final class RecordingFlowCoordinator {
             // instead of connecting under load on the main thread.
             recordHaptic.prepare()
             Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
+            if let outcome = await transcriptionProvider.launchLoadOutcome {
+                await LaunchTelemetry.recordOnce(outcome: outcome)
+            }
 
             // Hot-session policy (may call `start()`) is follow-up only; HAL
             // preparation already ran before the encoder phase.

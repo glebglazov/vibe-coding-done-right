@@ -123,6 +123,10 @@ _Avoid_: PREPARING, model init, compiling state
 The parts of the main app that do not depend on Transcription Readiness — navigation, settings, conversation history, and debug tools. The App Shell stays fully usable while Transcription Readiness is pending.
 _Avoid_: launch screen, boot gate, init blocker
 
+**Launch Verdict**:
+The classification of one launch's transcription-model load cost: Cold Download (model artifacts had to be fetched), Cold Specialize (artifacts were on disk but the system's ANE specialization cache was purged — reboot, OS or app update, storage pressure — forcing a re-grind), or Warm (all loads hit caches). The verdict explains why a launch was slow; each launch's verdict and timings are persisted as launch telemetry. Cold Specialize recurs in normal life — it is not a first-install-only event.
+_Avoid_: cold start (ambiguous between download and specialization), first launch, slow launch
+
 **History Bootstrap**:
 The one-time launch step that reconciles local and iCloud conversation storage before the active history store is constructed. It runs before Conversations can be browsed when a reconcile migration may be needed; otherwise it completes quickly enough to be invisible. While History Bootstrap is pending, the history screen is reachable and shows a loading state rather than blocking navigation.
 _Avoid_: iCloud init, bootstrapHistory, store factory

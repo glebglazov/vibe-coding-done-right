@@ -34,9 +34,14 @@ actor ParakeetProvider: TranscriptionProvider {
 
     private var loadedCore: ParakeetLoadedCoreModels?
     private var modelsOnDiskAtInit = false
-    private var downloadMsForVerdict = ""
+    private var downloadMs: Double = 0
     private var initQoS: DispatchQoS.QoSClass = .userInitiated
     private var initTaskPriority: TaskPriority = .userInitiated
+
+    /// Launch Verdict + timings of this process's model load, set when the
+    /// encoder lands. Read by the coordinator to persist launch telemetry.
+    /// Stays `nil` for test-stub loads.
+    private(set) var launchLoadOutcome: LaunchLoadOutcome?
 
     // MARK: - Constants
     private static let millisecondsPerSecond: Double = 1000
@@ -49,11 +54,14 @@ actor ParakeetProvider: TranscriptionProvider {
     /// encoder. 3s sits well clear of the warm band.
     private static let coldSpecializationThresholdMs: Double = 3000
 
-    private func elapsedMs(since start: ContinuousClock.Instant) -> String {
+    private func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {
         let duration = ContinuousClock.now - start
-        let ms = Double(duration.components.seconds) * Self.millisecondsPerSecond
+        return Double(duration.components.seconds) * Self.millisecondsPerSecond
             + Double(duration.components.attoseconds) / Self.attosecondsPerMillisecond
-        return String(format: "%.0fms", ms)
+    }
+
+    private func elapsedMs(since start: ContinuousClock.Instant) -> String {
+        String(format: "%.0fms", elapsedMilliseconds(since: start))
     }
 
     func initialize() async throws {
@@ -101,8 +109,8 @@ actor ParakeetProvider: TranscriptionProvider {
                 try await DownloadUtils.downloadRepo(.parakeet, to: modelDir.deletingLastPathComponent())
             }
             Logger.transcription.info("[LaunchProbe] ParakeetProvider after downloadRepo main=\(Thread.isMainThread)")
-            downloadMsForVerdict = self.elapsedMs(since: downloadStart)
-            Logger.transcription.info("Model download/cache check completed in \(self.downloadMsForVerdict)")
+            downloadMs = self.elapsedMilliseconds(since: downloadStart)
+            Logger.transcription.info("Model download/cache check completed in \(String(format: "%.0fms", self.downloadMs))")
 
             if ParakeetProviderTestSupport.bypassRealMLLoad {
                 try await Task.sleep(for: .milliseconds(30))
@@ -170,19 +178,27 @@ actor ParakeetProvider: TranscriptionProvider {
                 return (encoderResult, timings)
             }.value
 
-            let verdict: String
+            let verdict: LaunchVerdict
             if !modelsOnDiskAtInit {
-                verdict = "COLD_DOWNLOAD"
+                verdict = .coldDownload
             } else if loadTimings.maxAneMs >= Self.coldSpecializationThresholdMs {
-                verdict = "COLD_SPECIALIZE"
+                verdict = .coldSpecialize
             } else {
-                verdict = "WARM"
+                verdict = .warm
             }
             Logger.transcription.info(
-                "[InitTiming] launch verdict=\(verdict) onDisk=\(self.modelsOnDiskAtInit) downloadMs=\(self.downloadMsForVerdict) "
+                "[InitTiming] launch verdict=\(verdict.rawValue) onDisk=\(self.modelsOnDiskAtInit) "
+                    + "downloadMs=\(String(format: "%.0f", self.downloadMs)) "
                     + "encoderMs=\(String(format: "%.0f", loadTimings.encoderMs)) "
                     + "maxAneMs=\(String(format: "%.0f", loadTimings.maxAneMs))"
             )
+            if !core.isTestStub {
+                launchLoadOutcome = LaunchLoadOutcome(
+                    verdict: verdict,
+                    timings: loadTimings,
+                    downloadMs: downloadMs
+                )
+            }
 
             let aneConfig = MLModelConfiguration()
             aneConfig.allowLowPrecisionAccumulationOnGPU = true
