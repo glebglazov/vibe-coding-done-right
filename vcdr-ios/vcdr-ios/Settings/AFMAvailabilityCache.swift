@@ -26,11 +26,15 @@ final class AFMAvailabilityCache {
     func refresh() async -> Bool {
         if let probe { return await probe.value }
         Logger.app.info("[LaunchProbe] AFMAvailabilityCache.refresh entry main=\(Thread.isMainThread)")
-        let task = Task.detached(priority: .utility) {
-            Logger.app.info("[LaunchProbe] AFMAvailabilityCache detached body start main=\(Thread.isMainThread)")
-            let result = SystemLanguageModel.default.isAvailable
-            Logger.app.info("[LaunchProbe] AFMAvailabilityCache detached body end main=\(Thread.isMainThread) available=\(result)")
-            return result
+        // The availability accessor blocks for tens of seconds on first launch,
+        // so it must run on GCD, not the cooperative pool (ADR-0003).
+        let task = Task {
+            await withBlockingTask(qos: .utility) {
+                Logger.app.info("[LaunchProbe] AFMAvailabilityCache probe body start main=\(Thread.isMainThread)")
+                let result = SystemLanguageModel.default.isAvailable
+                Logger.app.info("[LaunchProbe] AFMAvailabilityCache probe body end main=\(Thread.isMainThread) available=\(result)")
+                return result
+            }
         }
         probe = task
         let result = await task.value

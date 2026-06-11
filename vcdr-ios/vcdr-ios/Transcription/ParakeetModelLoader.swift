@@ -69,7 +69,7 @@ enum ParakeetModelLoader {
         let jointResult = try await timedLoadModel(
             name: "JointDecision", url: jointURL, computeUnits: .cpuAndNeuralEngine, qos: qos
         )
-        let vocabulary = try await loadVocabulary(from: vocabularyURL)
+        let vocabulary = try await loadVocabulary(from: vocabularyURL, qos: qos)
 
         return ParakeetLoadedCoreModels(
             preprocessor: preprocessorResult.model,
@@ -127,17 +127,24 @@ enum ParakeetModelLoader {
         return (model, ms)
     }
 
-    private static func loadVocabulary(from url: URL) async throws -> [Int: String] {
-        let data = try Data(contentsOf: url)
-        guard let jsonDict = try JSONSerialization.jsonObject(with: data) as? [String: String] else {
-            return [:]
-        }
-        var vocabulary: [Int: String] = [:]
-        for (key, value) in jsonDict {
-            if let tokenId = Int(key) {
-                vocabulary[tokenId] = value
+    private static func loadVocabulary(
+        from url: URL,
+        qos: DispatchQoS.QoSClass
+    ) async throws -> [Int: String] {
+        // Blocking file read + parse stays off the cooperative pool (ADR-0003),
+        // same as the model loads beside it.
+        try await withThrowingBlockingTask(qos: qos) {
+            let data = try Data(contentsOf: url)
+            guard let jsonDict = try JSONSerialization.jsonObject(with: data) as? [String: String] else {
+                return [:]
             }
+            var vocabulary: [Int: String] = [:]
+            for (key, value) in jsonDict {
+                if let tokenId = Int(key) {
+                    vocabulary[tokenId] = value
+                }
+            }
+            return vocabulary
         }
-        return vocabulary
     }
 }
