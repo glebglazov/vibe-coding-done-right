@@ -155,6 +155,10 @@ final class RecordingFlowCoordinator {
     /// Leaves the cooperative executor free for the App Shell's first frame
     /// and immediate navigation before automatic CoreML specialization starts.
     private static let shellRenderGracePeriod: Duration = .milliseconds(500)
+    /// Grace before automatic init on a predicted-Warm launch. A warm load is
+    /// ~2s of GCD work with no ANE grind, so the shell only needs first-frame
+    /// headroom — the full cold grace would just be latency floor (F6).
+    private static let warmShellRenderGracePeriod: Duration = .milliseconds(100)
     /// Seconds the model can spend in a single init phase before the
     /// progress label starts appending elapsed time. Fast inits stay quiet;
     /// slow ones get a visible tick so the wait reads as bounded.
@@ -246,14 +250,30 @@ final class RecordingFlowCoordinator {
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
 
-    /// Automatic launch path: render the App Shell first, then initialize below
-    /// interactive UI priority. A Recording Run bypasses this delay and asks the
-    /// provider to initialize promptly through its own setup task.
+    /// Automatic launch path, driven by the Predicted Launch Verdict. A
+    /// predicted-Warm launch initializes at `.userInitiated` with only a short
+    /// shell grace — `.utility` is throttled under Low Power Mode and elevated
+    /// thermal state, stretching a warm ~2s load to 10s+ (F2), and the QoS
+    /// choice only earns its keep when a cold grind is expected. Predicted-cold
+    /// launches keep the full grace and `.utility` so the App Shell stays
+    /// responsive during the specialization grind. A Recording Run bypasses
+    /// this delay and asks the provider to initialize promptly through its own
+    /// setup task. Mispredictions are visible in Launch History: the actual
+    /// verdict lands in launch telemetry alongside this prediction's log line.
     func initializeModelAutomatically() async {
-        try? await Task.sleep(for: Self.shellRenderGracePeriod)
+        let predicted = await LaunchTelemetry.predictedVerdict()
+        let warmPredicted = predicted == .warm
+        let priority: TaskPriority = warmPredicted ? .userInitiated : .utility
+        let grace = warmPredicted ? Self.warmShellRenderGracePeriod : Self.shellRenderGracePeriod
+        Logger.app.info(
+            "[InitTiming] predicted verdict=\(predicted.rawValue) "
+                + "qos=\(warmPredicted ? "userInitiated" : "utility") "
+                + "graceMs=\(Int(grace / .milliseconds(1)))"
+        )
+        try? await Task.sleep(for: grace)
         guard !Task.isCancelled else { return }
-        await Task(priority: .utility) { [weak self] in
-            await self?.initializeModel(priority: .utility)
+        await Task(priority: priority) { [weak self] in
+            await self?.initializeModel(priority: priority)
         }.value
     }
 

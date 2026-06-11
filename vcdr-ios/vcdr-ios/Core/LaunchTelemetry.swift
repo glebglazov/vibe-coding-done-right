@@ -1,3 +1,4 @@
+import FluidAudio
 import Foundation
 import OSLog
 
@@ -69,6 +70,53 @@ enum LaunchTelemetry {
     private static let microsecondsPerSecond: Double = 1_000_000
 
     private static var recordedThisLaunch = false
+    private static var cachedPredictedVerdict: LaunchVerdict?
+
+    // MARK: - Predicted Launch Verdict
+
+    /// Predicted Launch Verdict for this launch, derived from already-persisted
+    /// signals before any model load starts: artifacts on disk, the last
+    /// telemetry record's verdict, and whether the device rebooted since that
+    /// record. Memoized — the coordinator queries it once per launch and later
+    /// consumers (parallel warm loads, barrier timebox, perceived readiness)
+    /// see the same prediction. Must run before `recordOnce`, which overwrites
+    /// the stored boot time the reboot check compares against.
+    static func predictedVerdict() async -> LaunchVerdict {
+        if let cached = cachedPredictedVerdict { return cached }
+        let predicted = await withBlockingTask(qos: .userInitiated) {
+            predictVerdict(
+                artifactsOnDisk: AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .v3)),
+                lastVerdict: loadRecordsSync().last?.verdict,
+                rebootedSinceLastRecord: rebootedSinceLastRecordSync()
+            )
+        }
+        cachedPredictedVerdict = predicted
+        return predicted
+    }
+
+    /// The prediction decision table, separated from its I/O for testability:
+    /// missing artifacts predict Cold Download; no prior telemetry or a reboot
+    /// since the last record predicts Cold Specialize (reboot purges the ANE
+    /// specialization cache, overriding even a Warm last verdict); only a Warm
+    /// last verdict with artifacts intact and no reboot predicts Warm.
+    nonisolated static func predictVerdict(
+        artifactsOnDisk: Bool,
+        lastVerdict: LaunchVerdict?,
+        rebootedSinceLastRecord: Bool
+    ) -> LaunchVerdict {
+        guard artifactsOnDisk else { return .coldDownload }
+        guard let lastVerdict, !rebootedSinceLastRecord else { return .coldSpecialize }
+        return lastVerdict == .warm ? .warm : .coldSpecialize
+    }
+
+    /// Read-only variant of `detectRebootAndRememberBootTime` — compares the
+    /// current `kern.boottime` against the one stored on the last recorded
+    /// launch without remembering it (that stays `recordOnce`'s job).
+    nonisolated private static func rebootedSinceLastRecordSync() -> Bool {
+        let previous = UserDefaults.standard.double(forKey: lastBootTimeKey)
+        guard previous > 0, let bootTime = currentBootTime() else { return false }
+        return abs(bootTime.timeIntervalSince1970 - previous) > bootTimeToleranceSeconds
+    }
 
     /// Appends one record for this launch. Later calls in the same process are
     /// no-ops; defaults I/O runs off the cooperative pool (ADR-0003).
