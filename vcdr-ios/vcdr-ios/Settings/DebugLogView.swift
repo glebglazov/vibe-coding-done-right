@@ -8,6 +8,7 @@ import UIKit
 /// process and dropped `.debug`/`.info` under the system's retention policy.
 struct DebugLogView: View {
     @State private var lines: [String] = []
+    @State private var readCursor: LogBuffer.ReadCursor?
     @State private var isLoading = false
     @State private var justCopied = false
     @State private var sinceMinutes: Int = 60
@@ -18,6 +19,13 @@ struct DebugLogView: View {
     private static let bottomAnchorID = "debug-log-bottom"
     private static let bottomDetectionTolerance: CGFloat = 8
     private static let pollInterval: Duration = .seconds(1)
+    /// Bounds `LazyVStack` diffing while copy/share still use every fetched
+    /// line in the selected window.
+    private static let renderedLineLimit = 500
+
+    private var renderedLines: [String] {
+        Array(lines.suffix(Self.renderedLineLimit))
+    }
 
     var body: some View {
         Group {
@@ -34,7 +42,7 @@ struct DebugLogView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                            ForEach(Array(renderedLines.enumerated()), id: \.offset) { _, line in
                                 Text(line)
                                     .font(.system(size: 11, weight: .regular, design: .monospaced))
                                     .textSelection(.enabled)
@@ -93,7 +101,7 @@ struct DebugLogView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Task { await fetch() }
+                    Task { await fetch(reload: true) }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -122,26 +130,32 @@ struct DebugLogView: View {
     }
 
     private func pollLogs() async {
-        await fetch()
+        readCursor = nil
+        await fetch(reload: true)
         while !Task.isCancelled {
             try? await Task.sleep(for: Self.pollInterval)
             guard !Task.isCancelled else { return }
-            await fetch()
+            await fetch(reload: false)
         }
     }
 
-    private func fetch() async {
+    private func fetch(reload: Bool) async {
         let shouldShowLoadingIndicator = lines.isEmpty
         if shouldShowLoadingIndicator {
             isLoading = true
         }
         let window = sinceMinutes
-        let fetched = await Task.detached(priority: .userInitiated) {
-            Self.readEntries(sinceMinutes: window)
-        }.value
+        let cursor = reload ? nil : readCursor
+        let fetched = await withBlockingTask(qos: .userInitiated) {
+            Self.readEntries(sinceMinutes: window, after: cursor)
+        }
         guard !Task.isCancelled else { return }
-        let shouldScrollToBottom = isAtBottom && fetched != lines
-        lines = fetched
+        readCursor = fetched.cursor
+        let nextLines = reload
+            ? fetched.lines
+            : Self.filteredCurrentLines(lines + fetched.lines, sinceMinutes: window)
+        let shouldScrollToBottom = isAtBottom && nextLines != lines
+        lines = nextLines
         if shouldScrollToBottom {
             bottomScrollRequest += 1
         }
@@ -153,9 +167,20 @@ struct DebugLogView: View {
     /// Merged lines whose timestamp falls within the window. Stored lines start
     /// with a fixed-width sortable timestamp, so a plain `>=` against the cutoff
     /// string filters by age without parsing each line into a `Date`.
-    nonisolated private static func readEntries(sinceMinutes: Int) -> [String] {
+    nonisolated private static func readEntries(
+        sinceMinutes: Int,
+        after cursor: LogBuffer.ReadCursor?
+    ) -> LogBuffer.ReadBatch {
+        let batch = LogBuffer.readBatch(after: cursor)
+        return LogBuffer.ReadBatch(
+            lines: filteredCurrentLines(batch.lines, sinceMinutes: sinceMinutes),
+            cursor: batch.cursor
+        )
+    }
+
+    nonisolated private static func filteredCurrentLines(_ lines: [String], sinceMinutes: Int) -> [String] {
         let cutoff = LogBuffer.timestamp(Date().addingTimeInterval(-Double(sinceMinutes * 60)))
-        return LogBuffer.mergedLines().filter { $0 >= cutoff }
+        return lines.filter { $0 >= cutoff }
     }
 }
 #endif
