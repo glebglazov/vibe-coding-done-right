@@ -21,6 +21,9 @@ enum ParakeetProviderTestSupport {
     /// prewarm / record-during-grind tests.
     static var simulateEncoderLoadDuration: Duration = .zero
 
+    /// Forces `finishWithEncoder` to fail after any configured delay/hooks.
+    static var failFinishWithEncoder = false
+
     /// Invoked when `finishWithEncoder` begins (after the core phase barrier).
     static var onFinishWithEncoderEntered: (@Sendable () async -> Void)?
 
@@ -48,6 +51,7 @@ enum ParakeetProviderTestSupport {
         simulateCoreLoadDuration = .zero
         simulatePerModelLoadDuration = .zero
         simulateEncoderLoadDuration = .zero
+        failFinishWithEncoder = false
         onFinishWithEncoderEntered = nil
         modelLoadInvocationCount = 0
         stubModelLoadMilliseconds = [:]

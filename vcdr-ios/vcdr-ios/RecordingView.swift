@@ -21,6 +21,7 @@ struct RecordingView: View {
     private static let hintFontSize: CGFloat = 13
     private static let returnPulseDuration: Double = 0.8
     private static let aiPillHeight: CGFloat = 36
+    private static let warmingPillHeight: CGFloat = 30
     private static let pillBorder: CGFloat = 1.5
     private static let pillFontSize: CGFloat = 12
 
@@ -119,7 +120,12 @@ struct RecordingView: View {
 
     private var readyContent: some View {
         VStack(spacing: 40) {
-            heroTitle("READY")
+            VStack(spacing: 16) {
+                heroTitle("READY")
+                if coordinator.isModelWarming {
+                    warmingPill
+                }
+            }
             actionCircle(
                 icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
                 label: "RECORD"
@@ -127,6 +133,27 @@ struct RecordingView: View {
                 Task { await coordinator.startRecording() }
             }
         }
+    }
+
+    private var warmingPill: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .tint(theme.primary)
+                .scaleEffect(0.7)
+            Text("Model warming")
+                .font(.system(size: Self.pillFontSize, weight: .semibold))
+                .foregroundStyle(theme.onSurfaceVariant)
+        }
+        .frame(height: Self.warmingPillHeight)
+        .padding(.horizontal, 12)
+        .background(
+            Capsule()
+                .fill(theme.surfaceHigh.opacity(0.7))
+        )
+        .overlay(
+            Capsule()
+                .stroke(theme.onSurfaceVariant.opacity(0.35), lineWidth: Self.pillBorder)
+        )
     }
 
     /// Arming phase: the tap is acknowledged and the audio engine is warming.

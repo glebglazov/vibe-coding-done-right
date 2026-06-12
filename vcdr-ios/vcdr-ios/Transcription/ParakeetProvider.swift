@@ -178,6 +178,10 @@ actor ParakeetProvider: TranscriptionProvider {
 
         let totalStart = ContinuousClock.now
         do {
+            if ParakeetProviderTestSupport.failFinishWithEncoder {
+                throw TranscriptionError.initializationFailed("Test encoder failure")
+            }
+
             let qos = initQoS
             let detachedPriority = initTaskPriority
             let (encoderResult, loadTimings): ((model: MLModel?, milliseconds: Double), ParakeetModelLoadTimings)

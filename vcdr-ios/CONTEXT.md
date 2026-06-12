@@ -119,6 +119,10 @@ _Avoid_: Apple provider case in Shared, AFM model picker, cloud adapter
 The point at which the on-device speech recognition model is loaded and ready to transcribe. A Recording Run may start before Transcription Readiness; audio is captured immediately and transcription catches up once the model is ready.
 _Avoid_: PREPARING, model init, compiling state
 
+**Model Warming**:
+The user-visible launch state when transcription-model artifacts already exist on disk but Transcription Readiness has not landed yet. The main app may show the ready hero with a subtle warming indicator because a Recording Run can begin immediately and transcription will catch up at Finalizing. Model Warming is about pending Transcription Readiness, not the audio-engine Arming phase after a record tap.
+_Avoid_: Arming, PREPARING, Capturing
+
 **App Shell**:
 The parts of the main app that do not depend on Transcription Readiness — navigation, settings, conversation history, and debug tools. The App Shell stays fully usable while Transcription Readiness is pending.
 _Avoid_: launch screen, boot gate, init blocker

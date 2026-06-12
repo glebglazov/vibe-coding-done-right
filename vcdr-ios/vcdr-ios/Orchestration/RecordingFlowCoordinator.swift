@@ -68,6 +68,10 @@ final class RecordingFlowCoordinator {
 
     var state: State = .idle
     private(set) var initProgress: String = "Preparing"
+    /// True while artifacts are already on disk and Transcription Readiness is
+    /// still pending. The hero may show READY because Recording Runs can begin
+    /// during this window; PREPARING remains reserved for Cold Download.
+    private(set) var isModelWarming = false
     /// Live transcription text updated in real-time during recording
     private(set) var liveTranscript: String = ""
     /// Shown in the transcribing state — describes what the app is waiting on
@@ -287,6 +291,7 @@ final class RecordingFlowCoordinator {
     /// verdict lands in launch telemetry alongside this prediction's log line.
     func initializeModelAutomatically() async {
         let predicted = await LaunchTelemetry.predictedVerdict()
+        publishReadinessPresentation(for: predicted)
         let warmPredicted = predicted == .warm
         let priority: TaskPriority = warmPredicted ? .userInitiated : .utility
         let grace = warmPredicted ? Self.warmShellRenderGracePeriod : Self.shellRenderGracePeriod
@@ -313,7 +318,7 @@ final class RecordingFlowCoordinator {
 
         let initStart = ContinuousClock.now
         Logger.app.info("[InitTiming] initializeModel entered")
-        state = .initializing
+        publishReadinessPresentation(for: predictedVerdict)
         // Initial label; pollTask below replaces this on the first iteration
         // with phase-true text once `ParakeetProvider.initPhase` advances.
         initProgress = "Preparing"
@@ -379,6 +384,7 @@ final class RecordingFlowCoordinator {
                 state = .ready
             }
             initProgress = "Ready"
+            isModelWarming = false
             isModelReady = true
             // Warm the haptic daemon now that the ANE compile is done and the
             // system is idle, so the first record-tap haptic fires instantly
@@ -397,10 +403,24 @@ final class RecordingFlowCoordinator {
             }
         } catch {
             pollTask.cancel()
-            if state == .initializing {
+            isModelWarming = false
+            if state == .initializing || state == .ready {
                 state = .error("Model initialization failed: \(error.localizedDescription)")
             }
             Logger.app.error("Model init failed: \(error)")
+        }
+    }
+
+    private func publishReadinessPresentation(for predictedVerdict: LaunchVerdict) {
+        switch predictedVerdict {
+        case .coldDownload:
+            isModelWarming = false
+            state = .initializing
+        case .coldSpecialize, .warm:
+            isModelWarming = true
+            if state == .idle || state == .initializing {
+                state = .ready
+            }
         }
     }
 

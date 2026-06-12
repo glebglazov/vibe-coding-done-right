@@ -7,6 +7,120 @@ import Testing
 @Suite("RecordingFlowCoordinator model init + engine prewarm", .serialized)
 struct RecordingFlowCoordinatorInitTests {
 
+    @Test("cold download keeps the preparing hero while transcription readiness is pending")
+    func coldDownloadKeepsPreparingHero() async throws {
+        ParakeetProviderTestSupport.reset()
+        ParakeetProviderTestSupport.bypassRealMLLoad = true
+        ParakeetProviderTestSupport.simulateEncoderLoadDuration = .seconds(1)
+
+        let provider = ParakeetProvider()
+        let coordinator = RecordingFlowCoordinator(
+            recordingEngine: SpyWarmRecordingEngine(),
+            transcriptionProvider: provider
+        )
+
+        let initTask = Task {
+            await coordinator.initializeModel(predictedVerdict: .coldDownload)
+        }
+
+        await waitUntil { coordinator.state == .initializing }
+
+        #expect(coordinator.state == .initializing)
+        #expect(!coordinator.isModelWarming)
+
+        await initTask.value
+        ParakeetProviderTestSupport.reset()
+    }
+
+    @Test("artifacts on disk show ready hero with model warming while transcription readiness is pending")
+    func artifactsOnDiskShowReadyHeroWithWarming() async throws {
+        ParakeetProviderTestSupport.reset()
+        ParakeetProviderTestSupport.bypassRealMLLoad = true
+        ParakeetProviderTestSupport.simulateEncoderLoadDuration = .seconds(1)
+
+        let provider = ParakeetProvider()
+        let coordinator = RecordingFlowCoordinator(
+            recordingEngine: SpyWarmRecordingEngine(),
+            transcriptionProvider: provider
+        )
+
+        let initTask = Task {
+            await coordinator.initializeModel(predictedVerdict: .coldSpecialize)
+        }
+
+        await waitUntil { coordinator.isModelWarming }
+
+        #expect(coordinator.state == .ready)
+        #expect(coordinator.isModelWarming)
+
+        await initTask.value
+        #expect(coordinator.state == .ready)
+        #expect(!coordinator.isModelWarming)
+
+        ParakeetProviderTestSupport.reset()
+    }
+
+    @Test("record tap during model warming starts a recording run before transcription readiness")
+    func recordTapDuringModelWarmingStartsRecordingRun() async throws {
+        ParakeetProviderTestSupport.reset()
+        ParakeetProviderTestSupport.bypassRealMLLoad = true
+        ParakeetProviderTestSupport.simulateEncoderLoadDuration = .seconds(1)
+
+        let engine = SpyWarmRecordingEngine()
+        engine.hasMicrophonePermission = true
+
+        let provider = ParakeetProvider()
+        let coordinator = RecordingFlowCoordinator(
+            recordingEngine: engine,
+            transcriptionProvider: provider
+        )
+
+        let initTask = Task {
+            await coordinator.initializeModel(predictedVerdict: .coldSpecialize)
+        }
+
+        await waitUntil { coordinator.isModelWarming }
+        let readyBeforeTap = await provider.isReady
+        #expect(!readyBeforeTap)
+
+        await coordinator.startRecording()
+
+        let readyAfterTap = await provider.isReady
+        #expect(!readyAfterTap)
+        #expect(coordinator.state == .recording)
+        #expect(engine.startHotSessionCalls == 1)
+        #expect(engine.isRecording)
+
+        coordinator.reset()
+        await initTask.value
+        ParakeetProviderTestSupport.reset()
+    }
+
+    @Test("model warming clears and error state surfaces when transcription readiness fails")
+    func modelWarmingClearsOnInitializationFailure() async throws {
+        ParakeetProviderTestSupport.reset()
+        ParakeetProviderTestSupport.bypassRealMLLoad = true
+        ParakeetProviderTestSupport.failFinishWithEncoder = true
+
+        let provider = ParakeetProvider()
+        let coordinator = RecordingFlowCoordinator(
+            recordingEngine: SpyWarmRecordingEngine(),
+            transcriptionProvider: provider
+        )
+
+        await coordinator.initializeModel(predictedVerdict: .coldSpecialize)
+
+        #expect(!coordinator.isModelWarming)
+        guard case .error(let message) = coordinator.state else {
+            Issue.record("Expected error state after model init failure")
+            ParakeetProviderTestSupport.reset()
+            return
+        }
+        #expect(message.contains("Model initialization failed"))
+
+        ParakeetProviderTestSupport.reset()
+    }
+
     @Test("predicted-cold prewarm finishes before the encoder phase begins")
     func predictedColdPrewarmBarrierBeforeEncoder() async throws {
         ParakeetProviderTestSupport.reset()
@@ -180,6 +294,18 @@ struct RecordingFlowCoordinatorInitTests {
         #expect(engine.prepareEngineCalls == 0)
 
         ParakeetProviderTestSupport.reset()
+    }
+}
+
+@MainActor
+private func waitUntil(
+    timeout: Duration = .seconds(2),
+    _ condition: @escaping @MainActor () -> Bool
+) async {
+    let start = ContinuousClock.now
+    while start.duration(to: .now) < timeout {
+        if condition() { return }
+        try? await Task.sleep(for: .milliseconds(5))
     }
 }
 
