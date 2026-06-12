@@ -7,8 +7,8 @@ import Testing
 @Suite("RecordingFlowCoordinator model init + engine prewarm", .serialized)
 struct RecordingFlowCoordinatorInitTests {
 
-    @Test("engine prewarm finishes before the encoder phase begins")
-    func prewarmBarrierBeforeEncoder() async throws {
+    @Test("predicted-cold prewarm finishes before the encoder phase begins")
+    func predictedColdPrewarmBarrierBeforeEncoder() async throws {
         ParakeetProviderTestSupport.reset()
         ParakeetProviderTestSupport.bypassRealMLLoad = true
 
@@ -17,6 +17,9 @@ struct RecordingFlowCoordinatorInitTests {
         engine.prepareEngineDelay = .milliseconds(120)
 
         var events: [String] = []
+        engine.onPrepareEngineCompleted = {
+            events.append("prewarm")
+        }
         ParakeetProviderTestSupport.onFinishWithEncoderEntered = {
             events.append("encoder")
         }
@@ -32,9 +35,87 @@ struct RecordingFlowCoordinatorInitTests {
         #expect(engine.prepareSessionCalls == 1)
         #expect(engine.prepareEngineCalls == 1)
         #expect(engine.startHotSessionCalls == 0)
-        #expect(events == ["encoder"])
+        #expect(events == ["prewarm", "encoder"])
         let ready = await provider.isReady
         #expect(ready)
+
+        ParakeetProviderTestSupport.reset()
+    }
+
+    @Test("predicted-warm encoder proceeds when prewarm barrier times out")
+    func predictedWarmTimeoutStartsEncoderAndKeepsPrewarmRunning() async throws {
+        ParakeetProviderTestSupport.reset()
+        ParakeetProviderTestSupport.bypassRealMLLoad = true
+
+        let engine = SpyWarmRecordingEngine()
+        engine.hasMicrophonePermission = true
+        engine.prepareEngineDelay = .milliseconds(150)
+
+        let prewarmCompleted = LockedFlag()
+        let encoderEntered = LockedFlag()
+        engine.onPrepareEngineCompleted = {
+            prewarmCompleted.set()
+        }
+        ParakeetProviderTestSupport.onFinishWithEncoderEntered = {
+            encoderEntered.set()
+        }
+
+        let provider = ParakeetProvider()
+        let coordinator = RecordingFlowCoordinator(
+            recordingEngine: engine,
+            transcriptionProvider: provider
+        )
+
+        await coordinator.initializeModel(
+            predictedVerdict: .warm,
+            prewarmBarrierTimeout: .milliseconds(20)
+        )
+
+        #expect(encoderEntered.value)
+        #expect(!prewarmCompleted.value)
+
+        for _ in 0..<100 {
+            if prewarmCompleted.value { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(prewarmCompleted.value)
+        #expect(engine.prepareSessionCalls == 1)
+        #expect(engine.prepareEngineCalls == 1)
+
+        ParakeetProviderTestSupport.reset()
+    }
+
+    @Test("predicted-warm prewarm-first ordering starts encoder after prewarm")
+    func predictedWarmPrewarmFirstStartsEncoderAfterPrewarm() async throws {
+        ParakeetProviderTestSupport.reset()
+        ParakeetProviderTestSupport.bypassRealMLLoad = true
+
+        let engine = SpyWarmRecordingEngine()
+        engine.hasMicrophonePermission = true
+
+        var events: [String] = []
+        engine.onPrepareEngineCompleted = {
+            events.append("prewarm")
+        }
+        ParakeetProviderTestSupport.onFinishWithEncoderEntered = {
+            events.append("encoder")
+        }
+
+        let provider = ParakeetProvider()
+        let coordinator = RecordingFlowCoordinator(
+            recordingEngine: engine,
+            transcriptionProvider: provider
+        )
+
+        await coordinator.initializeModel(
+            predictedVerdict: .warm,
+            prewarmBarrierTimeout: .milliseconds(100)
+        )
+
+        #expect(events == ["prewarm", "encoder"])
+        #expect(engine.prepareSessionCalls == 1)
+        #expect(engine.prepareEngineCalls == 1)
 
         ParakeetProviderTestSupport.reset()
     }
@@ -121,6 +202,7 @@ final class SpyWarmRecordingEngine: RecordingEngine {
 
     var prepareEngineDelay: Duration = .zero
     var startSucceeds = true
+    var onPrepareEngineCompleted: (@Sendable () async -> Void)?
 
     private var enginePrepared = false
 
@@ -139,6 +221,9 @@ final class SpyWarmRecordingEngine: RecordingEngine {
             try? await Task.sleep(for: prepareEngineDelay)
         }
         enginePrepared = true
+        if let onPrepareEngineCompleted {
+            await onPrepareEngineCompleted()
+        }
     }
 
     func startHotSession() async -> Bool {

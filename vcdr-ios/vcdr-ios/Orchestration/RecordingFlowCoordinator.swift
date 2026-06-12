@@ -3,6 +3,27 @@ import FluidAudio
 import OSLog
 import UIKit
 
+private enum PrewarmBarrierResult: Sendable {
+    case prewarmFinished
+    case timedOut
+}
+
+private final class PrewarmBarrierContinuation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didResume = false
+
+    func resume(
+        _ result: PrewarmBarrierResult,
+        _ continuation: CheckedContinuation<PrewarmBarrierResult, Never>
+    ) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !didResume else { return }
+        didResume = true
+        continuation.resume(returning: result)
+    }
+}
+
 /// Orchestrates the iOS recording lifecycle: initialization, the recording
 /// state machine, and start/stop. Each surrounding concern lives in its own
 /// same-type extension file, mirroring how the macOS Capture Session is split:
@@ -159,6 +180,10 @@ final class RecordingFlowCoordinator {
     /// ~2s of GCD work with no ANE grind, so the shell only needs first-frame
     /// headroom — the full cold grace would just be latency floor (F6).
     private static let warmShellRenderGracePeriod: Duration = .milliseconds(100)
+    /// Upper bound on the predicted-Warm prewarm barrier. When there is no
+    /// expected encoder specialization to isolate, audio prep must not hold
+    /// Transcription Readiness hostage behind route/Bluetooth HAL delays.
+    private static let predictedWarmPrewarmBarrierTimeout: Duration = .seconds(2)
     /// Seconds the model can spend in a single init phase before the
     /// progress label starts appending elapsed time. Fast inits stay quiet;
     /// slow ones get a visible tick so the wait reads as bounded.
@@ -279,7 +304,8 @@ final class RecordingFlowCoordinator {
 
     func initializeModel(
         priority: TaskPriority = .userInitiated,
-        predictedVerdict: LaunchVerdict = .coldSpecialize
+        predictedVerdict: LaunchVerdict = .coldSpecialize,
+        prewarmBarrierTimeout: Duration = RecordingFlowCoordinator.predictedWarmPrewarmBarrierTimeout
     ) async {
         Logger.app.info("[LaunchProbe] initializeModel entry main=\(Thread.isMainThread) state=\(String(describing: self.state))")
         // If recording already started, model init is handled by the active session setup task.
@@ -337,7 +363,11 @@ final class RecordingFlowCoordinator {
                 predictedVerdict: predictedVerdict
             )
             Logger.app.info("[LaunchProbe] before engine prewarm barrier main=\(Thread.isMainThread)")
-            await prewarmTask.value
+            await waitForPrewarmBarrier(
+                prewarmTask,
+                predictedVerdict: predictedVerdict,
+                timeout: prewarmBarrierTimeout
+            )
             Logger.app.info("[LaunchProbe] before transcriptionProvider.finishWithEncoder await main=\(Thread.isMainThread)")
             try await transcriptionProvider.finishWithEncoder()
             Logger.app.info("[LaunchProbe] after transcriptionProvider.finishWithEncoder main=\(Thread.isMainThread)")
@@ -371,6 +401,39 @@ final class RecordingFlowCoordinator {
                 state = .error("Model initialization failed: \(error.localizedDescription)")
             }
             Logger.app.error("Model init failed: \(error)")
+        }
+    }
+
+    private func waitForPrewarmBarrier(
+        _ prewarmTask: Task<Void, Never>,
+        predictedVerdict: LaunchVerdict,
+        timeout: Duration
+    ) async {
+        guard predictedVerdict == .warm else {
+            await prewarmTask.value
+            return
+        }
+
+        let result = await withCheckedContinuation { continuation in
+            let resumeBox = PrewarmBarrierContinuation()
+            Task {
+                await prewarmTask.value
+                resumeBox.resume(.prewarmFinished, continuation)
+            }
+            Task {
+                try? await Task.sleep(for: timeout)
+                resumeBox.resume(.timedOut, continuation)
+            }
+        }
+
+        switch result {
+        case .prewarmFinished:
+            Logger.app.info("[InitTiming] predicted-warm prewarm barrier finished before timeout")
+        case .timedOut:
+            Logger.app.warning(
+                "[InitTiming] predicted-warm prewarm barrier timed out after "
+                    + "\(Int(timeout / .milliseconds(1)))ms; continuing to encoder while prewarm remains in flight"
+            )
         }
     }
 
