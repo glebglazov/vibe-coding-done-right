@@ -74,14 +74,20 @@ actor ParakeetProvider: TranscriptionProvider {
             try await waitForInitialization()
             return
         }
-        try await loadCoreModels(priority: priority)
+        let predictedVerdict = await LaunchTelemetry.predictedVerdict()
+        try await loadCoreModels(priority: priority, predictedVerdict: predictedVerdict)
         try await finishWithEncoder()
     }
 
-    /// Phase 1: download model bytes (if needed), then load preprocessor →
-    /// decoder → joint serially. Leaves `isInitializing` true until
-    /// `finishWithEncoder()` completes.
-    func loadCoreModels(priority: TaskPriority = .userInitiated) async throws {
+    /// Phase 1: download model bytes (if needed), then load model files
+    /// according to the Predicted Launch Verdict. Predicted-cold keeps the
+    /// serial preprocessor → decoder → joint core phase; predicted-Warm fans
+    /// out all four model loads and stores the encoder for phase 2. Leaves
+    /// `isInitializing` true until `finishWithEncoder()` completes.
+    func loadCoreModels(
+        priority: TaskPriority = .userInitiated,
+        predictedVerdict: LaunchVerdict = .coldSpecialize
+    ) async throws {
         Logger.transcription.info("[LaunchProbe] ParakeetProvider.loadCoreModels entry main=\(Thread.isMainThread)")
         guard !isReady else { return }
         if isInitializing {
@@ -94,7 +100,8 @@ actor ParakeetProvider: TranscriptionProvider {
         let totalStart = ContinuousClock.now
         Logger.transcription.info("Initializing Parakeet v3 CoreML model (core phase)...")
 
-        modelsOnDiskAtInit = AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .v3))
+        modelsOnDiskAtInit = ParakeetProviderTestSupport.stubModelsOnDiskAtInit
+            ?? AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .v3))
         Logger.transcription.info("[InitTiming] artifacts onDisk=\(self.modelsOnDiskAtInit) before download")
 
         do {
@@ -129,7 +136,15 @@ actor ParakeetProvider: TranscriptionProvider {
 
             let core = try await Task.detached(priority: priority) {
                 Logger.transcription.info("[LaunchProbe] ParakeetProvider core load detached start main=\(Thread.isMainThread)")
-                let result = try await ParakeetModelLoader.loadCoreModelsSerial(from: modelDir, qos: qos)
+                let result: ParakeetLoadedCoreModels
+                if predictedVerdict == .warm {
+                    result = try await ParakeetModelLoader.loadAllModelsParallelForPredictedWarm(
+                        from: modelDir,
+                        qos: qos
+                    )
+                } else {
+                    result = try await ParakeetModelLoader.loadCoreModelsSerial(from: modelDir, qos: qos)
+                }
                 Logger.transcription.info("[LaunchProbe] ParakeetProvider core load detached end main=\(Thread.isMainThread)")
                 return result
             }.value
@@ -165,18 +180,30 @@ actor ParakeetProvider: TranscriptionProvider {
         do {
             let qos = initQoS
             let detachedPriority = initTaskPriority
-            let (encoderResult, loadTimings) = try await Task.detached(priority: detachedPriority) {
-                Logger.transcription.info("[LaunchProbe] ParakeetProvider encoder load detached start main=\(Thread.isMainThread)")
-                let encoderResult = try await ParakeetModelLoader.loadEncoder(from: core.repoDirectory, qos: qos)
-                let timings = ParakeetModelLoadTimings(
+            let (encoderResult, loadTimings): ((model: MLModel?, milliseconds: Double), ParakeetModelLoadTimings)
+            if let encoderMs = core.encoderLoadedDuringCorePhaseMs {
+                let result = (model: core.encoderLoadedDuringCorePhase, milliseconds: encoderMs)
+                encoderResult = result
+                loadTimings = ParakeetModelLoadTimings(
                     preprocessorMs: core.preprocessorMs,
-                    encoderMs: encoderResult.milliseconds,
+                    encoderMs: result.milliseconds,
                     decoderMs: core.decoderMs,
                     jointMs: core.jointMs
                 )
-                Logger.transcription.info("[LaunchProbe] ParakeetProvider encoder load detached end main=\(Thread.isMainThread)")
-                return (encoderResult, timings)
-            }.value
+            } else {
+                (encoderResult, loadTimings) = try await Task.detached(priority: detachedPriority) {
+                    Logger.transcription.info("[LaunchProbe] ParakeetProvider encoder load detached start main=\(Thread.isMainThread)")
+                    let encoderResult = try await ParakeetModelLoader.loadEncoder(from: core.repoDirectory, qos: qos)
+                    let timings = ParakeetModelLoadTimings(
+                        preprocessorMs: core.preprocessorMs,
+                        encoderMs: encoderResult.milliseconds,
+                        decoderMs: core.decoderMs,
+                        jointMs: core.jointMs
+                    )
+                    Logger.transcription.info("[LaunchProbe] ParakeetProvider encoder load detached end main=\(Thread.isMainThread)")
+                    return (encoderResult, timings)
+                }.value
+            }
 
             let verdict: LaunchVerdict
             if !modelsOnDiskAtInit {
@@ -192,7 +219,7 @@ actor ParakeetProvider: TranscriptionProvider {
                     + "encoderMs=\(String(format: "%.0f", loadTimings.encoderMs)) "
                     + "maxAneMs=\(String(format: "%.0f", loadTimings.maxAneMs))"
             )
-            if !core.isTestStub {
+            if !core.isTestStub || ParakeetProviderTestSupport.recordLaunchOutcomeForStubLoads {
                 launchLoadOutcome = LaunchLoadOutcome(
                     verdict: verdict,
                     timings: loadTimings,

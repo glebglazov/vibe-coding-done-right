@@ -273,11 +273,14 @@ final class RecordingFlowCoordinator {
         try? await Task.sleep(for: grace)
         guard !Task.isCancelled else { return }
         await Task(priority: priority) { [weak self] in
-            await self?.initializeModel(priority: priority)
+            await self?.initializeModel(priority: priority, predictedVerdict: predicted)
         }.value
     }
 
-    func initializeModel(priority: TaskPriority = .userInitiated) async {
+    func initializeModel(
+        priority: TaskPriority = .userInitiated,
+        predictedVerdict: LaunchVerdict = .coldSpecialize
+    ) async {
         Logger.app.info("[LaunchProbe] initializeModel entry main=\(Thread.isMainThread) state=\(String(describing: self.state))")
         // If recording already started, model init is handled by the active session setup task.
         guard state != .recording else { return }
@@ -329,7 +332,10 @@ final class RecordingFlowCoordinator {
                 await hotMicSession.prewarmIfPermitted()
             }
             Logger.app.info("[LaunchProbe] before transcriptionProvider.loadCoreModels await main=\(Thread.isMainThread)")
-            try await transcriptionProvider.loadCoreModels(priority: priority)
+            try await transcriptionProvider.loadCoreModels(
+                priority: priority,
+                predictedVerdict: predictedVerdict
+            )
             Logger.app.info("[LaunchProbe] before engine prewarm barrier main=\(Thread.isMainThread)")
             await prewarmTask.value
             Logger.app.info("[LaunchProbe] before transcriptionProvider.finishWithEncoder await main=\(Thread.isMainThread)")

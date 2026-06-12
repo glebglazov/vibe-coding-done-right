@@ -8,11 +8,13 @@ struct ParakeetLoadedCoreModels {
     let preprocessor: MLModel?
     let decoder: MLModel?
     let joint: MLModel?
+    let encoderLoadedDuringCorePhase: MLModel?
     let vocabulary: [Int: String]
     let repoDirectory: URL
     let preprocessorMs: Double
     let decoderMs: Double
     let jointMs: Double
+    let encoderLoadedDuringCorePhaseMs: Double?
     let isTestStub: Bool
 }
 
@@ -36,21 +38,20 @@ enum ParakeetModelLoader {
         qos: DispatchQoS.QoSClass
     ) async throws -> ParakeetLoadedCoreModels {
         if ParakeetProviderTestSupport.bypassRealMLLoad {
-            for name in ["Preprocessor", "Decoder", "JointDecision"] {
-                ParakeetProviderTestSupport.modelLoadInvocationCount += 1
-                if let hook = ParakeetProviderTestSupport.onModelLoadStarted {
-                    await hook(name)
-                }
-            }
+            let preprocessorMs = await loadStubModel(name: "Preprocessor")
+            let decoderMs = await loadStubModel(name: "Decoder")
+            let jointMs = await loadStubModel(name: "JointDecision")
             return ParakeetLoadedCoreModels(
                 preprocessor: nil,
                 decoder: nil,
                 joint: nil,
+                encoderLoadedDuringCorePhase: nil,
                 vocabulary: [:],
                 repoDirectory: repoDirectory,
-                preprocessorMs: 1,
-                decoderMs: 1,
-                jointMs: 1,
+                preprocessorMs: preprocessorMs,
+                decoderMs: decoderMs,
+                jointMs: jointMs,
+                encoderLoadedDuringCorePhaseMs: nil,
                 isTestStub: true
             )
         }
@@ -75,11 +76,84 @@ enum ParakeetModelLoader {
             preprocessor: preprocessorResult.model,
             decoder: decoderResult.model,
             joint: jointResult.model,
+            encoderLoadedDuringCorePhase: nil,
             vocabulary: vocabulary,
             repoDirectory: repoDirectory,
             preprocessorMs: preprocessorResult.milliseconds,
             decoderMs: decoderResult.milliseconds,
             jointMs: jointResult.milliseconds,
+            encoderLoadedDuringCorePhaseMs: nil,
+            isTestStub: false
+        )
+    }
+
+    /// Predicted-Warm path: all four model loads are independent cache hits, so
+    /// fan them out on GCD and let READY wait on the slowest single load. The
+    /// provider still exposes the same two-phase API; `finishWithEncoder()`
+    /// consumes the encoder loaded here after the coordinator's prewarm barrier.
+    static func loadAllModelsParallelForPredictedWarm(
+        from repoDirectory: URL,
+        qos: DispatchQoS.QoSClass
+    ) async throws -> ParakeetLoadedCoreModels {
+        if ParakeetProviderTestSupport.bypassRealMLLoad {
+            async let preprocessorMs = loadStubModel(name: "Preprocessor")
+            async let decoderMs = loadStubModel(name: "Decoder")
+            async let jointMs = loadStubModel(name: "JointDecision")
+            async let encoderMs = loadStubModel(name: "Encoder")
+            let timings = await (preprocessorMs, decoderMs, jointMs, encoderMs)
+            return ParakeetLoadedCoreModels(
+                preprocessor: nil,
+                decoder: nil,
+                joint: nil,
+                encoderLoadedDuringCorePhase: nil,
+                vocabulary: [:],
+                repoDirectory: repoDirectory,
+                preprocessorMs: timings.0,
+                decoderMs: timings.1,
+                jointMs: timings.2,
+                encoderLoadedDuringCorePhaseMs: timings.3,
+                isTestStub: true
+            )
+        }
+
+        let preprocessorURL = repoDirectory.appendingPathComponent(ModelNames.ASR.preprocessorFile)
+        let decoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.decoderFile)
+        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointFile)
+        let encoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.encoderFile)
+        let vocabularyURL = repoDirectory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
+
+        async let preprocessorResult = timedLoadModel(
+            name: "Preprocessor", url: preprocessorURL, computeUnits: .cpuOnly, qos: qos
+        )
+        async let decoderResult = timedLoadModel(
+            name: "Decoder", url: decoderURL, computeUnits: .cpuAndNeuralEngine, qos: qos
+        )
+        async let jointResult = timedLoadModel(
+            name: "JointDecision", url: jointURL, computeUnits: .cpuAndNeuralEngine, qos: qos
+        )
+        async let encoderResult = timedLoadModel(
+            name: "Encoder", url: encoderURL, computeUnits: .cpuAndNeuralEngine, qos: qos
+        )
+        async let vocabulary = loadVocabulary(from: vocabularyURL, qos: qos)
+
+        let loaded = try await (
+            preprocessorResult,
+            decoderResult,
+            jointResult,
+            encoderResult,
+            vocabulary
+        )
+        return ParakeetLoadedCoreModels(
+            preprocessor: loaded.0.model,
+            decoder: loaded.1.model,
+            joint: loaded.2.model,
+            encoderLoadedDuringCorePhase: loaded.3.model,
+            vocabulary: loaded.4,
+            repoDirectory: repoDirectory,
+            preprocessorMs: loaded.0.milliseconds,
+            decoderMs: loaded.1.milliseconds,
+            jointMs: loaded.2.milliseconds,
+            encoderLoadedDuringCorePhaseMs: loaded.3.milliseconds,
             isTestStub: false
         )
     }
@@ -89,17 +163,24 @@ enum ParakeetModelLoader {
         qos: DispatchQoS.QoSClass
     ) async throws -> (model: MLModel?, milliseconds: Double) {
         if ParakeetProviderTestSupport.bypassRealMLLoad {
-            ParakeetProviderTestSupport.modelLoadInvocationCount += 1
-            if let hook = ParakeetProviderTestSupport.onModelLoadStarted {
-                await hook("Encoder")
-            }
-            return (nil, 1)
+            return (nil, await loadStubModel(name: "Encoder"))
         }
         let encoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.encoderFile)
         let result = try await timedLoadModel(
             name: "Encoder", url: encoderURL, computeUnits: .cpuAndNeuralEngine, qos: qos
         )
         return (result.model, result.milliseconds)
+    }
+
+    private static func loadStubModel(name: String) async -> Double {
+        ParakeetProviderTestSupport.modelLoadInvocationCount += 1
+        if let hook = ParakeetProviderTestSupport.onModelLoadStarted {
+            await hook(name)
+        }
+        if ParakeetProviderTestSupport.simulatePerModelLoadDuration > .zero {
+            try? await Task.sleep(for: ParakeetProviderTestSupport.simulatePerModelLoadDuration)
+        }
+        return ParakeetProviderTestSupport.stubModelLoadMilliseconds[name] ?? 1
     }
 
     private static func timedLoadModel(
