@@ -14,11 +14,15 @@ import Darwin
 ///
 /// All file state is confined to a single serial queue; logging never throws
 /// into callers and never blocks the calling thread (writes are enqueued).
-final class LogBuffer: @unchecked Sendable {
+nonisolated final class LogBuffer: @unchecked Sendable {
     static let shared = LogBuffer()
 
     private let queue = DispatchQueue(label: "com.vcdr.logbuffer", qos: .utility)
+    private let queueKey = DispatchSpecificKey<Void>()
     private var storage: Storage?
+    private var pendingData = Data()
+    private var flushWorkItem: DispatchWorkItem?
+    private var trackedFileSize: Int?
 
     private struct Storage {
         let fileURL: URL
@@ -32,6 +36,7 @@ final class LogBuffer: @unchecked Sendable {
     private nonisolated static let logFilename = "vcdr.log"
     private nonisolated static let lockFilename = "vcdr.log.lock"
     private nonisolated static let newline = UInt8(0x0A)
+    private nonisolated static let flushInterval: DispatchTimeInterval = .milliseconds(250)
     /// App Group container resolution can contend with launch-time system
     /// services even when dispatched off-main. Persistent capture is
     /// best-effort, so leave the first shell frame completely free and drop
@@ -47,7 +52,20 @@ final class LogBuffer: @unchecked Sendable {
         return f
     }()
 
+    #if DEBUG
+    private nonisolated(unsafe) static var directoryOverride: URL?
+    private nonisolated(unsafe) static var instrumentation = Instrumentation()
+
+    struct Instrumentation: Equatable, Sendable {
+        var flushCount = 0
+        var lockCount = 0
+        var trimCount = 0
+        var streamedTrimBytes = 0
+    }
+    #endif
+
     private init() {
+        queue.setSpecific(key: queueKey, value: ())
         queue.asyncAfter(deadline: .now() + Self.bootstrapDelay) { [self] in
             _ = prepareStorageIfNeeded()
         }
@@ -58,34 +76,81 @@ final class LogBuffer: @unchecked Sendable {
     func append(category: String, level: String, message: String) {
         let date = Date()
         queue.async { [self] in
-            guard let storage else { return }
+            guard storage != nil else { return }
             let line = "\(Self.timestampFormatter.string(from: date)) [\(category)] [\(level)] \(message)\n"
-            withExclusiveFileLock(storage: storage) {
-                writeLocked(Data(line.utf8), fileURL: storage.fileURL)
+            pendingData.append(contentsOf: line.utf8)
+            scheduleFlush()
+        }
+    }
+
+    func flushPendingWrites() {
+        if DispatchQueue.getSpecific(key: queueKey) != nil {
+            flushPendingLocked()
+        } else {
+            queue.sync { [self] in
+                flushPendingLocked()
             }
         }
     }
 
+    private func scheduleFlush() {
+        guard flushWorkItem == nil else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.flushPendingLocked()
+        }
+        flushWorkItem = workItem
+        queue.asyncAfter(deadline: .now() + Self.flushInterval, execute: workItem)
+    }
+
+    private func flushPendingLocked() {
+        flushWorkItem?.cancel()
+        flushWorkItem = nil
+        guard !pendingData.isEmpty, let storage else { return }
+        let data = pendingData
+        pendingData.removeAll(keepingCapacity: true)
+        withExclusiveFileLock(storage: storage) {
+            writeLocked(data, fileURL: storage.fileURL)
+        }
+    }
+
     private func writeLocked(_ data: Data, fileURL: URL) {
+        trackedFileSize = Self.fileSize(fileURL)
         guard let handle = try? FileHandle(forWritingTo: fileURL) else { return }
         do {
             try handle.seekToEnd()
             try handle.write(contentsOf: data)
-            if Self.fileSize(fileURL) > Self.maxBytes { trimLocked(fileURL: fileURL) }
+            trackedFileSize = (trackedFileSize ?? 0) + data.count
+            try handle.close()
+            #if DEBUG
+            Self.instrumentation.flushCount += 1
+            #endif
+            if (trackedFileSize ?? 0) > Self.maxBytes {
+                trackedFileSize = trimLocked(fileURL: fileURL, fileSize: trackedFileSize ?? 0)
+            }
         } catch {
             // Logging must never crash or throw into callers; drop on failure.
+            try? handle.close()
         }
-        try? handle.close()
     }
 
     /// Drops the oldest `trimBytes` worth of whole lines from the current file.
-    private func trimLocked(fileURL: URL) {
-        guard let data = try? Data(contentsOf: fileURL), data.count > Self.trimBytes else { return }
-        var cut = Self.trimBytes
-        while cut < data.count, data[cut] != Self.newline { cut += 1 }
-        if cut < data.count { cut += 1 } // drop the trailing newline too, so we resume on a fresh line
-        let kept = data.subdata(in: cut ..< data.count)
-        try? kept.write(to: fileURL, options: .atomic)
+    private func trimLocked(fileURL: URL, fileSize: Int) -> Int {
+        guard fileSize > Self.trimBytes else { return fileSize }
+        guard let cutOffset = LogBufferTrimmer.trimCutOffset(
+            fileURL: fileURL,
+            fileSize: fileSize,
+            trimBytes: Self.trimBytes
+        ) else { return fileSize }
+        let tempURL = fileURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("\(Self.logFilename).trim-\(UUID().uuidString)")
+        let result = LogBufferTrimmer.trim(sourceURL: fileURL, temporaryURL: tempURL, cutOffset: cutOffset)
+        guard result.didTrim else { return fileSize }
+        #if DEBUG
+        Self.instrumentation.trimCount += 1
+        Self.instrumentation.streamedTrimBytes += result.keptBytes
+        #endif
+        return result.keptBytes
     }
 
     // MARK: - File lock
@@ -102,6 +167,9 @@ final class LogBuffer: @unchecked Sendable {
         guard flock(fd, LOCK_EX) == 0 else { return }
         defer { flock(fd, LOCK_UN) }
 
+        #if DEBUG
+        Self.instrumentation.lockCount += 1
+        #endif
         body()
     }
 
@@ -256,6 +324,9 @@ final class LogBuffer: @unchecked Sendable {
     // MARK: - Locations
 
     nonisolated private static func directory() -> URL {
+        #if DEBUG
+        if let directoryOverride { return directoryOverride }
+        #endif
         let root: URL
         if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) {
             root = group.appendingPathComponent("VCDR")
@@ -273,4 +344,45 @@ final class LogBuffer: @unchecked Sendable {
     nonisolated private static func lockURL() -> URL {
         directory().appendingPathComponent(lockFilename)
     }
+
 }
+
+#if DEBUG
+extension LogBuffer {
+    nonisolated static func withTemporaryDirectoryForTesting<T>(_ directory: URL, _ body: () throws -> T) rethrows -> T {
+        shared.flushPendingWrites()
+        directoryOverride = directory
+        instrumentation = Instrumentation()
+        shared.queue.sync {
+            shared.storage = nil
+            shared.pendingData.removeAll(keepingCapacity: false)
+            shared.flushWorkItem?.cancel()
+            shared.flushWorkItem = nil
+            shared.trackedFileSize = nil
+            _ = shared.prepareStorageIfNeeded()
+        }
+        defer {
+            shared.flushPendingWrites()
+            shared.queue.sync {
+                shared.storage = nil
+                shared.pendingData.removeAll(keepingCapacity: false)
+                shared.flushWorkItem?.cancel()
+                shared.flushWorkItem = nil
+                shared.trackedFileSize = nil
+            }
+            directoryOverride = nil
+            instrumentation = Instrumentation()
+        }
+        return try body()
+    }
+
+    nonisolated static func instrumentationForTesting() -> Instrumentation {
+        shared.flushPendingWrites()
+        return instrumentation
+    }
+
+    nonisolated static func fileURLForTesting() -> URL {
+        fileURL()
+    }
+}
+#endif

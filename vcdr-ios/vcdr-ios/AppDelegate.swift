@@ -18,6 +18,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         }
         return true
     }
+
+    func applicationWillTerminate(_ application: UIApplication) {
+        LogBuffer.shared.flushPendingWrites()
+    }
 }
 
 /// One-shot flag consumed by the scene's @State coordinator initializer.

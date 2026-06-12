@@ -86,6 +86,7 @@ struct VCDRiOSApp: App {
                         Task { await coordinator.renewHotSessionIfAlive() }
                     case .background:
                         Logger.app.info("Scene entering background — isHot=\(coordinator.isHotSessionActive), isRecording=\(coordinator.isRecording)")
+                        LogBuffer.shared.flushPendingWrites()
                         // Intentionally NOT tearing down the hot session:
                         // UIBackgroundModes=audio keeps the engine alive, so
                         // the keyboard extension can drive recording via the
