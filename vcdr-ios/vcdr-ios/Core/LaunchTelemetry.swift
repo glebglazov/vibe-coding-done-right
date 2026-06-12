@@ -14,6 +14,11 @@ enum LaunchVerdict: String, Codable, Sendable {
     case warm = "WARM"
 }
 
+enum LaunchTelemetryRecordKind: String, Codable, Sendable {
+    case foregroundLaunch = "FOREGROUND_LAUNCH"
+    case backgroundWarm = "BACKGROUND_WARM"
+}
+
 /// What `ParakeetProvider` learned about model loading on one launch, handed
 /// to `LaunchTelemetry` once Transcription Readiness is reached.
 struct LaunchLoadOutcome: Sendable {
@@ -26,6 +31,7 @@ struct LaunchLoadOutcome: Sendable {
 /// on-device: verdict × Low Power Mode × thermal state × reboot correlation.
 struct LaunchTelemetryRecord: Codable, Sendable, Identifiable {
     let timestamp: Date
+    let kind: LaunchTelemetryRecordKind
     let verdict: LaunchVerdict
     let downloadMs: Double
     let preprocessorMs: Double
@@ -44,6 +50,50 @@ struct LaunchTelemetryRecord: Codable, Sendable, Identifiable {
     let rebootedSinceLastLaunch: Bool
 
     var id: Date { timestamp }
+
+    init(
+        timestamp: Date,
+        kind: LaunchTelemetryRecordKind = .foregroundLaunch,
+        verdict: LaunchVerdict,
+        downloadMs: Double,
+        preprocessorMs: Double,
+        encoderMs: Double,
+        decoderMs: Double,
+        jointMs: Double,
+        msToReady: Double?,
+        lowPowerMode: Bool,
+        thermalState: Int,
+        rebootedSinceLastLaunch: Bool
+    ) {
+        self.timestamp = timestamp
+        self.kind = kind
+        self.verdict = verdict
+        self.downloadMs = downloadMs
+        self.preprocessorMs = preprocessorMs
+        self.encoderMs = encoderMs
+        self.decoderMs = decoderMs
+        self.jointMs = jointMs
+        self.msToReady = msToReady
+        self.lowPowerMode = lowPowerMode
+        self.thermalState = thermalState
+        self.rebootedSinceLastLaunch = rebootedSinceLastLaunch
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        kind = try container.decodeIfPresent(LaunchTelemetryRecordKind.self, forKey: .kind) ?? .foregroundLaunch
+        verdict = try container.decode(LaunchVerdict.self, forKey: .verdict)
+        downloadMs = try container.decode(Double.self, forKey: .downloadMs)
+        preprocessorMs = try container.decode(Double.self, forKey: .preprocessorMs)
+        encoderMs = try container.decode(Double.self, forKey: .encoderMs)
+        decoderMs = try container.decode(Double.self, forKey: .decoderMs)
+        jointMs = try container.decode(Double.self, forKey: .jointMs)
+        msToReady = try container.decodeIfPresent(Double.self, forKey: .msToReady)
+        lowPowerMode = try container.decode(Bool.self, forKey: .lowPowerMode)
+        thermalState = try container.decode(Int.self, forKey: .thermalState)
+        rebootedSinceLastLaunch = try container.decode(Bool.self, forKey: .rebootedSinceLastLaunch)
+    }
 
     var thermalStateLabel: String {
         switch ProcessInfo.ThermalState(rawValue: thermalState) {
@@ -142,14 +192,7 @@ enum LaunchTelemetry {
             rebootedSinceLastLaunch: rebooted
         )
         await withBlockingTask(qos: .utility) {
-            var records = loadRecordsSync()
-            records.append(record)
-            if records.count > maxRecords {
-                records.removeFirst(records.count - maxRecords)
-            }
-            if let data = try? JSONEncoder().encode(records) {
-                UserDefaults.standard.set(data, forKey: recordsKey)
-            }
+            appendRecordSync(record)
         }
         Logger.app.info(
             "[InitTiming] telemetry recorded verdict=\(record.verdict.rawValue) "
@@ -159,14 +202,59 @@ enum LaunchTelemetry {
         )
     }
 
+    static func recordBackgroundWarm(outcome: LaunchLoadOutcome) async {
+        let rebooted = detectRebootAndRememberBootTime()
+        let record = LaunchTelemetryRecord(
+            timestamp: Date(),
+            kind: .backgroundWarm,
+            verdict: .warm,
+            downloadMs: outcome.downloadMs,
+            preprocessorMs: outcome.timings.preprocessorMs,
+            encoderMs: outcome.timings.encoderMs,
+            decoderMs: outcome.timings.decoderMs,
+            jointMs: outcome.timings.jointMs,
+            msToReady: nil,
+            lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
+            thermalState: ProcessInfo.processInfo.thermalState.rawValue,
+            rebootedSinceLastLaunch: rebooted
+        )
+        await withBlockingTask(qos: .utility) {
+            appendRecordSync(record)
+        }
+        Logger.app.info(
+            "[InitTiming] background warm telemetry recorded "
+                + "encoderMs=\(String(format: "%.0f", record.encoderMs)) "
+                + "maxAneMs=\(String(format: "%.0f", outcome.timings.maxAneMs))"
+        )
+    }
+
     /// All persisted records, oldest first.
     static func records() async -> [LaunchTelemetryRecord] {
         await withBlockingTask(qos: .userInitiated) { loadRecordsSync() }
     }
 
+    static func latestRecord() async -> LaunchTelemetryRecord? {
+        await withBlockingTask(qos: .userInitiated) { loadRecordsSync().last }
+    }
+
+    static func rebootedSinceLastRecord() async -> Bool {
+        await withBlockingTask(qos: .utility) { rebootedSinceLastRecordSync() }
+    }
+
     nonisolated private static func loadRecordsSync() -> [LaunchTelemetryRecord] {
         guard let data = UserDefaults.standard.data(forKey: recordsKey) else { return [] }
         return (try? JSONDecoder().decode([LaunchTelemetryRecord].self, from: data)) ?? []
+    }
+
+    nonisolated private static func appendRecordSync(_ record: LaunchTelemetryRecord) {
+        var records = loadRecordsSync()
+        records.append(record)
+        if records.count > maxRecords {
+            records.removeFirst(records.count - maxRecords)
+        }
+        if let data = try? JSONEncoder().encode(records) {
+            UserDefaults.standard.set(data, forKey: recordsKey)
+        }
     }
 
     /// Compares the current `kern.boottime` against the one stored on the

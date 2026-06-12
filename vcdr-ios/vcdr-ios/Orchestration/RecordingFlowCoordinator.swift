@@ -393,6 +393,14 @@ final class RecordingFlowCoordinator {
             Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
             if let outcome = await transcriptionProvider.launchLoadOutcome {
                 await LaunchTelemetry.recordOnce(outcome: outcome)
+                if outcome.verdict == .coldSpecialize {
+                    await UserDefaultsBackgroundModelWarmTriggerStore()
+                        .markPurgeTrigger(.coldSpecializeVerdict)
+                    BackgroundModelWarmScheduler.schedule()
+                } else if outcome.verdict == .warm {
+                    await UserDefaultsBackgroundModelWarmTriggerStore()
+                        .clearPendingPurgeTrigger()
+                }
             }
 
             // Hot-session policy (may call `start()`) is follow-up only; HAL

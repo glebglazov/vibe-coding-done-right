@@ -16,6 +16,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
            url.scheme == "vcdr-ios", url.host == "record" {
             PendingLaunchIntent.recordRequested = true
         }
+        BackgroundModelWarmScheduler.register()
+        Task {
+            await BackgroundModelWarmScheduler.evaluateLaunchTriggersAndScheduleIfNeeded()
+        }
         return true
     }
 

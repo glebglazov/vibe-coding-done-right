@@ -33,7 +33,7 @@ private struct LaunchHistoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(record.verdict.rawValue)
+                Text(title)
                     .font(.system(.caption, design: .monospaced).weight(.semibold))
                     .foregroundStyle(verdictColor)
                 Spacer()
@@ -58,10 +58,20 @@ private struct LaunchHistoryRow: View {
     }
 
     private var verdictColor: Color {
+        if record.kind == .backgroundWarm { return .blue }
         switch record.verdict {
-        case .warm: .green
-        case .coldSpecialize: .orange
-        case .coldDownload: .red
+        case .warm: return .green
+        case .coldSpecialize: return .orange
+        case .coldDownload: return .red
+        }
+    }
+
+    private var title: String {
+        switch record.kind {
+        case .foregroundLaunch:
+            record.verdict.rawValue
+        case .backgroundWarm:
+            "BACKGROUND_WARM"
         }
     }
 

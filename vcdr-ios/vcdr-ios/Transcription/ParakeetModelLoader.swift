@@ -172,6 +172,53 @@ enum ParakeetModelLoader {
         return (result.model, result.milliseconds)
     }
 
+    /// Background cache warm path: touch every CoreML artifact with ANE enabled
+    /// so iOS pays any E5RT specialization cost outside an interactive launch.
+    static func preSpecializeAllModels(
+        from repoDirectory: URL,
+        qos: DispatchQoS.QoSClass
+    ) async throws -> ParakeetModelLoadTimings {
+        if ParakeetProviderTestSupport.bypassRealMLLoad {
+            async let preprocessorMs = loadStubModel(name: "Preprocessor")
+            async let encoderMs = loadStubModel(name: "Encoder")
+            async let decoderMs = loadStubModel(name: "Decoder")
+            async let jointMs = loadStubModel(name: "JointDecision")
+            let timings = await (preprocessorMs, encoderMs, decoderMs, jointMs)
+            return ParakeetModelLoadTimings(
+                preprocessorMs: timings.0,
+                encoderMs: timings.1,
+                decoderMs: timings.2,
+                jointMs: timings.3
+            )
+        }
+
+        let preprocessorURL = repoDirectory.appendingPathComponent(ModelNames.ASR.preprocessorFile)
+        let encoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.encoderFile)
+        let decoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.decoderFile)
+        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointFile)
+
+        async let preprocessorResult = timedLoadModel(
+            name: "Preprocessor", url: preprocessorURL, computeUnits: .cpuAndNeuralEngine, qos: qos
+        )
+        async let encoderResult = timedLoadModel(
+            name: "Encoder", url: encoderURL, computeUnits: .cpuAndNeuralEngine, qos: qos
+        )
+        async let decoderResult = timedLoadModel(
+            name: "Decoder", url: decoderURL, computeUnits: .cpuAndNeuralEngine, qos: qos
+        )
+        async let jointResult = timedLoadModel(
+            name: "JointDecision", url: jointURL, computeUnits: .cpuAndNeuralEngine, qos: qos
+        )
+
+        let loaded = try await (preprocessorResult, encoderResult, decoderResult, jointResult)
+        return ParakeetModelLoadTimings(
+            preprocessorMs: loaded.0.milliseconds,
+            encoderMs: loaded.1.milliseconds,
+            decoderMs: loaded.2.milliseconds,
+            jointMs: loaded.3.milliseconds
+        )
+    }
+
     private static func loadStubModel(name: String) async -> Double {
         ParakeetProviderTestSupport.modelLoadInvocationCount += 1
         if let hook = ParakeetProviderTestSupport.onModelLoadStarted {
