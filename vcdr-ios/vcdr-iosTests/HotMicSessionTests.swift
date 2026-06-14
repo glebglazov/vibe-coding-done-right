@@ -310,6 +310,76 @@ struct HotMicSessionTests {
         await waitUntil { env.engine.endHotSessionCalls == 1 }
     }
 
+    @Test("reset tears down session signals without refreshing the timeout")
+    func resetTearsDownWithoutRefreshingTimeout() async {
+        let env = makeEnv(policy: .fiveMinutes)
+
+        await env.session.start()
+        await settle()
+
+        #expect(env.engine.isHot)
+        #expect(env.channel.isAppLikelyAlive())
+        #expect(env.presence.isShown)
+        #expect(env.clock.sleepCount == 1)
+
+        env.session.reset()
+        await waitUntil { env.presence.stopCalls == 1 }
+
+        #expect(env.engine.endHotSessionCalls == 1)
+        #expect(!env.engine.isHot)
+        #expect(!env.channel.isAppLikelyAlive())
+        #expect(!env.presence.isShown)
+        #expect(env.clock.sleepCount == 1)
+
+        env.clock.advance()
+        await settle()
+        #expect(env.engine.endHotSessionCalls == 1)
+    }
+
+    @Test("arming cancellation without a prior warm window releases mic presence immediately")
+    func armingCancellationWithoutPriorWindowReleasesImmediately() async {
+        let env = makeEnv(policy: .fiveMinutes)
+
+        env.session.recordIntentStarted()
+        env.engine.isHot = true
+        env.session.recordIntentCancelledBeforeCapture()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+
+        #expect(!env.engine.isHot)
+        #expect(!env.channel.isAppLikelyAlive())
+        #expect(!env.presence.isShown)
+        #expect(env.presence.startCalls == 0)
+        #expect(env.clock.sleepCount == 0)
+    }
+
+    @Test("arming cancellation restores prior finite deadline without extending it")
+    func armingCancellationRestoresPriorDeadlineWithoutExtending() async {
+        var fakeNow = Date(timeIntervalSince1970: 0)
+        let env = makeEnv(policy: .fiveMinutes, now: { fakeNow })
+
+        await env.session.start()
+        await settle()
+
+        let originalDeadline = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
+        #expect(env.presence.deadline == originalDeadline)
+
+        fakeNow = Date(timeIntervalSince1970: 60)
+        env.session.recordIntentStarted()
+        await settle()
+
+        env.session.recordIntentCancelledBeforeCapture()
+        await settle()
+
+        #expect(env.engine.isHot)
+        #expect(env.presence.isShown)
+        #expect(env.presence.deadline == originalDeadline)
+        #expect(env.clock.sleepCount == 2)
+
+        env.clock.advance()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+        #expect(!env.engine.isHot)
+    }
+
     @Test("start is idempotent — presence is shown once across repeated calls")
     func startIsIdempotent() async {
         let env = makeEnv(policy: .fiveMinutes)

@@ -688,9 +688,7 @@ final class RecordingFlowCoordinator {
         isStartingRecording = false
         aiRetryTask?.cancel()
         aiRetryTask = nil
-        // Re-arm the inactivity timer so a reset counts as fresh activity
-        // rather than leaving a stale teardown scheduled from the prior flow.
-        hotMicSession.recordingStopped()
+        hotMicSession.reset()
     }
 
     // MARK: - Idle Timer

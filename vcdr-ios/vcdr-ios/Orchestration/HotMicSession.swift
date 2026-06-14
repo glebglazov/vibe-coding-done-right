@@ -106,6 +106,11 @@ final class HotMicSession {
     /// Token for the UserDefaults-change observer that re-evaluates the live
     /// timer the moment the user picks a different timeout value.
     private var timeoutObserverToken: (any NSObjectProtocol)?
+    /// True only while an Arming Recording Run is protecting a Hot Mic Session
+    /// that was already alive before record intent. A cold Arming path may warm
+    /// the engine before it is cancelled; that must be released, not converted
+    /// into post-capture warmth.
+    private var armingProtectedPriorSession = false
 
     /// Cadence for the app-alive heartbeat. Small enough that the keyboard's
     /// freshness threshold can be ~3x this without false negatives, large
@@ -199,7 +204,11 @@ final class HotMicSession {
     /// Protect an existing Hot Mic Session from expiring while the engine is
     /// starting, but do not create fresh Mic Presence for a cold engine.
     func recordIntentStarted() {
-        guard engine.isHot else { return }
+        guard engine.isHot else {
+            armingProtectedPriorSession = false
+            return
+        }
+        armingProtectedPriorSession = true
         idleTask?.cancel()
         idleTask = nil
     }
@@ -208,6 +217,11 @@ final class HotMicSession {
     /// already alive; this is not Post-Capture Warmth and must not earn a fresh
     /// timeout.
     func recordIntentCancelledBeforeCapture() {
+        guard armingProtectedPriorSession else {
+            teardown()
+            return
+        }
+        armingProtectedPriorSession = false
         armIdleTimer(policy())
     }
 
@@ -217,6 +231,7 @@ final class HotMicSession {
     /// `start()`.
     func recordingStarted() {
         guard engine.isHot else { return }
+        armingProtectedPriorSession = false
         idleTask?.cancel()
         idleTask = nil
         idleDeadline = nil
@@ -228,8 +243,16 @@ final class HotMicSession {
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
     func recordingStopped() {
+        armingProtectedPriorSession = false
         idleDeadline = nil  // fresh countdown from when recording actually stopped
         armIdleTimer(policy(), allowWhileRecording: true)
+    }
+
+    /// User-visible stop-everything action. Unlike post-capture stop, reset
+    /// does not earn or refresh a warm window; it force-withdraws readiness.
+    func reset() {
+        armingProtectedPriorSession = false
+        teardown()
     }
 
     /// The timeout setting changed — re-evaluate the live timer immediately
@@ -343,6 +366,7 @@ final class HotMicSession {
         idleTask = nil
         idleDeadline = nil
         idleStartedAt = nil
+        armingProtectedPriorSession = false
         do {
             try engine.endHotSession()
         } catch {

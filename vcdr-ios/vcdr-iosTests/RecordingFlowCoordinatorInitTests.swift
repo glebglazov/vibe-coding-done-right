@@ -338,6 +338,50 @@ struct RecordingFlowCoordinatorInitTests {
 
         ParakeetProviderTestSupport.reset()
     }
+
+    @Test("failed capture startup leaves no heartbeat or Mic Presence")
+    func failedCaptureStartupLeavesNoReadinessSignals() async throws {
+        ParakeetProviderTestSupport.reset()
+        ParakeetProviderTestSupport.bypassRealMLLoad = true
+
+        let engine = SpyWarmRecordingEngine()
+        engine.hasMicrophonePermission = true
+        engine.startSucceeds = false
+        let presence = SpyPresence()
+        let clock = TestClock()
+        let suite = "RecordingFlowCoordinatorInitTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let channel = KeyboardChannel(defaults: defaults)
+        let hotMicSession = HotMicSession(
+            engine: engine,
+            presence: presence,
+            keyboard: channel,
+            clock: clock,
+            policy: { .fiveMinutes }
+        )
+
+        let coordinator = RecordingFlowCoordinator(
+            keyboardChannel: channel,
+            recordingEngine: engine,
+            transcriptionProvider: ParakeetProvider(),
+            hotMicSession: hotMicSession
+        )
+
+        await coordinator.startRecording()
+        await settleMainActor()
+
+        #expect(engine.startHotSessionCalls == 1)
+        #expect(engine.endHotSessionCalls == 1)
+        #expect(!engine.isHot)
+        #expect(!engine.isRecording)
+        #expect(!channel.isAppLikelyAlive())
+        #expect(presence.startCalls == 0)
+        #expect(!presence.isShown)
+        #expect(clock.sleepCount == 0)
+
+        ParakeetProviderTestSupport.reset()
+    }
 }
 
 @MainActor
