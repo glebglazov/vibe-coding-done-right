@@ -215,6 +215,74 @@ struct HotMicSessionTests {
         #expect(env.presence.startCalls == 0)
     }
 
+    @Test("decreasing finite policy keeps original idle start")
+    func policyDecreaseKeepsOriginalIdleStart() async {
+        var fakeNow = Date(timeIntervalSince1970: 0)
+        let env = makeEnv(policy: .tenMinutes, now: { fakeNow })
+
+        await env.session.start()
+        await settle()
+
+        let originalDeadline = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.tenMinutes.rawValue))
+        #expect(env.presence.deadline == originalDeadline)
+
+        fakeNow = Date(timeIntervalSince1970: 240)
+        env.holder.value = .fiveMinutes
+        await env.session.policyChanged()
+        await settle()
+
+        let shortenedDeadline = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
+        #expect(env.presence.deadline == shortenedDeadline)
+        #expect(env.engine.isHot)
+
+        env.clock.advance()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+        #expect(!env.engine.isHot)
+    }
+
+    @Test("decreasing finite policy tears down when new deadline already passed")
+    func expiredPolicyDecreaseTearsDownImmediately() async {
+        var fakeNow = Date(timeIntervalSince1970: 0)
+        let env = makeEnv(policy: .tenMinutes, now: { fakeNow })
+
+        await env.session.start()
+        await settle()
+        #expect(env.engine.isHot)
+
+        fakeNow = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.fiveMinutes.rawValue) + 1)
+        env.holder.value = .fiveMinutes
+        await env.session.policyChanged()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+
+        #expect(!env.engine.isHot)
+        #expect(!env.channel.isAppLikelyAlive())
+        await waitUntil { env.presence.stopCalls == 1 }
+    }
+
+    @Test("increasing finite policy does not extend the active deadline")
+    func policyIncreaseDoesNotExtendActiveDeadline() async {
+        var fakeNow = Date(timeIntervalSince1970: 0)
+        let env = makeEnv(policy: .fiveMinutes, now: { fakeNow })
+
+        await env.session.start()
+        await settle()
+
+        let originalDeadline = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
+        #expect(env.presence.deadline == originalDeadline)
+
+        fakeNow = Date(timeIntervalSince1970: 60)
+        env.holder.value = .tenMinutes
+        await env.session.policyChanged()
+        await settle()
+
+        #expect(env.presence.deadline == originalDeadline)
+        #expect(env.engine.isHot)
+
+        env.clock.advance()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+        #expect(!env.engine.isHot)
+    }
+
     @Test("post-capture stop starts finite warmth with the configured deadline")
     func postCaptureStopStartsFiniteWarmthWithDeadline() async {
         let fixedNow = Date(timeIntervalSince1970: 2_000)
