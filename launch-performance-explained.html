@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Launch Performance — Explained Like You're Five</title>
+<style>
+  :root{
+    --bg:#0f1419; --card:#1a2230; --card2:#212c3d; --ink:#e6edf3;
+    --muted:#9fb0c3; --accent:#4ea1ff; --warm:#ffb454; --good:#5fd38d;
+    --bad:#ff6b6b; --line:#33415a; --code:#0b0f14;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;margin:0 0 6px}
+  h2{font-size:23px;margin:46px 0 10px;border-bottom:2px solid var(--line);padding-bottom:8px}
+  h3{font-size:18px;margin:26px 0 8px;color:var(--accent)}
+  p{margin:10px 0}
+  .lede{color:var(--muted);font-size:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;margin:16px 0}
+  .eli5{border-left:4px solid var(--good);background:var(--card2)}
+  .eli5 b{color:var(--good)}
+  .tech{border-left:4px solid var(--accent)}
+  .tag{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.5px;
+    text-transform:uppercase;padding:3px 9px;border-radius:999px;margin-right:8px}
+  .tag.afk{background:#23364d;color:var(--accent)}
+  .tag.done{background:#1d3a2a;color:var(--good)}
+  code{background:var(--code);padding:2px 6px;border-radius:6px;font-size:13px;
+    color:#ffd9a0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;
+    padding:14px;overflow:auto;font-size:13px}
+  .muted{color:var(--muted)}
+  svg{max-width:100%;height:auto;display:block;margin:14px 0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:600}
+  .p-warm{background:#3a2d12;color:var(--warm)}
+  .p-cold{background:#3a1414;color:var(--bad)}
+  .p-good{background:#143a23;color:var(--good)}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:var(--card2)}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc li{margin:4px 0}
+  .warnbox{border-left:4px solid var(--bad);background:#2a1818}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🚀 Launch Performance — Explained Like You're Five</h1>
+  <p class="lede">What the last 5 commits did to make the app open faster, plus how iOS "thread pools" work and what we kept tripping over.</p>
+
+  <div class="card toc">
+    <b>Map</b>
+    <ul>
+      <li><a href="#big">1. Big picture — why app feel slow</a></li>
+      <li><a href="#pools">2. iOS thread pools (the kitchen story)</a></li>
+      <li><a href="#commits">3. The 5 commits, one by one</a></li>
+      <li><a href="#trap">4. The trap we kept falling in</a></li>
+    </ul>
+  </div>
+
+  <!-- ============ BIG PICTURE ============ -->
+  <h2 id="big">1. Big picture</h2>
+
+  <div class="card eli5">
+    <p><b>ELI5.</b> App turns speech into text. To do that it must wake up a sleepy robot brain (the "model"). Waking robot brain take long time. While it wake up, you stare at a <b>PREPARING</b> screen and tap your foot. 😤</p>
+    <p>Whole project = <b>stop making you wait</b>, or at least <b>make the wait feel like nothing</b>.</p>
+  </div>
+
+  <p class="tech">Technical: the app runs on-device Parakeet speech models. First use after a cache purge forces the Apple Neural Engine (ANE) to <i>specialize</i> the model — a 15–50s grind that also slows the whole render server system-wide. Earlier commits (S5/S8/S10) moved probes off the wrong thread pool and added launch telemetry. This series (tasks 03–07) builds on task 01's <b>Predicted Launch Verdict</b> — a guess, made before launch finishes, of whether this boot will be fast or slow.</p>
+
+  <h3>Two kinds of launch</h3>
+  <svg viewBox="0 0 880 250" role="img" aria-label="Warm vs Cold launch timeline">
+    <style>
+      .lbl{fill:#e6edf3;font:14px sans-serif}
+      .sub{fill:#9fb0c3;font:12px sans-serif}
+      .bar{rx:6}
+    </style>
+    <text x="0" y="24" class="lbl" font-weight="700">WARM launch — robot brain already awake</text>
+    <rect x="0" y="38" width="120" height="34" fill="#5fd38d" rx="6"/>
+    <text x="60" y="60" text-anchor="middle" fill="#08130c" font-weight="700" font-size="13">shell</text>
+    <rect x="124" y="38" width="150" height="34" fill="#4ea1ff" rx="6"/>
+    <text x="199" y="60" text-anchor="middle" fill="#04121f" font-weight="700" font-size="13">warm cache</text>
+    <text x="284" y="60" class="sub">→ ✅ READY fast</text>
+
+    <text x="0" y="120" class="lbl" font-weight="700">COLD launch — robot brain asleep, ANE must specialize</text>
+    <rect x="0" y="134" width="120" height="34" fill="#5fd38d" rx="6"/>
+    <text x="60" y="156" text-anchor="middle" fill="#08130c" font-weight="700" font-size="13">shell</text>
+    <rect x="124" y="134" width="620" height="34" fill="#ff6b6b" rx="6"/>
+    <text x="434" y="156" text-anchor="middle" fill="#1a0606" font-weight="700" font-size="13">ANE grind 15–50s (whole phone feels laggy)</text>
+    <text x="752" y="156" class="sub">→ 😴 READY</text>
+
+    <text x="0" y="210" class="sub">Same shell. The robot-brain wake-up is the whole difference. The series attacks it from both ends:</text>
+    <text x="0" y="230" class="sub">make the slow path rarer (commit 07) + make the wait feel shorter (commits 03, 04).</text>
+  </svg>
+
+  <!-- ============ THREAD POOLS ============ -->
+  <h2 id="pools">2. iOS thread pools — the kitchen story 🍳</h2>
+
+  <div class="card eli5">
+    <p><b>ELI5.</b> Phone is a kitchen. Cooks = CPU cores. You have only a few cooks (say 6).</p>
+    <p>Swift has a rule: <b>"a cook must never stand still."</b> If a cook is waiting for the oven, they should go chop veggies, not freeze. This pack of busy-only cooks is the <b>cooperative thread pool</b>. Every <code>async/await</code> task shares it.</p>
+    <p>The trap: if a cook <b>freezes</b> while waiting (a "blocking" job — reading a giant file, talking to a slow gadget), that cook is wasted. Freeze enough cooks and the kitchen <b>stops</b>. Orders pile up. The app feels stuck. 🥶</p>
+  </div>
+
+  <svg viewBox="0 0 880 320" role="img" aria-label="Cooperative pool starvation diagram">
+    <style>
+      .t{fill:#e6edf3;font:13px sans-serif}
+      .th{fill:#9fb0c3;font:12px sans-serif}
+      .cookbox{rx:8}
+    </style>
+    <!-- healthy -->
+    <text x="10" y="22" class="t" font-weight="700">Healthy: few cooks, all working, orders flow</text>
+    <g>
+      <rect x="10" y="34" width="120" height="40" fill="#1d3a2a" stroke="#5fd38d" class="cookbox"/>
+      <text x="70" y="59" text-anchor="middle" class="t">🧑‍🍳 chopping</text>
+      <rect x="140" y="34" width="120" height="40" fill="#1d3a2a" stroke="#5fd38d" class="cookbox"/>
+      <text x="200" y="59" text-anchor="middle" class="t">🧑‍🍳 plating</text>
+      <rect x="270" y="34" width="120" height="40" fill="#1d3a2a" stroke="#5fd38d" class="cookbox"/>
+      <text x="330" y="59" text-anchor="middle" class="t">🧑‍🍳 sauce</text>
+      <text x="410" y="59" class="th">UI stays smooth ✅</text>
+    </g>
+
+    <!-- starved -->
+    <text x="10" y="130" class="t" font-weight="700">Starved: cooks frozen on blocking jobs (Task.detached + blocking I/O)</text>
+    <g>
+      <rect x="10" y="142" width="120" height="40" fill="#2a1818" stroke="#ff6b6b" class="cookbox"/>
+      <text x="70" y="167" text-anchor="middle" class="t">🥶 wait file</text>
+      <rect x="140" y="142" width="120" height="40" fill="#2a1818" stroke="#ff6b6b" class="cookbox"/>
+      <text x="200" y="167" text-anchor="middle" class="t">🥶 wait HAL</text>
+      <rect x="270" y="142" width="120" height="40" fill="#2a1818" stroke="#ff6b6b" class="cookbox"/>
+      <text x="330" y="167" text-anchor="middle" class="t">🥶 wait lock</text>
+      <text x="410" y="167" class="th" fill="#ff6b6b">no free cook → UI freezes 🛑</text>
+    </g>
+
+    <!-- fix -->
+    <text x="10" y="238" class="t" font-weight="700">Fix: send blocking jobs to a SEPARATE crew — <tspan font-family="monospace" fill="#ffd9a0">withBlockingTask</tspan> (GCD)</text>
+    <g>
+      <rect x="10" y="250" width="120" height="40" fill="#1d3a2a" stroke="#5fd38d" class="cookbox"/>
+      <text x="70" y="275" text-anchor="middle" class="t">🧑‍🍳 free</text>
+      <rect x="140" y="250" width="120" height="40" fill="#1d3a2a" stroke="#5fd38d" class="cookbox"/>
+      <text x="200" y="275" text-anchor="middle" class="t">🧑‍🍳 free</text>
+      <rect x="300" y="250" width="220" height="40" fill="#23364d" stroke="#4ea1ff" class="cookbox"/>
+      <text x="410" y="275" text-anchor="middle" class="t">🧰 dishwasher crew: blocking jobs</text>
+      <text x="540" y="275" class="th">cooperative cooks stay free ✅</text>
+    </g>
+  </svg>
+
+  <div class="card tech">
+    <h3 style="margin-top:0">The exact rule we follow</h3>
+    <table>
+      <tr><th>Pool</th><th>For</th><th>Never do</th></tr>
+      <tr><td><b>Cooperative pool</b><br><span class="muted">Swift concurrency, <code>async/await</code>, <code>Task</code></span></td><td>CPU work that yields, short non-blocking steps</td><td class="muted">Block it (sleep, blocking read, sync syscalls). <code>Task.detached</code> does <b>not</b> escape it.</td></tr>
+      <tr><td><b>GCD / dispatch queue</b><br><span class="muted">our <code>withBlockingTask</code> helper</span></td><td>Blocking syscalls, big file reads, slow daemon connects</td><td class="muted">—</td></tr>
+      <tr><td><b>Main actor</b><br><span class="muted">the one UI thread</span></td><td>UI only</td><td class="muted">Block it ever. A frozen main = frozen app.</td></tr>
+    </table>
+    <p class="muted">Project memory documents three separate real bugs from breaking this rule: ActivityKit <code>Activity.request</code> (~8s, pins main), haptic daemon connect (~11s, pins main), and the cooperative-pool starvation freeze. ADR-0003 codifies "no blocking I/O on the cooperative pool."</p>
+  </div>
+
+  <!-- ============ COMMITS ============ -->
+  <h2 id="commits">3. The 5 commits, one by one</h2>
+  <p class="muted">All five are <span class="tag afk">AFK</span> tasks, all <span class="tag done">done ✓</span>, all build on the <b>Predicted Launch Verdict</b> from task 01.</p>
+
+  <!-- 03 -->
+  <div class="card">
+    <h3 style="margin-top:0">03 · Timebox the prewarm barrier <span class="pill p-warm">warm only</span></h3>
+    <p class="eli5" style="border:none;background:none;padding:0"><b>ELI5.</b> Before, the app waited for the microphone to fully warm up <i>before</i> waking the robot brain — even when the brain was already awake and the mic warm-up was being slow (Bluetooth, headphones — up to ~20s!). So a fast launch got held hostage by slow mic prep it didn't even need. Now, on a predicted-<b>warm</b> launch, we set a timer: "wait a bit, then go ahead anyway." Mic keeps warming in the background; nothing cancelled.</p>
+    <p class="muted">Technical: the coordinator barriers on <code>prewarmIfPermitted</code> before the encoder load (ADR-0001 ordering). On predicted-Warm, <code>waitForPrewarmBarrier</code> races the prewarm task against a <code>2s</code> timeout (<code>predictedWarmPrewarmBarrierTimeout</code>) via two <code>Task</code>s into one <code>CheckedContinuation</code>, guarded by a lock-protected <code>PrewarmBarrierContinuation</code> so only the first wins. Predicted-Cold keeps the unbounded <code>await prewarmTask.value</code>. Timeout logs <code>[InitTiming] …barrier timed out after 2000ms; continuing to encoder while prewarm remains in flight</code>. ADR-0001 consequences amended. <span class="muted">(+65/−2 in <code>RecordingFlowCoordinator.swift</code>, +91 tests)</span></p>
+  </div>
+
+  <svg viewBox="0 0 880 150" role="img" aria-label="Timebox barrier">
+    <text x="0" y="18" fill="#9fb0c3" font="12px sans-serif" font-size="12">BEFORE — encoder waits for full mic prewarm (can be ~20s):</text>
+    <rect x="0" y="28" width="500" height="26" fill="#ffb454" rx="5"/>
+    <text x="250" y="46" text-anchor="middle" font-size="12" fill="#1a0e00" font-weight="700">mic prewarm (slow)</text>
+    <rect x="504" y="28" width="160" height="26" fill="#4ea1ff" rx="5"/>
+    <text x="584" y="46" text-anchor="middle" font-size="12" fill="#04121f" font-weight="700">encoder</text>
+
+    <text x="0" y="92" fill="#9fb0c3" font-size="12">AFTER (predicted-warm) — timeout, then go; prewarm continues in flight:</text>
+    <rect x="0" y="102" width="150" height="26" fill="#ffb454" rx="5"/>
+    <text x="75" y="120" text-anchor="middle" font-size="12" fill="#1a0e00" font-weight="700">2s timeout</text>
+    <rect x="154" y="102" width="160" height="26" fill="#4ea1ff" rx="5"/>
+    <text x="234" y="120" text-anchor="middle" font-size="12" fill="#04121f" font-weight="700">encoder (early!)</text>
+    <rect x="154" y="132" width="380" height="8" fill="#5b4424" rx="4"/>
+    <text x="540" y="139" fill="#9fb0c3" font-size="11">mic still warming, not cancelled</text>
+  </svg>
+
+  <!-- 04 -->
+  <div class="card">
+    <h3 style="margin-top:0">04 · Decouple perceived readiness from model load <span class="pill p-good">biggest UX win</span></h3>
+    <p class="eli5" style="border:none;background:none;padding:0"><b>ELI5.</b> Secret: you could <i>already</i> hit record before the robot brain finished — audio gets saved and the text catches up later. But the screen still showed <b>PREPARING</b> and hid the button until the very end. Dumb! Now, if the model files exist on disk, we show the <b>ready</b> screen immediately with a tiny "warming…" spinner. You can record from the first frame. PREPARING now only appears when there's a real download to wait for.</p>
+    <p class="muted">Technical: hero UI shows the ready state from first post-shell frame for any verdict except Cold Download, with a subtle warming indicator until Transcription Readiness lands. A record tap during warming runs Arming → Capturing normally; transcription catches up at Finalizing. New CONTEXT.md term added for the warming state (distinct from Arming and PREPARING). Perceived launch time no longer equals model-load time.</p>
+  </div>
+
+  <svg viewBox="0 0 880 120" role="img" aria-label="Perceived readiness">
+    <text x="0" y="16" fill="#9fb0c3" font-size="12">BEFORE — you wait, staring at PREPARING the whole time:</text>
+    <rect x="0" y="24" width="640" height="26" fill="#ff6b6b" rx="5"/>
+    <text x="320" y="42" text-anchor="middle" font-size="12" fill="#1a0606" font-weight="700">PREPARING (button hidden)</text>
+    <rect x="644" y="24" width="120" height="26" fill="#5fd38d" rx="5"/>
+    <text x="704" y="42" text-anchor="middle" font-size="12" fill="#08130c" font-weight="700">ready</text>
+
+    <text x="0" y="86" fill="#9fb0c3" font-size="12">AFTER — ready instantly, spinner warms quietly, you can record now:</text>
+    <rect x="0" y="94" width="764" height="26" fill="#5fd38d" rx="5"/>
+    <text x="382" y="112" text-anchor="middle" font-size="12" fill="#08130c" font-weight="700">ready (🌀 warming pill until brain done) — record anytime</text>
+  </svg>
+
+  <!-- 05 -->
+  <div class="card">
+    <h3 style="margin-top:0">05 · Debug Logs reader hygiene</h3>
+    <p class="eli5" style="border:none;background:none;padding:0"><b>ELI5.</b> The Debug Logs screen — the screen you open <i>because</i> things are slow — was making things slower. Every second it re-read a giant 20MB file, sorted the whole thing, and froze a cook (cooperative pool) doing it. So opening the debugger made the bug worse. Now it reads only the <b>new</b> lines since last peek, off the right crew, and shows a capped number of rows.</p>
+    <p class="muted">Technical: removed <code>Task.detached</code> blocking I/O → <code>withBlockingTask</code> (ADR-0003). Steady-state polling tail-appends only bytes since last position instead of whole-file read + sort each second; full re-read only on first load, window change, manual refresh. Rendered line count capped with a named constant to bound the LazyVStack diff.</p>
+  </div>
+
+  <!-- 06 -->
+  <div class="card">
+    <h3 style="margin-top:0">06 · LogBuffer write batching</h3>
+    <p class="eli5" style="border:none;background:none;padding:0"><b>ELI5.</b> Every single log line did a whole song-and-dance: open file, grab a lock, jump to end, write, measure size, close — and fought the keyboard extension for the same lock. Launch spits out dozens of lines at the busiest moment. Now lines wait in a little bucket and get poured in together every ~250ms under <b>one</b> lock. Way less thrashing.</p>
+    <p class="muted">Technical: lines append to <code>pendingData</code>; <code>scheduleFlush()</code> arms one <code>DispatchWorkItem</code> at <code>flushInterval = .milliseconds(250)</code>. <code>flushPendingLocked()</code> takes <code>withExclusiveFileLock</code> once and writes the whole batch; size tracked by <code>trackedFileSize</code> counter (reconciled at flush) instead of per-line <code>stat</code>; <code>LogBufferTrimmer</code> streams the overflow trim instead of loading the whole 20MB file. <code>flushPendingWrites()</code> on backgrounding (AppDelegate hook). Cross-process merge with the keyboard extension stays correct — one lock per flush, lines still timestamp-sortable. A crash may lose the last unflushed window (acceptable for a debug log). <span class="muted">(+138 LogBuffer, new LogBufferTrimmer, +58 tests)</span></p>
+  </div>
+
+  <svg viewBox="0 0 880 130" role="img" aria-label="Log batching">
+    <text x="0" y="16" fill="#9fb0c3" font-size="12">BEFORE — full open/lock/write/stat/close per line:</text>
+    <g font-size="11" fill="#1a0606" font-weight="700">
+      <rect x="0" y="24" width="70" height="24" fill="#ff6b6b" rx="4"/><text x="35" y="40" text-anchor="middle">line</text>
+      <rect x="78" y="24" width="70" height="24" fill="#ff6b6b" rx="4"/><text x="113" y="40" text-anchor="middle">line</text>
+      <rect x="156" y="24" width="70" height="24" fill="#ff6b6b" rx="4"/><text x="191" y="40" text-anchor="middle">line</text>
+      <rect x="234" y="24" width="70" height="24" fill="#ff6b6b" rx="4"/><text x="269" y="40" text-anchor="middle">line</text>
+      <rect x="312" y="24" width="70" height="24" fill="#ff6b6b" rx="4"/><text x="347" y="40" text-anchor="middle">line</text>
+    </g>
+    <text x="392" y="40" fill="#9fb0c3" font-size="11">5 lines = 5 lock cycles 😖</text>
+
+    <text x="0" y="92" fill="#9fb0c3" font-size="12">AFTER — bucket fills, one flush per ~250ms = one lock cycle:</text>
+    <rect x="0" y="100" width="382" height="24" fill="#5b4424" rx="4"/>
+    <text x="191" y="116" text-anchor="middle" font-size="11" fill="#ffd9a0" font-weight="700">bucket: line·line·line·line·line</text>
+    <rect x="390" y="100" width="120" height="24" fill="#5fd38d" rx="4"/>
+    <text x="450" y="116" text-anchor="middle" font-size="11" fill="#08130c" font-weight="700">1 flush 🔒</text>
+  </svg>
+
+  <!-- 07 -->
+  <div class="card">
+    <h3 style="margin-top:0">07 · Background pre-specialization <span class="pill p-cold">kills the cold grind</span></h3>
+    <p class="eli5" style="border:none;background:none;padding:0"><b>ELI5.</b> The real fix for the scary 15–50s freeze: <b>don't do it while you're watching</b>. After a reboot / app update / OS update wipes the robot-brain's cheat-sheet (the ANE cache), iOS lets us run a chore <b>while the phone charges overnight</b>. That chore wakes the brain once, builds the cheat-sheet, and quits. Next time you open the app — already warm. You pay the cost when nobody's looking.</p>
+    <p class="muted">Technical: <code>BackgroundModelWarmScheduler</code> registers id <code>glebglazov.vcdr-ios.parakeet-pre-specialization</code> (Info.plist) and submits a <code>BGProcessingTaskRequest</code> with <code>requiresExternalPower = true</code>, <code>requiresNetworkConnectivity = false</code>. The handler runs <code>BackgroundModelWarmRunner().run()</code> (loads all four Parakeet models via <code>ParakeetModelLoader</code> with <code>.cpuAndNeuralEngine</code>), then re-<code>schedule()</code>s and sets <code>setTaskCompleted</code>; an <code>expirationHandler</code> cancels mid-load. Triggers live in <code>BackgroundModelWarmTriggerStore</code> (app-version / OS-version / reboot / actual Cold Specialize). No-ops if latest verdict already Warm. <code>BackgroundModelWarmTelemetryRecorder</code> + <code>LaunchTelemetry</code> surface warms in Launch History. <span class="muted">(7 new files, +568/−12, +166 tests)</span></p>
+  </div>
+
+  <svg viewBox="0 0 880 120" role="img" aria-label="Background pre-specialization">
+    <text x="0" y="16" fill="#9fb0c3" font-size="12">Cache purged (reboot / update) → instead of grinding on YOUR next tap…</text>
+    <rect x="0" y="26" width="140" height="28" fill="#33415a" rx="6"/>
+    <text x="70" y="45" text-anchor="middle" font-size="12" fill="#e6edf3">🌙 phone charging</text>
+    <text x="148" y="45" font-size="20" fill="#4ea1ff">→</text>
+    <rect x="178" y="26" width="260" height="28" fill="#4ea1ff" rx="6"/>
+    <text x="308" y="45" text-anchor="middle" font-size="12" fill="#04121f" font-weight="700">BGProcessingTask warms ANE cache</text>
+    <text x="446" y="45" font-size="20" fill="#5fd38d">→</text>
+    <rect x="476" y="26" width="180" height="28" fill="#5fd38d" rx="6"/>
+    <text x="566" y="45" text-anchor="middle" font-size="12" fill="#08130c" font-weight="700">cache warm, you asleep</text>
+
+    <text x="0" y="92" fill="#9fb0c3" font-size="12">…next morning you open the app:</text>
+    <rect x="0" y="100" width="220" height="18" fill="#5fd38d" rx="4"/>
+    <text x="110" y="113" text-anchor="middle" font-size="11" fill="#08130c" font-weight="700">✅ instant — no grind</text>
+  </svg>
+
+  <!-- ============ THE TRAP ============ -->
+  <h2 id="trap">4. The trap we kept falling into</h2>
+  <div class="card warnbox">
+    <p>The same villain shows up in commit 05, ADR-0003, and three logged bugs in project memory: <b>blocking work on the wrong pool.</b></p>
+    <p>It hides well because the code <i>looks</i> async. <code>Task.detached { blockingRead() }</code> reads like "this runs off to the side" — but <code>Task.detached</code> still lands on the <b>cooperative pool</b>. The cooks freeze. Rule of thumb the project now enforces:</p>
+    <pre>blocking? (file I/O, syscalls, slow daemon connect, locks)
+   └─ yes → withBlockingTask  (separate GCD crew)
+   └─ no  → Task / async-await  (cooperative pool, fine)
+
+UI? → main actor, and keep it featherlight</pre>
+  </div>
+
+  <h3>Where the series leaves us</h3>
+  <table>
+    <tr><th>Lever</th><th>Commit</th><th>Effect</th></tr>
+    <tr><td>Make slow launches <b>rarer</b></td><td>07</td><td>Pay the ANE grind off-screen while charging</td></tr>
+    <tr><td>Make the wait <b>feel</b> shorter</td><td>03, 04</td><td>Show ready early; don't block on slow mic prep</td></tr>
+    <tr><td>Stop the debugger <b>making it worse</b></td><td>05, 06</td><td>Cheap logging + cheap log-reading, off the cooperative pool</td></tr>
+  </table>
+
+  <p class="muted" style="margin-top:30px;font-size:13px">Sources: pop task files 03–07 under <code>2026-06-11-launch-performance/</code>, parent analysis <code>thoughts/2026-06-11-ios-launch-performance-analysis.md</code> (S-numbers), and VCDR project memory (cooperative-pool starvation, ADR-0001/0003, predicted verdict). Verified against the real <code>git show</code> diffs of commits <code>d96ea5b · 7683074 · f144758 · 00c6066 · 28a53f7</code> — concrete constants (2s barrier, 250ms flush, BG task id) and file/line counts taken from the actual changes.</p>
+
+</div>
+</body>
+</html>

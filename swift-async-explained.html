@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swift Async — Every Abstraction, Explained Like You're Five</title>
+<style>
+  :root{
+    --bg:#0f1419; --card:#1a2230; --card2:#212c3d; --ink:#e6edf3;
+    --muted:#9fb0c3; --accent:#4ea1ff; --warm:#ffb454; --good:#5fd38d;
+    --bad:#ff6b6b; --line:#33415a; --code:#0b0f14; --purple:#b98cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:920px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;margin:0 0 6px}
+  h2{font-size:23px;margin:46px 0 10px;border-bottom:2px solid var(--line);padding-bottom:8px}
+  h3{font-size:18px;margin:26px 0 8px;color:var(--accent)}
+  p{margin:10px 0}
+  .lede{color:var(--muted);font-size:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;margin:16px 0}
+  .eli5{border-left:4px solid var(--good);background:var(--card2)}
+  .eli5 b{color:var(--good)}
+  .tech{border-left:4px solid var(--accent)}
+  .old{border-left:4px solid var(--warm)}
+  .new{border-left:4px solid var(--purple)}
+  .tag{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.5px;
+    text-transform:uppercase;padding:3px 9px;border-radius:999px;margin-right:8px}
+  .tag.old{background:#3a2d12;color:var(--warm)}
+  .tag.new{background:#2c1f47;color:var(--purple)}
+  code{background:var(--code);padding:2px 6px;border-radius:6px;font-size:13px;
+    color:#ffd9a0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;
+    padding:14px;overflow:auto;font-size:13px;line-height:1.5}
+  pre code{background:none;padding:0;color:#d6e2f0}
+  .muted{color:var(--muted)}
+  svg{max-width:100%;height:auto;display:block;margin:14px 0}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:600}
+  .p-old{background:#3a2d12;color:var(--warm)}
+  .p-new{background:#2c1f47;color:var(--purple)}
+  .p-good{background:#143a23;color:var(--good)}
+  .p-bad{background:#3a1414;color:var(--bad)}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:var(--card2)}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc li{margin:4px 0}
+  .warnbox{border-left:4px solid var(--bad);background:#2a1818}
+  .kw{color:#ff9ed8} .ty{color:#7fd3ff} .cm{color:#6b7d93} .st{color:#9fe0a0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🧵 Swift Async — Every Abstraction, Explained Like You're Five</h1>
+  <p class="lede">From raw threads to actors. The whole cast of "how do I do two things at once" in Swift — what each one is, when to reach for it, and how they fit together. Companion to the <i>Launch Performance</i> explainer.</p>
+
+  <div class="card toc">
+    <b>Map</b>
+    <ul>
+      <li><a href="#why">0. Why any of this exists</a></li>
+      <li><a href="#thread">1. Thread — the raw metal (don't touch)</a></li>
+      <li><a href="#gcd">2. GCD / DispatchQueue — the old workhorse</a></li>
+      <li><a href="#op">3. OperationQueue — GCD with a brain</a></li>
+      <li><a href="#await">4. async / await — the big shift</a></li>
+      <li><a href="#task">5. Task — a unit of async work</a></li>
+      <li><a href="#struct">6. Structured concurrency — child tasks</a></li>
+      <li><a href="#actor">7. Actors & @MainActor — state without locks</a></li>
+      <li><a href="#stream">8. AsyncSequence / AsyncStream — a faucet of values</a></li>
+      <li><a href="#cont">9. Continuations — bridging old to new</a></li>
+      <li><a href="#cheat">10. Cheat sheet — what to pick</a></li>
+    </ul>
+  </div>
+
+  <!-- ============ WHY ============ -->
+  <h2 id="why">0. Why any of this exists</h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> Computer has a few cooks (CPU cores). One cook can only do one thing at a time. If a cook starts a slow job — wait for the oven, wait for a file, wait for the internet — and just stands there, your app freezes. 🥶</p>
+    <p>All these tools answer one question: <b>how do I keep cooks busy and the kitchen smooth while slow stuff happens?</b> Two big families:</p>
+    <ul>
+      <li><span class="tag old">old way</span> <b>GCD & friends</b> — you, the boss, hand jobs to queues. Powerful, verbose, easy to deadlock.</li>
+      <li><span class="tag new">new way</span> <b>Swift Concurrency</b> (Swift 5.5, 2021) — <code>async/await</code>, <code>Task</code>, actors. The compiler helps. Code reads top-to-bottom even when it pauses.</li>
+    </ul>
+    <p>They <b>coexist</b>. Real apps (like this one) use both — new way for most things, GCD when you must block.</p>
+  </div>
+
+  <svg viewBox="0 0 880 210" role="img" aria-label="Old vs new concurrency families">
+    <style>.t{fill:#e6edf3;font:13px sans-serif}.th{fill:#9fb0c3;font:12px sans-serif}</style>
+    <text x="10" y="22" class="t" font-weight="700">Two families, one kitchen</text>
+
+    <rect x="10" y="36" width="410" height="150" fill="#3a2d12" stroke="#ffb454" rx="10" opacity="0.25"/>
+    <text x="28" y="62" fill="#ffb454" font-weight="700" font-size="14">OLD · GCD family (2009–)</text>
+    <text x="28" y="88" class="th">DispatchQueue · OperationQueue</text>
+    <text x="28" y="110" class="th">You manage queues, locks, callbacks</text>
+    <text x="28" y="132" class="th">Closures + completion handlers</text>
+    <text x="28" y="158" class="th">Still here for: blocking work, timers, legacy</text>
+
+    <rect x="450" y="36" width="420" height="150" fill="#2c1f47" stroke="#b98cff" rx="10" opacity="0.3"/>
+    <text x="468" y="62" fill="#b98cff" font-weight="700" font-size="14">NEW · Swift Concurrency (2021–)</text>
+    <text x="468" y="88" class="th">async/await · Task · actor · @MainActor</text>
+    <text x="468" y="110" class="th">Compiler tracks suspension &amp; data races</text>
+    <text x="468" y="132" class="th">Cooperative thread pool, structured</text>
+    <text x="468" y="158" class="th">Default choice for new code</text>
+  </svg>
+
+  <!-- ============ THREAD ============ -->
+  <h2 id="thread">1. <code>Thread</code> — the raw metal <span class="pill p-bad">almost never use</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> A cook. The actual person. You <i>can</i> hire one by hand (<code>Thread { ... }</code>) but it's like building your own oven from scratch — you manage its life, sleep, death. Nobody does this anymore.</p>
+  </div>
+  <p class="tech">Technical: <code>Thread</code> maps to an OS thread (pthread). Expensive (~512KB stack, kernel scheduling). Creating one per task doesn't scale — 1000 tasks ≠ 1000 threads. Every higher abstraction exists so you stop doing this. You'll see it only in old code, locks (<code>NSLock</code>), or <code>Thread.isMainThread</code> checks.</p>
+
+  <!-- ============ GCD ============ -->
+  <h2 id="gcd">2. GCD / <code>DispatchQueue</code> — the old workhorse <span class="pill p-old">2009</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> Instead of hiring cooks, you write jobs on tickets and drop them in a <b>queue</b>. Grand Central Dispatch owns a pool of cooks and pulls tickets for you. You never see the cooks. You only choose <i>which line</i> a ticket goes in.</p>
+    <ul>
+      <li>🚶 <b>Serial queue</b> — one ticket at a time, in order. (A single cashier.)</li>
+      <li>🏃🏃 <b>Concurrent queue</b> — many tickets at once. (A buffet.)</li>
+      <li>🖥️ <b>Main queue</b> — the special serial line for the screen. UI only.</li>
+    </ul>
+    <p>And two ways to drop a ticket: <code>.async</code> = "do this later, I'll keep going" · <code>.sync</code> = "I'll stand here until it's done" (⚠️ deadlock if you sync onto your own queue).</p>
+  </div>
+
+  <pre><code><span class="cm">// hop off the main thread, do slow work, hop back to update UI</span>
+DispatchQueue.global(qos: .userInitiated).<span class="kw">async</span> {
+    <span class="kw">let</span> data = loadBigFile()        <span class="cm">// slow — fine, we're off main</span>
+    DispatchQueue.main.<span class="kw">async</span> {
+        label.text = data.title       <span class="cm">// UI — must be on main</span>
+    }
+}</code></pre>
+
+  <p class="tech">Technical: <code>DispatchQueue</code> abstracts a thread pool sized to the hardware. <b>QoS</b> (quality of service: <code>.userInteractive</code> → <code>.background</code>) tells the scheduler priority. Other GCD pieces you'll meet: <code>DispatchGroup</code> (wait for N jobs to finish), <code>DispatchSemaphore</code> (counting gate / crude lock), <code>DispatchWorkItem</code> (a cancellable ticket — used in this app's <code>LogBuffer.scheduleFlush()</code>), <code>DispatchSource</code> timers. GCD is <b>not deprecated</b> — it's the right tool for genuinely <i>blocking</i> work, because blocking a GCD thread only costs that one thread, not the whole cooperative pool.</p>
+
+  <div class="card tech">
+    <p style="margin:0"><b>🔗 In this codebase:</b> <code>withBlockingTask</code> is a GCD bridge. When Swift-concurrency code hits a blocking syscall (big file read, slow daemon connect), it shoves that work onto a GCD queue so the shared cooperative pool stays free. See the kitchen "dishwasher crew" in the Launch Performance explainer.</p>
+  </div>
+
+  <!-- ============ OPERATIONQUEUE ============ -->
+  <h2 id="op">3. <code>OperationQueue</code> — GCD with a brain <span class="pill p-old">2011</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> GCD tickets are dumb — fire and forget. An <b>Operation</b> is a ticket that's a real object: you can <b>cancel</b> it, check if it's running, and say <b>"don't start B until A is done"</b> (dependencies). Like a job board with arrows between cards.</p>
+  </div>
+  <p class="tech">Technical: <code>Operation</code> + <code>OperationQueue</code> sit on top of GCD. Add <code>maxConcurrentOperationCount</code>, <code>addDependency()</code>, KVO-observable state, and cancellation. Heavier than raw GCD. In new code, <b>task groups + cancellation cover most of this</b> more cleanly — but you'll still see <code>OperationQueue</code> in older networking/image-pipeline code.</p>
+
+  <!-- ============ ASYNC/AWAIT ============ -->
+  <h2 id="await">4. <code>async</code> / <code>await</code> — the big shift <span class="pill p-new">Swift 5.5</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> Old async code was "callback soup" — do thing, hand over a note for what to do <i>when it's done</i>, nest another note inside, and another… 🍝 Pyramid of doom.</p>
+    <p><code>await</code> says: <b>"pause here, let the cook go help others, wake me when the result is ready, then keep going."</b> Code reads straight down even though it pauses in the middle.</p>
+  </div>
+
+  <pre><code><span class="cm">// OLD: callback soup</span>
+loadUser { user <span class="kw">in</span>
+    loadPosts(user) { posts <span class="kw">in</span>
+        loadComments(posts) { comments <span class="kw">in</span>
+            update(comments)     <span class="cm">// 3 levels deep 😖</span>
+        }
+    }
+}
+
+<span class="cm">// NEW: straight line, each await = a pause point</span>
+<span class="kw">let</span> user     = <span class="kw">await</span> loadUser()
+<span class="kw">let</span> posts    = <span class="kw">await</span> loadPosts(user)
+<span class="kw">let</span> comments = <span class="kw">await</span> loadComments(posts)
+update(comments)               <span class="cm">// 😌</span></code></pre>
+
+  <p class="tech">Technical: an <code>async</code> function can <b>suspend</b> at each <code>await</code> — it gives its thread back to the pool instead of blocking it. When the awaited result lands, it resumes (possibly on a <i>different</i> thread). The key mental shift: <b>suspension ≠ blocking.</b> A blocked thread is wasted; a suspended task is free. <code>await</code> is a marker of "a thread switch may happen here."</p>
+
+  <svg viewBox="0 0 880 160" role="img" aria-label="blocking vs suspending">
+    <text x="0" y="16" fill="#9fb0c3" font-size="12">BLOCKING (bad) — cook stands frozen at the oven the whole time:</text>
+    <rect x="0" y="24" width="240" height="26" fill="#ff6b6b" rx="5"/>
+    <text x="120" y="42" text-anchor="middle" font-size="12" fill="#1a0606" font-weight="700">work</text>
+    <rect x="244" y="24" width="380" height="26" fill="#5b1e1e" rx="5"/>
+    <text x="434" y="42" text-anchor="middle" font-size="12" fill="#ffd0d0" font-weight="700">🥶 thread stuck waiting — wasted</text>
+    <rect x="628" y="24" width="160" height="26" fill="#ff6b6b" rx="5"/>
+    <text x="708" y="42" text-anchor="middle" font-size="12" fill="#1a0606" font-weight="700">resume</text>
+
+    <text x="0" y="96" fill="#9fb0c3" font-size="12">SUSPENDING (await) — cook leaves, helps others, comes back when ready:</text>
+    <rect x="0" y="104" width="240" height="26" fill="#5fd38d" rx="5"/>
+    <text x="120" y="122" text-anchor="middle" font-size="12" fill="#08130c" font-weight="700">work</text>
+    <rect x="244" y="104" width="380" height="26" fill="#143a23" stroke="#5fd38d" rx="5"/>
+    <text x="434" y="122" text-anchor="middle" font-size="12" fill="#5fd38d" font-weight="700">⏸ suspended — thread freed for others ✅</text>
+    <rect x="628" y="104" width="160" height="26" fill="#5fd38d" rx="5"/>
+    <text x="708" y="122" text-anchor="middle" font-size="12" fill="#08130c" font-weight="700">resume</text>
+  </svg>
+
+  <!-- ============ TASK ============ -->
+  <h2 id="task">5. <code>Task</code> — a unit of async work <span class="pill p-new">Swift 5.5</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> <code>await</code> only works <i>inside</i> async code. But your button tap is plain old sync code. <code>Task { }</code> is the <b>doorway</b>: "start an async job from here." It's one ticket dropped on the cooperative pool.</p>
+  </div>
+
+  <pre><code>button.action = {
+    Task {                                  <span class="cm">// doorway into async</span>
+        <span class="kw">let</span> result = <span class="kw">await</span> fetchData()
+        <span class="kw">await</span> MainActor.run { show(result) } <span class="cm">// back to UI</span>
+    }
+}</code></pre>
+
+  <div class="card warnbox">
+    <p style="margin:0"><b>⚠️ The trap from the other explainer.</b> <code>Task.detached { }</code> looks like "run this off to the side on its own thread." It is <b>not</b>. It still runs on the shared <b>cooperative thread pool</b>. If you put a <i>blocking</i> call inside it, you freeze a pooled cook — and enough of those starve the whole kitchen. Blocking work belongs on GCD (<code>withBlockingTask</code>), never in a <code>Task</code>. This exact bug is logged in this project's memory.</p>
+  </div>
+
+  <p class="tech">Technical: a <code>Task</code> carries priority, a cancellation flag (cooperative — you must <i>check</i> <code>Task.isCancelled</code> / call <code>Task.checkCancellation()</code>), and a result you can <code>await</code> via <code>task.value</code>. <code>Task {}</code> inherits the current actor &amp; priority; <code>Task.detached {}</code> inherits nothing. The cooperative pool is capped near core-count on purpose — that's why blocking it is fatal where blocking a GCD queue is merely wasteful.</p>
+
+  <!-- ============ STRUCTURED ============ -->
+  <h2 id="struct">6. Structured concurrency — child tasks that can't escape <span class="pill p-new">Swift 5.5</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> If you start 3 little jobs, who cleans them up if one fails or you cancel? <b>Structured</b> means child jobs live <i>inside</i> a parent scope — like kids on a field trip. The bus doesn't leave until all kids are back, and if the trip is cancelled, every kid comes home. No orphans.</p>
+    <ul>
+      <li><code>async let</code> — fire 2–3 jobs in parallel, await them later.</li>
+      <li><code>withTaskGroup</code> — fire a dynamic number (a loop of them), collect results.</li>
+    </ul>
+  </div>
+
+  <pre><code><span class="cm">// async let — run two fetches at the SAME time, then combine</span>
+<span class="kw">async let</span> user  = loadUser()
+<span class="kw">async let</span> feed  = loadFeed()
+<span class="kw">let</span> screen = Screen(user: <span class="kw">await</span> user, feed: <span class="kw">await</span> feed)
+<span class="cm">// both ran in parallel; total time = the slower one, not the sum</span>
+
+<span class="cm">// task group — N jobs, gather results</span>
+<span class="kw">let</span> thumbs = <span class="kw">await withTaskGroup</span>(of: Image.self) { group <span class="kw">in</span>
+    <span class="kw">for</span> url <span class="kw">in</span> urls { group.addTask { <span class="kw">await</span> downloadThumb(url) } }
+    <span class="kw">var</span> out: [Image] = []
+    <span class="kw">for await</span> img <span class="kw">in</span> group { out.append(img) }
+    <span class="kw">return</span> out
+}</code></pre>
+
+  <p class="tech">Technical: child tasks are bound to the parent scope's lifetime — the scope can't return until all children finish, and cancelling the parent cancels children (propagated, cooperative). This is what makes Swift concurrency <i>safe</i> vs. fire-and-forget GCD: no leaked work, automatic error &amp; cancellation propagation. Use it instead of <code>DispatchGroup</code> for new code.</p>
+
+  <!-- ============ ACTOR ============ -->
+  <h2 id="actor">7. Actors &amp; <code>@MainActor</code> — state without locks <span class="pill p-new">Swift 5.5</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> When two cooks grab the same pot at once, food goes everywhere (a "data race" 💥). Old fix: a lock — a key only one cook holds. Easy to forget, easy to deadlock.</p>
+    <p>An <b>actor</b> is a pot with a <b>built-in bouncer</b>. Only one cook gets inside at a time, automatically. You don't manage a key — the compiler makes everyone <code>await</code> their turn. The pot's contents can never be touched by two at once.</p>
+    <p><b>@MainActor</b> is the one special actor = the UI thread. Mark UI code <code>@MainActor</code> and the compiler <i>guarantees</i> it runs on screen-thread.</p>
+  </div>
+
+  <pre><code><span class="kw">actor</span> <span class="ty">Counter</span> {
+    <span class="kw">private var</span> value = 0
+    <span class="kw">func</span> increment() { value += 1 }   <span class="cm">// safe — one caller at a time</span>
+}
+<span class="kw">let</span> c = <span class="ty">Counter</span>()
+<span class="kw">await</span> c.increment()                     <span class="cm">// await: you wait for the bouncer</span>
+
+<span class="kw">@MainActor</span>
+<span class="kw">final class</span> <span class="ty">HeroViewModel</span> {        <span class="cm">// all its code runs on the UI thread</span>
+    <span class="kw">var</span> isReady = <span class="kw">false</span>
+}</code></pre>
+
+  <p class="tech">Technical: actors serialize access to their mutable state via an implicit mailbox — calls from outside are <code>async</code> (you may suspend until the actor is free). This replaces manual <code>NSLock</code>/<code>DispatchQueue</code>-as-lock patterns and is checked at <i>compile time</i> (Swift 6 strict concurrency flags races as errors). <code>@MainActor</code> is a global actor pinning work to the main thread — the modern replacement for scattered <code>DispatchQueue.main.async</code>. <code>nonisolated</code> opts a member out when it touches no actor state.</p>
+
+  <!-- ============ STREAM ============ -->
+  <h2 id="stream">8. <code>AsyncSequence</code> / <code>AsyncStream</code> — a faucet of values <span class="pill p-new">Swift 5.5</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> <code>await</code> gives you <b>one</b> value later. But some things give you a <b>drip… drip… drip</b> of values over time — location updates, log lines, notifications. An async sequence lets you <code>for await</code> each drip as it arrives, pausing between.</p>
+  </div>
+
+  <pre><code><span class="kw">for await</span> location <span class="kw">in</span> locationUpdates {   <span class="cm">// loops as each new value arrives</span>
+    map.center = location
+}                                          <span class="cm">// pauses (frees thread) between drips</span></code></pre>
+
+  <p class="tech">Technical: <code>AsyncSequence</code> is the async cousin of <code>Sequence</code> — <code>for await</code> suspends between elements. <code>AsyncStream</code> / <code>AsyncThrowingStream</code> let you <b>build</b> one from a callback or delegate API (push values into a continuation, finish when done). This is the Swift-concurrency answer to Combine publishers / <code>NotificationCenter</code> observers for many use cases.</p>
+
+  <!-- ============ CONTINUATION ============ -->
+  <h2 id="cont">9. Continuations — bridging old callbacks into <code>await</code> <span class="pill p-new">Swift 5.5</span></h2>
+  <div class="card eli5">
+    <p><b>ELI5.</b> Tons of old code speaks "callback": <code>doThing { result in ... }</code>. You want to <code>await</code> it. A <b>continuation</b> is a translator: it pauses your async code, hands the old API a callback, and when that callback fires it <b>resumes</b> you with the value. One bridge between the two worlds.</p>
+  </div>
+
+  <pre><code><span class="kw">func</span> loadThing() <span class="kw">async throws</span> -> Thing {
+    <span class="kw">try await withCheckedThrowingContinuation</span> { cont <span class="kw">in</span>
+        oldAPI.load { result, error <span class="kw">in</span>
+            <span class="kw">if let</span> error { cont.resume(throwing: error) }
+            <span class="kw">else</span> { cont.resume(returning: result!) }   <span class="cm">// resume EXACTLY once</span>
+        }
+    }
+}</code></pre>
+
+  <div class="card tech">
+    <p style="margin:0"><b>🔗 In this codebase:</b> the <b>prewarm barrier</b> (commit 03) uses a <code>CheckedContinuation</code> to race a prewarm <code>Task</code> against a 2s timeout <code>Task</code> — whichever finishes first calls <code>resume</code>, guarded by a lock-protected wrapper so only the <i>first</i> wins. Resuming a continuation twice (or never) is a bug; the <code>Checked</code> variant traps on misuse. That's exactly the old→new bridge pattern.</p>
+  </div>
+
+  <!-- ============ CHEAT ============ -->
+  <h2 id="cheat">10. Cheat sheet — what do I reach for?</h2>
+  <table>
+    <tr><th>I want to…</th><th>Use</th><th>Family</th></tr>
+    <tr><td>Run async code from a sync place (button tap)</td><td><code>Task { }</code></td><td><span class="pill p-new">new</span></td></tr>
+    <tr><td>Wait for one async result</td><td><code>await</code></td><td><span class="pill p-new">new</span></td></tr>
+    <tr><td>Do 2–3 things in parallel</td><td><code>async let</code></td><td><span class="pill p-new">new</span></td></tr>
+    <tr><td>Do N things in parallel, collect results</td><td><code>withTaskGroup</code></td><td><span class="pill p-new">new</span></td></tr>
+    <tr><td>Protect shared mutable state</td><td><code>actor</code></td><td><span class="pill p-new">new</span></td></tr>
+    <tr><td>Guarantee code runs on the UI thread</td><td><code>@MainActor</code></td><td><span class="pill p-new">new</span></td></tr>
+    <tr><td>Consume a stream of values over time</td><td><code>for await</code> / <code>AsyncStream</code></td><td><span class="pill p-new">new</span></td></tr>
+    <tr><td>Wrap an old callback API in await</td><td><code>withCheckedContinuation</code></td><td><span class="pill p-new">new</span></td></tr>
+    <tr><td><b>Do genuinely BLOCKING work</b> (sync file read, slow daemon connect, locks)</td><td><code>DispatchQueue</code> / <code>withBlockingTask</code></td><td><span class="pill p-old">old</span></td></tr>
+    <tr><td>A cancellable delayed job (debounce/flush)</td><td><code>DispatchWorkItem</code></td><td><span class="pill p-old">old</span></td></tr>
+    <tr><td>Hand-roll your own OS thread</td><td><code>Thread</code></td><td><span class="pill p-bad">~never</span></td></tr>
+  </table>
+
+  <div class="card warnbox">
+    <h3 style="margin-top:0">The one rule that ties both explainers together</h3>
+    <pre>Is the work BLOCKING? (sync file I/O, syscalls, slow daemon, locks)
+   └─ YES → GCD  (DispatchQueue / withBlockingTask)   ← old way, on purpose
+   └─ NO  → Swift Concurrency  (Task / await / actor)  ← new way, default
+
+Touching the UI? → @MainActor / DispatchQueue.main, and keep it featherlight.
+
+Blocking the cooperative pool (Task / Task.detached with blocking work)
+   = the bug behind the cooperative-pool starvation, the ANE freeze,
+     and the haptic/ActivityKit main-thread stalls in this project.</pre>
+  </div>
+
+  <p class="muted" style="margin-top:30px;font-size:13px">Companion to <code>launch-performance-explained.html</code>. The "blocking → GCD, non-blocking → Swift concurrency" rule and the cooperative-pool starvation trap are documented in this project's ADR-0003 and VCDR project memory. Code snippets are illustrative — see the real <code>withBlockingTask</code>, <code>LogBuffer.scheduleFlush()</code>, and <code>PrewarmBarrierContinuation</code> in the source for the exact shapes.</p>
+
+</div>
+</body>
+</html>

@@ -189,11 +189,28 @@ final class HotMicSession {
         await start()
     }
 
-    /// A recording has begun. Cancel the inactivity teardown so long recordings
+    /// Record intent has been acknowledged and the Recording Run is Arming.
+    /// Protect an existing Hot Mic Session from expiring while the engine is
+    /// starting, but do not create fresh Mic Presence for a cold engine.
+    func recordIntentStarted() {
+        guard engine.isHot else { return }
+        idleTask?.cancel()
+        idleTask = nil
+    }
+
+    /// Arming ended before Capturing. Resume the prior idle window if one was
+    /// already alive; this is not Post-Capture Warmth and must not earn a fresh
+    /// timeout.
+    func recordIntentCancelledBeforeCapture() {
+        armIdleTimer(policy())
+    }
+
+    /// Capturing has begun. Cancel the inactivity teardown so long recordings
     /// never time out, and make sure heartbeat and presence are lit — the cold
-    /// record path warms the engine via `startCapture` without going through
+    /// record path warmed the engine via `startCapture` without going through
     /// `start()`.
     func recordingStarted() {
+        guard engine.isHot else { return }
         idleTask?.cancel()
         idleTask = nil
         idleDeadline = nil
@@ -206,7 +223,7 @@ final class HotMicSession {
     /// A recording has ended. Re-arm the inactivity timer per policy.
     func recordingStopped() {
         idleDeadline = nil  // fresh countdown from when recording actually stopped
-        armIdleTimer(policy())
+        armIdleTimer(policy(), allowWhileRecording: true)
     }
 
     /// The timeout setting changed — re-evaluate the live timer immediately
@@ -214,11 +231,8 @@ final class HotMicSession {
     func policyChanged() async {
         idleDeadline = nil  // recalculate from now with the new duration
         let timeout = policy()
-        if timeout == .never {
-            armIdleTimer(timeout)
-        } else {
-            await start()
-        }
+        guard engine.isHot else { return }
+        armIdleTimer(timeout)
     }
 
     // MARK: - Idle-timeout state machine
@@ -242,7 +256,7 @@ final class HotMicSession {
     ///
     /// If the engine isn't actually hot there is nothing to keep alive, so the
     /// heartbeat and presence are torn down too rather than left orphaned.
-    private func armIdleTimer(_ timeout: HotSessionTimeout) {
+    private func armIdleTimer(_ timeout: HotSessionTimeout, allowWhileRecording: Bool = false) {
         idleTask?.cancel()
         idleTask = nil
 
@@ -266,7 +280,7 @@ final class HotMicSession {
             break
         }
 
-        guard !engine.isRecording else { return }
+        guard allowWhileRecording || !engine.isRecording else { return }
 
         let currentTime = now()
         if idleDeadline == nil {

@@ -201,17 +201,45 @@ struct HotMicSessionTests {
         await settle()
     }
 
-    @Test("opting into a warm policy starts the session")
-    func policyChangeFromNeverStartsSession() async {
+    @Test("opting into a warm policy does not start a cold session")
+    func policyChangeFromNeverDoesNotStartColdSession() async {
         let env = makeEnv(policy: .never)
 
         env.holder.value = .fiveMinutes
         await env.session.policyChanged()
         await settle()
 
-        #expect(env.engine.startHotSessionCalls == 1)
-        #expect(env.engine.isHot)
+        #expect(env.engine.startHotSessionCalls == 0)
+        #expect(!env.engine.isHot)
+        #expect(!env.channel.isAppLikelyAlive())
+        #expect(env.presence.startCalls == 0)
+    }
+
+    @Test("post-capture stop starts finite warmth with the configured deadline")
+    func postCaptureStopStartsFiniteWarmthWithDeadline() async {
+        let fixedNow = Date(timeIntervalSince1970: 2_000)
+        let env = makeEnv(policy: .fiveMinutes, now: { fixedNow })
+
+        env.engine.isHot = true
+        env.engine.isRecording = true
+        env.session.recordingStarted()
+        await settle()
+
+        #expect(env.presence.isShown)
+        #expect(env.presence.deadline == nil)
+
+        env.engine.isRecording = false
+        env.session.recordingStopped()
+        await settle()
+
+        let expected = fixedNow.addingTimeInterval(TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
+        #expect(env.presence.deadline == expected)
+        #expect(env.presence.isShown)
         #expect(env.channel.isAppLikelyAlive())
+        #expect(env.clock.sleepCount == 1)
+
+        env.clock.advance()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
     }
 
     @Test("start is idempotent — presence is shown once across repeated calls")

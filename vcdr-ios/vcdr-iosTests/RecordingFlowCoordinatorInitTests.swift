@@ -295,6 +295,49 @@ struct RecordingFlowCoordinatorInitTests {
 
         ParakeetProviderTestSupport.reset()
     }
+
+    @Test("model ready with finite policy does not start cold Mic Presence")
+    func modelReadyWithFinitePolicyDoesNotStartColdMicPresence() async throws {
+        ParakeetProviderTestSupport.reset()
+        ParakeetProviderTestSupport.bypassRealMLLoad = true
+
+        let engine = SpyWarmRecordingEngine()
+        engine.hasMicrophonePermission = true
+        let presence = SpyPresence()
+        let clock = TestClock()
+        let suite = "RecordingFlowCoordinatorInitTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let channel = KeyboardChannel(defaults: defaults)
+        let hotMicSession = HotMicSession(
+            engine: engine,
+            presence: presence,
+            keyboard: channel,
+            clock: clock,
+            policy: { .fiveMinutes }
+        )
+
+        let provider = ParakeetProvider()
+        let coordinator = RecordingFlowCoordinator(
+            keyboardChannel: channel,
+            recordingEngine: engine,
+            transcriptionProvider: provider,
+            hotMicSession: hotMicSession
+        )
+
+        await coordinator.initializeModel()
+        await settleMainActor()
+
+        #expect(engine.prepareSessionCalls == 1)
+        #expect(engine.prepareEngineCalls == 1)
+        #expect(engine.startHotSessionCalls == 0)
+        #expect(!engine.isHot)
+        #expect(!channel.isAppLikelyAlive())
+        #expect(presence.startCalls == 0)
+        #expect(clock.sleepCount == 0)
+
+        ParakeetProviderTestSupport.reset()
+    }
 }
 
 @MainActor
@@ -307,6 +350,11 @@ private func waitUntil(
         if condition() { return }
         try? await Task.sleep(for: .milliseconds(5))
     }
+}
+
+@MainActor
+private func settleMainActor() async {
+    for _ in 0..<10 { await Task.yield() }
 }
 
 // MARK: - Test doubles

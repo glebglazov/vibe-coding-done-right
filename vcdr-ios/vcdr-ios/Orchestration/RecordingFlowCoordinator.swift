@@ -220,23 +220,6 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Hot Session Lifecycle
 
-    /// Brings the hot mic session up so the next recording begins instantly.
-    /// Idempotent — safe to call after model-ready. The `.never` /
-    /// `.always` / finite policy, the heartbeat, the Live Activity presence,
-    /// and the idle-timeout teardown all live inside `HotMicSession`.
-    ///
-    /// Skipped while the model is still initializing or after an init failure.
-    func startHotSessionIfNeeded() async {
-        switch state {
-        case .initializing, .error:
-            Logger.app.info("startHotSessionIfNeeded: skipping — state is \(String(describing: self.state))")
-            return
-        default:
-            break
-        }
-        await hotMicSession.startIfPermitted()
-    }
-
     /// Foreground lifecycle hook. A live Hot Mic Session gets its heartbeat and
     /// idle deadline renewed, but cold launch does not start audio preparation.
     func renewHotSessionIfAlive() async {
@@ -403,11 +386,13 @@ final class RecordingFlowCoordinator {
                 }
             }
 
-            // Hot-session policy (may call `start()`) is follow-up only; HAL
-            // preparation already ran before the encoder phase.
+            // Transcription Readiness does not grant Post-Capture Warmth. If a
+            // Hot Mic Session is already alive, re-sync its heartbeat/deadline;
+            // otherwise leave the audio engine cold until a Recording Run
+            // reaches Capturing.
             Task { [weak self] in
                 guard let self else { return }
-                await self.startHotSessionIfNeeded()
+                await self.renewHotSessionIfAlive()
             }
         } catch {
             pollTask.cancel()
@@ -524,11 +509,9 @@ final class RecordingFlowCoordinator {
             await self?.writeStateAsync(.recording)
         }
 
-        // We're about to record: cancel any pending hot-session teardown and
-        // light the heartbeat + presence now. The cold path warms the engine
-        // via `startCapture` below without ever going through `start()`, so the
-        // session needs telling regardless of how it got hot.
-        hotMicSession.recordingStarted()
+        // We're about to record: protect any already-alive Hot Mic Session
+        // while Arming, without creating fresh Mic Presence for a cold engine.
+        hotMicSession.recordIntentStarted()
 
         let run = makeRecordingRun(deliversToKeyboard: fromDeepLink)
         recordingRun = run
@@ -545,9 +528,7 @@ final class RecordingFlowCoordinator {
             state = .error("Microphone unavailable — couldn't start recording")
             writeState(.idle)
             recordingRun = nil
-            // The engine never came up, so tear down the heartbeat/presence we
-            // optimistically lit above rather than leaving them orphaned.
-            hotMicSession.recordingStopped()
+            hotMicSession.recordIntentCancelledBeforeCapture()
             isStartingRecording = false
             return
         }
@@ -558,7 +539,7 @@ final class RecordingFlowCoordinator {
         guard state == .arming else {
             _ = await run.cancel()
             recordingRun = nil
-            hotMicSession.recordingStopped()
+            hotMicSession.recordIntentCancelledBeforeCapture()
             isStartingRecording = false
             return
         }
@@ -568,6 +549,7 @@ final class RecordingFlowCoordinator {
         // while the model is cold so a first-use haptic-daemon connect can't
         // block the main thread under the concurrent ANE compile.
         state = .recording
+        hotMicSession.recordingStarted()
         if isModelReady { recordHaptic.impactOccurred() }
         isStartingRecording = false
     }
