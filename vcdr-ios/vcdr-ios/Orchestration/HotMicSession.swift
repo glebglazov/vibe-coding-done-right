@@ -39,10 +39,10 @@ extension AudioRecorder: RecordingEngine {}
 protocol MicPresence {
     /// Shows the presence. `deadline`, when non-nil, is the *Presence Deadline*:
     /// the wall-clock instant past which readiness must no longer be advertised.
-    /// The adapter only reflects this deadline (e.g. as a Live Activity stale
-    /// date) — it never computes timeout policy itself; that lives in the Hot
-    /// Mic Session. `nil` means no inactivity deadline (`.always`, or while a
-    /// recording is in progress).
+    /// The adapter only reflects this deadline (for example by scheduling Live
+    /// Activity dismissal) — it never computes timeout policy itself; that lives
+    /// in the Hot Mic Session. `nil` means no inactivity deadline (`.always`, or
+    /// while a recording is in progress).
     func start(deadline: Date?) async
     func stop() async
 }
@@ -237,7 +237,7 @@ final class HotMicSession {
         idleDeadline = nil
         startHeartbeat()
         // No Presence Deadline while recording — a long recording must not let
-        // readiness go stale mid-capture; the timer re-arms on stop.
+        // readiness expire mid-capture; the timer re-arms on stop.
         Task { [presence] in await presence.start(deadline: nil) }
     }
 
@@ -307,7 +307,7 @@ final class HotMicSession {
             return
         case .always:
             // No inactivity Presence Deadline — readiness lives for the app
-            // lifetime, so the presence carries no stale date.
+            // lifetime, so the presence carries no scheduled dismissal.
             idleDeadline = nil
             idleStartedAt = nil
             Task { [presence] in await presence.start(deadline: nil) }

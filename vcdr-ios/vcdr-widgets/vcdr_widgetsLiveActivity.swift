@@ -3,30 +3,26 @@ import WidgetKit
 import SwiftUI
 
 struct HotMicLiveActivity: Widget {
-    // Once the Presence Deadline (the activity's stale date) passes, the system
-    // marks the context stale even while the app is suspended. Readiness must
-    // not survive that instant, so the stale rendering drops "Ready to record".
     private static let readyTitle = "Ready to record"
-    private static let staleTitle = "Mic idle"
 
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: HotMicActivityAttributes.self) { context in
+        ActivityConfiguration(for: HotMicActivityAttributes.self) { _ in
             HStack(spacing: 12) {
                 iconBadge(size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("VCDR")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(context.isStale ? Self.staleTitle : Self.readyTitle)
+                    Text(Self.readyTitle)
                         .font(.body.weight(.medium))
-                        .foregroundStyle(context.isStale ? .secondary : .primary)
+                        .foregroundStyle(.primary)
                 }
                 Spacer()
             }
             .padding()
             .activityBackgroundTint(Color.black.opacity(0.6))
             .activitySystemActionForegroundColor(Color.white)
-        } dynamicIsland: { context in
+        } dynamicIsland: { _ in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     iconBadge(size: 32)
@@ -37,7 +33,7 @@ struct HotMicLiveActivity: Widget {
                         Text("VCDR")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        Text(context.isStale ? Self.staleTitle : Self.readyTitle)
+                        Text(Self.readyTitle)
                             .font(.callout.weight(.medium))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -46,7 +42,7 @@ struct HotMicLiveActivity: Widget {
             } compactLeading: {
                 iconBadge(size: 20)
             } compactTrailing: {
-                Text(context.isStale ? "Idle" : "Ready")
+                Text("Ready")
                     .font(.caption2.weight(.semibold))
             } minimal: {
                 iconBadge(size: 20)

@@ -497,7 +497,7 @@ struct HotMicSessionTests {
         #expect(env.channel.isAppLikelyAlive())
     }
 
-    @Test("recording clears the presence deadline so readiness can't go stale mid-capture")
+    @Test("recording clears the presence deadline so readiness can't expire mid-capture")
     func recordingClearsPresenceDeadline() async {
         let env = makeEnv(policy: .fiveMinutes)
 
@@ -638,17 +638,16 @@ final class FakeWarmEngine: WarmEngine {
 /// refusing to deactivate) surfaced by `endHotSession`.
 struct FakeAudioReleaseError: Error {}
 
-/// Spy `MicPresence` that mirrors `HotMicActivityController`'s idempotency: a
-/// second `start()` while already shown is a no-op, so `startCalls` counts
-/// distinct presentations.
+/// Spy `MicPresence` that mirrors `HotMicActivityController`'s idempotency:
+/// repeated `start()` calls for the same live or scheduled presence do not
+/// count as distinct presentations.
 @MainActor
 final class SpyPresence: MicPresence {
     private(set) var startCalls = 0
     private(set) var stopCalls = 0
     private(set) var isShown = false
-    /// The most recent Presence Deadline handed to `start` — mirrors
-    /// `HotMicActivityController` updating the stale date even when already
-    /// shown, so tests can assert the deadline tracks the idle window.
+    /// The most recent Presence Deadline handed to `start`, so tests can assert
+    /// the deadline tracks the idle window.
     private(set) var deadline: Date?
 
     func start(deadline: Date?) async {
