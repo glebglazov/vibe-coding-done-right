@@ -105,7 +105,8 @@ struct RecordingRunTests {
         let conversation = try! #require(history.conversations.first)
         #expect(history.conversations.count == 1)
         #expect(conversation.id == pendingSuccess.conversationID)
-        #expect(conversation.inputSegments.map(\.text) == ["raw text", "selected context"])
+        #expect(conversation.inputSegments[0].text == "raw text")
+        #expect(conversation.inputSegments[1].capture?.text == "selected context")
         #expect(conversation.inputSegments[1].capture?.source == .selection)
         #expect(conversation.output == "pending text")
         #expect(conversation.label == "Dictation · Formal")
@@ -117,7 +118,11 @@ struct RecordingRunTests {
         let adapter = HistoryRecordingRunCompletionAdapter()
         adapter.setHistory(history)
 
-        await adapter.complete(.success(success(finalText: "normal path")))
+        await adapter.complete(.success(success(
+            transcript: "raw",
+            processed: "processed",
+            finalText: "normal path"
+        )))
 
         #expect(history.conversations.count == 1)
         #expect(history.conversations.first?.copyableText == "normal path")

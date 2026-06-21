@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import vcdr_ios
 
-@Suite("LogBuffer")
+@Suite("LogBuffer", .serialized)
 struct LogBufferTests {
     private static let coalescedLineCount = 3
     private static let trimLineCount = 22_000

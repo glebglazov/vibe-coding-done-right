@@ -11,8 +11,10 @@ struct RecordingRunTerminalOutcomeTests {
     func success() async {
         let settings = Self.makeSettings()
         let captures = ["selected context"]
+        let rawTranscript = "hello world"
+        let cleanedTranscript = TextPostProcessor.removeFillers(from: rawTranscript)
         let (run, keyboard) = makeRun(
-            streaming: FakeRecordingStreamingSession(result: .success("hello world")),
+            streaming: FakeRecordingStreamingSession(result: .success(rawTranscript)),
             settings: settings,
             captures: captures
         )
@@ -24,9 +26,9 @@ struct RecordingRunTerminalOutcomeTests {
             Issue.record("Expected success outcome")
             return
         }
-        #expect(success.transcript == "hello world")
+        #expect(success.transcript == cleanedTranscript)
         #expect(success.processed == nil)
-        #expect(success.finalText == TranscriptProcessor.finalize("hello world", settings: settings))
+        #expect(success.finalText == TranscriptProcessor.finalize(cleanedTranscript, settings: settings))
         #expect(success.captures == captures)
         #expect(keyboard.interactions == [.publishBundledResult(success.finalText)])
     }
