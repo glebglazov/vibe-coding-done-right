@@ -180,7 +180,21 @@ struct DebugLogView: View {
 
     nonisolated private static func filteredCurrentLines(_ lines: [String], sinceMinutes: Int) -> [String] {
         let cutoff = LogBuffer.timestamp(Date().addingTimeInterval(-Double(sinceMinutes * 60)))
-        return lines.filter { $0 >= cutoff }
+        return lines.filter { hasTimestampPrefix($0) && $0 >= cutoff }
+    }
+
+    /// True when a stored line begins with the fixed-width `yyyy-MM-dd …`
+    /// timestamp the store writes. Messages logged before newline-sanitisation
+    /// could split into orphan continuation lines with no timestamp; those
+    /// outsort real entries (their leading char beats the year digit `2`) and
+    /// never age out of any window, so they get dropped here rather than pinned
+    /// to the bottom of the log forever.
+    nonisolated private static func hasTimestampPrefix(_ line: String) -> Bool {
+        let head = Array(line.unicodeScalars.prefix(5))
+        guard head.count == 5 else { return false }
+        let isDigit: (Unicode.Scalar) -> Bool = { $0.value >= 48 && $0.value <= 57 }
+        return isDigit(head[0]) && isDigit(head[1]) && isDigit(head[2]) && isDigit(head[3])
+            && head[4] == "-"
     }
 }
 #endif

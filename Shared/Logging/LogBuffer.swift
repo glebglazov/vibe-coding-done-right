@@ -77,10 +77,23 @@ nonisolated final class LogBuffer: @unchecked Sendable {
         let date = Date()
         queue.async { [self] in
             guard storage != nil else { return }
-            let line = "\(Self.timestampFormatter.string(from: date)) [\(category)] [\(level)] \(message)\n"
+            let line = "\(Self.timestampFormatter.string(from: date)) [\(category)] [\(level)] \(Self.sanitize(message))\n"
             pendingData.append(contentsOf: line.utf8)
             scheduleFlush()
         }
+    }
+
+    /// Collapses newlines embedded in a message so one logical entry stays one
+    /// physical line. Both the reader's chronological `.sorted()` and its
+    /// time-window `>=` filter assume every stored line begins with a sortable
+    /// timestamp (see `readBatch` / `DebugLogView`). A multi-line message would
+    /// otherwise split into orphan, timestamp-less continuation lines whose
+    /// leading character outranks the year digit `2`, pinning them to the very
+    /// bottom of the log forever and surviving every time window. `\r\n` is a
+    /// single grapheme, so per-`Character` mapping collapses it to one marker.
+    private nonisolated static func sanitize(_ message: String) -> String {
+        guard message.contains(where: \.isNewline) else { return message }
+        return String(message.map { $0.isNewline ? "⏎" : $0 })
     }
 
     func flushPendingWrites() {

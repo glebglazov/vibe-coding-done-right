@@ -25,6 +25,20 @@ struct LogBufferTests {
         }
     }
 
+    @Test("collapses a multi-line message into one stored line")
+    func collapsesMultiLineMessageIntoOneLine() throws {
+        try LogBuffer.withTemporaryDirectoryForTesting(temporaryLogDirectory()) {
+            LogBuffer.shared.append(category: "ai", level: "I", message: "first\nsecond\r\nthird")
+
+            LogBuffer.shared.flushPendingWrites()
+
+            let lines = LogBuffer.mergedLines()
+            #expect(lines.count == 1)
+            #expect(lines.first?.contains("\n") == false)
+            #expect(lines.first?.contains("⏎") == true)
+        }
+    }
+
     @Test("trim streams kept bytes instead of loading the whole file")
     func trimStreamsKeptBytes() throws {
         try LogBuffer.withTemporaryDirectoryForTesting(temporaryLogDirectory()) {
