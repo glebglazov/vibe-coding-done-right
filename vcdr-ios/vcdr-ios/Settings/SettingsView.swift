@@ -2,6 +2,9 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    #if DEBUG
+    @State private var showClearLogsConfirmation = false
+    #endif
     @AppStorage("appearance") private var appearance: Appearance = .system
     @AppStorage(AudioRecorder.useBuiltInMicOnlyKey) private var useBuiltInMicOnly = true
     @AppStorage(
@@ -176,10 +179,25 @@ struct SettingsView: View {
             NavigationLink("Launch History") {
                 LaunchHistoryView()
             }
+            Button("Clear All Logs", role: .destructive) {
+                showClearLogsConfirmation = true
+            }
         } header: {
             Text("Debug")
         } footer: {
             Text("Visible in Xcode builds only. Reads the persistent log file (App Group), so entries survive app restarts.")
+        }
+        .confirmationDialog(
+            "Clear all logs?",
+            isPresented: $showClearLogsConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear All", role: .destructive) {
+                LogBuffer.shared.clearAll()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes all saved log entries. This cannot be undone.")
         }
     }
     #endif

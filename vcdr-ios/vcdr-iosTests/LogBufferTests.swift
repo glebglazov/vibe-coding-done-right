@@ -39,6 +39,20 @@ struct LogBufferTests {
         }
     }
 
+    @Test("clearAll removes stored and pending log lines")
+    func clearAllRemovesStoredLines() throws {
+        try LogBuffer.withTemporaryDirectoryForTesting(temporaryLogDirectory()) {
+            LogBuffer.shared.append(category: "test", level: "I", message: "before clear")
+            LogBuffer.shared.flushPendingWrites()
+
+            #expect(LogBuffer.mergedLines().count == 1)
+
+            LogBuffer.shared.clearAll()
+
+            #expect(LogBuffer.mergedLines().isEmpty)
+        }
+    }
+
     @Test("trim streams kept bytes instead of loading the whole file")
     func trimStreamsKeptBytes() throws {
         try LogBuffer.withTemporaryDirectoryForTesting(temporaryLogDirectory()) {

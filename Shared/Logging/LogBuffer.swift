@@ -106,6 +106,20 @@ nonisolated final class LogBuffer: @unchecked Sendable {
         }
     }
 
+    /// Deletes every stored log line, including entries not yet flushed from
+    /// memory. Shared across the app and its extensions via the App Group file.
+    func clearAll() {
+        queue.sync { [self] in
+            flushWorkItem?.cancel()
+            flushWorkItem = nil
+            pendingData.removeAll(keepingCapacity: false)
+            guard let storage = prepareStorageIfNeeded() else { return }
+            withExclusiveFileLock(storage: storage) {
+                clearFileLocked(fileURL: storage.fileURL)
+            }
+        }
+    }
+
     private func scheduleFlush() {
         guard flushWorkItem == nil else { return }
         let workItem = DispatchWorkItem { [weak self] in
@@ -143,6 +157,15 @@ nonisolated final class LogBuffer: @unchecked Sendable {
         } catch {
             // Logging must never crash or throw into callers; drop on failure.
             try? handle.close()
+        }
+    }
+
+    private func clearFileLocked(fileURL: URL) {
+        do {
+            try Data().write(to: fileURL, options: .atomic)
+            trackedFileSize = 0
+        } catch {
+            // Logging must never crash or throw into callers; drop on failure.
         }
     }
 
