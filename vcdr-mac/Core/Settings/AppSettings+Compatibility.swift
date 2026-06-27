@@ -150,6 +150,23 @@ extension AppSettings {
         return env
     }
 
+    /// The informational notice for a Variables-screen row, or `nil` when the row's
+    /// name is not a Reserved Provider key name. Compares the row's override value
+    /// against the authoritative Provider key so the UI can explain the relationship.
+    /// See `docs/adr/0001-ai-provider-key-source-of-truth.md`.
+    func reservedVariableNotice(for variable: Variable) -> ReservedVariableNotice? {
+        guard let provider = AIProvider.allCases.first(where: { $0.apiKeyVariableName == variable.name })
+        else { return nil }
+
+        if variable.value.isEmpty {
+            return .noEffect(provider: provider)
+        }
+        if variable.value == apiKey(for: provider) {
+            return .duplicatesProviderKey(provider: provider)
+        }
+        return .overridesBashOnly(provider: provider)
+    }
+
     /// Set of all defined variable names (for highlighting in command editors).
     /// Reserved names are always defined because the Provider key is injected for them.
     var definedVariableNames: Set<String> {

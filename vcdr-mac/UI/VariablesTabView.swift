@@ -12,9 +12,10 @@ struct VariablesTabView: View {
             }
 
             Section {
-                ForEach(Array(settings.variables.enumerated()), id: \.element.id) { index, _ in
+                ForEach(Array(settings.variables.enumerated()), id: \.element.id) { index, variable in
                     VariableRowView(
                         variable: $settings.variables[index],
+                        notice: settings.reservedVariableNotice(for: variable),
                         onDelete: {
                             settings.variables.remove(at: index)
                         }
@@ -35,10 +36,20 @@ struct VariablesTabView: View {
 
 private struct VariableRowView: View {
     @Binding var variable: Variable
+    let notice: ReservedVariableNotice?
     let onDelete: () -> Void
     @State private var isValueVisible = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            fields
+            if let notice {
+                noticeLabel(notice)
+            }
+        }
+    }
+
+    private var fields: some View {
         HStack(spacing: 8) {
             TextField("VARIABLE_NAME", text: $variable.name)
                 .textFieldStyle(.roundedBorder)
@@ -72,5 +83,16 @@ private struct VariableRowView: View {
             .buttonStyle(.borderless)
             .help("Remove variable")
         }
+    }
+
+    @ViewBuilder
+    private func noticeLabel(_ notice: ReservedVariableNotice) -> some View {
+        Label {
+            Text(.init(notice.message))
+        } icon: {
+            Image(systemName: notice.isWarning ? "exclamationmark.triangle" : "info.circle")
+        }
+        .font(.caption)
+        .foregroundStyle(notice.isWarning ? Color.orange : Color.secondary)
     }
 }
