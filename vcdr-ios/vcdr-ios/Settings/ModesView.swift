@@ -20,7 +20,7 @@ struct ModesView: View {
                 afmFallback: $assistantAfmFallback
             )
         }
-        .navigationTitle("Configure Modes")
+        .navigationTitle("Modes")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: dictationProviderRaw) { _, _ in syncAIConfigured() }
         .onChange(of: assistantProviderRaw) { _, _ in syncAIConfigured() }
@@ -53,7 +53,7 @@ struct ModesView: View {
             Text(mode.displayName)
         } footer: {
             if configured.isEmpty {
-                Text("Configure a provider first in \"Configure Providers\".")
+                Text("Configure a provider first in \"Providers\".")
             }
         }
     }

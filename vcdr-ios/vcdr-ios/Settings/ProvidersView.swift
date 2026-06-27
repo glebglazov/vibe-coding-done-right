@@ -14,7 +14,7 @@ struct ProvidersView: View {
                 appleRow
             }
         }
-        .navigationTitle("Configure Providers")
+        .navigationTitle("Providers")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: anthropicApiKey) { _, _ in syncAIConfigured() }
         .onChange(of: openaiApiKey) { _, _ in syncAIConfigured() }

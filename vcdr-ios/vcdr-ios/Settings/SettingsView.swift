@@ -226,18 +226,18 @@ struct SettingsView: View {
                 }
             }
 
-            NavigationLink("Configure Providers") {
+            NavigationLink("Providers") {
                 ProvidersView()
             }
 
-            NavigationLink("Configure Modes") {
+            NavigationLink("Modes") {
                 ModesView()
             }
         } header: {
             Text("AI Processing")
         } footer: {
             if AIProvider.configuredProviders.isEmpty {
-                Text("No providers configured. Tap \"Configure Providers\" to add an API key.")
+                Text("No providers configured. Tap \"Providers\" to add an API key.")
             } else {
                 Text("Enhances transcriptions using AI.")
             }
