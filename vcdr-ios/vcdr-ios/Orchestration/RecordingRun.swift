@@ -39,6 +39,7 @@ final class RecordingRun {
     private let completionAdapters: [any RecordingRunCompletionAdapter]
     private let currentSettings: @MainActor () -> Settings
     private let currentCaptures: @MainActor () -> [String]
+    private let currentSubstitutions: @MainActor () -> [Substitution]
     private let onLiveTranscript: @MainActor (String) -> Void
     private let onInterimResult: @MainActor (String) -> Void
     private let onTranscribingMessage: @MainActor (String) -> Void
@@ -56,6 +57,7 @@ final class RecordingRun {
         completionAdapters: [any RecordingRunCompletionAdapter],
         currentSettings: @escaping @MainActor () -> Settings,
         currentCaptures: @escaping @MainActor () -> [String],
+        currentSubstitutions: @escaping @MainActor () -> [Substitution] = { [] },
         onLiveTranscript: @escaping @MainActor (String) -> Void,
         onInterimResult: @escaping @MainActor (String) -> Void,
         onTranscribingMessage: @escaping @MainActor (String) -> Void
@@ -67,6 +69,7 @@ final class RecordingRun {
         self.completionAdapters = completionAdapters
         self.currentSettings = currentSettings
         self.currentCaptures = currentCaptures
+        self.currentSubstitutions = currentSubstitutions
         self.onLiveTranscript = onLiveTranscript
         self.onInterimResult = onInterimResult
         self.onTranscribingMessage = onTranscribingMessage
@@ -170,7 +173,17 @@ final class RecordingRun {
 
     private func finishStreaming(context: TerminalContext) async throws -> RecordingRunTerminalState {
         let rawText = try await streaming.finish()
-        let cleanedText = TextPostProcessor.removeFillers(from: rawText)
+        // Substitution — first pre-processing step, before filler removal, on
+        // the dictated transcript only, in every AI Prompt Mode (Verbatim
+        // included). Captures are never run through the matcher. The keyboard
+        // extension stays out of this: it receives the already-substituted
+        // text via the Bundled Result on the Keyboard Channel.
+        let substitutedText = SubstitutionMatcher(substitutions: currentSubstitutions())
+            .apply(to: rawText)
+        if substitutedText != rawText {
+            Logger.app.info("After substitutions: \(substitutedText.prefix(50))...")
+        }
+        let cleanedText = TextPostProcessor.removeFillers(from: substitutedText)
         Logger.app.info("Streaming transcription complete: \(cleanedText.prefix(50))...")
 
         guard !cleanedText.isEmpty else {

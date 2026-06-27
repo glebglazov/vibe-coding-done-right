@@ -140,6 +140,13 @@ final class RecordingFlowCoordinator {
     /// bootstrap task completes; callers must tolerate the transient gap.
     private(set) var history: (any HistoryStore)?
     private var isHistoryBootstrapRunning = false
+    /// Stable Substitution store reference handed out at launch. Backed by a
+    /// proxy so the Settings screen and the recording pipeline can read it
+    /// immediately, while the real (possibly iCloud-backed) store is resolved
+    /// off-main in `bootstrapSubstitutions()`. Mirrors the macOS
+    /// `AppDependencies.substitutionStore` shell-first pattern.
+    let substitutionStore = SubstitutionStoreProxy()
+    private var isSubstitutionBootstrapRunning = false
     private let historyCompletionAdapter = HistoryRecordingRunCompletionAdapter()
     private var recordingRun: RecordingRun?
     /// Set to true while `startRecording` is between its UI flip and
@@ -260,6 +267,24 @@ final class RecordingFlowCoordinator {
         self.history = history
         historyCompletionAdapter.setHistory(history)
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
+    }
+
+    /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves
+    /// the iCloud ubiquity container off-main (it can block for seconds on first
+    /// launch), builds the real store via the factory on the main actor, and
+    /// installs it on the proxy — replaying any edits the user made before the
+    /// store was ready. The proxy stays the stable reference handed to the UI
+    /// and pipeline throughout.
+    func bootstrapSubstitutions() async {
+        guard !isSubstitutionBootstrapRunning else { return }
+        isSubstitutionBootstrapRunning = true
+        defer { isSubstitutionBootstrapRunning = false }
+        let defaults = SharedConstants.sharedDefaults
+        let ubiquityRoot: URL? = await withBlockingTask(qos: .userInitiated) {
+            UbiquitySubstitutionStore.resolveStorageRoot()
+        }
+        let store = SubstitutionStoreFactory.make(defaults: defaults, ubiquityRoot: ubiquityRoot)
+        substitutionStore.setRealStore(store)
     }
 
     /// Automatic launch path, driven by the Predicted Launch Verdict. A
@@ -644,6 +669,9 @@ final class RecordingFlowCoordinator {
             },
             currentCaptures: { [weak self] in
                 self?.capturedTexts ?? []
+            },
+            currentSubstitutions: { [weak self] in
+                self?.substitutionStore.substitutions ?? []
             },
             onLiveTranscript: { [weak self] text in
                 self?.liveTranscript = text

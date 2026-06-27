@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    let substitutionStore: any SubstitutionStore
     @Environment(\.dismiss) private var dismiss
     #if DEBUG
     @State private var showClearLogsConfirmation = false
@@ -30,6 +31,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 textStyleSection
+                substitutionsSection
                 aiProcessingSection
                 syncSection
                 microphoneSection
@@ -113,6 +115,18 @@ struct SettingsView: View {
             }
         } header: {
             Text("Default Dictation Style")
+        }
+    }
+
+    // MARK: - Substitutions
+
+    private var substitutionsSection: some View {
+        Section {
+            NavigationLink("Substitutions") {
+                SubstitutionsSettings(store: substitutionStore)
+            }
+        } footer: {
+            Text("Swap a spoken Trigger Phrase for fixed Replacement text, applied before any other processing in every mode.")
         }
     }
 

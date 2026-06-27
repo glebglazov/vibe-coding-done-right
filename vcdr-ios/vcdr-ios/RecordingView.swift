@@ -56,7 +56,10 @@ struct RecordingView: View {
         case .arming, .recording:
             EmptyView()
         default:
-            RecordingTopBar(history: coordinator.history)
+            RecordingTopBar(
+                history: coordinator.history,
+                substitutionStore: coordinator.substitutionStore
+            )
         }
     }
 

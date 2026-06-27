@@ -41,6 +41,7 @@ struct VCDRiOSApp: App {
                     //   3. Republish AI capability after the probe lands —
                     //      the keyboard extension gates its UI on the cached flag.
                     async let historyReady: Void = coordinator.bootstrapHistory()
+                    async let substitutionsReady: Void = coordinator.bootstrapSubstitutions()
                     async let afmReady: Bool = AFMAvailabilityCache.shared.refresh()
                     // Let the shell render before automatic model
                     // specialization begins. History bootstrap still overlaps
@@ -62,6 +63,8 @@ struct VCDRiOSApp: App {
                     Logger.app.info("[LaunchProbe] setupCommandListener done")
                     await historyReady
                     Logger.app.info("[LaunchProbe] historyReady awaited")
+                    await substitutionsReady
+                    Logger.app.info("[LaunchProbe] substitutionsReady awaited")
                     await modelReady
                     Logger.app.info("[LaunchProbe] initializeModel returned")
                     _ = await afmReady

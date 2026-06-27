@@ -33,6 +33,36 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(keyboard.interactions == [.publishBundledResult(success.finalText)])
     }
 
+    @Test("substitution rewrites the transcript before output and keyboard delivery")
+    func substitutionAppliesAcrossAppAndKeyboard() async {
+        let settings = Self.makeSettings()
+        let substitutions = [
+            Substitution(triggerPhrase: "btw", replacement: "by the way")
+        ]
+        let (run, keyboard) = makeRun(
+            streaming: FakeRecordingStreamingSession(result: .success("btw hello")),
+            settings: settings,
+            substitutions: substitutions
+        )
+
+        #expect(await run.start())
+        _ = await run.stop(deliversToKeyboard: true)
+
+        guard case .success(let success) = await run.waitForIdle(timeout: .seconds(1)) else {
+            Issue.record("Expected success outcome")
+            return
+        }
+        // App path: the dictated Trigger Phrase is swapped for its Replacement.
+        // Compared case-insensitively because deterministic finalization may
+        // sentence-case the leading word; the swap itself is what matters here.
+        #expect(success.transcript.lowercased() == "by the way hello")
+        #expect(!success.transcript.lowercased().contains("btw"))
+        // Keyboard path: the extension receives the already-substituted text
+        // via the Bundled Result — it never reads the Substitution store.
+        #expect(keyboard.interactions == [.publishBundledResult(success.finalText)])
+        #expect(success.finalText.lowercased().contains("by the way hello"))
+    }
+
     @Test("empty transcription records Empty Result and publishes it to keyboard")
     func emptyResult() async {
         let (run, keyboard) = makeRun(
@@ -89,7 +119,8 @@ struct RecordingRunTerminalOutcomeTests {
     private func makeRun(
         streaming: any RecordingStreamingSession,
         settings: RecordingRun.Settings? = nil,
-        captures: [String] = []
+        captures: [String] = [],
+        substitutions: [Substitution] = []
     ) -> (RecordingRun, FakeKeyboardChannel) {
         let settings = settings ?? Self.makeSettings()
         let keyboard = FakeKeyboardChannel()
@@ -117,6 +148,7 @@ struct RecordingRunTerminalOutcomeTests {
             ],
             currentSettings: { settings },
             currentCaptures: { captures },
+            currentSubstitutions: { substitutions },
             onLiveTranscript: { _ in },
             onInterimResult: { _ in },
             onTranscribingMessage: { _ in }

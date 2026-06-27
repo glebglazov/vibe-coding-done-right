@@ -5,6 +5,7 @@ import OSLog
 /// Readiness progress updates cannot interrupt sheet presentation.
 struct RecordingTopBar: View {
     let history: (any HistoryStore)?
+    let substitutionStore: any SubstitutionStore
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("appearance") private var appearance: Appearance = .system
     @State private var showSettings = false
@@ -68,7 +69,7 @@ struct RecordingTopBar: View {
         .padding(.leading, 4)
         .sheet(isPresented: $showSettings) {
             let _ = Logger.app.info("[LaunchProbe] settings sheet content built main=\(Thread.isMainThread)")
-            SettingsView()
+            SettingsView(substitutionStore: substitutionStore)
                 .preferredColorScheme(appearance.colorScheme)
                 .onAppear {
                     Logger.app.info("[LaunchProbe] SettingsView onAppear main=\(Thread.isMainThread)")
