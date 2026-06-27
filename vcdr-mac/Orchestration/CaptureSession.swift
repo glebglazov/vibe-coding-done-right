@@ -109,6 +109,9 @@ final class CaptureSession {
         let indicator: RecordingIndicatorPanel
         let panel: any CapturePanelSurface
         let textProcessor: TextProcessor
+        /// Live Substitutions list, read at submission time and applied to the
+        /// dictated transcript as the pipeline's first step.
+        let substitutionStore: any SubstitutionStore
         /// The session owns destination overrides per-run, but
         /// `ModeSwitcherCoordinator` + `RecordingIndicatorPanel` still need
         /// shared read/write access to parameter overrides — so the same
@@ -139,6 +142,7 @@ final class CaptureSession {
     let indicator: RecordingIndicatorPanel
     let panel: any CapturePanelSurface
     let textProcessor: TextProcessor
+    let substitutionStore: any SubstitutionStore
     let overrides: SessionOverrides
     var styleProvider: @MainActor @Sendable () -> Style
 
@@ -215,6 +219,7 @@ final class CaptureSession {
         self.indicator = deps.indicator
         self.panel = deps.panel
         self.textProcessor = deps.textProcessor
+        self.substitutionStore = deps.substitutionStore
         self.overrides = deps.overrides
         self.styleProvider = deps.styleProvider
         wirePanelCallbacks()

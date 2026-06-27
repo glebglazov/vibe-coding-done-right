@@ -21,6 +21,43 @@ struct TranscriptionInput: Sendable {
     let removeFillerWords: Bool
     let style: Style
     let saveResultToClipboard: Bool
+    /// Substitutions applied to the dictated transcript as the pipeline's first step.
+    /// Defaults to empty so existing call sites that predate Substitutions compile unchanged.
+    let substitutions: [Substitution]
+
+    init(
+        text: String,
+        mode: Mode,
+        captures: [CapturedContext],
+        conversationID: UUID,
+        destination: OutputDestination,
+        targetAppPID: pid_t?,
+        cursorContext: CursorContext?,
+        parameterValues: [String: String],
+        variableEnvironment: [String: String],
+        inputSegments: [InputSegment],
+        hadDestinationOverride: Bool,
+        removeFillerWords: Bool,
+        style: Style,
+        saveResultToClipboard: Bool,
+        substitutions: [Substitution] = []
+    ) {
+        self.text = text
+        self.mode = mode
+        self.captures = captures
+        self.conversationID = conversationID
+        self.destination = destination
+        self.targetAppPID = targetAppPID
+        self.cursorContext = cursorContext
+        self.parameterValues = parameterValues
+        self.variableEnvironment = variableEnvironment
+        self.inputSegments = inputSegments
+        self.hadDestinationOverride = hadDestinationOverride
+        self.removeFillerWords = removeFillerWords
+        self.style = style
+        self.saveResultToClipboard = saveResultToClipboard
+        self.substitutions = substitutions
+    }
 }
 
 // MARK: - Output
@@ -272,6 +309,7 @@ final class TextProcessor {
             text: input.text,
             mode: input.mode,
             captures: input.captures,
+            substitutions: input.substitutions,
             conversationID: input.conversationID,
             parameterValues: input.parameterValues,
             variableEnvironment: input.variableEnvironment,
@@ -322,7 +360,8 @@ extension TranscriptionInput {
             hadDestinationOverride: hadDestinationOverride,
             removeFillerWords: removeFillerWords,
             style: style,
-            saveResultToClipboard: saveResultToClipboard
+            saveResultToClipboard: saveResultToClipboard,
+            substitutions: substitutions
         )
     }
 }

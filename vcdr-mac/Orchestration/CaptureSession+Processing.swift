@@ -327,7 +327,8 @@ extension CaptureSession {
             hadDestinationOverride: runState.hadDestinationOverride,
             removeFillerWords: settings.removeFillerWords,
             style: effectiveStyle,
-            saveResultToClipboard: mode.saveResultToClipboard
+            saveResultToClipboard: mode.saveResultToClipboard,
+            substitutions: substitutionStore.substitutions
         )
     }
 

@@ -114,6 +114,7 @@ struct CaptureSessionTestEnvironment {
                 indicator: recordingIndicator,
                 panel: fakePanel,
                 textProcessor: textProcessor,
+                substitutionStore: SubstitutionStoreProxy(),
                 overrides: overrides,
                 styleProvider: { .casual }
             )

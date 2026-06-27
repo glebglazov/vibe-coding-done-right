@@ -28,6 +28,8 @@ enum TextProcessingPipeline {
     }
 
     /// Runs the three-stage text processing pipeline:
+    /// 0. Substitution — swap Trigger Phrases for Replacements in the dictated
+    ///    transcript (runs first, in all modes, on the transcript only)
     /// 1. Algorithmic pre-processing — speech cleanup (filler word removal)
     /// 2. External processing — input structuring + content processing (none/AI/bash)
     /// 3. Style transformation — capitalization, punctuation (always applied as final step)
@@ -36,6 +38,7 @@ enum TextProcessingPipeline {
         mode: Mode,
         text: String,
         captures: [CapturedContext],
+        substitutions: [Substitution] = [],
         parameterValues: [String: String] = [:],
         variableEnvironment: [String: String] = [:],
         removeFillerWords: Bool = false,
@@ -43,11 +46,19 @@ enum TextProcessingPipeline {
         style: Style = .casual,
         cursorContext: CursorContext? = nil
     ) async throws -> PipelineResult {
-        // MARK: Algorithmic pre-processing — speech cleanup
-        let cleanedText = removeFillerWords ? FillerWordRemover.remove(from: text) : text
-
         Logger.textTransform.info("Pipeline input: \"\(text)\"")
-        if removeFillerWords && cleanedText != text {
+
+        // MARK: Substitution — first pass, all modes, dictated transcript only.
+        // Captures are never run through the matcher: they stay byte-exact.
+        let substitutedText = SubstitutionMatcher(substitutions: substitutions).apply(to: text)
+        if substitutedText != text {
+            Logger.textTransform.info("After substitutions: \"\(substitutedText)\"")
+        }
+
+        // MARK: Algorithmic pre-processing — speech cleanup
+        let cleanedText = removeFillerWords ? FillerWordRemover.remove(from: substitutedText) : substitutedText
+
+        if removeFillerWords && cleanedText != substitutedText {
             Logger.textTransform.info("After filler removal: \"\(cleanedText)\"")
         }
         if let ctx = cursorContext {

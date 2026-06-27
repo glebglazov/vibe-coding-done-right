@@ -13,6 +13,7 @@ final class AppDependencies {
     let inputLevelMonitor: InputLevelMonitor
     let mediaPlaybackController: MediaPlaybackController
     let transcriptionHistory: HistoryStoreProxy
+    let substitutionStore: SubstitutionStoreProxy
     let styleRegistry: StyleRegistry
     let frontmostAppMonitor: FrontmostAppMonitor
     let styleResolution: StyleResolutionPipeline
@@ -48,6 +49,8 @@ final class AppDependencies {
         self.mediaPlaybackController = mediaPlayback
         let history = HistoryStoreProxy()
         self.transcriptionHistory = history
+        let substitutions = SubstitutionStoreProxy()
+        self.substitutionStore = substitutions
         let audioRecorder = AudioRecorder()
         #if DEBUG
         self.audioRecorder = audioRecorder
@@ -104,6 +107,7 @@ final class AppDependencies {
                 indicator: recordingIndicator,
                 panel: CapturePanelAdapter(capturePanel),
                 textProcessor: textProcessor,
+                substitutionStore: substitutions,
                 overrides: overrides,
                 styleProvider: { .casual }
             )
@@ -159,6 +163,7 @@ final class AppDependencies {
         // Shell-first Initialization: deferred backend init.
         // History store and audio device enumeration must not block the shell.
         await bootstrapHistory()
+        await bootstrapSubstitutions()
         await audioDeviceMonitor.start()
 
         do {
@@ -216,6 +221,21 @@ final class AppDependencies {
         }
 
         await transcriptionHistory.setRealStore(store)
+    }
+
+    /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves the
+    /// iCloud ubiquity container off-main (can block for seconds on first launch),
+    /// builds the real store via the factory, and installs it on the proxy —
+    /// flushing any edits the user made before the store was ready.
+    private func bootstrapSubstitutions() async {
+        let defaults = UserDefaults.standard
+
+        let ubiquityRoot = await Task.detached(priority: .userInitiated) {
+            UbiquitySubstitutionStore.resolveStorageRoot()
+        }.value
+
+        let store = SubstitutionStoreFactory.make(defaults: defaults, ubiquityRoot: ubiquityRoot)
+        substitutionStore.setRealStore(store)
     }
 
     private func checkPermissions() {

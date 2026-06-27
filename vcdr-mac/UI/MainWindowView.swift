@@ -15,6 +15,7 @@ struct MainWindowView: View {
         case modes
         case styles
         case variables
+        case substitutions
         case outputDestinations
         case transcription
         case history
@@ -29,6 +30,7 @@ struct MainWindowView: View {
             case .modes: "Modes"
             case .styles: "Styles"
             case .variables: "Variables"
+            case .substitutions: "Substitutions"
             case .outputDestinations: "Output"
             case .transcription: "Transcription"
             case .history: "History"
@@ -45,6 +47,7 @@ struct MainWindowView: View {
             case .modes: "list.bullet"
             case .styles: "paintbrush"
             case .variables: "key"
+            case .substitutions: "arrow.left.arrow.right"
             case .outputDestinations: "arrow.right.square"
             case .transcription: "waveform"
             case .history: "clock.arrow.circlepath"
@@ -102,6 +105,8 @@ struct MainWindowView: View {
                         )
                     case .variables:
                         VariablesTabView(settings: dependencies.settings)
+                    case .substitutions:
+                        SubstitutionsTabView(store: dependencies.substitutionStore)
                     case .outputDestinations:
                         OutputDestinationsListView(settings: dependencies.settings, path: $path)
                     case .transcription:

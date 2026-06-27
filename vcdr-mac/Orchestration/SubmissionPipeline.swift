@@ -10,6 +10,8 @@ enum SubmissionPipeline {
         let text: String
         let mode: Mode
         let captures: [CapturedContext]
+        /// Substitutions applied to the dictated transcript as the pipeline's first step.
+        let substitutions: [Substitution]
         let conversationID: UUID
         let parameterValues: [String: String]
         let variableEnvironment: [String: String]
@@ -27,6 +29,7 @@ enum SubmissionPipeline {
             text: String,
             mode: Mode,
             captures: [CapturedContext],
+            substitutions: [Substitution] = [],
             conversationID: UUID,
             parameterValues: [String: String],
             variableEnvironment: [String: String],
@@ -40,6 +43,7 @@ enum SubmissionPipeline {
             self.text = text
             self.mode = mode
             self.captures = captures
+            self.substitutions = substitutions
             self.conversationID = conversationID
             self.parameterValues = parameterValues
             self.variableEnvironment = variableEnvironment
@@ -93,6 +97,7 @@ enum SubmissionPipeline {
             mode: context.mode,
             text: context.text,
             captures: context.captures,
+            substitutions: context.substitutions,
             parameterValues: context.parameterValues,
             variableEnvironment: context.variableEnvironment,
             removeFillerWords: context.removeFillerWords,
