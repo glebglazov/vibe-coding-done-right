@@ -15,11 +15,11 @@ struct MainWindowView: View {
         case modes
         case providers
         case styles
-        case variables
         case substitutions
         case outputDestinations
         case transcription
         case history
+        case variables
         #if DEBUG
         case debug
         #endif
@@ -71,9 +71,21 @@ struct MainWindowView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.doubleColumn)) {
-            List(Tab.allCases, id: \.self, selection: $selection) { tab in
-                Label(tab.title, systemImage: tab.systemImage)
-                    .tag(tab)
+            List(selection: $selection) {
+                Section {
+                    ForEach([Tab.home, .audio, .modes, .providers, .styles, .substitutions, .outputDestinations, .transcription, .history], id: \.self) { tab in
+                        Label(tab.title, systemImage: tab.systemImage)
+                            .tag(tab)
+                    }
+                }
+                Section("Advanced") {
+                    Label(Tab.variables.title, systemImage: Tab.variables.systemImage)
+                        .tag(Tab.variables)
+                    #if DEBUG
+                    Label(Tab.debug.title, systemImage: Tab.debug.systemImage)
+                        .tag(Tab.debug)
+                    #endif
+                }
             }
             .listStyle(.sidebar)
             .toolbar(removing: .sidebarToggle)
