@@ -53,10 +53,10 @@ struct VCDRKeyboardView: View {
 
                     Spacer()
 
-                    // Right: capture button (during recording in assistant mode) + action button
+                    // Right: capture button (during recording in any AI mode) + action button
                     DictateActionButton(
                         dictationState: controller.dictationState,
-                        showCapture: controller.aiMode == .assistant,
+                        showCapture: true,
                         captureCount: controller.captureCount,
                         onStart: { controller.startRecordingFromKeyboard() },
                         onStop: { controller.stopAndWaitForResult() },

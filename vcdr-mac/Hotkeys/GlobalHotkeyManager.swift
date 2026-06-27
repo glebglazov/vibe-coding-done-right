@@ -91,6 +91,7 @@ final class GlobalHotkeyManager {
         let flags = event.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
 
         if type == .keyDown {
+            Logger.hotkeys.notice("[tap] keyDown kc=\(keyCode) flags=\(flags.rawValue) | target kc=\(self.targetKeyCode) flags=\(self.targetModifiers.rawValue) | en=\(self.isEnabled) sup=\(self.isSuppressed)")
             guard keyCode == targetKeyCode && flags == targetModifiers else {
                 return Unmanaged.passUnretained(event)
             }

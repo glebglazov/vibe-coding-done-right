@@ -21,15 +21,32 @@ struct TranscriptProcessorTests {
         """)
     }
 
-    @Test("dictation AI input excludes captures")
-    func dictationAIInputExcludesCaptures() {
+    @Test("dictation AI input includes numbered capture tags")
+    func dictationAIInputIncludesCaptures() {
         let input = TranscriptProcessor.buildAIInput(
             "clean this up",
             mode: .dictation,
+            captures: ["first", "", "third"]
+        )
+
+        #expect(input == """
+        <dictation>clean this up</dictation>
+
+        <capture id="1">first</capture>
+
+        <capture id="3">third</capture>
+        """)
+    }
+
+    @Test("verbatim AI input excludes captures")
+    func verbatimAIInputExcludesCaptures() {
+        let input = TranscriptProcessor.buildAIInput(
+            "leave as is",
+            mode: .verbatim,
             captures: ["selected context"]
         )
 
-        #expect(input == "<dictation>clean this up</dictation>")
+        #expect(input == "<dictation>leave as is</dictation>")
     }
 
     @Test("final transcript uses AI result and final settings")

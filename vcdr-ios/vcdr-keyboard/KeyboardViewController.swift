@@ -353,10 +353,9 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     }
 
     /// Captures the currently selected text and appends it to the captures array.
-    /// Called via the Capture button during recording in assistant mode.
+    /// Called via the Capture button during recording in any AI mode.
     func captureSelectedText() {
-        guard aiMode == .assistant,
-              let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
+        guard let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
         keyboardChannel.appendCapture(selected)
         captureCount = keyboardChannel.readCaptures().count
         KeyboardHaptics.light()
