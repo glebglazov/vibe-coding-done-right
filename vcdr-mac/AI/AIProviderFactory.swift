@@ -13,25 +13,26 @@ enum AIProviderFactory {
     /// On-device providers should not retry, if one is added later.
     static let onDeviceMaxAttempts = 1
 
+    /// Builds the cascade for `mode`, using the AI Provider's stored API key directly.
+    /// The key is the AI Provider's single source of truth — never resolved from a
+    /// Variable. See `docs/adr/0001-ai-provider-key-source-of-truth.md`.
     static func make(
         for mode: Mode,
-        variableEnvironment: [String: String]
+        apiKey: String
     ) -> ProviderCascade {
         let provider = mode.aiProvider
-        let apiKey = variableEnvironment[provider.apiKeyVariableName] ?? ""
         let primary = provider.makeAdapter(apiKey: apiKey)
 
         return ProviderCascade(
             primary: primary,
-            fallback: fallbackProvider(for: mode, variableEnvironment: variableEnvironment),
+            fallback: fallbackProvider(for: mode),
             maxAttempts: maxAttempts(for: provider),
             timeout: processingTimeout
         )
     }
 
     private static func fallbackProvider(
-        for _: Mode,
-        variableEnvironment _: [String: String]
+        for _: Mode
     ) -> (any LLMAdapter)? {
         nil
     }

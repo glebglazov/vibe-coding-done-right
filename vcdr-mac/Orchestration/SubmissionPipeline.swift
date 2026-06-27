@@ -15,6 +15,8 @@ enum SubmissionPipeline {
         let conversationID: UUID
         let parameterValues: [String: String]
         let variableEnvironment: [String: String]
+        /// The AI Provider's stored API key for `mode` — the source of truth for AI calls.
+        let aiAPIKey: String
         let destination: OutputDestination
         let targetAppPID: pid_t?
         let saveResultToClipboard: Bool
@@ -33,6 +35,7 @@ enum SubmissionPipeline {
             conversationID: UUID,
             parameterValues: [String: String],
             variableEnvironment: [String: String],
+            aiAPIKey: String = "",
             destination: OutputDestination,
             targetAppPID: pid_t?,
             saveResultToClipboard: Bool,
@@ -47,6 +50,7 @@ enum SubmissionPipeline {
             self.conversationID = conversationID
             self.parameterValues = parameterValues
             self.variableEnvironment = variableEnvironment
+            self.aiAPIKey = aiAPIKey
             self.destination = destination
             self.targetAppPID = targetAppPID
             self.saveResultToClipboard = saveResultToClipboard
@@ -100,6 +104,7 @@ enum SubmissionPipeline {
             substitutions: context.substitutions,
             parameterValues: context.parameterValues,
             variableEnvironment: context.variableEnvironment,
+            aiAPIKey: context.aiAPIKey,
             removeFillerWords: context.removeFillerWords,
             aiPort: aiPort,
             style: context.style,

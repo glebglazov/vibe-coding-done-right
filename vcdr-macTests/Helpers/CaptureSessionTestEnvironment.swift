@@ -62,10 +62,8 @@ struct CaptureSessionTestEnvironment {
             settings.modes = [mode]
             settings.activeModeID = mode.id
         }
-        // Pre-populate Anthropic API key so AIClient fallback path isn't hit.
-        if let idx = settings.variables.firstIndex(where: { $0.name == "ANTHROPIC_API_KEY" }) {
-            settings.variables[idx].value = "test-key"
-        }
+        // Pre-populate the Anthropic Provider key so the AI call path is configured.
+        settings.setAPIKey("test-key", for: .anthropic)
         self.settings = settings
 
         let audioRecorder = AudioRecorder()

@@ -83,13 +83,35 @@ final class AppSettings {
         didSet { save() }
     }
 
+    /// API keys per cloud AI Provider — the single source of truth for AI calls.
+    /// Stored in plain `UserDefaults` under their own keys (not in `variables`),
+    /// mirroring iOS. See `docs/adr/0001-ai-provider-key-source-of-truth.md`.
+    private var providerAPIKeys: [AIProvider: String] {
+        didSet { save() }
+    }
+
+    // MARK: - AI Provider Keys
+
+    /// The stored API key for an AI Provider (empty string if unset).
+    func apiKey(for provider: AIProvider) -> String {
+        providerAPIKeys[provider] ?? ""
+    }
+
+    /// Stores an AI Provider's API key — the single source of truth AI calls read.
+    func setAPIKey(_ key: String, for provider: AIProvider) {
+        providerAPIKeys[provider] = key
+    }
+
+    /// Whether an AI Provider has a non-empty stored API key.
+    func isProviderConfigured(_ provider: AIProvider) -> Bool {
+        !apiKey(for: provider).isEmpty
+    }
+
     /// Whether a mode is fully configured and ready to use.
-    /// Cloud AI modes require the provider's API key variable to be set.
+    /// Cloud AI modes require the AI Provider's stored API key to be set.
     func isModeConfigured(_ mode: Mode) -> Bool {
         guard mode.processingType == .cloudAI else { return true }
-        let apiKeyName = mode.aiProvider.apiKeyVariableName
-        guard let value = variableEnvironment[apiKeyName] else { return false }
-        return !value.isEmpty
+        return isProviderConfigured(mode.aiProvider)
     }
 
     /// Modes shown in the settings modes list. Excludes disabled and unavailable templates,
@@ -138,11 +160,26 @@ final class AppSettings {
         static let audioSettings = "audioSettings"
 
         static let variables = "variables"
+        // AI Provider API keys — own dedicated UserDefaults fields (mirrors iOS).
+        static let anthropicAPIKey = "ai_processing_anthropic_api_key"
+        static let openaiAPIKey = "ai_processing_openai_api_key"
+        static let geminiAPIKey = "ai_processing_gemini_api_key"
+        /// Persisted flag gating the one-shot Reserved Variable → Provider key migration.
+        static let didMigrateProviderKeys = "didMigrateProviderKeys"
         static let removeFillerWords = "removeFillerWords"
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         static let legacyPushToTalkHotkey = "pushToTalkHotkey"
         static let legacyKeyCode = "hotkeyKeyCode"
         static let legacyModifiers = "hotkeyModifiers"
+    }
+
+    /// The UserDefaults key holding a given AI Provider's API key.
+    private static func apiKeyDefaultsKey(for provider: AIProvider) -> String {
+        switch provider {
+        case .anthropic: Keys.anthropicAPIKey
+        case .openai: Keys.openaiAPIKey
+        case .gemini: Keys.geminiAPIKey
+        }
     }
 
     // MARK: - Decode/Encode Helpers
@@ -259,12 +296,12 @@ final class AppSettings {
         // Load variables
         self.variables = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
 
-        // Ensure API key variables exist (pre-created with empty values for discoverability)
-        let requiredVariables = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"]
-        let existingNames = Set(variables.map(\.name))
-        for name in requiredVariables where !existingNames.contains(name) {
-            variables.append(Variable(id: UUID(), name: name, value: ""))
+        // Load AI Provider API keys — the single source of truth for AI calls.
+        var loadedKeys: [AIProvider: String] = [:]
+        for provider in AIProvider.allCases {
+            loadedKeys[provider] = userDefaults.string(forKey: Self.apiKeyDefaultsKey(for: provider)) ?? ""
         }
+        self.providerAPIKeys = loadedKeys
 
         // Ensure built-in destinations exist (migration for existing installs)
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
@@ -284,6 +321,44 @@ final class AppSettings {
         for i in modeConfig.modes.indices where modeConfig.modes[i].defaultOutputDestinationID == OutputDestination.builtInPasteToInitialAppID {
             modeConfig.modes[i].defaultOutputDestinationID = OutputDestination.builtInPasteID
         }
+
+        // One-shot: fold legacy Reserved-named Variable rows into Provider keys.
+        migrateReservedVariablesIfNeeded()
+    }
+
+    /// One-shot migration of legacy Reserved-named Variable rows (`ANTHROPIC_API_KEY`,
+    /// etc.) into the matching Provider key, then drops the rows. Gated by a persisted
+    /// flag so it runs exactly once. A non-empty Reserved Variable is copied into the
+    /// Provider key only when that key is still empty; if both already hold a value the
+    /// row is left as an explicit bash override. Empty Reserved rows (the formerly
+    /// auto-created blanks) are dropped. See ADR-0001.
+    private func migrateReservedVariablesIfNeeded() {
+        guard !userDefaults.bool(forKey: Keys.didMigrateProviderKeys) else { return }
+
+        let reservedByName = Dictionary(
+            uniqueKeysWithValues: AIProvider.allCases.map { ($0.apiKeyVariableName, $0) }
+        )
+        var remaining: [Variable] = []
+        for variable in variables {
+            guard let provider = reservedByName[variable.name] else {
+                remaining.append(variable)
+                continue
+            }
+            if variable.value.isEmpty {
+                // Empty Reserved Variable is unset (falls back to the Provider key) — drop it.
+                continue
+            }
+            if apiKey(for: provider).isEmpty {
+                // Seed the still-empty Provider key, then drop the row.
+                providerAPIKeys[provider] = variable.value
+                continue
+            }
+            // Both a Provider key and a non-empty Reserved Variable exist — leave both.
+            remaining.append(variable)
+        }
+        variables = remaining
+        userDefaults.set(true, forKey: Keys.didMigrateProviderKeys)
+        save()
     }
 
     private func save() {
@@ -296,6 +371,9 @@ final class AppSettings {
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
         encode(variables, forKey: Keys.variables)
+        for provider in AIProvider.allCases {
+            userDefaults.set(apiKey(for: provider), forKey: Self.apiKeyDefaultsKey(for: provider))
+        }
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
         Logger.settings.info("Settings saved")
     }

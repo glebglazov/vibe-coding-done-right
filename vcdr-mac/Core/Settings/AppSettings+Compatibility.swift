@@ -124,13 +124,36 @@ extension AppSettings {
 
     // MARK: - Variables
 
-    /// Builds a dictionary of user-defined variables for injection into bash scripts.
+    /// Builds the bash-facing environment injected into all bash scripts.
+    ///
+    /// Each AI Provider's key is injected under its Reserved name (`ANTHROPIC_API_KEY`,
+    /// etc.) as a fallback so existing scripts keep working with zero config. An explicit
+    /// user Variable overrides its name — but for a Reserved name only a *non-empty* value
+    /// overrides; an empty Reserved Variable is treated as unset and falls back to the
+    /// Provider key. This is bash-only: the AI-call key always comes from the Provider.
+    /// See `docs/adr/0001-ai-provider-key-source-of-truth.md`.
     var variableEnvironment: [String: String] {
-        Dictionary(uniqueKeysWithValues: variables.filter { !$0.name.isEmpty }.map { ($0.name, $0.value) })
+        let reserved = Set(AIProvider.allCases.map(\.apiKeyVariableName))
+        var env: [String: String] = [:]
+        // Provider keys under their Reserved names (the fallback).
+        for provider in AIProvider.allCases {
+            env[provider.apiKeyVariableName] = apiKey(for: provider)
+        }
+        // Explicit user variables override; Reserved names only when non-empty.
+        for variable in variables where !variable.name.isEmpty {
+            if reserved.contains(variable.name) {
+                if !variable.value.isEmpty { env[variable.name] = variable.value }
+            } else {
+                env[variable.name] = variable.value
+            }
+        }
+        return env
     }
 
     /// Set of all defined variable names (for highlighting in command editors).
+    /// Reserved names are always defined because the Provider key is injected for them.
     var definedVariableNames: Set<String> {
         Set(variables.map(\.name).filter { !$0.isEmpty })
+            .union(AIProvider.allCases.map(\.apiKeyVariableName))
     }
 }

@@ -16,6 +16,8 @@ struct TranscriptionInput: Sendable {
     let cursorContext: CursorContext?
     let parameterValues: [String: String]
     let variableEnvironment: [String: String]
+    /// The AI Provider's stored API key for `mode` — the source of truth for AI calls.
+    let aiAPIKey: String
     let inputSegments: [InputSegment]
     let hadDestinationOverride: Bool
     let removeFillerWords: Bool
@@ -35,6 +37,7 @@ struct TranscriptionInput: Sendable {
         cursorContext: CursorContext?,
         parameterValues: [String: String],
         variableEnvironment: [String: String],
+        aiAPIKey: String = "",
         inputSegments: [InputSegment],
         hadDestinationOverride: Bool,
         removeFillerWords: Bool,
@@ -51,6 +54,7 @@ struct TranscriptionInput: Sendable {
         self.cursorContext = cursorContext
         self.parameterValues = parameterValues
         self.variableEnvironment = variableEnvironment
+        self.aiAPIKey = aiAPIKey
         self.inputSegments = inputSegments
         self.hadDestinationOverride = hadDestinationOverride
         self.removeFillerWords = removeFillerWords
@@ -247,7 +251,7 @@ final class TextProcessor {
             var processedText = try await ai.process(
                 structuredText: structured,
                 mode: handle.input.mode,
-                variableEnvironment: handle.input.variableEnvironment,
+                apiKey: handle.input.aiAPIKey,
                 parameterValues: handle.input.parameterValues
             )
 
@@ -313,6 +317,7 @@ final class TextProcessor {
             conversationID: input.conversationID,
             parameterValues: input.parameterValues,
             variableEnvironment: input.variableEnvironment,
+            aiAPIKey: input.aiAPIKey,
             destination: input.destination,
             targetAppPID: input.targetAppPID,
             saveResultToClipboard: input.saveResultToClipboard,
@@ -356,6 +361,7 @@ extension TranscriptionInput {
             cursorContext: cursorContext,
             parameterValues: parameterValues,
             variableEnvironment: variableEnvironment,
+            aiAPIKey: aiAPIKey,
             inputSegments: inputSegments,
             hadDestinationOverride: hadDestinationOverride,
             removeFillerWords: removeFillerWords,

@@ -52,7 +52,7 @@ struct ModeDetailView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.yellow)
-                            Text("Set \(mode.aiProvider.apiKeyVariableName) in Variables to use this mode.")
+                            Text("Set the \(mode.aiProvider.displayName) API key in Providers to use this mode.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

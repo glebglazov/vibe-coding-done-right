@@ -13,6 +13,7 @@ struct MainWindowView: View {
         case home
         case audio
         case modes
+        case providers
         case styles
         case variables
         case substitutions
@@ -28,6 +29,7 @@ struct MainWindowView: View {
             case .home: "Home"
             case .audio: "Audio"
             case .modes: "Modes"
+            case .providers: "Providers"
             case .styles: "Styles"
             case .variables: "Variables"
             case .substitutions: "Substitutions"
@@ -45,6 +47,7 @@ struct MainWindowView: View {
             case .home: "house"
             case .audio: "speaker.wave.2"
             case .modes: "list.bullet"
+            case .providers: "sparkles"
             case .styles: "paintbrush"
             case .variables: "key"
             case .substitutions: "arrow.left.arrow.right"
@@ -98,6 +101,8 @@ struct MainWindowView: View {
                         )
                     case .modes:
                         ModesListView(settings: dependencies.settings, path: $path)
+                    case .providers:
+                        ProvidersListView(settings: dependencies.settings)
                     case .styles:
                         StylesListView(
                             styleRegistry: dependencies.styleRegistry,
@@ -161,6 +166,15 @@ struct MainWindowView: View {
                     StyleDetailContainer(
                         styleID: navID.id,
                         styleRegistry: dependencies.styleRegistry
+                    )
+                }
+                .navigationDestination(for: AIProvider.self) { provider in
+                    ProviderDetailView(
+                        provider: provider,
+                        apiKey: Binding(
+                            get: { dependencies.settings.apiKey(for: provider) },
+                            set: { dependencies.settings.setAPIKey($0, for: provider) }
+                        )
                     )
                 }
             }

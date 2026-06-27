@@ -150,7 +150,7 @@ private struct ModeRowView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.yellow)
                             .font(.caption2)
-                        Text("Set \(mode.aiProvider.apiKeyVariableName) in Variables")
+                        Text("Set the \(mode.aiProvider.displayName) API key in Providers")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

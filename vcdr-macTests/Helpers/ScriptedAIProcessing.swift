@@ -16,7 +16,7 @@ actor ScriptedAIProcessing: AIProcessingPort {
     struct ReceivedCall: Equatable, Sendable {
         let structuredText: String
         let modeID: UUID
-        let variableEnvironment: [String: String]
+        let apiKey: String
         let parameterValues: [String: String]
     }
 
@@ -30,14 +30,14 @@ actor ScriptedAIProcessing: AIProcessingPort {
     func process(
         structuredText: String,
         mode: Mode,
-        variableEnvironment: [String: String],
+        apiKey: String,
         parameterValues: [String: String]
     ) async throws -> String {
         receivedCalls.append(
             ReceivedCall(
                 structuredText: structuredText,
                 modeID: mode.id,
-                variableEnvironment: variableEnvironment,
+                apiKey: apiKey,
                 parameterValues: parameterValues
             )
         )

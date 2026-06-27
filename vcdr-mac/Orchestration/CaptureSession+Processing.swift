@@ -323,6 +323,7 @@ extension CaptureSession {
             cursorContext: runState.cursorContext,
             parameterValues: overrides.resolvedParameterValues(for: mode),
             variableEnvironment: settings.variableEnvironment,
+            aiAPIKey: settings.apiKey(for: mode.aiProvider),
             inputSegments: segments,
             hadDestinationOverride: runState.hadDestinationOverride,
             removeFillerWords: settings.removeFillerWords,
