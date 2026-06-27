@@ -47,6 +47,34 @@ struct AIProviderKeyTests {
         #expect(settings.isModeConfigured(mode))
     }
 
+    // MARK: - Configured providers & Mode picker options
+
+    @Test("configuredProviders lists only providers with a key, in allCases order")
+    func configuredProvidersFiltersByKey() {
+        let settings = AppSettings(userDefaults: makeDefaults())
+        #expect(settings.configuredProviders.isEmpty)
+
+        settings.setAPIKey("sk-gemini", for: .gemini)
+        settings.setAPIKey("sk-anthropic", for: .anthropic)
+        // OpenAI left unset.
+        #expect(settings.configuredProviders == [.anthropic, .gemini])
+    }
+
+    @Test("Mode picker options keep a now-unconfigured selected provider visible")
+    func pickerOptionsKeepUnconfiguredSelection() {
+        let settings = AppSettings(userDefaults: makeDefaults())
+        settings.setAPIKey("sk-openai", for: .openai)
+
+        // Selected provider is unconfigured → still present (appended), no blank.
+        let options = settings.providerPickerOptions(selected: .anthropic)
+        #expect(options.contains(.anthropic))
+        #expect(options == [.openai, .anthropic])
+
+        // Selected provider is configured → not duplicated.
+        let configuredSelection = settings.providerPickerOptions(selected: .openai)
+        #expect(configuredSelection == [.openai])
+    }
+
     // MARK: - Bash fallback & divergence
 
     @Test("Bash env falls back to the provider key under the Reserved name")

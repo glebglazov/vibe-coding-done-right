@@ -107,6 +107,24 @@ final class AppSettings {
         !apiKey(for: provider).isEmpty
     }
 
+    /// AI Providers with a non-empty stored API key, in `allCases` order.
+    /// Mirrors iOS `AIProvider.configuredProviders` so the Mode picker offers
+    /// only providers the user has actually set a key for.
+    var configuredProviders: [AIProvider] {
+        AIProvider.allCases.filter { isProviderConfigured($0) }
+    }
+
+    /// The AI Providers a Mode's provider picker should list: all configured
+    /// providers, plus `selected` if it is currently unconfigured — so a Mode
+    /// pinned to a now-unconfigured provider never shows a blank selection.
+    func providerPickerOptions(selected: AIProvider) -> [AIProvider] {
+        var options = configuredProviders
+        if !options.contains(selected) {
+            options.append(selected)
+        }
+        return options
+    }
+
     /// Whether a mode is fully configured and ready to use.
     /// Cloud AI modes require the AI Provider's stored API key to be set.
     func isModeConfigured(_ mode: Mode) -> Bool {

@@ -52,15 +52,15 @@ struct ModeDetailView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.yellow)
-                            Text("Set the \(mode.aiProvider.displayName) API key in Providers to use this mode.")
+                            Text("Set the \(mode.aiProvider.displayName) API key on the Providers screen.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
 
                     Picker("Provider", selection: $mode.aiProvider) {
-                        ForEach(AIProvider.allCases, id: \.self) { provider in
-                            Text(provider.displayName).tag(provider)
+                        ForEach(settings.providerPickerOptions(selected: mode.aiProvider), id: \.self) { provider in
+                            Text(providerLabel(provider)).tag(provider)
                         }
                     }
                     .onChange(of: mode.aiProvider) { _, newProvider in
@@ -171,6 +171,16 @@ struct ModeDetailView: View {
                 mode.parameters = mode.localAgentProvider.defaultParameters
             }
         }
+    }
+
+    // MARK: - Provider picker
+
+    /// Label for a provider row: marks unconfigured providers (e.g. the Mode's
+    /// pinned-but-now-unconfigured selection) so the choice never reads as valid.
+    private func providerLabel(_ provider: AIProvider) -> String {
+        settings.isProviderConfigured(provider)
+            ? provider.displayName
+            : "\(provider.displayName) — no key"
     }
 
     // MARK: - Local Agent Parameters (read-only)
