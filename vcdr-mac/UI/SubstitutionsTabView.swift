@@ -46,6 +46,8 @@ private struct SubstitutionRowView: View {
     let onCommit: () -> Void
     let onDelete: () -> Void
 
+    @State private var isConfirmingDelete = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             TextField("Trigger Phrase", text: $substitution.triggerPhrase)
@@ -64,16 +66,32 @@ private struct SubstitutionRowView: View {
                 Spacer()
 
                 Button(role: .destructive) {
-                    onDelete()
+                    isConfirmingDelete = true
                 } label: {
                     Label("Remove", systemImage: "trash")
                 }
                 .buttonStyle(.borderless)
+                .tint(.red)
+                .foregroundStyle(.red)
                 .help("Remove substitution")
             }
         }
         .onChange(of: substitution) {
             onCommit()
+        }
+        .confirmationDialog(
+            "Remove this substitution?",
+            isPresented: $isConfirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                onDelete()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(substitution.triggerPhrase.isEmpty
+                 ? "This cannot be undone."
+                 : "“\(substitution.triggerPhrase)” will be removed. This cannot be undone.")
         }
     }
 }
