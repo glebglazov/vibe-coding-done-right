@@ -226,12 +226,12 @@ struct SettingsView: View {
                 }
             }
 
-            NavigationLink("Providers") {
-                ProvidersView()
-            }
-
             NavigationLink("Modes") {
                 ModesView()
+            }
+
+            NavigationLink("Providers") {
+                ProvidersView()
             }
         } header: {
             Text("AI Processing")
