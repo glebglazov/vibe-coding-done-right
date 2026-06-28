@@ -6,8 +6,21 @@ struct OutputDestinationNavID: Hashable {
     let id: UUID
 }
 
+/// Navigation value for substitution detail views.
+/// Distinguishes substitution UUIDs from mode UUIDs in NavigationStack.
+struct SubstitutionNavID: Hashable {
+    let id: UUID
+}
+
 struct MainWindowView: View {
     let dependencies: AppDependencies
+
+    init(dependencies: AppDependencies) {
+        self.dependencies = dependencies
+        _substitutionsViewModel = State(
+            initialValue: SubstitutionsViewModel(store: dependencies.substitutionStore)
+        )
+    }
 
     enum Tab: String, CaseIterable, Hashable {
         case home
@@ -68,6 +81,7 @@ struct MainWindowView: View {
 
     @State private var selection: Tab? = .home
     @State private var path = NavigationPath()
+    @State private var substitutionsViewModel: SubstitutionsViewModel
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.doubleColumn)) {
@@ -123,7 +137,7 @@ struct MainWindowView: View {
                     case .variables:
                         VariablesTabView(settings: dependencies.settings)
                     case .substitutions:
-                        SubstitutionsTabView(store: dependencies.substitutionStore)
+                        SubstitutionsListView(viewModel: substitutionsViewModel, path: $path)
                     case .outputDestinations:
                         OutputDestinationsListView(settings: dependencies.settings, path: $path)
                     case .transcription:
@@ -171,6 +185,19 @@ struct MainWindowView: View {
                                 set: { dependencies.settings.outputDestinations[index] = $0 }
                             ),
                             definedVariableNames: dependencies.settings.definedVariableNames
+                        )
+                    }
+                }
+                .navigationDestination(for: SubstitutionNavID.self) { navID in
+                    if let index = substitutionsViewModel.drafts.firstIndex(where: { $0.id == navID.id }) {
+                        SubstitutionDetailView(
+                            substitution: Binding(
+                                get: { substitutionsViewModel.drafts[index] },
+                                set: { substitutionsViewModel.drafts[index] = $0 }
+                            ),
+                            onCommit: {
+                                substitutionsViewModel.persist(substitutionsViewModel.drafts[index])
+                            }
                         )
                     }
                 }

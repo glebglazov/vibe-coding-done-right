@@ -1,16 +1,15 @@
 import SwiftUI
 
-struct SubstitutionsTabView: View {
-    @State private var viewModel: SubstitutionsViewModel
-
-    init(store: any SubstitutionStore) {
-        _viewModel = State(initialValue: SubstitutionsViewModel(store: store))
-    }
+/// List of substitutions with NavigationLink rows (chevrons), matching the
+/// Modes / Output / Styles tabs. Lives inside a NavigationStack owned by
+/// MainWindowView; the detail view and "+" toolbar add come from that shared
+/// pattern so every settings list looks and behaves the same.
+struct SubstitutionsListView: View {
+    @Bindable var viewModel: SubstitutionsViewModel
+    @Binding var path: NavigationPath
 
     var body: some View {
-        @Bindable var viewModel = viewModel
-
-        Form {
+        List {
             Section {
                 Text("Substitutions swap a spoken Trigger Phrase for fixed Replacement text in your dictation, before any other processing. They apply in every mode and sync across your devices.")
                     .font(.caption)
@@ -18,80 +17,100 @@ struct SubstitutionsTabView: View {
             }
 
             Section {
-                ForEach($viewModel.drafts) { $substitution in
-                    SubstitutionRowView(
-                        substitution: $substitution,
-                        onCommit: { viewModel.persist(substitution) },
-                        onDelete: { viewModel.delete(substitution) }
-                    )
+                ForEach(viewModel.drafts) { substitution in
+                    NavigationLink(value: SubstitutionNavID(id: substitution.id)) {
+                        SubstitutionRowView(substitution: substitution)
+                    }
                 }
-
-                Button("Add Substitution") {
-                    viewModel.add()
+                .onDelete { indexSet in
+                    for index in indexSet {
+                        viewModel.delete(viewModel.drafts[index])
+                    }
                 }
             }
         }
-        .formStyle(.grouped)
         .navigationTitle("Substitutions")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: add) {
+                    Image(systemName: "plus")
+                }
+                .help("Add new substitution")
+            }
+        }
         .task {
             viewModel.syncFromStore()
         }
+    }
+
+    private func add() {
+        let id = viewModel.add()
+        path.append(SubstitutionNavID(id: id))
     }
 }
 
 // MARK: - Substitution Row
 
 private struct SubstitutionRowView: View {
-    @Binding var substitution: Substitution
-    let onCommit: () -> Void
-    let onDelete: () -> Void
-
-    @State private var isConfirmingDelete = false
+    let substitution: Substitution
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("Trigger Phrase", text: $substitution.triggerPhrase)
-                .textFieldStyle(.roundedBorder)
-
-            TextField("Replacement", text: $substitution.replacement, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(2...6)
-
-            HStack(spacing: 8) {
-                Toggle("Enabled", isOn: $substitution.isEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .help(substitution.isEnabled ? "Substitution is active" : "Substitution is disabled")
-
-                Spacer()
-
-                Button(role: .destructive) {
-                    isConfirmingDelete = true
-                } label: {
-                    Label("Remove", systemImage: "trash")
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(substitution.triggerPhrase.isEmpty ? "New Substitution" : substitution.triggerPhrase)
+                    .foregroundStyle(substitution.triggerPhrase.isEmpty ? .secondary : .primary)
+                if !substitution.replacement.isEmpty {
+                    Text(substitution.replacement)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                .buttonStyle(.borderless)
-                .tint(.red)
-                .foregroundStyle(.red)
-                .help("Remove substitution")
+            }
+
+            Spacer()
+
+            if !substitution.isEnabled {
+                Text("Disabled")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
         }
+        .opacity(substitution.isEnabled ? 1 : 0.5)
+    }
+}
+
+// MARK: - Substitution Detail
+
+struct SubstitutionDetailView: View {
+    @Binding var substitution: Substitution
+    let onCommit: () -> Void
+
+    @FocusState private var isTriggerFocused: Bool
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Trigger Phrase", text: $substitution.triggerPhrase)
+                    .focused($isTriggerFocused)
+
+                TextField("Replacement", text: $substitution.replacement, axis: .vertical)
+                    .lineLimit(2...6)
+            }
+
+            Section {
+                Toggle("Enabled", isOn: $substitution.isEnabled)
+                    .help(substitution.isEnabled ? "Substitution is active" : "Substitution is disabled")
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(substitution.triggerPhrase.isEmpty ? "New Substitution" : substitution.triggerPhrase)
         .onChange(of: substitution) {
             onCommit()
         }
-        .confirmationDialog(
-            "Remove this substitution?",
-            isPresented: $isConfirmingDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                onDelete()
+        .onAppear {
+            if substitution.triggerPhrase.isEmpty {
+                isTriggerFocused = true
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(substitution.triggerPhrase.isEmpty
-                 ? "This cannot be undone."
-                 : "“\(substitution.triggerPhrase)” will be removed. This cannot be undone.")
         }
     }
 }

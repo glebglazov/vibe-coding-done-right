@@ -7,15 +7,26 @@ struct ProvidersListView: View {
     @Bindable var settings: AppSettings
 
     var body: some View {
-        List(AIProvider.allCases, id: \.self) { provider in
-            NavigationLink(value: provider) {
-                ProviderRowView(
-                    provider: provider,
-                    isConfigured: settings.isProviderConfigured(provider)
-                )
+        List {
+            ForEach(AIProvider.allCases, id: \.self) { provider in
+                NavigationLink(value: provider) {
+                    ProviderRowView(
+                        provider: provider,
+                        isConfigured: settings.isProviderConfigured(provider)
+                    )
+                }
             }
         }
         .navigationTitle("Providers")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                // Providers are a fixed set with nothing to add, but every other
+                // settings list contributes a toolbar item. Reserving the toolbar
+                // region here makes the window's unified title bar extend over the
+                // sidebar so it wraps the traffic-light buttons, matching the rest.
+                Color.clear.frame(width: 1, height: 1)
+            }
+        }
     }
 }
 
@@ -27,17 +38,19 @@ private struct ProviderRowView: View {
 
     var body: some View {
         HStack {
-            Text(provider.displayName)
-            Spacer()
-            if isConfigured {
-                Text("Configured")
-                    .font(.subheadline)
-                    .foregroundStyle(.green)
-            } else {
-                Text("Not configured")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(provider.displayName)
+                if isConfigured {
+                    Text("Configured")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else {
+                    Text("Not configured")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+            Spacer()
         }
     }
 }

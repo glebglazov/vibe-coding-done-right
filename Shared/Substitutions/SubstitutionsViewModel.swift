@@ -31,12 +31,15 @@ final class SubstitutionsViewModel {
         drafts = store.substitutions
     }
 
-    /// Appends a blank Substitution and persists it. New rows go to the end so
+    /// Appends a blank Substitution, persists it, and returns its id so the
+    /// caller can push the detail view for editing. New rows go to the end so
     /// existing rows keep their position.
-    func add() {
+    @discardableResult
+    func add() -> UUID {
         let substitution = Substitution(triggerPhrase: "", replacement: "")
         drafts.append(substitution)
         store.upsert(substitution)
+        return substitution.id
     }
 
     /// Persists an in-place edit to an existing draft without reordering the UI list.
