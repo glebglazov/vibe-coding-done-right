@@ -260,14 +260,34 @@ final class AudioRecorder {
     /// They run off the main actor so the PREPARING UI stays responsive.
     func prepareEngine() async {
         Logger.app.info("[LaunchProbe] prepareEngine entry main=\(Thread.isMainThread)")
-        guard audioSessionConfigured, audioEngine == nil else {
-            Logger.app.info("[LaunchProbe] prepareEngine skip configured=\(self.audioSessionConfigured) hasEngine=\(self.audioEngine != nil)")
-            return
-        }
+        _ = await ensureEngine()
+        Logger.app.info("[LaunchProbe] prepareEngine exit main=\(Thread.isMainThread)")
+    }
+
+    /// Single source of engine construction. Returns a prepared engine — tap
+    /// installed and `prepare()`d, but NOT started, so no microphone indicator
+    /// lights (vcdr-ios ADR-0001). Concurrent callers — the launch prewarm
+    /// (`prepareEngine`) and the record path (`startEngine`) — join the same
+    /// in-flight build via `prepareEngineTask`, so exactly ONE `AVAudioEngine`
+    /// is ever constructed and assigned to `audioEngine`.
+    ///
+    /// This single-builder guarantee is load-bearing. Without it, a cold-launch
+    /// record tap racing the prewarm build constructs a *second* engine, and
+    /// whichever path assigns `audioEngine` last wins. The prewarm's engine is
+    /// never started, so when it lands last it overwrites — and, being the sole
+    /// strong reference, ARC-deallocates — the live engine mid-recording. The
+    /// mic then dies while `isRecording`/state stay set: the timer keeps ticking
+    /// and the waveform freezes, and the run ends in an Empty Result. Do NOT
+    /// re-split this into per-path builds (see vcdr-ios ADR-0001).
+    private func ensureEngine() async -> AVAudioEngine? {
+        if let engine = audioEngine { return engine }
         if let inflight = prepareEngineTask {
-            Logger.app.info("[LaunchProbe] prepareEngine joining in-flight")
-            _ = await inflight.value
-            return
+            Logger.app.info("[LaunchProbe] ensureEngine joining in-flight")
+            return await inflight.value
+        }
+        guard audioSessionConfigured else {
+            Logger.app.info("[LaunchProbe] ensureEngine skip: session not configured")
+            return nil
         }
 
         let task = Task<AVAudioEngine?, Never> { [weak self] in
@@ -275,12 +295,11 @@ final class AudioRecorder {
             // blocking HAL call that can take many seconds cold. Off the
             // cooperative pool so it can't freeze the shell (gesture-gate timeout).
             let engine = await withBlockingTask(qos: .userInitiated) { [weak self] () -> AVAudioEngine in
-                Logger.app.info("[LaunchProbe] prepareEngine detached body start main=\(Thread.isMainThread)")
+                Logger.app.info("[LaunchProbe] ensureEngine build body start main=\(Thread.isMainThread)")
                 let engine = AVAudioEngine()
-                Logger.app.info("[LaunchProbe] prepareEngine after AVAudioEngine() main=\(Thread.isMainThread)")
                 let inputNode = engine.inputNode
                 let format = inputNode.outputFormat(forBus: 0)
-                Logger.app.info("[LaunchProbe] prepareEngine after outputFormat main=\(Thread.isMainThread)")
+                Logger.app.info("[LaunchProbe] ensureEngine after outputFormat main=\(Thread.isMainThread)")
 
                 inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
                     buffer, _ in
@@ -288,7 +307,7 @@ final class AudioRecorder {
 
                     if !self.hasLoggedFirstBuffer {
                         self.hasLoggedFirstBuffer = true
-                        Logger.app.info("[LaunchProbe] first audio buffer from tap (prepareEngine) handler=\(self.bufferHandler != nil)")
+                        Logger.app.info("[LaunchProbe] first audio buffer from tap handler=\(self.bufferHandler != nil)")
                     }
 
                     let level = Self.computeLevel(from: buffer)
@@ -298,10 +317,9 @@ final class AudioRecorder {
 
                     self.bufferHandler?(buffer)
                 }
-                Logger.app.info("[LaunchProbe] prepareEngine after installTap main=\(Thread.isMainThread)")
+                Logger.app.info("[LaunchProbe] ensureEngine after installTap main=\(Thread.isMainThread)")
 
                 engine.prepare()
-                Logger.app.info("[LaunchProbe] prepareEngine after engine.prepare main=\(Thread.isMainThread)")
                 Logger.recording.info("Audio engine prepared (format: \(format))")
                 return engine
             }
@@ -309,9 +327,9 @@ final class AudioRecorder {
             return engine
         }
         prepareEngineTask = task
-        _ = await task.value
+        let engine = await task.value
         prepareEngineTask = nil
-        Logger.app.info("[LaunchProbe] prepareEngine exit main=\(Thread.isMainThread)")
+        return engine
     }
 
     /// Brings the audio engine online and keeps it running with the tap
@@ -415,61 +433,34 @@ final class AudioRecorder {
     /// caller's decision, since hot-session startup runs with no buffer handler.
     private func startEngine() async -> Bool {
         Logger.app.info("[LaunchProbe] startEngine entry preExistingEngine=\(self.audioEngine != nil)")
-        // Reuse pre-prepared engine — tap is already installed, resources allocated.
-        if let engine = audioEngine, !engine.isRunning {
-            if await Self.startEngineOffMain(engine) {
-                let format = engine.inputNode.outputFormat(forBus: 0)
-                Logger.recording.info("Audio engine started (pre-prepared, format: \(format))")
-                return true
-            }
-            Logger.recording.warning("Pre-prepared engine failed to start, creating fresh engine")
-            engine.inputNode.removeTap(onBus: 0)
-            audioEngine = nil
-            // Fall through to create fresh engine
+        // Get the one shared engine (built here or joined from an in-flight
+        // prewarm). `ensureEngine` builds it off the cooperative pool at
+        // `.userInitiated`, so the HAL warm outranks the concurrent `.utility`
+        // ANE compile and the mic arms fast (vcdr-ios ADR-0001, ADR-0003).
+        guard let engine = await ensureEngine() else {
+            Logger.recording.error("startEngine: engine build failed")
+            return false
         }
-
-        Logger.app.info("[LaunchProbe] startEngine creating fresh engine")
-        // Build the engine off the cooperative pool. `AVAudioEngine()` +
-        // `inputNode.outputFormat(forBus:)` are blocking audio-HAL calls that
-        // cost up to ~9s when they contend with the concurrent ANE model
-        // compile. This path is reached from `RecordingRun.start`'s
-        // `Task.detached`, so running them inline both starves the cooperative
-        // pool (ADR-0003) and stretches the Arming phase. At `.userInitiated`
-        // the warmup outranks the `.utility` compile, so the mic arms fast
-        // (vcdr-ios ADR-0001). Mirrors `prepareEngine`.
-        let engine = await withBlockingTask(qos: .userInitiated) { [weak self] () -> AVAudioEngine in
-            let engine = AVAudioEngine()
-            let inputNode = engine.inputNode
-            let format = inputNode.outputFormat(forBus: 0)
-            Logger.app.info("[LaunchProbe] startEngine after outputFormat fresh format=\(format)")
-
-            inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
-                buffer, _ in
-                guard let self else { return }
-
-                if !self.hasLoggedFirstBuffer {
-                    self.hasLoggedFirstBuffer = true
-                    Logger.app.info("[LaunchProbe] first audio buffer from tap (startEngine fresh) handler=\(self.bufferHandler != nil)")
-                }
-
-                let level = Self.computeLevel(from: buffer)
-                Task { @MainActor [weak self] in
-                    self?.appendLevel(level)
-                }
-
-                self.bufferHandler?(buffer)
-            }
-            Logger.app.info("[LaunchProbe] startEngine after installTap fresh")
-            return engine
-        }
-
+        if engine.isRunning { return true }
         if await Self.startEngineOffMain(engine) {
-            audioEngine = engine
-            Logger.recording.info("Audio engine started (fresh)")
+            Logger.recording.info("Audio engine started")
             return true
         }
+
+        // Start failed — the built engine may be bound to a stale route/HAL
+        // state. Discard it and rebuild once through the same single-builder
+        // path on a clean slate.
+        Logger.recording.warning("Engine failed to start, rebuilding once")
         engine.inputNode.removeTap(onBus: 0)
-        Logger.recording.error("startEngine: fresh engine failed to start")
+        audioEngine = nil
+        guard let fresh = await ensureEngine() else { return false }
+        if await Self.startEngineOffMain(fresh) {
+            Logger.recording.info("Audio engine started (rebuilt)")
+            return true
+        }
+        fresh.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        Logger.recording.error("startEngine: rebuilt engine failed to start")
         return false
     }
 
