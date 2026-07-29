@@ -68,6 +68,7 @@ struct VCDRKeyboardView: View {
                             captureCount: controller.captureCount,
                             onStart: { controller.startRecordingFromKeyboard() },
                             onStop: { controller.stopAndWaitForResult() },
+                            onDiscard: { controller.discardRecordingFromKeyboard() },
                             onInsert: { controller.insertPendingText() },
                             onCapture: { controller.captureSelectedText() }
                         )
@@ -233,6 +234,7 @@ struct DictateActionButton: View {
     var captureCount: Int
     var onStart: () -> Void
     var onStop: () -> Void
+    var onDiscard: () -> Void
     var onInsert: () -> Void
     var onCapture: () -> Void
 
@@ -250,12 +252,14 @@ struct DictateActionButton: View {
                 if showCapture {
                     DictateCaptureButton(captureCount: captureCount, onCapture: onCapture)
                 }
-                Button {
-                    KeyboardHaptics.medium()
-                    onStop()
-                } label: {
-                    actionPill("Stop", icon: "stop.fill", color: .red)
-                }
+                HoldToDiscardStopPill(
+                    text: "Stop",
+                    icon: "stop.fill",
+                    color: .red,
+                    onStop: onStop,
+                    onDiscard: onDiscard,
+                    onDiscardHaptic: { KeyboardHaptics.medium() }
+                )
             case .transcribing:
                 actionPill("", icon: "ellipsis", color: .orange)
                     .phaseAnimator([false, true]) { content, phase in
@@ -277,6 +281,8 @@ struct DictateActionButton: View {
                 } label: {
                     actionPill("Start", icon: "mic.fill", color: .yellow)
                 }
+            case .cancelled:
+                actionPill("CANCELLED", icon: "xmark", color: .gray)
             }
         }
     }
@@ -298,6 +304,92 @@ struct DictateActionButton: View {
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
 
         .contentShape(Capsule())
+    }
+}
+
+/// Stop pill with hold-to-Discard: fill grows while held; early release stops.
+struct HoldToDiscardStopPill: View {
+    private static let pillHeight: CGFloat = 32
+    private static let pillFont: CGFloat = 11
+    private static let pillBorder: CGFloat = 1.5
+
+    let text: String
+    let icon: String
+    let color: Color
+    let onStop: () -> Void
+    let onDiscard: () -> Void
+    let onDiscardHaptic: () -> Void
+
+    @State private var holdController: HoldToDiscardController
+    @State private var isPressed = false
+
+    init(
+        text: String,
+        icon: String,
+        color: Color,
+        onStop: @escaping () -> Void,
+        onDiscard: @escaping () -> Void,
+        onDiscardHaptic: @escaping () -> Void = {}
+    ) {
+        self.text = text
+        self.icon = icon
+        self.color = color
+        self.onStop = onStop
+        self.onDiscard = onDiscard
+        self.onDiscardHaptic = onDiscardHaptic
+        _holdController = State(
+            initialValue: HoldToDiscardController(
+                onStop: onStop,
+                onDiscard: onDiscard,
+                onDiscardHaptic: onDiscardHaptic
+            )
+        )
+    }
+
+    var body: some View {
+        @Bindable var hold = holdController
+
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: Self.pillFont, weight: .black))
+            Text(text.uppercased())
+                .font(.system(size: Self.pillFont, weight: .black))
+                .tracking(0.5)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .frame(height: Self.pillHeight)
+        .background(
+            Group {
+                if hold.isHolding {
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(color.opacity(0.35))
+                        GeometryReader { geometry in
+                            Capsule()
+                                .fill(color)
+                                .frame(width: geometry.size.width * hold.progress)
+                        }
+                    }
+                } else {
+                    Capsule().fill(color)
+                }
+            }
+        )
+        .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
+        .contentShape(Capsule())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard !isPressed else { return }
+                    isPressed = true
+                    holdController.touchDown()
+                }
+                .onEnded { _ in
+                    guard isPressed else { return }
+                    isPressed = false
+                    holdController.touchUp()
+                }
+        )
     }
 }
 

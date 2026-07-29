@@ -46,6 +46,7 @@ struct CompactKeyboardView: View {
                     captureCount: controller.captureCount,
                     onStart: { controller.startRecordingFromKeyboard() },
                     onStop: { controller.stopAndWaitForResult() },
+                    onDiscard: { controller.discardRecordingFromKeyboard() },
                     onInsert: { controller.insertPendingText() },
                     onCapture: { controller.captureSelectedText() }
                 )

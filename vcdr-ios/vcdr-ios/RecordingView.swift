@@ -83,6 +83,9 @@ struct RecordingView: View {
         case .transcribing:
             transcribingContent
 
+        case .cancelled:
+            cancelledFlashContent
+
         case .complete(let text):
             completeContent(text)
 
@@ -180,10 +183,16 @@ struct RecordingView: View {
                         .fill(theme.onSurface)
                         .frame(width: Self.stopIconSize, height: Self.stopIconSize)
                 },
-                label: "STOP"
-            ) {
-                Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) }
-            }
+                label: "STOP",
+                onStop: { Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) } },
+                onDiscard: { Task { await coordinator.discardRecording() } }
+            )
+        }
+    }
+
+    private var cancelledFlashContent: some View {
+        VStack(spacing: 40) {
+            heroTitle("CANCELLED")
         }
     }
 
@@ -258,10 +267,10 @@ struct RecordingView: View {
                             .fill(theme.onSurface)
                             .frame(width: Self.stopIconSize, height: Self.stopIconSize)
                     },
-                    label: "STOP"
-                ) {
-                    Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) }
-                }
+                    label: "STOP",
+                    onStop: { Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) } },
+                    onDiscard: { Task { await coordinator.discardRecording() } }
+                )
                 .padding(.bottom, 16)
 
                 if coordinator.launchedViaDeepLink {
@@ -584,6 +593,27 @@ struct RecordingView: View {
         }
     }
 
+    private func actionCircle(
+        icon: @escaping () -> some View,
+        label: String,
+        onStop: @escaping () -> Void,
+        onDiscard: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 16) {
+            HoldToDiscardRingStopButton(
+                theme: theme,
+                label: label,
+                icon: icon,
+                onStop: onStop,
+                onDiscard: onDiscard
+            )
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .tracking(3)
+                .foregroundStyle(theme.onSurface)
+        }
+    }
+
     private func brutalistButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
@@ -630,6 +660,87 @@ struct RecordingView: View {
         let m = (total % 3600) / 60
         let s = total % 60
         return String(format: "%02d:%02d:%02d", h, m, s)
+    }
+}
+
+private enum HoldToDiscardRingMetrics {
+    static let actionButtonSize: CGFloat = 96
+    static let actionButtonBorder: CGFloat = 8
+}
+
+private struct HoldToDiscardRingStopButton<Icon: View>: View {
+    let theme: Theme
+    let icon: () -> Icon
+    let onStop: () -> Void
+    let onDiscard: () -> Void
+
+    @State private var holdController: HoldToDiscardController
+    @State private var isPressed = false
+
+    init(
+        theme: Theme,
+        label: String,
+        icon: @escaping () -> Icon,
+        onStop: @escaping () -> Void,
+        onDiscard: @escaping () -> Void
+    ) {
+        self.theme = theme
+        self.icon = icon
+        self.onStop = onStop
+        self.onDiscard = onDiscard
+        _holdController = State(
+            initialValue: HoldToDiscardController(
+                onStop: onStop,
+                onDiscard: onDiscard,
+                onDiscardHaptic: {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                }
+            )
+        )
+    }
+
+    var body: some View {
+        @Bindable var hold = holdController
+
+        ZStack {
+            Circle()
+                .fill(theme.primaryDim)
+                .frame(width: HoldToDiscardRingMetrics.actionButtonSize, height: HoldToDiscardRingMetrics.actionButtonSize)
+                .shadow(color: theme.primaryDim.opacity(0.2), radius: 20)
+
+            if hold.isHolding {
+                Circle()
+                    .trim(from: 0, to: hold.progress)
+                    .stroke(
+                        theme.primary,
+                        style: StrokeStyle(
+                            lineWidth: HoldToDiscardRingMetrics.actionButtonBorder,
+                            lineCap: .round
+                        )
+                    )
+                    .frame(width: HoldToDiscardRingMetrics.actionButtonSize, height: HoldToDiscardRingMetrics.actionButtonSize)
+                    .rotationEffect(.degrees(-90))
+            }
+
+            Circle()
+                .stroke(theme.surfaceHighest, lineWidth: HoldToDiscardRingMetrics.actionButtonBorder)
+                .frame(width: HoldToDiscardRingMetrics.actionButtonSize, height: HoldToDiscardRingMetrics.actionButtonSize)
+
+            icon()
+        }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard !isPressed else { return }
+                    isPressed = true
+                    holdController.touchDown()
+                }
+                .onEnded { _ in
+                    guard isPressed else { return }
+                    isPressed = false
+                    holdController.touchUp()
+                }
+        )
     }
 }
 

@@ -54,6 +54,8 @@ final class RecordingFlowCoordinator {
         /// catches up at Finalizing (`.transcribing`).
         case recording
         case transcribing
+        /// Brief Discard acknowledgement — auto-reverts to idle or ready.
+        case cancelled
         case complete(String)
         case error(String)
     }
@@ -648,6 +650,7 @@ final class RecordingFlowCoordinator {
             Logger.app.info("[RecordTiming] discardRecording during Arming — cancelling")
             clearCapturedTexts()
             abortArming()
+            flashCancelled(revertingTo: .idle)
             return
         }
 
@@ -658,8 +661,26 @@ final class RecordingFlowCoordinator {
         clearCapturedTexts()
 
         let terminalState = await run.cancel()
-        applyTerminalStateToUI(terminalState)
         recordingRun = nil
+        switch terminalState {
+        case .cancellation:
+            flashCancelled(revertingTo: .ready)
+        default:
+            applyTerminalStateToUI(terminalState)
+        }
+    }
+
+    /// Surfaces the optimistic "CANCELLED" flash for ~1s, then returns to the
+    /// given steady state. Discard always shows this on the app surface; the
+    /// keyboard shows its own optimistic flash (ADR-0003).
+    private func flashCancelled(revertingTo target: State) {
+        state = .cancelled
+        Task {
+            try? await Task.sleep(for: .seconds(HoldToDiscardController.cancelledFlashDuration))
+            if state == .cancelled {
+                state = target
+            }
+        }
     }
 
     /// Shared by `stopAndTranscribe` and `discardRecording`: a stop or

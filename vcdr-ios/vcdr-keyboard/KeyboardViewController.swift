@@ -12,6 +12,8 @@ enum DictationState {
     case ready
     /// Recording produced no speech — shown briefly before reverting to idle
     case emptyResult
+    /// Discard acknowledgement — shown briefly before reverting to idle
+    case cancelled
 }
 
 class KeyboardViewController: KeyboardInputViewController, ObservableObject {
@@ -158,6 +160,9 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Reads the shared state key and updates `dictationState`.
     /// Parses state bundling format: `"idle|transcription text"`.
     private func refreshState() {
+        // Optimistic cancelled flash — ignore channel updates until it ends.
+        guard dictationState != .cancelled else { return }
+
         switch keyboardChannel.readState() {
         case .bundledResult(let text):
             if !text.isEmpty {
@@ -215,6 +220,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     private static let pollInterval: TimeInterval = 0.1
     /// Duration to show the yellow empty-result indicator before reverting to idle
     private static let emptyResultFlashDuration: TimeInterval = 2
+    /// Duration to show the cancelled flash after Discard (ADR-0003).
+    private static let cancelledFlashDuration: TimeInterval = HoldToDiscardController.cancelledFlashDuration
     /// Window to wait for the app to confirm a `startRecording` command by
     /// writing `state = .recording`. If nothing by then, fall back to URL.
     /// Tuned for Darwin roundtrip + a MainActor hop under CoreML load.
@@ -239,6 +246,20 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// we fall back to URL mid-poll. In both URL paths the keyboard returns
     /// without a result; the app's stop pipeline publishes bundled text and the
     /// next `viewWillAppear` auto-pastes it.
+    ///
+    /// Discard (hold Stop ≥3s) uses `discardRecordingFromKeyboard()` instead —
+    /// no deep-link fallback, no acknowledgement wait (ADR-0003).
+    func discardRecordingFromKeyboard() {
+        keyboardChannel.cancelRecording()
+        dictationState = .cancelled
+        captureCount = 0
+        pendingText = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.cancelledFlashDuration) { [weak self] in
+            guard self?.dictationState == .cancelled else { return }
+            self?.dictationState = .idle
+        }
+    }
+
     func stopAndWaitForResult() {
         switch keyboardChannel.stopRecording() {
         case .commandSent:

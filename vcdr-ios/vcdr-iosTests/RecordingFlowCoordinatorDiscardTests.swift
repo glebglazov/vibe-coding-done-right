@@ -43,6 +43,8 @@ struct RecordingFlowCoordinatorDiscardTests {
         await coordinator.discardRecording()
         await startTask.value
 
+        #expect(coordinator.state == .cancelled)
+        try? await Task.sleep(for: .seconds(HoldToDiscardController.cancelledFlashDuration + 0.05))
         #expect(coordinator.state == .idle)
         #expect(!engine.isRecording)
         #expect(coordinator.capturedTexts.isEmpty)
@@ -89,6 +91,8 @@ struct RecordingFlowCoordinatorDiscardTests {
 
         await coordinator.discardRecording()
 
+        #expect(coordinator.state == .cancelled)
+        try? await Task.sleep(for: .seconds(HoldToDiscardController.cancelledFlashDuration + 0.05))
         #expect(coordinator.state == .ready)
         #expect(engine.isHot)
         #expect(!engine.isRecording)
