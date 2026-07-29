@@ -13,6 +13,7 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
         case clearLegacySelectedText
         case writeHeartbeat(alive: Bool, now: Date)
         case isAppLikelyAlive(now: Date)
+        case isCancelStampFresh(now: Date)
     }
 
     private let lock = NSLock()
@@ -20,10 +21,21 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
     private var command: KeyboardChannel.Command?
     private var captures: [String] = []
     private var heartbeat: Date?
+    /// Controls `isCancelStampFresh(now:)`. `nil` (the default) reports no
+    /// queued cancel — tests that exercise a Discard set it explicitly to
+    /// simulate a fresh or stale stamp.
+    private var cancelStampFresh: Bool?
     private var recordedInteractions: [Interaction] = []
 
     init(heartbeatFreshnessWindow: TimeInterval = 18) {
         self.heartbeatFreshnessWindow = heartbeatFreshnessWindow
+    }
+
+    func enqueueCancel(fresh: Bool) {
+        lock.withLock {
+            self.command = .cancelRecording
+            self.cancelStampFresh = fresh
+        }
     }
 
     var interactions: [Interaction] {
@@ -96,6 +108,14 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
             recordedInteractions.append(.isAppLikelyAlive(now: now))
             guard let heartbeat else { return false }
             return now.timeIntervalSince(heartbeat) < heartbeatFreshnessWindow
+        }
+    }
+
+    func isCancelStampFresh(now: Date) -> Bool {
+        lock.withLock {
+            recordedInteractions.append(.isCancelStampFresh(now: now))
+            defer { cancelStampFresh = nil }
+            return cancelStampFresh ?? false
         }
     }
 

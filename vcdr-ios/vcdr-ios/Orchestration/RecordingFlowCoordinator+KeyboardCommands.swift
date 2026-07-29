@@ -74,6 +74,16 @@ extension RecordingFlowCoordinator {
         case .stopRecording:
             Logger.app.info("Received stop command from keyboard")
             await stopAndTranscribe(sendToKeyboard: true)
+        case .cancelRecording:
+            // Fail-closed on staleness (ADR-0003): a cancel that sat queued
+            // across a suspend must never be applied to a later Recording Run,
+            // so the freshness check runs before touching any run state.
+            guard keyboardChannel.isCancelStampFresh() else {
+                Logger.app.info("Dropped stale cancel command from keyboard")
+                return
+            }
+            Logger.app.info("Received cancel command from keyboard")
+            await discardRecording()
         }
     }
 }

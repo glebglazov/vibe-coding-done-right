@@ -101,6 +101,46 @@ struct KeyboardChannelTests {
         #expect(channel.readAndClearCommand() == nil)
     }
 
+    @Test("cancel command carries a wall-clock stamp read back by the app")
+    func cancelRecordingWritesCommandAndStamp() {
+        let defaults = makeDefaults()
+        let channel = KeyboardChannel(defaults: defaults)
+        let fixedNow = Date(timeIntervalSince1970: 1_000)
+
+        channel.cancelRecording(now: fixedNow)
+
+        #expect(channel.readAndClearCommand() == .cancelRecording)
+        #expect(channel.isCancelStampFresh(now: fixedNow))
+    }
+
+    @Test("a cancel stamp inside the freshness window is applied, an older one is dropped")
+    func cancelStampFreshnessWindow() {
+        let defaults = makeDefaults()
+        let fixedNow = Date(timeIntervalSince1970: 1_000)
+        let channel = KeyboardChannel(defaults: defaults, cancelFreshnessWindow: 10)
+
+        channel.cancelRecording(now: fixedNow.addingTimeInterval(-9))
+        #expect(channel.isCancelStampFresh(now: fixedNow))
+
+        channel.cancelRecording(now: fixedNow.addingTimeInterval(-11))
+        #expect(!channel.isCancelStampFresh(now: fixedNow))
+    }
+
+    @Test("a stale cancel is dropped for good and cannot affect a later run")
+    func staleCancelStampIsClearedNotJustRejected() {
+        let defaults = makeDefaults()
+        let fixedNow = Date(timeIntervalSince1970: 1_000)
+        let channel = KeyboardChannel(defaults: defaults, cancelFreshnessWindow: 10)
+
+        channel.cancelRecording(now: fixedNow.addingTimeInterval(-30))
+        #expect(!channel.isCancelStampFresh(now: fixedNow))
+
+        // Re-checking later must not resurrect the same stale stamp against
+        // whatever Recording Run is active by then — it was cleared, not just
+        // rejected once.
+        #expect(!channel.isCancelStampFresh(now: fixedNow.addingTimeInterval(60)))
+    }
+
     @Test("notifications are emitted for command and state writes")
     func notificationNames() {
         let defaults = makeDefaults()

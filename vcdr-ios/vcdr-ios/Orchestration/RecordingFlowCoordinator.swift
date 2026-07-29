@@ -121,6 +121,11 @@ final class RecordingFlowCoordinator {
     /// touches the engine's warmth directly.
     private let hotMicSession: HotMicSession
     private let transcriptionProvider: ParakeetProvider
+    /// Builds the streaming transport for each Recording Run. Defaults to the
+    /// production `LiveRecordingStreamingSession`; tests inject a controllable
+    /// fake to hold a run in Finalizing so Discard's ignore-during-Finalizing
+    /// behaviour can be exercised deterministically.
+    private let makeStreamingSession: () -> any RecordingStreamingSession
     /// Reused, prewarmed haptic generator. A freshly constructed generator
     /// connects to the haptic daemon lazily on its first `impactOccurred()`,
     /// and that connect blocks the *main thread* for seconds under the
@@ -172,7 +177,8 @@ final class RecordingFlowCoordinator {
         keyboardChannel: (any KeyboardChannelProtocol)? = nil,
         recordingEngine: (any RecordingEngine)? = nil,
         transcriptionProvider: ParakeetProvider? = nil,
-        hotMicSession: HotMicSession? = nil
+        hotMicSession: HotMicSession? = nil,
+        makeStreamingSession: (() -> any RecordingStreamingSession)? = nil
     ) {
         let engine = recordingEngine ?? AudioRecorder()
         let keyboardChannel = keyboardChannel ?? KeyboardChannel.live
@@ -180,6 +186,7 @@ final class RecordingFlowCoordinator {
         self.transcriptionProvider = transcriptionProvider ?? ParakeetProvider()
         self.keyboardChannel = keyboardChannel
         self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, keyboard: keyboardChannel)
+        self.makeStreamingSession = makeStreamingSession ?? { LiveRecordingStreamingSession() }
     }
 
     // MARK: - Constants
@@ -590,9 +597,7 @@ final class RecordingFlowCoordinator {
             // cancellation, not an Empty Result, so the keyboard returns to
             // idle rather than flashing "no speech detected".
             Logger.app.info("[RecordTiming] stopAndTranscribe during Arming — cancelling")
-            state = .idle
-            writeState(.idle)
-            setIdleTimerDisabled(false)
+            abortArming()
             return
         }
 
@@ -627,6 +632,52 @@ final class RecordingFlowCoordinator {
         recordingRun = nil
     }
 
+    /// Ends the active Recording Run without producing text (Discard,
+    /// ADR-0003). Scoped to Arming and Capturing:
+    /// - Arming reuses the exact path a stop landing mid-Arming already takes
+    ///   (`abortArming`) — the in-flight `startRecording` tears the run down
+    ///   once it observes `state` is no longer `.arming`.
+    /// - Capturing cancels the run directly, terminating in `.cancellation`
+    ///   (no Bundled Result, no Conversation — see `RecordingRunCompletion`
+    ///   adapters) while leaving the Hot Mic Session warm exactly as a normal
+    ///   stop does.
+    /// - Any other state (notably Finalizing / `.transcribing`) is ignored —
+    ///   a model load or AI call already in flight is not abortable.
+    func discardRecording() async {
+        if isStartingRecording {
+            Logger.app.info("[RecordTiming] discardRecording during Arming — cancelling")
+            clearCapturedTexts()
+            abortArming()
+            return
+        }
+
+        guard state == .recording, let run = recordingRun else { return }
+
+        hotMicSession.recordingStopped()
+        setIdleTimerDisabled(false)
+        clearCapturedTexts()
+
+        let terminalState = await run.cancel()
+        applyTerminalStateToUI(terminalState)
+        recordingRun = nil
+    }
+
+    /// Shared by `stopAndTranscribe` and `discardRecording`: a stop or
+    /// Discard landing while `isStartingRecording` is true means no audio
+    /// ever flowed. Flips to idle instantly (responsiveness-first); the
+    /// in-flight `startRecording` observes `state` is no longer `.arming`
+    /// and tears the run down itself.
+    private func abortArming() {
+        state = .idle
+        writeState(.idle)
+        setIdleTimerDisabled(false)
+    }
+
+    private func clearCapturedTexts() {
+        keyboardChannel.clearCaptures()
+        capturedTexts = []
+    }
+
     private func applyTerminalStateToUI(_ terminalState: RecordingRunTerminalState) {
         switch terminalState {
         case .success(let success):
@@ -644,6 +695,7 @@ final class RecordingFlowCoordinator {
         RecordingRun(
             audioRecorder: recordingEngine,
             transcriptionProvider: transcriptionProvider,
+            streaming: makeStreamingSession(),
             transcriptProcessor: makeTranscriptProcessor(),
             completionAdapters: [
                 KeyboardChannelRecordingRunCompletionAdapter(

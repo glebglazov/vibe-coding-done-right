@@ -11,6 +11,7 @@ nonisolated protocol KeyboardChannelProtocol: Sendable {
     func clearLegacySelectedText()
     func writeHeartbeat(alive: Bool, now: Date)
     func isAppLikelyAlive(now: Date) -> Bool
+    func isCancelStampFresh(now: Date) -> Bool
 }
 
 nonisolated extension KeyboardChannelProtocol {
@@ -21,12 +22,21 @@ nonisolated extension KeyboardChannelProtocol {
     func isAppLikelyAlive() -> Bool {
         isAppLikelyAlive(now: Date())
     }
+
+    func isCancelStampFresh() -> Bool {
+        isCancelStampFresh(now: Date())
+    }
 }
 
 nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
     enum Command: String, Equatable {
         case startRecording
         case stopRecording
+        /// Ends the run without producing text (Discard, ADR-0003). Written
+        /// together with a wall-clock stamp in `Keys.commandCancelStamp` —
+        /// unlike the other two commands, applying it is conditional on that
+        /// stamp still being fresh.
+        case cancelRecording
     }
 
     enum RecordingState: String, Equatable {
@@ -51,6 +61,7 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
 
     private enum Keys {
         static let command = "command"
+        static let commandCancelStamp = "command_cancel_stamp"
         static let state = "recordingState"
         static let captures = "shared_captured_texts"
         static let selectedText = "shared_selected_text"
@@ -60,6 +71,7 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     private let defaults: UserDefaults
     private let notify: @Sendable (String) -> Void
     private let heartbeatFreshnessWindow: TimeInterval
+    private let cancelFreshnessWindow: TimeInterval
 
     static let appGroupID = "group.glebglazov.vcdr-ios"
     static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
@@ -77,11 +89,13 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     init(
         defaults: UserDefaults,
         notify: @escaping @Sendable (String) -> Void = { _ in },
-        heartbeatFreshnessWindow: TimeInterval = 18
+        heartbeatFreshnessWindow: TimeInterval = 18,
+        cancelFreshnessWindow: TimeInterval = 10
     ) {
         self.defaults = defaults
         self.notify = notify
         self.heartbeatFreshnessWindow = heartbeatFreshnessWindow
+        self.cancelFreshnessWindow = cancelFreshnessWindow
     }
 
     // MARK: - Keyboard-side commands
@@ -103,6 +117,18 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
             return .commandSent
         }
         return .openURL(Self.stopDeepLinkURL)
+    }
+
+    /// Ends the active Recording Run without producing text (Discard,
+    /// ADR-0003). Unlike `startRecording`/`stopRecording` this never falls
+    /// back to a deep link — foregrounding the app to throw something away
+    /// defeats the point — so it does not return an `Action` for the caller
+    /// to branch on. The wall-clock stamp lets the app drop a cancel that sat
+    /// queued across a suspend instead of applying it to whatever run is
+    /// active when the app next wakes.
+    func cancelRecording(now: Date = Date()) {
+        defaults.set(now.timeIntervalSince1970, forKey: Keys.commandCancelStamp)
+        send(.cancelRecording)
     }
 
     func send(_ command: Command) {
@@ -212,5 +238,18 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
         let beat = defaults.double(forKey: Keys.heartbeat)
         guard beat > 0 else { return false }
         return now.timeIntervalSince1970 - beat < heartbeatFreshnessWindow
+    }
+
+    // MARK: - Cancel freshness
+
+    /// True when a queued `cancelRecording` command's stamp is still inside
+    /// the freshness window. Always clears the stamp, so a stale cancel that
+    /// sat in the app group across a suspend is dropped for good rather than
+    /// being re-evaluated against whatever Recording Run is active next.
+    func isCancelStampFresh(now: Date = Date()) -> Bool {
+        let stamp = defaults.double(forKey: Keys.commandCancelStamp)
+        defaults.removeObject(forKey: Keys.commandCancelStamp)
+        guard stamp > 0 else { return false }
+        return now.timeIntervalSince1970 - stamp < cancelFreshnessWindow
     }
 }

@@ -421,6 +421,9 @@ final class SpyWarmRecordingEngine: RecordingEngine {
     var prepareEngineDelay: Duration = .zero
     var startSucceeds = true
     var onPrepareEngineCompleted: (@Sendable () async -> Void)?
+    /// Widens the window between `state = .arming` and Capturing so tests can
+    /// land a concurrent action (e.g. Discard) mid-Arming deterministically.
+    var startCaptureDelay: Duration = .zero
 
     private var enginePrepared = false
 
@@ -459,6 +462,9 @@ final class SpyWarmRecordingEngine: RecordingEngine {
 
     func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
         _ = onBuffer
+        if startCaptureDelay > .zero {
+            try? await Task.sleep(for: startCaptureDelay)
+        }
         if !isHot {
             guard await startHotSession() else { return false }
         }
