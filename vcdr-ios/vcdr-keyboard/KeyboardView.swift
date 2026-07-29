@@ -43,33 +43,46 @@ struct VCDRKeyboardView: View {
             services: services,
             buttonContent: { $0.view },
             buttonView: { $0.view },
-            collapsedView: { $0.view },
+            collapsedView: { _ in
+                CompactKeyboardView(controller: controller)
+            },
             emojiKeyboard: { $0.view },
             toolbar: { _ in
-                HStack {
-                    // Left: settings pills
-                    DictateSettingsPills(controller: controller)
-                        .padding(.leading, 10)
+                // Never render the strip in Compact: the pills already live
+                // in the compact view, and a toolbar that leaked through
+                // would show them twice.
+                if keyboardContext.isKeyboardCollapsed {
+                    EmptyView()
+                } else {
+                    HStack {
+                        // Left: settings pills
+                        DictateSettingsPills(controller: controller)
+                            .padding(.leading, 10)
 
-                    Spacer()
+                        Spacer()
 
-                    // Right: capture button (during recording in any AI mode) + action button
-                    DictateActionButton(
-                        dictationState: controller.dictationState,
-                        showCapture: true,
-                        captureCount: controller.captureCount,
-                        onStart: { controller.startRecordingFromKeyboard() },
-                        onStop: { controller.stopAndWaitForResult() },
-                        onInsert: { controller.insertPendingText() },
-                        onCapture: { controller.captureSelectedText() }
-                    )
-                    .padding(.trailing, 10)
+                        // Right: capture button (during recording in any AI mode) + action button
+                        DictateActionButton(
+                            dictationState: controller.dictationState,
+                            showCapture: true,
+                            captureCount: controller.captureCount,
+                            onStart: { controller.startRecordingFromKeyboard() },
+                            onStop: { controller.stopAndWaitForResult() },
+                            onInsert: { controller.insertPendingText() },
+                            onCapture: { controller.captureSelectedText() }
+                        )
+
+                        CollapseKeyboardButton { controller.collapseKeyboard() }
+                            .padding(.trailing, 10)
+                    }
+                    .padding(.top, 2)
+                    .padding(.bottom, 6)
                 }
-                .padding(.top, 2)
-                .padding(.bottom, 6)
             }
         )
-        .keyboardToolbarStyle(.init(height: 44))
+        .keyboardToolbarStyle(keyboardContext.isKeyboardCollapsed
+            ? .init(height: 0, minHeight: 0)
+            : .init(height: 44))
     }
 }
 
@@ -148,6 +161,66 @@ struct DictateSettingsPills: View {
     }
 }
 
+/// Collapse icon at the right end of the toolbar strip — flips the live
+/// keyboard into Compact without a reload.
+struct CollapseKeyboardButton: View {
+    private static let pillHeight: CGFloat = 32
+    private static let pillWidth: CGFloat = 36
+    private static let pillBorder: CGFloat = 1.5
+    private static let iconSize: CGFloat = 12
+
+    var onCollapse: () -> Void
+
+    var body: some View {
+        Button {
+            KeyboardHaptics.light()
+            onCollapse()
+        } label: {
+            Image(systemName: "chevron.down")
+                .font(.system(size: Self.iconSize, weight: .black))
+                .foregroundStyle(Color(.label))
+                .frame(width: Self.pillWidth, height: Self.pillHeight)
+                .background(Capsule().fill(Color(.systemGray5)))
+                .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
+                .contentShape(Capsule())
+        }
+    }
+}
+
+/// Capture button shown during recording: icon only for 0 captures,
+/// icon + ×N for 1+. Appends the current text selection to the session's
+/// captures; used by the Full toolbar strip and the Compact strip alike.
+struct DictateCaptureButton: View {
+    private static let pillHeight: CGFloat = 32
+    private static let pillFont: CGFloat = 11
+    private static let pillBorder: CGFloat = 1.5
+
+    var captureCount: Int
+    var onCapture: () -> Void
+
+    var body: some View {
+        Button {
+            onCapture()
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 11, weight: .black))
+                if captureCount >= 1 {
+                    Text("×\(captureCount)")
+                        .font(.system(size: Self.pillFont, weight: .black))
+                        .tracking(0.5)
+                }
+            }
+            .foregroundStyle(captureCount > 0 ? .white : .white.opacity(0.7))
+            .padding(.horizontal, captureCount >= 1 ? 8 : 6)
+            .frame(height: Self.pillHeight)
+            .background(Capsule().fill(captureCount > 0 ? Color.blue : Color(.systemGray2)))
+            .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
+            .contentShape(Capsule())
+        }
+    }
+}
+
 /// Action button (Start/Stop/transcribing/ready) in the toolbar,
 /// with an optional Capture button shown during recording in assistant mode.
 struct DictateActionButton: View {
@@ -175,11 +248,7 @@ struct DictateActionButton: View {
                 }
             case .recording:
                 if showCapture {
-                    Button {
-                        onCapture()
-                    } label: {
-                        capturePill
-                    }
+                    DictateCaptureButton(captureCount: captureCount, onCapture: onCapture)
                 }
                 Button {
                     KeyboardHaptics.medium()
@@ -210,26 +279,6 @@ struct DictateActionButton: View {
                 }
             }
         }
-    }
-
-    /// Capture button: icon only for 0 captures, icon + ×N for 1+.
-    private var capturePill: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "doc.on.clipboard")
-                .font(.system(size: 11, weight: .black))
-            if captureCount >= 1 {
-                Text("×\(captureCount)")
-                    .font(.system(size: Self.pillFont, weight: .black))
-                    .tracking(0.5)
-            }
-        }
-        .foregroundStyle(captureCount > 0 ? .white : .white.opacity(0.7))
-        .padding(.horizontal, captureCount >= 1 ? 8 : 6)
-        .frame(height: Self.pillHeight)
-        .background(Capsule().fill(captureCount > 0 ? Color.blue : Color(.systemGray2)))
-        .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
-
-        .contentShape(Capsule())
     }
 
     private func actionPill(_ text: String, icon: String, color: Color) -> some View {

@@ -43,6 +43,11 @@ enum SharedConstants {
     /// (app suspended/killed → foreground-and-record bounce).
     static let appHeartbeatKey = "app_heartbeat_at"
 
+    /// Keyboard display mode (Compact/Full) — keyboard-local UI state, never
+    /// read by the app. Absent key → Compact, so fresh installs and installs
+    /// that predate the key both land in Compact on the next keyboard open.
+    static let keyboardDisplayModeKey = "keyboard_display_mode"
+
     /// Shared UserDefaults for App Group IPC between main app and keyboard extension.
     /// Falls back to `.standard` if the App Group is unavailable (e.g. unit tests,
     /// misconfigured signing) — prevents a crash at the cost of IPC not working.
@@ -110,6 +115,34 @@ enum SharedTextStyle: String, CaseIterable {
         let all = Self.allCases
         let idx = all.firstIndex(of: self) ?? 0
         return all[(idx + 1) % all.count]
+    }
+}
+
+/// The keyboard's two presentation states. Switching between them is a flag
+/// flip in the live keyboard process — the keys are already built and come
+/// back instantly — never a reload.
+enum KeyboardDisplayMode: String {
+    /// Dictation controls only, no key rows. The default state.
+    case compact
+    /// Key rows plus the toolbar strip.
+    case full
+}
+
+/// Persists the chosen `KeyboardDisplayMode` across appearances, host apps,
+/// and process teardown. Keyboard-local: no Darwin notification on write,
+/// because the app never reads this value and waking it for a keyboard-only
+/// visual flip would be wasted work.
+enum KeyboardDisplayModeStore {
+    /// The persisted mode. Absent or unreadable key → `.compact`.
+    static func current() -> KeyboardDisplayMode {
+        let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.keyboardDisplayModeKey) ?? ""
+        return KeyboardDisplayMode(rawValue: raw) ?? .compact
+    }
+
+    static func set(_ mode: KeyboardDisplayMode) {
+        let sd = SharedConstants.sharedDefaults
+        sd.set(mode.rawValue, forKey: SharedConstants.keyboardDisplayModeKey)
+        sd.synchronize()
     }
 }
 

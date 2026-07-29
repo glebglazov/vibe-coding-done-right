@@ -48,9 +48,23 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     private var pendingText: String?
     private let keyboardChannel = KeyboardChannel.live
 
+    /// Owns the Compact/Full display mode: persistence, the KeyboardKit
+    /// collapse flag, and the Compact height constraint.
+    private var displayModeManager: KeyboardDisplayModeManager?
+
     override func viewDidLoad() {
         super.viewDidLoad()
         setup(for: .vcdr)
+
+        // Land in the persisted display mode before the first frame — absent
+        // key reads as Compact, so fresh installs and installs that used the
+        // keyboard before Compact existed both open collapsed.
+        let modeManager = KeyboardDisplayModeManager(
+            keyboardContext: state.keyboardContext,
+            inputView: view
+        )
+        modeManager.activate()
+        displayModeManager = modeManager
 
         // Refresh the cached enabled flag now; haptic generator construction
         // is deferred to `viewWillAppear` because the iOS 17.5+
@@ -120,6 +134,10 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         if pendingText != nil {
             insertPendingText()
         }
+
+        // The system can drop view constraints between appearances (rotation,
+        // dock changes) — re-pin the Compact height if we're collapsed.
+        displayModeManager?.reassertHeight()
     }
 
     // MARK: - State Parsing
@@ -281,6 +299,19 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
         // Timeout — show ready button as fallback for manual tap-to-insert
         refreshState()
+    }
+
+    // MARK: - Display Mode (Compact / Full)
+
+    /// Switches to the Full Keyboard — a state flip in the live process, so
+    /// the already-built key rows come back instantly.
+    func expandKeyboard() {
+        displayModeManager?.expand()
+    }
+
+    /// Switches to the Compact Keyboard.
+    func collapseKeyboard() {
+        displayModeManager?.collapse()
     }
 
     // MARK: - Settings
