@@ -247,7 +247,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// without a result; the app's stop pipeline publishes bundled text and the
     /// next `viewWillAppear` auto-pastes it.
     ///
-    /// Discard (hold Stop ≥3s) uses `discardRecordingFromKeyboard()` instead —
+    /// Discard (hold Stop to `HoldToDiscardController.holdDuration`) uses
+    /// `discardRecordingFromKeyboard()` instead —
     /// no deep-link fallback, no acknowledgement wait (ADR-0003).
     func discardRecordingFromKeyboard() {
         keyboardChannel.cancelRecording()

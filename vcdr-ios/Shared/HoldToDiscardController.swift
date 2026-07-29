@@ -8,7 +8,7 @@ import Foundation
 final class HoldToDiscardController {
     // MARK: - Constants
 
-    static let holdDuration: TimeInterval = 3
+    static let holdDuration: TimeInterval = 2
     static let cancelledFlashDuration: TimeInterval = 1
     static let progressTick: Duration = .milliseconds(16)
 

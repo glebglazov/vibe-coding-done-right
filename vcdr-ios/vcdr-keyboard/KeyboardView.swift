@@ -73,8 +73,10 @@ struct VCDRKeyboardView: View {
                             onCapture: { controller.captureSelectedText() }
                         )
 
-                        CollapseKeyboardButton { controller.collapseKeyboard() }
-                            .padding(.trailing, 10)
+                        KeyboardModeToggleButton(direction: .collapse) {
+                            controller.collapseKeyboard()
+                        }
+                        .padding(.trailing, 10)
                     }
                     .padding(.top, 2)
                     .padding(.bottom, 6)
@@ -83,7 +85,11 @@ struct VCDRKeyboardView: View {
         )
         .keyboardToolbarStyle(keyboardContext.isKeyboardCollapsed
             ? .init(height: 0, minHeight: 0)
-            : .init(height: 44))
+            : .init(height: KeyboardDisplayModeManager.fullToolbarHeight))
+        // Compact draws no keys, so KeyboardKit's opaque keyboard background
+        // has nothing to sit behind — hiding it lets the host app show through
+        // the strip. Full keeps it: the key rows need it for contrast.
+        .keyboardViewBackground(keyboardContext.isKeyboardCollapsed ? .hidden : .automatic)
     }
 }
 
@@ -162,22 +168,35 @@ struct DictateSettingsPills: View {
     }
 }
 
-/// Collapse icon at the right end of the toolbar strip — flips the live
-/// keyboard into Compact without a reload.
-struct CollapseKeyboardButton: View {
+/// Chevron pill that flips display mode without a reload: down at the right
+/// end of the Full toolbar, up at the right end of the Compact row. One view
+/// for both directions so the two ends of the toggle can't drift apart.
+struct KeyboardModeToggleButton: View {
+    enum Direction {
+        case collapse, expand
+
+        var icon: String {
+            switch self {
+            case .collapse: "chevron.down"
+            case .expand: "chevron.up"
+            }
+        }
+    }
+
     private static let pillHeight: CGFloat = 32
     private static let pillWidth: CGFloat = 36
     private static let pillBorder: CGFloat = 1.5
     private static let iconSize: CGFloat = 12
 
-    var onCollapse: () -> Void
+    var direction: Direction
+    var onToggle: () -> Void
 
     var body: some View {
         Button {
             KeyboardHaptics.light()
-            onCollapse()
+            onToggle()
         } label: {
-            Image(systemName: "chevron.down")
+            Image(systemName: direction.icon)
                 .font(.system(size: Self.iconSize, weight: .black))
                 .foregroundStyle(Color(.label))
                 .frame(width: Self.pillWidth, height: Self.pillHeight)
