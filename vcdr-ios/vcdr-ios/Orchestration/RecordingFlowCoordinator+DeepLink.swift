@@ -59,6 +59,9 @@ extension RecordingFlowCoordinator {
         case .transcribing, .complete:
             break
         default:
+            Logger.recording.info(
+                "Publishing idle: stop deep link found no run to stop (state=\(String(describing: state)))"
+            )
             writeState(.idle)
         }
     }

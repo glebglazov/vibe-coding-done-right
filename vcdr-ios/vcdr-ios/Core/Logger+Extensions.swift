@@ -1,6 +1,6 @@
 import OSLog
 
-extension Logger {
+nonisolated extension Logger {
     static let subsystem = Bundle.main.bundleIdentifier ?? "vcdr-ios"
 
     static let app = AppLog(subsystem: subsystem, category: "app")

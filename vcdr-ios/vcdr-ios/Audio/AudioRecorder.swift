@@ -41,6 +41,13 @@ final class AudioRecorder {
     /// Safe: only set before starting the engine, cleared after stopping it.
     @ObservationIgnored
     private nonisolated(unsafe) var bufferHandler: (@Sendable (AVAudioPCMBuffer) -> Void)?
+    /// What this run handed to the buffer handler, summarized when capture stops.
+    /// nonisolated(unsafe) for the same reason as `bufferHandler`: the audio
+    /// render thread is the only writer, and the main actor reads it in
+    /// `stopCapture()` after clearing the handler, so no tap can still be
+    /// counting into it.
+    @ObservationIgnored
+    private nonisolated(unsafe) var captureTally = CaptureTally()
     /// One-shot diagnostic: logs once when the first audio buffer arrives from
     /// the input tap. If recording shows zero waveform / zero timer, the
     /// absence of this log line tells us the engine never actually fired the
@@ -177,10 +184,6 @@ final class AudioRecorder {
     /// Buffer size for the audio engine tap — 4096 frames at hardware sample rate
     /// gives ~85ms per buffer at 48kHz, a good balance between latency and overhead
     private nonisolated static let tapBufferSize: AVAudioFrameCount = 4096
-    /// Floor value to avoid log10(0) when computing level from silent audio
-    private nonisolated static let silenceFloor: Float = 1e-7
-    /// dB range mapped to 0.0–1.0 linear scale (matches AVAudioRecorder.averagePower range)
-    private nonisolated static let dbRange: Float = 60
 
     func requestMicrophonePermission() async -> Bool {
         Logger.app.info("[LaunchProbe] requestMicrophonePermission entry main=\(Thread.isMainThread)")
@@ -310,12 +313,17 @@ final class AudioRecorder {
                         Logger.app.info("[LaunchProbe] first audio buffer from tap handler=\(self.bufferHandler != nil)")
                     }
 
-                    let level = Self.computeLevel(from: buffer)
+                    let level = AudioLevelMeter.level(of: buffer)
                     Task { @MainActor [weak self] in
                         self?.appendLevel(level)
                     }
 
-                    self.bufferHandler?(buffer)
+                    // Tally only what is actually handed off, and reuse the
+                    // level the waveform already needed — the audio thread
+                    // walks these samples once per buffer, not twice.
+                    guard let handler = self.bufferHandler else { return }
+                    self.captureTally.record(frames: Int(buffer.frameLength), level: level)
+                    handler(buffer)
                 }
                 Logger.app.info("[LaunchProbe] ensureEngine after installTap main=\(Thread.isMainThread)")
 
@@ -417,6 +425,7 @@ final class AudioRecorder {
                 return false
             }
         }
+        captureTally = CaptureTally()
         bufferHandler = onBuffer
         isRecording = true
         Logger.recording.info("Capture started (isHot=\(self.isHot)) engineRunning=\(self.audioEngine?.isRunning == true)")
@@ -525,9 +534,15 @@ final class AudioRecorder {
     /// release the microphone.
     func stopCapture() {
         bufferHandler = nil
+        let tally = captureTally
         isRecording = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
-        Logger.recording.info("Capture stopped (hot session alive)")
+        // Emitted on every run, not only failing ones: an empty transcript is
+        // only readable against the shape of runs that worked. Zero buffers
+        // means the tap never fired; buffers with a near-zero peak means the
+        // mic delivered silence; a healthy peak here moves the suspicion
+        // downstream, to what the transcriber consumed.
+        Logger.recording.info("Capture stopped (hot session alive) — \(tally.summary)")
     }
 
     /// Fully ends the hot session: removes the tap, stops the engine, drops the
@@ -582,23 +597,6 @@ final class AudioRecorder {
     }
 
     // MARK: - Level Metering
-
-    /// Computes a normalized audio level (0.0–1.0) from raw PCM buffer samples.
-    private nonisolated static func computeLevel(from buffer: AVAudioPCMBuffer) -> Float {
-        guard let channelData = buffer.floatChannelData, buffer.frameLength > 0 else { return 0 }
-        let samples = UnsafeBufferPointer(start: channelData[0], count: Int(buffer.frameLength))
-
-        // RMS (Root Mean Square) for average loudness
-        var sumOfSquares: Float = 0
-        for sample in samples { sumOfSquares += sample * sample }
-        let rms = sqrt(sumOfSquares / Float(samples.count))
-
-        // Convert to dB-like scale, then normalize to 0–1
-        let dB = 20 * log10(max(rms, silenceFloor))
-        let linear = max(0, (dB + dbRange) / dbRange)
-        // Square root curve expands the speech range into a wider visual range
-        return sqrt(linear)
-    }
 
     private func appendLevel(_ level: Float) {
         let previous = audioLevels.last ?? 0

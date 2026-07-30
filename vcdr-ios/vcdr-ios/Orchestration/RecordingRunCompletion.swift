@@ -18,6 +18,19 @@ enum RecordingRunTerminalState: Equatable {
     case emptyResult
     case cancellation
     case processingFailure(RecordingRunFailure)
+
+    /// Log-facing name of the terminal state. The run's own terminal line and
+    /// the completion adapters' published-state lines spell it the same way, so
+    /// a reader can pair "what the run decided" with "what the keyboard was
+    /// told" from the log alone (ADR-0004).
+    var logName: String {
+        switch self {
+        case .success: "success"
+        case .emptyResult: "empty result"
+        case .cancellation: "cancellation"
+        case .processingFailure: "processing failure"
+        }
+    }
 }
 
 @MainActor

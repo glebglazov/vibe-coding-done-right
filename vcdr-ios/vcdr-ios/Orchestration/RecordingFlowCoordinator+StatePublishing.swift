@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Recording-state publishing: writes the coordinator's recording state (and
 /// the optional bundled result) to the App Group so the keyboard extension can
@@ -19,12 +20,20 @@ extension RecordingFlowCoordinator {
         writeStateRaw(recordingState, bundledText: bundledText)
     }
 
+    /// Logs every value it writes: this and the completion adapters are the
+    /// only two writers on the wire, so logging both makes the published state
+    /// sequence for a run reconstructable from the log alone (ADR-0004). The
+    /// Bundled Result is logged by length — the transcript itself is already
+    /// logged once, by the run.
     private nonisolated func writeStateRaw(_ recordingState: RecordingState, bundledText: String? = nil) {
         if let bundledText, recordingState == .idle {
+            Logger.recording.info("Wire state written: bundledResult (\(bundledText.count) chars)")
             keyboardChannel.publishBundledResult(bundledText)
             return
         }
-        keyboardChannel.publish(KeyboardChannel.RecordingState(recordingState))
+        let wireState = KeyboardChannel.RecordingState(recordingState)
+        Logger.recording.info("Wire state written: \(wireState.rawValue)")
+        keyboardChannel.publish(wireState)
     }
 
     func cleanupStaleResults() {

@@ -621,6 +621,9 @@ final class RecordingFlowCoordinator {
         }
 
         guard let run = recordingRun else {
+            Logger.recording.error(
+                "Publishing idle: stop found no Recording Run — interrupted before audio started"
+            )
             state = .error("Recording was interrupted before audio started")
             writeState(.idle)
             return
@@ -689,6 +692,9 @@ final class RecordingFlowCoordinator {
     /// in-flight `startRecording` observes `state` is no longer `.arming`
     /// and tears the run down itself.
     private func abortArming() {
+        Logger.recording.info(
+            "Publishing idle: stop or Discard landed during Arming — no audio was captured"
+        )
         state = .idle
         writeState(.idle)
         setIdleTimerDisabled(false)

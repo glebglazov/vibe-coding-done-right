@@ -14,7 +14,12 @@ import OSLog
 /// Messages are plain `String`. The OS mirror is emitted as `.public` so Console
 /// shows the same text the in-app viewer captures — no granular privacy
 /// redaction. Don't log secrets through this facade.
-struct AppLog: Sendable {
+/// `nonisolated`, not MainActor-inferred: the wire write, the log buffer's own
+/// queue and every background pipeline log from outside the main actor. Both
+/// sinks are already thread-safe (`os.Logger` is Sendable, `LogBuffer` confines
+/// its file state to a serial queue), so isolation would buy nothing and cost
+/// every off-main call site an await.
+nonisolated struct AppLog: Sendable {
     private let os: Logger
     private let category: String
 
