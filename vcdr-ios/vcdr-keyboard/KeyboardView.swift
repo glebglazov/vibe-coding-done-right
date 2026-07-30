@@ -351,6 +351,10 @@ struct DictateActionButton: View {
                 }
             case .cancelled:
                 actionPill("CANCELLED", icon: "xmark", color: .gray)
+            case .failed:
+                // Red, and only "FAILED" — the reason lives in the app, which
+                // has room to show it in full (ADR-0004).
+                actionPill("FAILED", icon: "exclamationmark.triangle.fill", color: .red)
             }
         }
     }

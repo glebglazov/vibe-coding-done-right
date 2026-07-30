@@ -20,6 +20,15 @@ extension RecordingFlowCoordinator {
         writeStateRaw(recordingState, bundledText: bundledText)
     }
 
+    /// Publishes a Processing Failure the coordinator itself detected, before
+    /// or without a Recording Run to route it through its completion adapters.
+    /// Carries the same reason the app surface shows, the way the Bundled
+    /// Result carries its text (ADR-0004).
+    func writeFailure(reason: String) {
+        Logger.recording.error("Wire state written: failed — \(reason)")
+        keyboardChannel.publishFailure(reason: reason)
+    }
+
     /// Logs every value it writes: this and the completion adapters are the
     /// only two writers on the wire, so logging both makes the published state
     /// sequence for a run reconstructable from the log alone (ADR-0004). The
@@ -49,6 +58,8 @@ private extension KeyboardChannel.RecordingState {
         case .recording: self = .recording
         case .transcribing: self = .transcribing
         case .emptyResult: self = .emptyResult
+        case .cancelled: self = .cancelled
+        case .failed: self = .failed
         }
     }
 }

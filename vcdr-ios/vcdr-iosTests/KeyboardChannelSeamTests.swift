@@ -62,4 +62,24 @@ struct KeyboardChannelSeamTests {
             .publish(.idle)
         ])
     }
+
+    @MainActor
+    @Test("a keyboard stop with no Recording Run publishes the failure, never idle")
+    func stopWithoutRunPublishesFailure() async {
+        let fake = FakeKeyboardChannel()
+        let coordinator = RecordingFlowCoordinator(keyboardChannel: fake)
+
+        // Interrupted before audio started: no run exists, so no completion
+        // adapter will report for it. The keyboard is mid-poll waiting for a
+        // terminal state — it must get the failure, not an idle it would have
+        // to interpret (ADR-0004).
+        await coordinator.stopAndTranscribe(sendToKeyboard: true)
+
+        let publishedFailures = fake.interactions.compactMap { interaction -> String? in
+            guard case .publishFailure(let reason) = interaction else { return nil }
+            return reason
+        }
+        #expect(publishedFailures == ["Recording was interrupted before audio started"])
+        #expect(!fake.interactions.contains(.publish(.idle)))
+    }
 }

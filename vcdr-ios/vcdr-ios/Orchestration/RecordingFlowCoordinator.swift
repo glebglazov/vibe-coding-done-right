@@ -556,11 +556,11 @@ final class RecordingFlowCoordinator {
 
         guard started else {
             // Engine warmup failed (mic seized, route/HAL error). The Recording
-            // Run already terminated in processing failure inside `run.start()`.
-            // Surface it briefly and return the keyboard to idle — never Empty
-            // Result, because no audio was ever captured.
+            // Run already terminated in processing failure inside `run.start()`,
+            // and its keyboard completion adapter has already published that
+            // failure on the wire — writing anything here would overwrite the
+            // reason with a state the run did not reach (ADR-0004).
             state = .error("Microphone unavailable — couldn't start recording")
-            writeState(.idle)
             recordingRun = nil
             hotMicSession.recordIntentCancelledBeforeCapture()
             isStartingRecording = false
@@ -596,8 +596,7 @@ final class RecordingFlowCoordinator {
             // Stop landed during Arming — no audio ever flowed. Flip to idle
             // instantly (responsiveness-first); the in-flight start sees state
             // is no longer `.arming` and tears the run down. This is a
-            // cancellation, not an Empty Result, so the keyboard returns to
-            // idle rather than flashing "no speech detected".
+            // cancellation, not an Empty Result, and the wire now says so.
             Logger.app.info("[RecordTiming] stopAndTranscribe during Arming — cancelling")
             abortArming()
             return
@@ -621,11 +620,17 @@ final class RecordingFlowCoordinator {
         }
 
         guard let run = recordingRun else {
-            Logger.recording.error(
-                "Publishing idle: stop found no Recording Run — interrupted before audio started"
-            )
-            state = .error("Recording was interrupted before audio started")
-            writeState(.idle)
+            // No run means no completion adapter to publish for us, so this is
+            // the one Processing Failure the coordinator puts on the wire
+            // itself — and only when the keyboard is the one waiting for it.
+            let reason = "Recording was interrupted before audio started"
+            Logger.recording.error("Publishing failure: stop found no Recording Run — \(reason)")
+            state = .error(reason)
+            if sendToKeyboard {
+                writeFailure(reason: reason)
+            } else {
+                writeState(.idle)
+            }
             return
         }
 
@@ -691,12 +696,18 @@ final class RecordingFlowCoordinator {
     /// ever flowed. Flips to idle instantly (responsiveness-first); the
     /// in-flight `startRecording` observes `state` is no longer `.arming`
     /// and tears the run down itself.
+    ///
+    /// Publishes cancellation — never Empty Result, never idle — because that
+    /// is what the run will terminate in once the in-flight start tears it
+    /// down. Publishing here rather than waiting for that teardown is what
+    /// keeps a keyboard stop poll from timing out into a deep-link bounce
+    /// while the engine finishes coming up.
     private func abortArming() {
         Logger.recording.info(
-            "Publishing idle: stop or Discard landed during Arming — no audio was captured"
+            "Publishing cancelled: stop or Discard landed during Arming — no audio was captured"
         )
         state = .idle
-        writeState(.idle)
+        writeState(.cancelled)
         setIdleTimerDisabled(false)
     }
 

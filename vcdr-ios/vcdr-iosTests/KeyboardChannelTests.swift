@@ -14,9 +14,37 @@ struct KeyboardChannelTests {
         #expect(KeyboardChannel.decodeState("unknown") == .idle)
     }
 
-    @Test("encodes bundled result on idle state channel")
-    func encodeBundledResult() {
+    @Test("all four terminal states are distinguishable on the wire")
+    func terminalStatesAreDistinct() {
+        // The point of the widened protocol: Empty Result, cancellation and a
+        // Processing Failure are three different wire values, and none of them
+        // is idle. A run's success is the fourth (a bundled result).
+        let wireValues = [
+            KeyboardChannel.encodeBundledResult("hello"),
+            KeyboardChannel.RecordingState.emptyResult.rawValue,
+            KeyboardChannel.RecordingState.cancelled.rawValue,
+            KeyboardChannel.encodeFailure(reason: "Transcription unavailable: model load failed")
+        ]
+        #expect(Set(wireValues).count == wireValues.count)
+        #expect(!wireValues.contains(KeyboardChannel.RecordingState.idle.rawValue))
+
+        #expect(KeyboardChannel.decodeState(wireValues[0]) == .bundledResult("hello"))
+        #expect(KeyboardChannel.decodeState(wireValues[1]) == .emptyResult)
+        #expect(KeyboardChannel.decodeState(wireValues[2]) == .cancelled)
+        #expect(
+            KeyboardChannel.decodeState(wireValues[3])
+                == .failed("Transcription unavailable: model load failed")
+        )
+    }
+
+    @Test("encodes payload states with the same prefix scheme")
+    func encodePayloadStates() {
         #expect(KeyboardChannel.encodeBundledResult("hello") == "idle|hello")
+        #expect(KeyboardChannel.encodeFailure(reason: "mic seized") == "failed|mic seized")
+        // A reason containing the separator survives — only the first `|` splits.
+        #expect(KeyboardChannel.decodeState("failed|a|b") == .failed("a|b"))
+        // A bare token stays a failure rather than degrading to idle.
+        #expect(KeyboardChannel.decodeState("failed") == .failed(""))
     }
 
     @Test("publishes and reads state")
@@ -32,6 +60,28 @@ struct KeyboardChannelTests {
 
         channel.publishEmptyResult()
         #expect(channel.readState() == .emptyResult)
+
+        channel.publish(.cancelled)
+        #expect(channel.readState() == .cancelled)
+
+        channel.publishFailure(reason: "Transcription failed: forced failure")
+        #expect(channel.readState() == .failed("Transcription failed: forced failure"))
+    }
+
+    @Test("the keyboard consumes a rendered terminal state without notifying")
+    func consumeStateIsSilent() {
+        let defaults = makeDefaults()
+        var notifications: [String] = []
+        let channel = KeyboardChannel(defaults: defaults) { notifications.append($0) }
+
+        channel.publishFailure(reason: "mic seized")
+        notifications.removeAll()
+
+        // The keyboard is the only reader; a post here would return to the same
+        // process and cut short the flash it has just started rendering.
+        channel.consumeState()
+        #expect(channel.readState() == .idle)
+        #expect(notifications.isEmpty)
     }
 
     @Test("captures roundtrip through JSON storage")

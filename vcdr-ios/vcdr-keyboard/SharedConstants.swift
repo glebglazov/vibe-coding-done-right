@@ -62,12 +62,21 @@ enum RecordingCommand: String {
     case stopRecording
 }
 
-/// Recording states the main app publishes for the keyboard extension to read
+/// Recording states the main app publishes for the keyboard extension to read.
+/// One value per Recording Run terminal state, so the keyboard never infers a
+/// terminal state from idle (ADR-0004). `failed` carries the failure reason
+/// appended after `|`, the way `idle` carries the Bundled Result.
+///
+/// **This enum is duplicated in the app target's `SharedConstants.swift`. Both
+/// copies must carry the same cases**: a mismatch fails silently, because each
+/// side falls back to `UserDefaults.standard` when the App Group is unavailable.
 enum RecordingState: String {
     case idle
     case recording
     case transcribing
     case emptyResult
+    case cancelled
+    case failed
 }
 
 /// AI prompt mode — keyboard-safe mirror of AIPromptMode.

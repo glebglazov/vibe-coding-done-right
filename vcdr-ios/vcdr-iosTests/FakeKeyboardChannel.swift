@@ -5,6 +5,7 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
     enum Interaction: Equatable {
         case publish(KeyboardChannel.RecordingState)
         case publishBundledResult(String)
+        case publishFailure(String)
         case readAndClearCommand
         case clearCommand
         case readCaptures
@@ -54,6 +55,10 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
 
     func publishBundledResult(_ text: String) {
         record(.publishBundledResult(text))
+    }
+
+    func publishFailure(reason: String) {
+        record(.publishFailure(reason))
     }
 
     func readAndClearCommand() -> KeyboardChannel.Command? {

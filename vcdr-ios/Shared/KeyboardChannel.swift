@@ -3,6 +3,7 @@ import Foundation
 nonisolated protocol KeyboardChannelProtocol: Sendable {
     func publish(_ state: KeyboardChannel.RecordingState)
     func publishBundledResult(_ text: String)
+    func publishFailure(reason: String)
     func readAndClearCommand() -> KeyboardChannel.Command?
     func clearCommand()
     func readCaptures() -> [String]
@@ -39,18 +40,32 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
         case cancelRecording
     }
 
+    /// The wire vocabulary: one token per value the app can write to the state
+    /// key. Every Recording Run terminal state has its own token, so the
+    /// keyboard never has to infer which one happened (ADR-0004).
+    ///
+    /// Two tokens carry a payload appended after `|` — `idle` carries the
+    /// Bundled Result and `failed` carries the failure reason. Publish those
+    /// through `publishBundledResult` / `publishFailure(reason:)` rather than
+    /// `publish`, so the payload always travels with its token.
     enum RecordingState: String, Equatable {
         case idle
         case recording
         case transcribing
         case emptyResult
+        case cancelled
+        case failed
     }
 
+    /// A decoded wire value: a token plus its payload, if it had one.
     enum State: Equatable {
         case idle
         case recording
         case transcribing
         case emptyResult
+        case cancelled
+        /// Processing Failure, carrying the same reason string the app shows.
+        case failed(String)
         case bundledResult(String)
     }
 
@@ -165,12 +180,28 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
         publishRaw(Self.encodeBundledResult(text))
     }
 
+    /// Publishes a Processing Failure together with the reason the app shows
+    /// the user, so the keyboard's FAILED pill and the app's error text come
+    /// from one fact rather than two.
+    func publishFailure(reason: String) {
+        publishRaw(Self.encodeFailure(reason: reason))
+    }
+
     func publishEmptyResult() {
         publish(.emptyResult)
     }
 
     func clearResult() {
         publish(.idle)
+    }
+
+    /// Returns the channel to idle without a Darwin post — for the keyboard
+    /// clearing a terminal state it has just rendered. The keyboard is the only
+    /// reader of this key, so the post would come straight back to it and cut
+    /// the flash it is in the middle of showing; the app never observes state.
+    func consumeState() {
+        defaults.set(RecordingState.idle.rawValue, forKey: Keys.state)
+        defaults.synchronize()
     }
 
     private func publishRaw(_ value: String) {
@@ -180,10 +211,11 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     }
 
     static func decodeState(_ raw: String) -> State {
-        let idlePrefix = "\(RecordingState.idle.rawValue)|"
-        if raw.hasPrefix(idlePrefix) {
-            let text = String(raw.dropFirst(idlePrefix.count))
+        if let text = payload(of: .idle, in: raw) {
             return text.isEmpty ? .idle : .bundledResult(text)
+        }
+        if let reason = payload(of: .failed, in: raw) {
+            return .failed(reason)
         }
         guard let state = RecordingState(rawValue: raw) else { return .idle }
         switch state {
@@ -191,11 +223,30 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
         case .recording: return .recording
         case .transcribing: return .transcribing
         case .emptyResult: return .emptyResult
+        case .cancelled: return .cancelled
+        case .failed: return .failed("")
         }
     }
 
     static func encodeBundledResult(_ text: String) -> String {
-        "\(RecordingState.idle.rawValue)|\(text)"
+        encode(.idle, payload: text)
+    }
+
+    static func encodeFailure(reason: String) -> String {
+        encode(.failed, payload: reason)
+    }
+
+    private static func encode(_ state: RecordingState, payload: String) -> String {
+        "\(state.rawValue)|\(payload)"
+    }
+
+    /// The payload written after `<token>|`, or nil when `raw` is not that
+    /// token's payload form. Only the first separator is significant, so a
+    /// payload containing `|` survives the roundtrip.
+    private static func payload(of state: RecordingState, in raw: String) -> String? {
+        let prefix = "\(state.rawValue)|"
+        guard raw.hasPrefix(prefix) else { return nil }
+        return String(raw.dropFirst(prefix.count))
     }
 
     // MARK: - Captures

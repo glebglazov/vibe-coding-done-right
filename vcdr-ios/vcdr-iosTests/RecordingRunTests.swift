@@ -44,7 +44,7 @@ struct RecordingRunTests {
         #expect(adapter.states == [.cancellation])
     }
 
-    @Test("keyboard adapter preserves bundled result and failure idle behavior")
+    @Test("keyboard adapter publishes each terminal state as its own wire state")
     func keyboardAdapterMapsTerminalStates() async {
         let defaults = makeDefaults()
         let channel = KeyboardChannel(defaults: defaults)
@@ -59,8 +59,39 @@ struct RecordingRunTests {
         await adapter.complete(.emptyResult)
         #expect(channel.readState() == .emptyResult)
 
-        await adapter.complete(.processingFailure(RecordingRunFailure(message: "failed")))
-        #expect(channel.readState() == .idle)
+        await adapter.complete(.cancellation)
+        #expect(channel.readState() == .cancelled)
+
+        // The reason the app shows the user is the reason on the wire — the
+        // keyboard's FAILED pill and the app's error text are one fact.
+        await adapter.complete(.processingFailure(
+            RecordingRunFailure(message: "Transcription unavailable: model load failed")
+        ))
+        #expect(channel.readState() == .failed("Transcription unavailable: model load failed"))
+    }
+
+    @Test("a run that does not deliver to the keyboard is the only publisher of idle")
+    func keyboardAdapterPublishesIdleOnlyWhenNotDelivering() async {
+        let defaults = makeDefaults()
+        let channel = KeyboardChannel(defaults: defaults)
+        let adapter = KeyboardChannelRecordingRunCompletionAdapter(
+            keyboardChannel: channel,
+            deliversToKeyboard: false
+        )
+
+        // Driven from the app surface, which already shows the outcome: the
+        // keyboard has nothing to render, so the channel comes back to idle
+        // rather than carrying a terminal state the keyboard would flash.
+        for terminal: RecordingRunTerminalState in [
+            .success(success(finalText: "hello ")),
+            .emptyResult,
+            .cancellation,
+            .processingFailure(RecordingRunFailure(message: "failed"))
+        ] {
+            channel.publish(.transcribing)
+            await adapter.complete(terminal)
+            #expect(channel.readState() == .idle)
+        }
     }
 
     @Test("history adapter records successful runs only")

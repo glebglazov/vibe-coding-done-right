@@ -4,6 +4,8 @@ import SwiftUI
 import UIKit
 
 /// Keyboard-side dictation state, derived from the main app's recording state.
+/// Every terminal case is published by the app on the Keyboard Channel — the
+/// keyboard never infers one (ADR-0004).
 enum DictationState {
     case idle
     case recording
@@ -14,6 +16,9 @@ enum DictationState {
     case emptyResult
     /// Discard acknowledgement — shown briefly before reverting to idle
     case cancelled
+    /// The run failed to produce a transcript. The reason stays in the app; the
+    /// pill only reports that a failure happened.
+    case failed
 }
 
 class KeyboardViewController: KeyboardInputViewController, ObservableObject {
@@ -173,15 +178,13 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 dictationState = .idle
             }
         case .emptyResult:
-            pendingText = nil
-            dictationState = .emptyResult
-            // Clear the state so it doesn't persist across keyboard appearances
-            keyboardChannel.clearResult()
-            // Auto-revert to idle after the flash duration
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
-                guard self?.dictationState == .emptyResult else { return }
-                self?.dictationState = .idle
-            }
+            flash(.emptyResult, for: Self.emptyResultFlashDuration)
+        case .cancelled:
+            flash(.cancelled, for: Self.cancelledFlashDuration)
+        case .failed:
+            // The reason travels on the wire for the app to show; the pill
+            // reports only that a failure happened (ADR-0004).
+            flash(.failed, for: Self.failedFlashDuration)
         case .recording:
             pendingText = nil
             dictationState = .recording
@@ -192,6 +195,21 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
             pendingText = nil
             captureCount = 0
             dictationState = .idle
+        }
+    }
+
+    /// Renders a terminal state the app published: consumes it from the wire so
+    /// a later appearance can't replay a finished run, then reverts to idle once
+    /// the user has had time to see it. Consuming is a silent write — a Darwin
+    /// post would come back to this same process and end the flash immediately.
+    private func flash(_ terminal: DictationState, for duration: TimeInterval) {
+        pendingText = nil
+        captureCount = 0
+        dictationState = terminal
+        keyboardChannel.consumeState()
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard self?.dictationState == terminal else { return }
+            self?.dictationState = .idle
         }
     }
 
@@ -220,6 +238,11 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     private static let pollInterval: TimeInterval = 0.1
     /// Duration to show the yellow empty-result indicator before reverting to idle
     private static let emptyResultFlashDuration: TimeInterval = 2
+    /// Duration to show the red FAILED pill before reverting to idle. Longer
+    /// than the informational no-speech flash: a failure is the one terminal
+    /// state the user may want to act on, and the pill is the only place the
+    /// keyboard reports it.
+    private static let failedFlashDuration: TimeInterval = 5
     /// Duration to show the cancelled flash after Discard (ADR-0003).
     private static let cancelledFlashDuration: TimeInterval = HoldToDiscardController.cancelledFlashDuration
     /// Window to wait for the app to confirm a `startRecording` command by
@@ -284,19 +307,22 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
             switch keyboardChannel.readState() {
             case .emptyResult:
-                dictationState = .emptyResult
-                keyboardChannel.clearResult()
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
-                    guard self?.dictationState == .emptyResult else { return }
-                    self?.dictationState = .idle
-                }
+                flash(.emptyResult, for: Self.emptyResultFlashDuration)
+                return
+            case .cancelled:
+                flash(.cancelled, for: Self.cancelledFlashDuration)
+                return
+            case .failed:
+                flash(.failed, for: Self.failedFlashDuration)
                 return
             case .idle:
-                dictationState = .emptyResult
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.emptyResultFlashDuration) { [weak self] in
-                    guard self?.dictationState == .emptyResult else { return }
-                    self?.dictationState = .idle
-                }
+                // Idle is idle. Guessing Empty Result here is what made yellow
+                // mean six different things (ADR-0004) — the app publishes the
+                // terminal state it reached, and a run that reached one is
+                // handled by the cases above.
+                pendingText = nil
+                captureCount = 0
+                dictationState = .idle
                 return
             case .recording:
                 // Ack window passed and state hasn't moved off `.recording` —

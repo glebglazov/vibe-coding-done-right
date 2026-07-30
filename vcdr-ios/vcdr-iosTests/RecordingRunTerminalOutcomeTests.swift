@@ -76,7 +76,7 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(keyboard.interactions == [.publish(.emptyResult)])
     }
 
-    @Test("cancellation accessor polls until rest and publishes idle to keyboard")
+    @Test("cancellation accessor polls until rest and publishes cancellation to keyboard")
     func cancellation() async {
         let (run, keyboard) = makeRun(
             streaming: FakeRecordingStreamingSession(result: .success("unused"))
@@ -88,10 +88,10 @@ struct RecordingRunTerminalOutcomeTests {
         }
 
         #expect(await run.waitForIdle(timeout: .seconds(1)) == .cancellation)
-        #expect(keyboard.interactions == [.publish(.idle)])
+        #expect(keyboard.interactions == [.publish(.cancelled)])
     }
 
-    @Test("processing failure records message payload and publishes idle to keyboard")
+    @Test("processing failure records message payload and publishes it with its reason")
     func processingFailure() async {
         let (run, keyboard) = makeRun(
             streaming: FakeRecordingStreamingSession(result: .failure(ForcedFailure()))
@@ -104,7 +104,9 @@ struct RecordingRunTerminalOutcomeTests {
             RecordingRunFailure(message: "Transcription failed: forced failure")
         )
         #expect(await run.waitForIdle(timeout: .seconds(1)) == expected)
-        #expect(keyboard.interactions == [.publish(.idle)])
+        // The reason the app shows reaches the keyboard as the failure payload —
+        // it is not discarded at the process boundary (ADR-0004).
+        #expect(keyboard.interactions == [.publishFailure("Transcription failed: forced failure")])
     }
 
     @Test("accessor returns nil when the run has not reached rest")
