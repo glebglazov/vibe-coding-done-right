@@ -165,7 +165,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Reads the shared state key and updates `dictationState`.
     /// Parses state bundling format: `"idle|transcription text"`.
     private func refreshState() {
-        // Optimistic cancelled flash — ignore channel updates until it ends.
+        // Keep a wire-published cancellation visible for its full flash.
         guard dictationState != .cancelled else { return }
 
         switch keyboardChannel.readState() {
@@ -277,13 +277,6 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// no deep-link fallback, no acknowledgement wait (ADR-0003).
     func discardRecordingFromKeyboard() {
         keyboardChannel.cancelRecording()
-        dictationState = .cancelled
-        captureCount = 0
-        pendingText = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.cancelledFlashDuration) { [weak self] in
-            guard self?.dictationState == .cancelled else { return }
-            self?.dictationState = .idle
-        }
     }
 
     func stopAndWaitForResult() {
