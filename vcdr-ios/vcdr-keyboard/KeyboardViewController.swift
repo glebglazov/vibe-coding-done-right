@@ -1,5 +1,6 @@
 import Combine
 import KeyboardKit
+import OSLog
 import SwiftUI
 import UIKit
 
@@ -282,10 +283,11 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     func stopAndWaitForResult() {
         switch keyboardChannel.stopRecording() {
         case .commandSent:
-            break
+            Logger.keyboard.info("Heartbeat verdict: command=stop fresh=true")
         case .openURL(let url):
+            Logger.keyboard.info("Heartbeat verdict: command=stop fresh=false")
             dictationState = .transcribing
-            openURL(url)
+            openDeepLinkFallback(url, command: "stop", reason: "Heartbeat was stale")
             return
         }
 
@@ -294,11 +296,26 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         let postedAt = Date()
         let ackDeadline = postedAt.addingTimeInterval(Self.stopCommandAckTimeout)
         let deadline = postedAt.addingTimeInterval(Self.insertionTimeout)
+        var previousPolledState: String?
+        var didLogAcknowledgement = false
 
         while Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(Self.pollInterval))
 
-            switch keyboardChannel.readState() {
+            let state = keyboardChannel.readState()
+            let stateName = Self.wireStateName(state)
+            if previousPolledState != stateName {
+                Logger.keyboard.info(
+                    "Stop poll state transition: \(previousPolledState ?? "initial") -> \(stateName)"
+                )
+                previousPolledState = stateName
+            }
+            if state != .recording, !didLogAcknowledgement {
+                Logger.keyboard.info("Stop Command Acknowledgement received: state=\(stateName)")
+                didLogAcknowledgement = true
+            }
+
+            switch state {
             case .emptyResult:
                 flash(.emptyResult, for: Self.emptyResultFlashDuration)
                 return
@@ -322,7 +339,14 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 // the Darwin post landed in a suspended app. Foreground via URL
                 // and exit; the app's stop pipeline takes it from here.
                 if Date() >= ackDeadline {
-                    openURL(KeyboardChannel.stopDeepLinkURL)
+                    Logger.keyboard.warning(
+                        "Stop Command Acknowledgement timed out after \(Self.stopCommandAckTimeout)s"
+                    )
+                    openDeepLinkFallback(
+                        KeyboardChannel.stopDeepLinkURL,
+                        command: "stop",
+                        reason: "Command Acknowledgement timed out"
+                    )
                     return
                 }
             case .transcribing:
@@ -341,6 +365,9 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         }
 
         // Timeout — show ready button as fallback for manual tap-to-insert
+        Logger.keyboard.warning(
+            "Stop poll timed out after \(Self.insertionTimeout)s; refreshing state for manual insertion"
+        )
         refreshState()
     }
 
@@ -349,6 +376,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// neither duplicated into the URL nor sent through another channel.
     func showFailureReason() {
         guard dictationState == .failed else { return }
+        Logger.keyboard.info("Opening the app to show the Processing Failure reason")
         openURL(KeyboardChannel.failureDeepLinkURL)
     }
 
@@ -414,9 +442,11 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
         switch keyboardChannel.startRecording(captures: captures) {
         case .commandSent:
+            Logger.keyboard.info("Heartbeat verdict: command=start fresh=true")
             scheduleStartAckFallback()
         case .openURL(let url):
-            openURL(url)
+            Logger.keyboard.info("Heartbeat verdict: command=start fresh=false")
+            openDeepLinkFallback(url, command: "start", reason: "Heartbeat was stale")
         }
     }
 
@@ -425,12 +455,23 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     private func scheduleStartAckFallback() {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.startCommandAckTimeout) { [weak self] in
             guard let self else { return }
-            if self.keyboardChannel.readState() == .recording { return }
+            let state = self.keyboardChannel.readState()
+            if state == .recording {
+                Logger.keyboard.info("Start Command Acknowledgement received before timeout")
+                return
+            }
+            Logger.keyboard.warning(
+                "Start Command Acknowledgement timed out after \(Self.startCommandAckTimeout)s; state=\(Self.wireStateName(state))"
+            )
             // App didn't ack — heartbeat lied (suspended between our read and the
             // command firing) or Darwin was dropped. Wake it via URL; the command
             // + captures we already wrote will be overwritten by the deep-link
             // path, which calls its own `startRecording(fromDeepLink:)`.
-            self.openURL(KeyboardChannel.recordDeepLinkURL)
+            self.openDeepLinkFallback(
+                KeyboardChannel.recordDeepLinkURL,
+                command: "start",
+                reason: "Command Acknowledgement timed out"
+            )
         }
     }
 
@@ -461,6 +502,23 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 return
             }
             responder = current.next
+        }
+    }
+
+    private func openDeepLinkFallback(_ url: URL, command: String, reason: String) {
+        Logger.keyboard.notice("Deep-Link Fallback: command=\(command) reason=\(reason)")
+        openURL(url)
+    }
+
+    private static func wireStateName(_ state: KeyboardChannel.State) -> String {
+        switch state {
+        case .idle: "idle"
+        case .recording: "recording"
+        case .transcribing: "transcribing"
+        case .emptyResult: "emptyResult"
+        case .cancelled: "cancelled"
+        case .failed: "failed"
+        case .bundledResult: "bundledResult"
         }
     }
 

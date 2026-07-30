@@ -22,6 +22,7 @@ nonisolated final class LogBuffer: @unchecked Sendable {
     private var storage: Storage?
     private var pendingData = Data()
     private var flushWorkItem: DispatchWorkItem?
+    private var bootstrapWorkItem: DispatchWorkItem?
     private var trackedFileSize: Int?
 
     private struct Storage {
@@ -38,9 +39,9 @@ nonisolated final class LogBuffer: @unchecked Sendable {
     private nonisolated static let newline = UInt8(0x0A)
     private nonisolated static let flushInterval: DispatchTimeInterval = .milliseconds(250)
     /// App Group container resolution can contend with launch-time system
-    /// services even when dispatched off-main. Persistent capture is
-    /// best-effort, so leave the first shell frame completely free and drop
-    /// early file lines until storage is ready.
+    /// services even when dispatched off-main. Leave the first shell frame
+    /// completely free while retaining early lines in memory until storage is
+    /// ready.
     private nonisolated static let bootstrapDelay: DispatchTimeInterval = .seconds(2)
 
     /// Fixed-width, lexicographically sortable timestamp — lets the viewer sort
@@ -66,9 +67,14 @@ nonisolated final class LogBuffer: @unchecked Sendable {
 
     private init() {
         queue.setSpecific(key: queueKey, value: ())
-        queue.asyncAfter(deadline: .now() + Self.bootstrapDelay) { [self] in
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            bootstrapWorkItem = nil
             _ = prepareStorageIfNeeded()
+            flushPendingLocked()
         }
+        bootstrapWorkItem = workItem
+        queue.asyncAfter(deadline: .now() + Self.bootstrapDelay, execute: workItem)
     }
 
     // MARK: - Write
@@ -76,10 +82,11 @@ nonisolated final class LogBuffer: @unchecked Sendable {
     func append(category: String, level: String, message: String) {
         let date = Date()
         queue.async { [self] in
-            guard storage != nil else { return }
             let line = "\(Self.timestampFormatter.string(from: date)) [\(category)] [\(level)] \(Self.sanitize(message))\n"
             pendingData.append(contentsOf: line.utf8)
-            scheduleFlush()
+            if storage != nil {
+                scheduleFlush()
+            }
         }
     }
 
@@ -385,17 +392,25 @@ nonisolated final class LogBuffer: @unchecked Sendable {
 
 #if DEBUG
 extension LogBuffer {
-    nonisolated static func withTemporaryDirectoryForTesting<T>(_ directory: URL, _ body: () throws -> T) rethrows -> T {
+    nonisolated static func withTemporaryDirectoryForTesting<T>(
+        _ directory: URL,
+        storageInitiallyReady: Bool = true,
+        _ body: () throws -> T
+    ) rethrows -> T {
         shared.flushPendingWrites()
         directoryOverride = directory
         instrumentation = Instrumentation()
         shared.queue.sync {
+            shared.bootstrapWorkItem?.cancel()
+            shared.bootstrapWorkItem = nil
             shared.storage = nil
             shared.pendingData.removeAll(keepingCapacity: false)
             shared.flushWorkItem?.cancel()
             shared.flushWorkItem = nil
             shared.trackedFileSize = nil
-            _ = shared.prepareStorageIfNeeded()
+            if storageInitiallyReady {
+                _ = shared.prepareStorageIfNeeded()
+            }
         }
         defer {
             shared.flushPendingWrites()
@@ -410,6 +425,13 @@ extension LogBuffer {
             instrumentation = Instrumentation()
         }
         return try body()
+    }
+
+    nonisolated static func completeBootstrapForTesting() {
+        shared.queue.sync {
+            _ = shared.prepareStorageIfNeeded()
+            shared.flushPendingLocked()
+        }
     }
 
     nonisolated static func instrumentationForTesting() -> Instrumentation {

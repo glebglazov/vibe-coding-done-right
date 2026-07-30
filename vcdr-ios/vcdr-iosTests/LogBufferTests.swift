@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Testing
 @testable import vcdr_ios
 
@@ -50,6 +51,48 @@ struct LogBufferTests {
             LogBuffer.shared.clearAll()
 
             #expect(LogBuffer.mergedLines().isEmpty)
+        }
+    }
+
+    @Test("cold bootstrap retains every line in emission order")
+    func coldBootstrapRetainsLinesInOrder() throws {
+        try LogBuffer.withTemporaryDirectoryForTesting(
+            temporaryLogDirectory(),
+            storageInitiallyReady: false
+        ) {
+            LogBuffer.shared.append(category: "keyboard", level: "I", message: "first cold line")
+            LogBuffer.shared.append(category: "keyboard", level: "I", message: "second cold line")
+            LogBuffer.shared.flushPendingWrites()
+
+            let fileURL = LogBuffer.fileURLForTesting()
+            #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+
+            LogBuffer.completeBootstrapForTesting()
+            LogBuffer.shared.append(category: "keyboard", level: "I", message: "first live line")
+            LogBuffer.shared.flushPendingWrites()
+
+            let storedLines = try String(contentsOf: fileURL, encoding: .utf8)
+                .split(separator: "\n")
+                .map(String.init)
+            #expect(storedLines.count == 3)
+            #expect(storedLines[0].hasSuffix("first cold line"))
+            #expect(storedLines[1].hasSuffix("second cold line"))
+            #expect(storedLines[2].hasSuffix("first live line"))
+        }
+    }
+
+    @Test("app and keyboard categories share one timestamp-ordered timeline")
+    func appAndKeyboardCategoriesShareTimeline() throws {
+        try LogBuffer.withTemporaryDirectoryForTesting(temporaryLogDirectory()) {
+            Logger.app.info("app timeline marker")
+            Logger.keyboard.info("keyboard timeline marker")
+            LogBuffer.shared.flushPendingWrites()
+
+            let lines = LogBuffer.mergedLines()
+            #expect(lines.count == 2)
+            #expect(lines == lines.sorted())
+            #expect(lines.contains { $0.contains("[app] [I] app timeline marker") })
+            #expect(lines.contains { $0.contains("[keyboard] [I] keyboard timeline marker") })
         }
     }
 

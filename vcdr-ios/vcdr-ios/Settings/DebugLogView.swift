@@ -180,7 +180,9 @@ struct DebugLogView: View {
 
     nonisolated private static func filteredCurrentLines(_ lines: [String], sinceMinutes: Int) -> [String] {
         let cutoff = LogBuffer.timestamp(Date().addingTimeInterval(-Double(sinceMinutes * 60)))
-        return lines.filter { hasTimestampPrefix($0) && $0 >= cutoff }
+        return lines
+            .filter { hasTimestampPrefix($0) && $0 >= cutoff }
+            .sorted()
     }
 
     /// True when a stored line begins with the fixed-width `yyyy-MM-dd …`
