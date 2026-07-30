@@ -91,6 +91,7 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     static let appGroupID = "group.glebglazov.vcdr-ios"
     static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
     static let stopDeepLinkURL = URL(string: "vcdr-ios://stop")!
+    static let failureDeepLinkURL = URL(string: "vcdr-ios://failure")!
     static let commandNotificationName = "glebglazov.vcdr-ios.command"
     static let stateNotificationName = "glebglazov.vcdr-ios.stateChanged"
 

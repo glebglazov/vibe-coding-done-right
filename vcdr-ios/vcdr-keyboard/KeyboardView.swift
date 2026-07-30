@@ -106,6 +106,7 @@ struct FullKeyboardToolbar: View {
                     },
                     onInsert: { controller.insertPendingText() },
                     onCapture: { controller.captureSelectedText() },
+                    onShowFailure: { controller.showFailureReason() },
                     onWarningRamp: {
                         wash.ramp(to: $0)
                         narration.ramp(to: $0)
@@ -299,6 +300,7 @@ struct DictateActionButton: View {
     var onDiscard: () -> Void
     var onInsert: () -> Void
     var onCapture: () -> Void
+    var onShowFailure: () -> Void
     /// Forwarded from the Stop pill's hold so the surrounding strip — not the
     /// pill under the thumb — can carry the Discard Warning.
     var onWarningRamp: (CGFloat) -> Void = { _ in }
@@ -354,12 +356,29 @@ struct DictateActionButton: View {
             case .failed:
                 // Red, and only "FAILED" — the reason lives in the app, which
                 // has room to show it in full (ADR-0004).
-                actionPill("FAILED", icon: "exclamationmark.triangle.fill", color: .red)
+                Button {
+                    KeyboardHaptics.medium()
+                    onShowFailure()
+                } label: {
+                    actionPill(
+                        "FAILED",
+                        icon: "exclamationmark.triangle.fill",
+                        trailingIcon: "chevron.right",
+                        color: .red
+                    )
+                }
+                .accessibilityLabel("Failed")
+                .accessibilityHint("Opens VCDR to show the reason")
             }
         }
     }
 
-    private func actionPill(_ text: String, icon: String, color: Color) -> some View {
+    private func actionPill(
+        _ text: String,
+        icon: String,
+        trailingIcon: String? = nil,
+        color: Color
+    ) -> some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .black))
@@ -367,6 +386,10 @@ struct DictateActionButton: View {
                 Text(text.uppercased())
                     .font(.system(size: Self.pillFont, weight: .black))
                     .tracking(0.5)
+            }
+            if let trailingIcon {
+                Image(systemName: trailingIcon)
+                    .font(.system(size: 9, weight: .black))
             }
         }
         .foregroundStyle(.white)

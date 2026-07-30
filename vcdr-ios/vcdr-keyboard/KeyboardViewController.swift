@@ -351,6 +351,14 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         refreshState()
     }
 
+    /// Foregrounds the app on the surface that already owns the failure
+    /// reason. The URL is a route only: the reason remains app-owned and is
+    /// neither duplicated into the URL nor sent through another channel.
+    func showFailureReason() {
+        guard dictationState == .failed else { return }
+        openURL(KeyboardChannel.failureDeepLinkURL)
+    }
+
     // MARK: - Display Mode (Compact / Full)
 
     /// Switches to the Full Keyboard — a state flip in the live process, so

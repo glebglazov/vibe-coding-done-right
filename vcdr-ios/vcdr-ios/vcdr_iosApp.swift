@@ -111,6 +111,11 @@ struct VCDRiOSApp: App {
                         Task { await coordinator.handleRecordDeepLink() }
                     case "stop":
                         Task { await coordinator.handleStopDeepLink() }
+                    case "failure":
+                        // Opening the URL foregrounds this scene. Preserve the
+                        // coordinator's app-owned `.error(reason)` state so
+                        // RecordingView continues to show that exact reason.
+                        break
                     default:
                         break
                     }

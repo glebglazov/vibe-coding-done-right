@@ -47,6 +47,12 @@ struct KeyboardChannelTests {
         #expect(KeyboardChannel.decodeState("failed") == .failed(""))
     }
 
+    @Test("failure reason route uses the existing app URL scheme")
+    func failureReasonDeepLink() {
+        #expect(KeyboardChannel.failureDeepLinkURL.scheme == "vcdr-ios")
+        #expect(KeyboardChannel.failureDeepLinkURL.host == "failure")
+    }
+
     @Test("publishes and reads state")
     func publishAndReadState() {
         let defaults = makeDefaults()

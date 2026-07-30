@@ -68,6 +68,7 @@ struct CompactKeyboardView: View {
                     },
                     onInsert: { controller.insertPendingText() },
                     onCapture: { controller.captureSelectedText() },
+                    onShowFailure: { controller.showFailureReason() },
                     onWarningRamp: {
                         wash.ramp(to: $0)
                         narration.ramp(to: $0)
