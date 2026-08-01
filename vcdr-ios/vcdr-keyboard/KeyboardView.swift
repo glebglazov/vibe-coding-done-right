@@ -54,36 +54,7 @@ struct VCDRKeyboardView: View {
                 if keyboardContext.isKeyboardCollapsed {
                     EmptyView()
                 } else {
-                    VStack(spacing: 0) {
-                        DiscardHintRow(isRecording: controller.dictationState == .recording)
-
-                        HStack {
-                            // Left: settings pills
-                            DictateSettingsPills(controller: controller)
-                                .padding(.leading, 10)
-
-                            Spacer()
-
-                            // Right: capture button (during recording in any AI mode) + action button
-                            DictateActionButton(
-                                dictationState: controller.dictationState,
-                                showCapture: true,
-                                captureCount: controller.captureCount,
-                                onStart: { controller.startRecordingFromKeyboard() },
-                                onStop: { controller.stopAndWaitForResult() },
-                                onDiscard: { controller.discardRecordingFromKeyboard() },
-                                onInsert: { controller.insertPendingText() },
-                                onCapture: { controller.captureSelectedText() }
-                            )
-
-                            KeyboardModeToggleButton(direction: .collapse) {
-                                controller.collapseKeyboard()
-                            }
-                            .padding(.trailing, 10)
-                        }
-                        .padding(.top, 2)
-                        .padding(.bottom, 6)
-                    }
+                    FullKeyboardToolbar(controller: controller)
                 }
             }
         )
@@ -94,6 +65,52 @@ struct VCDRKeyboardView: View {
         // has nothing to sit behind — hiding it lets the host app show through
         // the strip. Full keeps it: the key rows need it for contrast.
         .keyboardViewBackground(keyboardContext.isKeyboardCollapsed ? .hidden : .automatic)
+    }
+}
+
+/// The Full Keyboard's toolbar strip: the Discard Hint row over the dictation
+/// controls. Lives in its own view rather than inline in the `toolbar:` builder
+/// because it holds the Discard Warning wash state — the strip is what reddens
+/// while the Stop pill is held, and the strip's own background is opaque, so
+/// the wash simply tints it.
+struct FullKeyboardToolbar: View {
+    @ObservedObject var controller: KeyboardViewController
+    @State private var wash = DiscardWarningWashState()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            DiscardHintRow(isRecording: controller.dictationState == .recording)
+
+            HStack {
+                // Left: settings pills
+                DictateSettingsPills(controller: controller)
+                    .padding(.leading, 10)
+
+                Spacer()
+
+                // Right: capture button (during recording in any AI mode) + action button
+                DictateActionButton(
+                    dictationState: controller.dictationState,
+                    showCapture: true,
+                    captureCount: controller.captureCount,
+                    onStart: { controller.startRecordingFromKeyboard() },
+                    onStop: { controller.stopAndWaitForResult() },
+                    onDiscard: { controller.discardRecordingFromKeyboard() },
+                    onInsert: { controller.insertPendingText() },
+                    onCapture: { controller.captureSelectedText() },
+                    onWarningRamp: { wash.ramp(to: $0) },
+                    onWarningEnd: { wash.end() }
+                )
+
+                KeyboardModeToggleButton(direction: .collapse) {
+                    controller.collapseKeyboard()
+                }
+                .padding(.trailing, 10)
+            }
+            .padding(.top, 2)
+            .padding(.bottom, 6)
+        }
+        .discardWarningWash(progress: wash.progress)
     }
 }
 
@@ -260,6 +277,10 @@ struct DictateActionButton: View {
     var onDiscard: () -> Void
     var onInsert: () -> Void
     var onCapture: () -> Void
+    /// Forwarded from the Stop pill's hold so the surrounding strip — not the
+    /// pill under the thumb — can carry the Discard Warning.
+    var onWarningRamp: (CGFloat) -> Void = { _ in }
+    var onWarningEnd: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 8) {
@@ -281,7 +302,9 @@ struct DictateActionButton: View {
                     color: .red,
                     onStop: onStop,
                     onDiscard: onDiscard,
-                    onDiscardHaptic: { KeyboardHaptics.medium() }
+                    onDiscardHaptic: { KeyboardHaptics.medium() },
+                    onWarningRamp: onWarningRamp,
+                    onWarningEnd: onWarningEnd
                 )
             case .transcribing:
                 actionPill("", icon: "ellipsis", color: .orange)
@@ -332,6 +355,10 @@ struct DictateActionButton: View {
 
 /// Stop pill with hold-to-Discard: nothing shows during the Discard Dwell, then
 /// the fill ramps across the Discard Warning; release before the threshold stops.
+///
+/// The pill reports the ramp outwards via `onWarningRamp`/`onWarningEnd` so the
+/// strip around it can redden too — the pill alone can't carry the warning
+/// while a thumb covers it.
 struct HoldToDiscardStopPill: View {
     private static let pillHeight: CGFloat = 32
     private static let pillFont: CGFloat = 11
@@ -343,6 +370,7 @@ struct HoldToDiscardStopPill: View {
     let onStop: () -> Void
     let onDiscard: () -> Void
     let onDiscardHaptic: () -> Void
+    let onWarningEnd: () -> Void
 
     @State private var holdController: HoldToDiscardController
     @State private var isPressed = false
@@ -353,7 +381,9 @@ struct HoldToDiscardStopPill: View {
         color: Color,
         onStop: @escaping () -> Void,
         onDiscard: @escaping () -> Void,
-        onDiscardHaptic: @escaping () -> Void = {}
+        onDiscardHaptic: @escaping () -> Void = {},
+        onWarningRamp: @escaping (CGFloat) -> Void = { _ in },
+        onWarningEnd: @escaping () -> Void = {}
     ) {
         self.text = text
         self.icon = icon
@@ -361,11 +391,13 @@ struct HoldToDiscardStopPill: View {
         self.onStop = onStop
         self.onDiscard = onDiscard
         self.onDiscardHaptic = onDiscardHaptic
+        self.onWarningEnd = onWarningEnd
         _holdController = State(
             initialValue: HoldToDiscardController(
                 onStop: onStop,
                 onDiscard: onDiscard,
-                onDiscardHaptic: onDiscardHaptic
+                onDiscardHaptic: onDiscardHaptic,
+                onWarningRamp: onWarningRamp
             )
         )
     }
@@ -401,6 +433,9 @@ struct HoldToDiscardStopPill: View {
         )
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
         .contentShape(Capsule())
+        .onChange(of: hold.isWarning) { _, warning in
+            if !warning { onWarningEnd() }
+        }
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in

@@ -34,6 +34,12 @@ struct CompactKeyboardView: View {
 
     @ObservedObject var controller: KeyboardViewController
 
+    /// Drives the Discard Warning wash. Compact paints no background of its own
+    /// so the host app shows through; the wash is the one exception, and only
+    /// for as long as a hold lasts — at rest its progress is 0 and the row is
+    /// fully transparent again.
+    @State private var wash = DiscardWarningWashState()
+
     var body: some View {
         VStack(spacing: 0) {
             DiscardHintRow(isRecording: controller.dictationState == .recording)
@@ -49,7 +55,9 @@ struct CompactKeyboardView: View {
                     onStop: { controller.stopAndWaitForResult() },
                     onDiscard: { controller.discardRecordingFromKeyboard() },
                     onInsert: { controller.insertPendingText() },
-                    onCapture: { controller.captureSelectedText() }
+                    onCapture: { controller.captureSelectedText() },
+                    onWarningRamp: { wash.ramp(to: $0) },
+                    onWarningEnd: { wash.end() }
                 )
                 KeyboardModeToggleButton(direction: .expand) {
                     controller.expandKeyboard()
@@ -58,6 +66,7 @@ struct CompactKeyboardView: View {
         }
         .padding(.horizontal, Self.horizontalPadding)
         .padding(.top, Self.topPadding)
+        .discardWarningWash(progress: wash.progress)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
