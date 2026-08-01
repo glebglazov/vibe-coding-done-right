@@ -375,7 +375,10 @@ struct HoldToDiscardStopPill: View {
     @State private var holdController: HoldToDiscardController
     @State private var isPressed = false
     /// Boxed so the controller's ramp closure and the gesture can share it.
-    private let ladder = HapticLadderBox()
+    /// Held in `@State` (not a plain `let`) so re-inits of this view struct —
+    /// which happen ~60×/s while the ramp drives `DiscardWarningWashState`'s
+    /// progress — don't hand the gesture a fresh, disconnected box each render.
+    @State private var ladder: HapticLadderBox
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
@@ -395,7 +398,8 @@ struct HoldToDiscardStopPill: View {
         self.onDiscard = onDiscard
         self.onDiscardHaptic = onDiscardHaptic
         self.onWarningEnd = onWarningEnd
-        let ladder = self.ladder
+        let ladder = HapticLadderBox()
+        _ladder = State(initialValue: ladder)
         _holdController = State(
             initialValue: HoldToDiscardController(
                 onStop: onStop,
