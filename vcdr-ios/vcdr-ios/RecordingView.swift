@@ -7,11 +7,13 @@ struct RecordingView: View {
     private var theme: Theme { Theme.current(for: colorScheme) }
     @State private var showCopiedConfirmation = false
     @State private var recordingStart: Date?
+    /// Drives the Discard Warning tint on the screen behind the Stop button.
+    /// Lives here, not in the button, because the escalation has to be visible
+    /// around a thumb that covers the control.
+    @State private var discardWarningProgress: CGFloat = 0
 
     // MARK: - Constants
     private static let copiedConfirmationDuration: Duration = .seconds(3)
-    private static let actionButtonSize: CGFloat = 96
-    private static let actionButtonBorder: CGFloat = 8
     private static let stopIconSize: CGFloat = 32
     private static let recordIconSize: CGFloat = 36
     private static let dotGridSpacing: CGFloat = 40
@@ -24,11 +26,15 @@ struct RecordingView: View {
     private static let warmingPillHeight: CGFloat = 30
     private static let pillBorder: CGFloat = 1.5
     private static let pillFontSize: CGFloat = 12
+    private static let discardHintSlotHeight: CGFloat = 20
+    private static let discardTintMaxOpacity: Double = 0.4
+    private static let discardTintFadeDuration: Double = 0.2
 
     var body: some View {
         ZStack {
             theme.surfaceLowest.ignoresSafeArea()
             dotGrid
+            discardWarningTint
 
             VStack(spacing: 0) {
                 topBar
@@ -43,6 +49,7 @@ struct RecordingView: View {
             } else {
                 recordingStart = nil
             }
+            endDiscardWarning()
         }
         // Propagate theme to child views (WaveformView) via environment
         .environment(\.theme, theme)
@@ -244,8 +251,10 @@ struct RecordingView: View {
                     .padding(.top, 20)
             }
 
-            // Top overlay — return hint
-            VStack {
+            // Top overlay — discard hint slot, then the return hint
+            VStack(spacing: 0) {
+                discardHintSlot
+                    .padding(.top, 16)
                 HStack {
                     if coordinator.launchedViaDeepLink {
                         returnHint
@@ -279,6 +288,17 @@ struct RecordingView: View {
                 }
             }
         }
+    }
+
+    /// The Discard Hint, in a slot whose height is a constant sized to the hint
+    /// text. Present from the moment recording starts and never changing, so
+    /// nothing reflows when a run begins or while a hold is in progress.
+    private var discardHintSlot: some View {
+        Text("Hold STOP to discard")
+            .font(.system(size: Self.hintFontSize, weight: .medium))
+            .foregroundStyle(theme.onSurfaceVariant)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.discardHintSlotHeight)
     }
 
     private var returnHint: some View {
@@ -578,11 +598,11 @@ struct RecordingView: View {
                 ZStack {
                     Circle()
                         .fill(theme.primaryDim)
-                        .frame(width: Self.actionButtonSize, height: Self.actionButtonSize)
+                        .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
                         .shadow(color: theme.primaryDim.opacity(0.2), radius: 20)
                     Circle()
-                        .stroke(theme.surfaceHighest, lineWidth: Self.actionButtonBorder)
-                        .frame(width: Self.actionButtonSize, height: Self.actionButtonSize)
+                        .stroke(theme.surfaceHighest, lineWidth: ActionButtonMetrics.border)
+                        .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
                     icon()
                 }
             }
@@ -605,7 +625,9 @@ struct RecordingView: View {
                 label: label,
                 icon: icon,
                 onStop: onStop,
-                onDiscard: onDiscard
+                onDiscard: onDiscard,
+                onWarningRamp: { discardWarningProgress = $0 },
+                onWarningEnd: endDiscardWarning
             )
             Text(label)
                 .font(.system(size: 10, weight: .bold))
@@ -652,6 +674,25 @@ struct RecordingView: View {
         .ignoresSafeArea()
     }
 
+    /// Reddens the screen behind the Stop button as the Discard Warning ramps.
+    /// The button itself is left alone — release still stops, so the control
+    /// must keep naming what release does (ADR-0004).
+    private var discardWarningTint: some View {
+        theme.primaryDim
+            .opacity(Double(discardWarningProgress) * Self.discardTintMaxOpacity)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+    }
+
+    /// Eases the tint back out so backing out of a hold reads as intentional
+    /// rather than as a glitch.
+    private func endDiscardWarning() {
+        guard discardWarningProgress > 0 else { return }
+        withAnimation(.easeOut(duration: Self.discardTintFadeDuration)) {
+            discardWarningProgress = 0
+        }
+    }
+
     // MARK: - Helpers
 
     private func formatDuration(_ interval: TimeInterval) -> String {
@@ -663,9 +704,12 @@ struct RecordingView: View {
     }
 }
 
-private enum HoldToDiscardRingMetrics {
-    static let actionButtonSize: CGFloat = 96
-    static let actionButtonBorder: CGFloat = 8
+private enum ActionButtonMetrics {
+    static let size: CGFloat = 96
+    static let border: CGFloat = 8
+    /// The progress ring's centred stroke needs a full stroke width of clearance
+    /// from the button edge, or half of it hangs outside the disc.
+    static var ringDiameter: CGFloat { size - border * 2 }
 }
 
 private struct HoldToDiscardRingStopButton<Icon: View>: View {
@@ -673,6 +717,7 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
     let icon: () -> Icon
     let onStop: () -> Void
     let onDiscard: () -> Void
+    let onWarningEnd: () -> Void
 
     @State private var holdController: HoldToDiscardController
     @State private var isPressed = false
@@ -682,19 +727,23 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
         label: String,
         icon: @escaping () -> Icon,
         onStop: @escaping () -> Void,
-        onDiscard: @escaping () -> Void
+        onDiscard: @escaping () -> Void,
+        onWarningRamp: @escaping (CGFloat) -> Void = { _ in },
+        onWarningEnd: @escaping () -> Void = {}
     ) {
         self.theme = theme
         self.icon = icon
         self.onStop = onStop
         self.onDiscard = onDiscard
+        self.onWarningEnd = onWarningEnd
         _holdController = State(
             initialValue: HoldToDiscardController(
                 onStop: onStop,
                 onDiscard: onDiscard,
                 onDiscardHaptic: {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                }
+                },
+                onWarningRamp: onWarningRamp
             )
         )
     }
@@ -705,7 +754,7 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
         ZStack {
             Circle()
                 .fill(theme.primaryDim)
-                .frame(width: HoldToDiscardRingMetrics.actionButtonSize, height: HoldToDiscardRingMetrics.actionButtonSize)
+                .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
                 .shadow(color: theme.primaryDim.opacity(0.2), radius: 20)
 
             if hold.isWarning {
@@ -714,19 +763,22 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
                     .stroke(
                         theme.primary,
                         style: StrokeStyle(
-                            lineWidth: HoldToDiscardRingMetrics.actionButtonBorder,
+                            lineWidth: ActionButtonMetrics.border,
                             lineCap: .round
                         )
                     )
-                    .frame(width: HoldToDiscardRingMetrics.actionButtonSize, height: HoldToDiscardRingMetrics.actionButtonSize)
+                    .frame(width: ActionButtonMetrics.ringDiameter, height: ActionButtonMetrics.ringDiameter)
                     .rotationEffect(.degrees(-90))
             }
 
             Circle()
-                .stroke(theme.surfaceHighest, lineWidth: HoldToDiscardRingMetrics.actionButtonBorder)
-                .frame(width: HoldToDiscardRingMetrics.actionButtonSize, height: HoldToDiscardRingMetrics.actionButtonSize)
+                .stroke(theme.surfaceHighest, lineWidth: ActionButtonMetrics.border)
+                .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
 
             icon()
+        }
+        .onChange(of: hold.isWarning) { _, warning in
+            if !warning { onWarningEnd() }
         }
         .gesture(
             DragGesture(minimumDistance: 0)
