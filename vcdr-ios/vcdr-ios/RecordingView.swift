@@ -714,6 +714,7 @@ private enum ActionButtonMetrics {
 
 private struct HoldToDiscardRingStopButton<Icon: View>: View {
     let theme: Theme
+    let label: String
     let icon: () -> Icon
     let onStop: () -> Void
     let onDiscard: () -> Void
@@ -723,6 +724,7 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
     @State private var isPressed = false
     /// Boxed so the controller's ramp closure and the gesture can share it.
     private let ladder = HapticLadderBox()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         theme: Theme,
@@ -734,6 +736,7 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
         onWarningEnd: @escaping () -> Void = {}
     ) {
         self.theme = theme
+        self.label = label
         self.icon = icon
         self.onStop = onStop
         self.onDiscard = onDiscard
@@ -763,7 +766,7 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
 
             if hold.isWarning {
                 Circle()
-                    .trim(from: 0, to: hold.warningProgress)
+                    .trim(from: 0, to: reduceMotion ? hold.warningProgress.steppedForReduceMotion() : hold.warningProgress)
                     .stroke(
                         theme.primary,
                         style: StrokeStyle(
@@ -780,6 +783,12 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
                 .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
 
             icon()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Discard recording") {
+            holdController.discardImmediately()
         }
         .onAppear { AppHaptics.prepare() }
         .onChange(of: hold.isWarning) { _, warning in

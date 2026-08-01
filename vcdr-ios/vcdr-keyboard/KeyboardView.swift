@@ -376,6 +376,7 @@ struct HoldToDiscardStopPill: View {
     @State private var isPressed = false
     /// Boxed so the controller's ramp closure and the gesture can share it.
     private let ladder = HapticLadderBox()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         text: String,
@@ -429,9 +430,10 @@ struct HoldToDiscardStopPill: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(color.opacity(0.35))
                         GeometryReader { geometry in
+                            let progress = reduceMotion ? hold.warningProgress.steppedForReduceMotion() : hold.warningProgress
                             Capsule()
                                 .fill(color)
-                                .frame(width: geometry.size.width * hold.warningProgress)
+                                .frame(width: geometry.size.width * progress)
                         }
                     }
                 } else {
@@ -441,6 +443,12 @@ struct HoldToDiscardStopPill: View {
         )
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
         .contentShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Discard recording") {
+            holdController.discardImmediately()
+        }
         .onAppear { KeyboardHaptics.prepare() }
         .onChange(of: hold.isWarning) { _, warning in
             if !warning {

@@ -29,6 +29,10 @@ final class HoldToDiscardController {
     static var warningDuration: TimeInterval { holdDuration - dwellDuration }
     static let cancelledFlashDuration: TimeInterval = 1
     static let progressTick: Duration = .milliseconds(16)
+    /// Discrete jumps the progress indicator takes under Reduce Motion,
+    /// instead of the continuous-looking per-tick sweep. The colour ramp is
+    /// unaffected by this — a fade isn't motion.
+    static let reduceMotionSteps = 10
 
     // MARK: - State
 
@@ -107,6 +111,18 @@ final class HoldToDiscardController {
         didDiscard = false
     }
 
+    /// Discards immediately, independent of hold state — including with no
+    /// hold in progress at all. Produces the same terminal outcome as a
+    /// completed hold. This is the only thing the "Discard recording"
+    /// accessibility action calls: a three-second sustained hold is a poor
+    /// primary gesture for VoiceOver or limited motor control, and it must
+    /// never be the *only* route to Discard.
+    func discardImmediately() {
+        discardTask?.cancel()
+        discardTask = nil
+        fireDiscard()
+    }
+
     private func tickProgress() {
         guard let holdStart else { return }
         let elapsed = Date().timeIntervalSince(holdStart)
@@ -127,5 +143,17 @@ final class HoldToDiscardController {
         progressTask = nil
         onDiscardHaptic()
         onDiscard()
+    }
+}
+
+extension CGFloat {
+    /// Quantizes 0...1 progress into discrete steps, for Reduce Motion: a
+    /// driven sweep (the ring trim, the pill fill) reads as a handful of
+    /// jumps instead of continuous-looking motion. Not used for colour —
+    /// the Discard Warning tint stays a continuous fade under Reduce Motion,
+    /// since a fade isn't motion.
+    func steppedForReduceMotion(steps: Int = HoldToDiscardController.reduceMotionSteps) -> CGFloat {
+        guard steps > 0 else { return self }
+        return (self * CGFloat(steps)).rounded(.down) / CGFloat(steps)
     }
 }

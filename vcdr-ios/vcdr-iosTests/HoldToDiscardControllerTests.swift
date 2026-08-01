@@ -116,4 +116,66 @@ struct HoldToDiscardControllerTests {
         // Reaching the threshold is not an abandonment.
         #expect(controller.abandonment == nil)
     }
+
+    @Test("discardImmediately fires Discard with no hold in progress")
+    func discardImmediatelyWithNoHold() async {
+        var stopCount = 0
+        var discardCount = 0
+
+        let controller = HoldToDiscardController(
+            onStop: { stopCount += 1 },
+            onDiscard: { discardCount += 1 }
+        )
+
+        controller.discardImmediately()
+
+        #expect(discardCount == 1)
+        #expect(stopCount == 0)
+    }
+
+    @Test("discardImmediately mid-hold discards once and release afterwards doesn't also Stop")
+    func discardImmediatelyMidHoldDoesNotDoubleFire() async {
+        var stopCount = 0
+        var discardCount = 0
+
+        let controller = HoldToDiscardController(
+            onStop: { stopCount += 1 },
+            onDiscard: { discardCount += 1 }
+        )
+
+        controller.touchDown()
+        try? await Task.sleep(
+            for: .seconds(HoldToDiscardController.dwellDuration + HoldToDiscardController.warningDuration / 2)
+        )
+        controller.discardImmediately()
+
+        #expect(discardCount == 1)
+        #expect(stopCount == 0)
+
+        // The pending threshold timer must be cancelled — waiting past where it
+        // would have fired must not produce a second Discard.
+        try? await Task.sleep(for: .seconds(HoldToDiscardController.warningDuration / 2 + 0.1))
+        #expect(discardCount == 1)
+
+        // A release that follows must not also perform Stop.
+        controller.touchUp()
+        #expect(stopCount == 0)
+        #expect(discardCount == 1)
+    }
+
+    @Test("steppedForReduceMotion quantizes into discrete jumps")
+    func steppedForReduceMotionQuantizes() {
+        let steps = HoldToDiscardController.reduceMotionSteps
+
+        #expect(CGFloat(0).steppedForReduceMotion() == 0)
+        #expect(CGFloat(1).steppedForReduceMotion() == 1)
+
+        // A value strictly between two step boundaries snaps down to the
+        // lower boundary rather than reading as continuous motion.
+        let midStep = (CGFloat(1) / CGFloat(steps)) / 2
+        #expect(midStep.steppedForReduceMotion() == 0)
+
+        let justPastFirstBoundary = CGFloat(1) / CGFloat(steps) + 0.001
+        #expect(justPastFirstBoundary.steppedForReduceMotion() == CGFloat(1) / CGFloat(steps))
+    }
 }

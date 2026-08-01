@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import vcdr_ios
 
+@MainActor
 struct DiscardHapticLadderTests {
     @Test("the dwell boundary itself gets a tick")
     func ticksAtDwellBoundary() {
