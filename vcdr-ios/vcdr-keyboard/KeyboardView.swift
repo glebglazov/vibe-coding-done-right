@@ -54,32 +54,36 @@ struct VCDRKeyboardView: View {
                 if keyboardContext.isKeyboardCollapsed {
                     EmptyView()
                 } else {
-                    HStack {
-                        // Left: settings pills
-                        DictateSettingsPills(controller: controller)
-                            .padding(.leading, 10)
+                    VStack(spacing: 0) {
+                        DiscardHintRow(isRecording: controller.dictationState == .recording)
 
-                        Spacer()
+                        HStack {
+                            // Left: settings pills
+                            DictateSettingsPills(controller: controller)
+                                .padding(.leading, 10)
 
-                        // Right: capture button (during recording in any AI mode) + action button
-                        DictateActionButton(
-                            dictationState: controller.dictationState,
-                            showCapture: true,
-                            captureCount: controller.captureCount,
-                            onStart: { controller.startRecordingFromKeyboard() },
-                            onStop: { controller.stopAndWaitForResult() },
-                            onDiscard: { controller.discardRecordingFromKeyboard() },
-                            onInsert: { controller.insertPendingText() },
-                            onCapture: { controller.captureSelectedText() }
-                        )
+                            Spacer()
 
-                        KeyboardModeToggleButton(direction: .collapse) {
-                            controller.collapseKeyboard()
+                            // Right: capture button (during recording in any AI mode) + action button
+                            DictateActionButton(
+                                dictationState: controller.dictationState,
+                                showCapture: true,
+                                captureCount: controller.captureCount,
+                                onStart: { controller.startRecordingFromKeyboard() },
+                                onStop: { controller.stopAndWaitForResult() },
+                                onDiscard: { controller.discardRecordingFromKeyboard() },
+                                onInsert: { controller.insertPendingText() },
+                                onCapture: { controller.captureSelectedText() }
+                            )
+
+                            KeyboardModeToggleButton(direction: .collapse) {
+                                controller.collapseKeyboard()
+                            }
+                            .padding(.trailing, 10)
                         }
-                        .padding(.trailing, 10)
+                        .padding(.top, 2)
+                        .padding(.bottom, 6)
                     }
-                    .padding(.top, 2)
-                    .padding(.bottom, 6)
                 }
             }
         )
