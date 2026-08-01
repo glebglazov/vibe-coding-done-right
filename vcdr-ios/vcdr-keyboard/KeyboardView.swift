@@ -68,18 +68,22 @@ struct VCDRKeyboardView: View {
     }
 }
 
-/// The Full Keyboard's toolbar strip: the Discard Hint row over the dictation
-/// controls. Lives in its own view rather than inline in the `toolbar:` builder
-/// because it holds the Discard Warning wash state — the strip is what reddens
-/// while the Stop pill is held, and the strip's own background is opaque, so
-/// the wash simply tints it.
+/// The Full Keyboard's toolbar strip: the reserved status row over the
+/// dictation controls. Lives in its own view rather than inline in the
+/// `toolbar:` builder because it holds the Discard Warning wash state — the
+/// strip is what reddens while the Stop pill is held, and the strip's own
+/// background is opaque, so the wash simply tints it.
 struct FullKeyboardToolbar: View {
     @ObservedObject var controller: KeyboardViewController
     @State private var wash = DiscardWarningWashState()
+    @State private var narration = HoldNarrationState()
 
     var body: some View {
         VStack(spacing: 0) {
-            DiscardHintRow(isRecording: controller.dictationState == .recording)
+            KeyboardStatusRow(
+                dictationState: controller.dictationState,
+                warningProgress: narration.warningProgress
+            )
 
             HStack {
                 // Left: settings pills
@@ -97,12 +101,19 @@ struct FullKeyboardToolbar: View {
                     onStop: { controller.stopAndWaitForResult() },
                     onDiscard: {
                         wash.beginDiscardUnwind()
+                        narration.end()
                         controller.discardRecordingFromKeyboard()
                     },
                     onInsert: { controller.insertPendingText() },
                     onCapture: { controller.captureSelectedText() },
-                    onWarningRamp: { wash.ramp(to: $0) },
-                    onWarningEnd: { wash.end() }
+                    onWarningRamp: {
+                        wash.ramp(to: $0)
+                        narration.ramp(to: $0)
+                    },
+                    onWarningEnd: {
+                        wash.end()
+                        narration.end()
+                    }
                 )
 
                 KeyboardModeToggleButton(direction: .collapse) {
@@ -114,10 +125,12 @@ struct FullKeyboardToolbar: View {
             .padding(.bottom, 6)
         }
         .discardWarningWash(progress: wash.progress)
-        // Belt-and-braces: whatever ends the run, the wash cannot outlive it.
+        // Belt-and-braces: whatever ends the run, neither the wash nor the
+        // hold narration can outlive it.
         .onChange(of: controller.dictationState) { _, newState in
             if newState != .recording {
                 wash.end()
+                narration.end()
             }
         }
     }

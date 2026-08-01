@@ -11,6 +11,10 @@ struct RecordingView: View {
     /// Lives here, not in the button, because the escalation has to be visible
     /// around a thumb that covers the control.
     @State private var discardWarningProgress: CGFloat = 0
+    /// Where the current hold is, for the status row's narration. Separate from
+    /// `discardWarningProgress` because that one eases out after the hold ends,
+    /// which is right for the colour and wrong for the words.
+    @State private var narration = HoldNarrationState()
 
     // MARK: - Constants
     private static let copiedConfirmationDuration: Duration = .seconds(3)
@@ -26,7 +30,9 @@ struct RecordingView: View {
     private static let warmingPillHeight: CGFloat = 30
     private static let pillBorder: CGFloat = 1.5
     private static let pillFontSize: CGFloat = 12
-    private static let discardHintSlotHeight: CGFloat = 20
+    /// Clearance above the status row, which now sits at the top of every
+    /// screen rather than only inside the recording one.
+    private static let statusRowTopPadding: CGFloat = 8
     private static let discardTintMaxOpacity: Double = 0.4
     /// Release before the threshold is the recovery gesture — it has to read
     /// as *gone*, not as fading. Fast enough to look instant, slow enough
@@ -46,6 +52,8 @@ struct RecordingView: View {
 
             VStack(spacing: 0) {
                 topBar
+                statusRow
+                    .padding(.top, Self.statusRowTopPadding)
                 stateContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 bottomArea
@@ -262,10 +270,8 @@ struct RecordingView: View {
                     .padding(.top, 20)
             }
 
-            // Top overlay — discard hint slot, then the return hint
+            // Top overlay — the return hint
             VStack(spacing: 0) {
-                discardHintSlot
-                    .padding(.top, 16)
                 HStack {
                     if coordinator.launchedViaDeepLink {
                         returnHint
@@ -304,15 +310,43 @@ struct RecordingView: View {
         }
     }
 
-    /// The Discard Hint, in a slot whose height is a constant sized to the hint
-    /// text. Present from the moment recording starts and never changing, so
-    /// nothing reflows when a run begins or while a hold is in progress.
-    private var discardHintSlot: some View {
-        Text("Hold STOP to discard")
-            .font(.system(size: Self.hintFontSize, weight: .medium))
-            .foregroundStyle(theme.onSurfaceVariant)
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.discardHintSlotHeight)
+    /// The reserved status row, shared with the keyboard. It sits above
+    /// `stateContent` rather than inside the recording screen because it is the
+    /// screen's status line in every phase, not just while a hold is possible:
+    /// its height is reserved for the whole session, so nothing reflows when a
+    /// run begins, ends, or is held.
+    private var statusRow: some View {
+        StatusRow(
+            content: StatusRowContent.resolve(
+                warningProgress: narration.warningProgress,
+                status: transientStatus,
+                holdAvailable: holdAvailable
+            ),
+            fontSize: Self.hintFontSize,
+            color: theme.onSurfaceVariant,
+            isHoldNarration: narration.warningProgress != nil
+        )
+    }
+
+    /// Both phases that put a hold-capable STOP button on screen: audio is
+    /// warming, or audio is flowing. Release stops either way, and a hold
+    /// discards either way, so the resting hint belongs in both.
+    private var holdAvailable: Bool {
+        switch coordinator.state {
+        case .arming, .recording: true
+        default: false
+        }
+    }
+
+    /// The run-adjacent states that had nowhere to say anything before the row
+    /// became a status line. The empty-result case is recognised by the message
+    /// the coordinator puts on its error state, which is the same constant.
+    private var transientStatus: TransientStatus? {
+        switch coordinator.state {
+        case .transcribing: .transcribing
+        case .error(let message) where message == TransientStatus.noSpeechDetectedText: .noSpeechDetected
+        default: nil
+        }
     }
 
     private var returnHint: some View {
@@ -640,7 +674,10 @@ struct RecordingView: View {
                 icon: icon,
                 onStop: onStop,
                 onDiscard: onDiscard,
-                onWarningRamp: { discardWarningProgress = $0 },
+                onWarningRamp: {
+                    discardWarningProgress = $0
+                    narration.ramp(to: $0)
+                },
                 onWarningEnd: endDiscardWarning
             )
             Text(label)
@@ -706,6 +743,7 @@ struct RecordingView: View {
     /// straight from the gesture's release (not just from the later
     /// `isWarning` `onChange`) so nothing delays the retreat from starting.
     private func endDiscardWarning() {
+        narration.end()
         resetDiscardWarning(duration: Self.discardTintReleaseFadeDuration)
     }
 
@@ -716,6 +754,7 @@ struct RecordingView: View {
     /// gap. The ease-out here is intentionally slower than the release
     /// retreat: it overlaps the CANCELLED flash and has a different job.
     private func beginDiscardUnwind() {
+        narration.end()
         resetDiscardWarning(duration: Self.discardTintDiscardFadeDuration)
     }
 

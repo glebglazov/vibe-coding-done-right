@@ -26,10 +26,10 @@ final class KeyboardDisplayModeManager {
     static var compactKeyboardHeight: CGFloat { CompactKeyboardView.intrinsicHeight }
 
     /// Height of the Full Keyboard's toolbar area: the control strip plus the
-    /// permanently reserved Discard Hint row above it. Shared with
+    /// permanently reserved status row above it. Shared with
     /// `VCDRKeyboardView`'s `keyboardToolbarStyle` so the predicted Full
     /// height below and the rendered strip cannot drift apart.
-    static var fullToolbarHeight: CGFloat { controlStripHeight + DiscardHintRow.height }
+    static var fullToolbarHeight: CGFloat { controlStripHeight + StatusRow.height }
 
     /// The dictation control strip on its own — pills, action button, chevron.
     private static let controlStripHeight: CGFloat = 44

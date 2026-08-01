@@ -1,6 +1,6 @@
 # Discard is announced after a dwell, not signalled at touch-down
 
-Holding Stop shows nothing for the first second (the Discard Dwell). Only then does the Discard Warning appear — the surface around Stop reddening over two seconds while haptic ticks accelerate — with Discard firing at a three-second Hold Threshold. The control keeps saying "STOP" throughout, and a stationary Discard Hint above the controls carries the teaching.
+Holding Stop shows nothing for the first second (the Discard Dwell). Only then does the Discard Warning appear — the surface around Stop reddening over two seconds while haptic ticks accelerate — with Discard firing at a three-second Hold Threshold. The control keeps saying "STOP" throughout, and a reserved row above the controls carries the teaching — the Discard Hint at rest, and live narration of the escape hatch and the deadline once the warning is up.
 
 ## Context
 
@@ -25,6 +25,7 @@ Separately, the ring was drawn with a centred stroke on the same 96pt frame as t
 - **The warning renders around the control, not inside it.** The main app tints its background; the Full Keyboard tints its toolbar strip; the Compact Keyboard fades in a red backdrop across its row for the duration of the hold and drops it on release. The progress indicator survives, inset with `strokeBorder` so it sits inside the button edge, as the only precise "how much longer" cue.
 - **Haptic ticks accelerate** across the ramp (light, roughly 350ms to 120ms) with a medium thump at discard, from a retained prepared generator. Keyboard haptics remain subject to the existing user setting; with haptics off the visual ramp stands alone, and no third variant is built.
 - **A reserved row above the controls carries the Discard Hint** — "Hold STOP to discard" — in both keyboard states and in the app. Reserved permanently at a shared tunable height sized to the hint, so no layout changes when a run starts or while a hold is in progress.
+- **That row narrates the hold and doubles as the surface's status line.** It says the resting hint through the whole dwell, then "Release to keep" plus a countdown of the whole seconds left, derived from the controller's own ramp and warning window rather than a second timer. Between holds it carries transient run states (transcribing, no speech detected). Precedence is fixed: hold narration, then a transient status, then the resting hint. Content comes from one shared source (`StatusRowContent`) so the two surfaces cannot diverge, and the narration is hidden from VoiceOver, which already has the direct "Discard recording" action.
 - **Releasing mid-warning eases the tint out over ~200ms** rather than snapping, so backing out reads as intentional.
 - VoiceOver gets a direct "Discard recording" action; the three-second hold is never the only path.
 
@@ -37,7 +38,7 @@ Separately, the ring was drawn with a centred stroke on the same 96pt frame as t
 
 ## Consequences
 
-- **The Compact Keyboard is taller, always.** The reserved row costs roughly a quarter of its 60pt height, paid at idle as well as during recording, and `CompactKeyboardView.intrinsicHeight` is no longer just padding plus pill. This directly amends what "as little screen as a dictation surface needs" means for that state. The row is currently empty outside recording; giving it a second job at rest is open work.
+- **The Compact Keyboard is taller, always.** The reserved row costs roughly a quarter of its 60pt height, paid at idle as well as during recording, and `CompactKeyboardView.intrinsicHeight` is no longer just padding plus pill. This directly amends what "as little screen as a dictation surface needs" means for that state. The row now earns that permanence by doubling as the surface's status line, so it is no longer empty outside recording.
 - **Discard takes 50% longer.** Deliberate discards cost a second more, and the threshold lives in two places — `HoldToDiscardController` and the keyboard's own timer in `KeyboardViewController` — both of which move together, as do the controller's tests.
 - **Freshness stays coupled to the threshold.** ADR-0003's freshness window is sized against how long a Discard takes to express; a longer hold eats into the margin before a queued cancel goes stale.
 - **The warning is a surface concern now**, so each surface owns its own destructive treatment rather than sharing one component. The Compact Keyboard's transient backdrop is a deliberate exception to its see-through-at-rest background.

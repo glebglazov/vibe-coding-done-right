@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The Compact Keyboard: VCDR's dictation controls without the key rows — a
 /// control row carrying the same content as the Full Keyboard's toolbar strip,
-/// with the chevron at its right end pointing up instead of down, under a
-/// permanently reserved Discard Hint row.
+/// with the chevron at its right end pointing up instead of down, under the
+/// permanently reserved status row.
 ///
 /// Rendered by `KeyboardView`'s `collapsedView` builder whenever KeyboardKit's
 /// `isKeyboardCollapsed` is set. `KeyboardDisplayModeManager` owns the flag and
@@ -25,11 +25,11 @@ struct CompactKeyboardView: View {
     /// Read by `KeyboardDisplayModeManager` to pin the Compact height — every
     /// point above this is dead space between the controls and the host app.
     ///
-    /// Includes the Discard Hint row, which is reserved whether or not a run
+    /// Includes the status row, which is reserved whether or not a run
     /// is in progress: Compact is permanently that much taller, so the frame
     /// never moves when recording starts. See vcdr-ios ADR-0004.
     static var intrinsicHeight: CGFloat {
-        topPadding + DiscardHintRow.height + pillHeight + bottomPadding
+        topPadding + StatusRow.height + pillHeight + bottomPadding
     }
 
     @ObservedObject var controller: KeyboardViewController
@@ -40,9 +40,17 @@ struct CompactKeyboardView: View {
     /// fully transparent again.
     @State private var wash = DiscardWarningWashState()
 
+    /// Where the current hold is, for the status row's narration. Separate from
+    /// `wash` because the words must go the instant the hold ends, while the
+    /// colour is still easing out.
+    @State private var narration = HoldNarrationState()
+
     var body: some View {
         VStack(spacing: 0) {
-            DiscardHintRow(isRecording: controller.dictationState == .recording)
+            KeyboardStatusRow(
+                dictationState: controller.dictationState,
+                warningProgress: narration.warningProgress
+            )
 
             HStack {
                 DictateSettingsPills(controller: controller)
@@ -55,12 +63,19 @@ struct CompactKeyboardView: View {
                     onStop: { controller.stopAndWaitForResult() },
                     onDiscard: {
                         wash.beginDiscardUnwind()
+                        narration.end()
                         controller.discardRecordingFromKeyboard()
                     },
                     onInsert: { controller.insertPendingText() },
                     onCapture: { controller.captureSelectedText() },
-                    onWarningRamp: { wash.ramp(to: $0) },
-                    onWarningEnd: { wash.end() }
+                    onWarningRamp: {
+                        wash.ramp(to: $0)
+                        narration.ramp(to: $0)
+                    },
+                    onWarningEnd: {
+                        wash.end()
+                        narration.end()
+                    }
                 )
                 KeyboardModeToggleButton(direction: .expand) {
                     controller.expandKeyboard()
@@ -75,6 +90,7 @@ struct CompactKeyboardView: View {
         .onChange(of: controller.dictationState) { _, newState in
             if newState != .recording {
                 wash.end()
+                narration.end()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

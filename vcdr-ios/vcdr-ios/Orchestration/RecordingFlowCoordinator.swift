@@ -704,7 +704,9 @@ final class RecordingFlowCoordinator {
         case .success(let success):
             state = .complete(success.finalText)
         case .emptyResult:
-            state = .error("No speech detected")
+            // Same constant the status row recognises, so the empty-result
+            // wording can't drift between the two.
+            state = .error(TransientStatus.noSpeechDetectedText)
         case .cancellation:
             state = .ready
         case .processingFailure(let failure):
