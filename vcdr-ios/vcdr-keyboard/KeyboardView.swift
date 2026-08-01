@@ -326,7 +326,8 @@ struct DictateActionButton: View {
     }
 }
 
-/// Stop pill with hold-to-Discard: fill grows while held; early release stops.
+/// Stop pill with hold-to-Discard: nothing shows during the Discard Dwell, then
+/// the fill ramps across the Discard Warning; release before the threshold stops.
 struct HoldToDiscardStopPill: View {
     private static let pillHeight: CGFloat = 32
     private static let pillFont: CGFloat = 11
@@ -380,13 +381,13 @@ struct HoldToDiscardStopPill: View {
         .frame(height: Self.pillHeight)
         .background(
             Group {
-                if hold.isHolding {
+                if hold.isWarning {
                     ZStack(alignment: .leading) {
                         Capsule().fill(color.opacity(0.35))
                         GeometryReader { geometry in
                             Capsule()
                                 .fill(color)
-                                .frame(width: geometry.size.width * hold.progress)
+                                .frame(width: geometry.size.width * hold.warningProgress)
                         }
                     }
                 } else {

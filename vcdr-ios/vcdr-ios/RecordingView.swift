@@ -708,9 +708,9 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
                 .frame(width: HoldToDiscardRingMetrics.actionButtonSize, height: HoldToDiscardRingMetrics.actionButtonSize)
                 .shadow(color: theme.primaryDim.opacity(0.2), radius: 20)
 
-            if hold.isHolding {
+            if hold.isWarning {
                 Circle()
-                    .trim(from: 0, to: hold.progress)
+                    .trim(from: 0, to: hold.warningProgress)
                     .stroke(
                         theme.primary,
                         style: StrokeStyle(
