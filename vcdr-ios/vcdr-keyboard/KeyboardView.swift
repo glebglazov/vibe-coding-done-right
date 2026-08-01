@@ -353,12 +353,11 @@ struct DictateActionButton: View {
     }
 }
 
-/// Stop pill with hold-to-Discard: nothing shows during the Discard Dwell, then
-/// the fill ramps across the Discard Warning; release before the threshold stops.
+/// Stop pill with hold-to-Discard: release before the threshold stops.
 ///
-/// The pill reports the ramp outwards via `onWarningRamp`/`onWarningEnd` so the
-/// strip around it can redden too — the pill alone can't carry the warning
-/// while a thumb covers it.
+/// The pill draws no warning of its own — a thumb covers it, so progress there
+/// cannot be read. It reports the ramp outwards via `onWarningRamp`/
+/// `onWarningEnd` and the strip around it carries the whole cue.
 struct HoldToDiscardStopPill: View {
     private static let pillHeight: CGFloat = 32
     private static let pillFont: CGFloat = 11
@@ -379,7 +378,6 @@ struct HoldToDiscardStopPill: View {
     /// which happen ~60×/s while the ramp drives `DiscardWarningWashState`'s
     /// progress — don't hand the gesture a fresh, disconnected box each render.
     @State private var ladder: HapticLadderBox
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         text: String,
@@ -428,23 +426,7 @@ struct HoldToDiscardStopPill: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 10)
         .frame(height: Self.pillHeight)
-        .background(
-            Group {
-                if hold.isWarning {
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(color.opacity(0.35))
-                        GeometryReader { geometry in
-                            let progress = reduceMotion ? hold.warningProgress.steppedForReduceMotion() : hold.warningProgress
-                            Capsule()
-                                .fill(color)
-                                .frame(width: geometry.size.width * progress)
-                        }
-                    }
-                } else {
-                    Capsule().fill(color)
-                }
-            }
-        )
+        .background(Capsule().fill(color))
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
         .contentShape(Capsule())
         .accessibilityElement(children: .ignore)

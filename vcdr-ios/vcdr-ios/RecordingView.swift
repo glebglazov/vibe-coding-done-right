@@ -674,14 +674,17 @@ struct RecordingView: View {
         .ignoresSafeArea()
     }
 
-    /// Reddens the screen behind the Stop button as the Discard Warning ramps.
-    /// The button itself is left alone — release still stops, so the control
-    /// must keep naming what release does (ADR-0004).
+    /// Sweeps red across the screen behind the Stop button as the Discard
+    /// Warning ramps: how far it has travelled is how close Discard is. The
+    /// button itself is left alone — release still stops, so the control must
+    /// keep naming what release does (ADR-0004).
     private var discardWarningTint: some View {
-        theme.primaryDim
-            .opacity(Double(discardWarningProgress) * Self.discardTintMaxOpacity)
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
+        DiscardWarningWipe(
+            color: theme.primaryDim,
+            progress: discardWarningProgress,
+            opacity: Self.discardTintMaxOpacity
+        )
+        .ignoresSafeArea()
     }
 
     /// Eases the tint back out so backing out of a hold reads as intentional
@@ -707,9 +710,6 @@ struct RecordingView: View {
 private enum ActionButtonMetrics {
     static let size: CGFloat = 96
     static let border: CGFloat = 8
-    /// The progress ring's centred stroke needs a full stroke width of clearance
-    /// from the button edge, or half of it hangs outside the disc.
-    static var ringDiameter: CGFloat { size - border * 2 }
 }
 
 private struct HoldToDiscardRingStopButton<Icon: View>: View {
@@ -727,7 +727,6 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
     /// which happen ~60×/s while the ramp drives `discardWarningProgress` —
     /// don't hand the gesture a fresh, disconnected box each render.
     @State private var ladder: HapticLadderBox
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         theme: Theme,
@@ -767,20 +766,6 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
                 .fill(theme.primaryDim)
                 .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
                 .shadow(color: theme.primaryDim.opacity(0.2), radius: 20)
-
-            if hold.isWarning {
-                Circle()
-                    .trim(from: 0, to: reduceMotion ? hold.warningProgress.steppedForReduceMotion() : hold.warningProgress)
-                    .stroke(
-                        theme.primary,
-                        style: StrokeStyle(
-                            lineWidth: ActionButtonMetrics.border,
-                            lineCap: .round
-                        )
-                    )
-                    .frame(width: ActionButtonMetrics.ringDiameter, height: ActionButtonMetrics.ringDiameter)
-                    .rotationEffect(.degrees(-90))
-            }
 
             Circle()
                 .stroke(theme.surfaceHighest, lineWidth: ActionButtonMetrics.border)

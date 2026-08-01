@@ -3,8 +3,9 @@ import SwiftUI
 /// The red wash the keyboard paints *around* the Stop pill while the Discard
 /// Warning ramps. It is drawn outside the control because a thumb sits on the
 /// pill, and because the pill has to keep naming what release does — release
-/// still stops (ADR-0004). The pill's own fill sweep stays the precise
-/// "how much longer" cue.
+/// still stops (ADR-0004). The wash sweeps across the strip rather than
+/// tinting it uniformly, so it is also the "how much longer" cue: the pill has
+/// no progress fill of its own, since one under the thumb cannot be read.
 ///
 /// Both keyboard states use the same wash so their escalation reads alike; what
 /// differs is what it sits on. The Full toolbar strip is opaque, so tinting it
@@ -24,17 +25,19 @@ struct DiscardWarningWash: ViewModifier {
 
     func body(content: Content) -> some View {
         content.background(
-            Color.red
-                .opacity(Double(progress) * Self.maxOpacity)
-                .allowsHitTesting(false)
+            DiscardWarningWipe(
+                color: .red,
+                progress: progress,
+                opacity: Double(progress) * Self.maxOpacity
+            )
         )
     }
 }
 
 extension View {
-    /// Washes this surface red in step with the Discard Warning. At progress 0
-    /// the wash is fully transparent, so a Compact row at rest still shows the
-    /// host app through.
+    /// Sweeps red across this surface in step with the Discard Warning. At
+    /// progress 0 nothing is drawn at all, so a Compact row at rest still shows
+    /// the host app through.
     func discardWarningWash(progress: CGFloat) -> some View {
         modifier(DiscardWarningWash(progress: progress))
     }
