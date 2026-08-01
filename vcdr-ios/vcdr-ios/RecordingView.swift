@@ -721,6 +721,8 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
 
     @State private var holdController: HoldToDiscardController
     @State private var isPressed = false
+    /// Boxed so the controller's ramp closure and the gesture can share it.
+    private let ladder = HapticLadderBox()
 
     init(
         theme: Theme,
@@ -736,14 +738,16 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
         self.onStop = onStop
         self.onDiscard = onDiscard
         self.onWarningEnd = onWarningEnd
+        let ladder = self.ladder
         _holdController = State(
             initialValue: HoldToDiscardController(
                 onStop: onStop,
                 onDiscard: onDiscard,
-                onDiscardHaptic: {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                },
-                onWarningRamp: onWarningRamp
+                onDiscardHaptic: { AppHaptics.medium() },
+                onWarningRamp: { progress in
+                    onWarningRamp(progress)
+                    for _ in 0..<ladder.ticks(upTo: progress) { AppHaptics.light() }
+                }
             )
         )
     }
@@ -777,14 +781,19 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
 
             icon()
         }
+        .onAppear { AppHaptics.prepare() }
         .onChange(of: hold.isWarning) { _, warning in
-            if !warning { onWarningEnd() }
+            if !warning {
+                ladder.reset()
+                onWarningEnd()
+            }
         }
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
                     guard !isPressed else { return }
                     isPressed = true
+                    ladder.reset()
                     holdController.touchDown()
                 }
                 .onEnded { _ in

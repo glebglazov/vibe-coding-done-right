@@ -374,6 +374,8 @@ struct HoldToDiscardStopPill: View {
 
     @State private var holdController: HoldToDiscardController
     @State private var isPressed = false
+    /// Boxed so the controller's ramp closure and the gesture can share it.
+    private let ladder = HapticLadderBox()
 
     init(
         text: String,
@@ -392,12 +394,18 @@ struct HoldToDiscardStopPill: View {
         self.onDiscard = onDiscard
         self.onDiscardHaptic = onDiscardHaptic
         self.onWarningEnd = onWarningEnd
+        let ladder = self.ladder
         _holdController = State(
             initialValue: HoldToDiscardController(
                 onStop: onStop,
                 onDiscard: onDiscard,
                 onDiscardHaptic: onDiscardHaptic,
-                onWarningRamp: onWarningRamp
+                onWarningRamp: { progress in
+                    onWarningRamp(progress)
+                    // `KeyboardHaptics.light()` is a no-op when the user has
+                    // haptics off, so the ladder simply vanishes there.
+                    for _ in 0..<ladder.ticks(upTo: progress) { KeyboardHaptics.light() }
+                }
             )
         )
     }
@@ -433,14 +441,19 @@ struct HoldToDiscardStopPill: View {
         )
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
         .contentShape(Capsule())
+        .onAppear { KeyboardHaptics.prepare() }
         .onChange(of: hold.isWarning) { _, warning in
-            if !warning { onWarningEnd() }
+            if !warning {
+                ladder.reset()
+                onWarningEnd()
+            }
         }
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
                     guard !isPressed else { return }
                     isPressed = true
+                    ladder.reset()
                     holdController.touchDown()
                 }
                 .onEnded { _ in
