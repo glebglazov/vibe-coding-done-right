@@ -163,6 +163,61 @@ struct HoldToDiscardControllerTests {
         #expect(discardCount == 1)
     }
 
+    /// Task 10's device pass found the tint lingering after release and asked
+    /// whether a ramp tick already in flight could still write progress after
+    /// `touchUp()`. This sweeps release points across the dwell boundary and
+    /// the whole warning window — where a tick and a release genuinely race
+    /// against real `Task.sleep` timing, not a mocked clock — under real OS
+    /// thread scheduling, with a generous post-release window for any
+    /// in-flight continuation to surface. Across 80 runs it never did: zero
+    /// violations, so a ramp tick re-tinting after release was ruled out as
+    /// the cause of the lingering red (see task 10's artifact). `tickProgress()`
+    /// additionally now guards on `isHolding` — flipped synchronously and
+    /// first thing in `touchUp()` — so this is also a structural guarantee,
+    /// not just an empirical one; this test is the regression guard for it.
+    @Test("no ramp tick writes progress after touchUp, across the dwell boundary and warning window")
+    func noRampTickAfterRelease() async {
+        var maxViolationDelayMs: Double = 0
+        var violationCount = 0
+        var totalIterations = 0
+
+        let releaseOffsetsMs: [Int] = [995, 1000, 1005, 1010, 1016, 1020, 1500, 1990, 2000, 2010]
+
+        for offset in releaseOffsetsMs {
+            for _ in 0..<8 {
+                totalIterations += 1
+                nonisolated(unsafe) var releasedAt: ContinuousClock.Instant?
+                let clock = ContinuousClock()
+
+                let controller = HoldToDiscardController(
+                    onStop: {},
+                    onDiscard: {},
+                    onWarningRamp: { _ in
+                        if let releasedAt {
+                            let delay = clock.now - releasedAt
+                            let ms = Double(delay.components.seconds) * 1000
+                                + Double(delay.components.attoseconds) / 1_000_000_000_000_000
+                            violationCount += 1
+                            maxViolationDelayMs = max(maxViolationDelayMs, ms)
+                        }
+                    }
+                )
+
+                controller.touchDown()
+                try? await Task.sleep(for: .milliseconds(offset))
+                releasedAt = clock.now
+                controller.touchUp()
+                // Give any in-flight continuation a generous window to surface.
+                try? await Task.sleep(for: .milliseconds(80))
+            }
+        }
+
+        #expect(
+            violationCount == 0,
+            "a ramp tick fired after touchUp \(violationCount)/\(totalIterations) time(s), max delay \(maxViolationDelayMs)ms"
+        )
+    }
+
     @Test("steppedForReduceMotion quantizes into discrete jumps")
     func steppedForReduceMotionQuantizes() {
         let steps = HoldToDiscardController.reduceMotionSteps

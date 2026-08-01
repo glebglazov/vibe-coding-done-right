@@ -124,7 +124,14 @@ final class HoldToDiscardController {
     }
 
     private func tickProgress() {
-        guard let holdStart else { return }
+        // `isHolding` is flipped to false synchronously as the first thing
+        // `touchUp()` does, before any suspension point, and this method
+        // only ever runs on the same serial main-actor queue as `touchUp()`.
+        // So this guard — not just the loop's `Task.isCancelled` check —
+        // is what makes it structurally impossible for a tick already
+        // in flight when a release lands to write a post-release progress
+        // value, regardless of Task-cancellation timing nuances.
+        guard isHolding, let holdStart else { return }
         let elapsed = Date().timeIntervalSince(holdStart)
         guard elapsed >= Self.dwellDuration else { return }
 

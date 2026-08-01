@@ -53,7 +53,10 @@ struct CompactKeyboardView: View {
                     captureCount: controller.captureCount,
                     onStart: { controller.startRecordingFromKeyboard() },
                     onStop: { controller.stopAndWaitForResult() },
-                    onDiscard: { controller.discardRecordingFromKeyboard() },
+                    onDiscard: {
+                        wash.beginDiscardUnwind()
+                        controller.discardRecordingFromKeyboard()
+                    },
                     onInsert: { controller.insertPendingText() },
                     onCapture: { controller.captureSelectedText() },
                     onWarningRamp: { wash.ramp(to: $0) },
@@ -67,6 +70,13 @@ struct CompactKeyboardView: View {
         .padding(.horizontal, Self.horizontalPadding)
         .padding(.top, Self.topPadding)
         .discardWarningWash(progress: wash.progress)
+        // Belt-and-braces: whatever ends the run, the wash cannot outlive it,
+        // so Compact returns fully transparent even off an unexpected path.
+        .onChange(of: controller.dictationState) { _, newState in
+            if newState != .recording {
+                wash.end()
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }

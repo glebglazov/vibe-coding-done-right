@@ -28,7 +28,15 @@ struct RecordingView: View {
     private static let pillFontSize: CGFloat = 12
     private static let discardHintSlotHeight: CGFloat = 20
     private static let discardTintMaxOpacity: Double = 0.4
-    private static let discardTintFadeDuration: Double = 0.2
+    /// Release before the threshold is the recovery gesture — it has to read
+    /// as *gone*, not as fading. Fast enough to look instant, slow enough
+    /// that a full-screen 40%-opacity wash doesn't leave a hard flash edge.
+    /// Device verification (task 07) found the previous 200ms read as
+    /// lingering; this is the value that replaced it.
+    private static let discardTintReleaseFadeDuration: Double = 0.09
+    /// Discard's ease-out overlaps the CANCELLED flash and has a different
+    /// job than the release retreat, so it keeps the longer, original pace.
+    private static let discardTintDiscardFadeDuration: Double = 0.2
 
     var body: some View {
         ZStack {
@@ -192,7 +200,10 @@ struct RecordingView: View {
                 },
                 label: "STOP",
                 onStop: { Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) } },
-                onDiscard: { Task { await coordinator.discardRecording() } }
+                onDiscard: {
+                    beginDiscardUnwind()
+                    Task { await coordinator.discardRecording() }
+                }
             )
         }
     }
@@ -278,7 +289,10 @@ struct RecordingView: View {
                     },
                     label: "STOP",
                     onStop: { Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) } },
-                    onDiscard: { Task { await coordinator.discardRecording() } }
+                    onDiscard: {
+                        beginDiscardUnwind()
+                        Task { await coordinator.discardRecording() }
+                    }
                 )
                 .padding(.bottom, 16)
 
@@ -687,11 +701,32 @@ struct RecordingView: View {
         .ignoresSafeArea()
     }
 
-    /// Eases the tint back out so backing out of a hold reads as intentional
-    /// rather than as a glitch.
+    /// Retreats the tint on a release before the threshold — the recovery
+    /// gesture, which has to read as instant rather than as a fade. Called
+    /// straight from the gesture's release (not just from the later
+    /// `isWarning` `onChange`) so nothing delays the retreat from starting.
     private func endDiscardWarning() {
+        resetDiscardWarning(duration: Self.discardTintReleaseFadeDuration)
+    }
+
+    /// Starts the tint's unwind the instant Discard fires, before the
+    /// coordinator's teardown `Task` is even spawned — the button unmounts
+    /// as soon as `coordinator.state` leaves `.recording`, so waiting on that
+    /// state change would hold the screen at full red for the whole teardown
+    /// gap. The ease-out here is intentionally slower than the release
+    /// retreat: it overlaps the CANCELLED flash and has a different job.
+    private func beginDiscardUnwind() {
+        resetDiscardWarning(duration: Self.discardTintDiscardFadeDuration)
+    }
+
+    /// `guard discardWarningProgress > 0` makes repeat calls a no-op, so
+    /// whichever of `endDiscardWarning()`, `beginDiscardUnwind()`, and the
+    /// `onChange(of: coordinator.state)` belt-and-braces path runs first
+    /// wins — the others don't retrigger or shorten an animation already
+    /// under way.
+    private func resetDiscardWarning(duration: Double) {
         guard discardWarningProgress > 0 else { return }
-        withAnimation(.easeOut(duration: Self.discardTintFadeDuration)) {
+        withAnimation(.easeOut(duration: duration)) {
             discardWarningProgress = 0
         }
     }
@@ -798,6 +833,12 @@ private struct HoldToDiscardRingStopButton<Icon: View>: View {
                     guard isPressed else { return }
                     isPressed = false
                     holdController.touchUp()
+                    // Fire the retreat straight from the release rather than
+                    // only from the `isWarning` `onChange` below, which lands
+                    // a render pass later. `onWarningEnd()` is idempotent, so
+                    // the `onChange` still firing afterward is a no-op.
+                    ladder.reset()
+                    onWarningEnd()
                 }
         )
     }

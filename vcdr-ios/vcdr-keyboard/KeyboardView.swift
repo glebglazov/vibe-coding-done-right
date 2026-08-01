@@ -95,7 +95,10 @@ struct FullKeyboardToolbar: View {
                     captureCount: controller.captureCount,
                     onStart: { controller.startRecordingFromKeyboard() },
                     onStop: { controller.stopAndWaitForResult() },
-                    onDiscard: { controller.discardRecordingFromKeyboard() },
+                    onDiscard: {
+                        wash.beginDiscardUnwind()
+                        controller.discardRecordingFromKeyboard()
+                    },
                     onInsert: { controller.insertPendingText() },
                     onCapture: { controller.captureSelectedText() },
                     onWarningRamp: { wash.ramp(to: $0) },
@@ -111,6 +114,12 @@ struct FullKeyboardToolbar: View {
             .padding(.bottom, 6)
         }
         .discardWarningWash(progress: wash.progress)
+        // Belt-and-braces: whatever ends the run, the wash cannot outlive it.
+        .onChange(of: controller.dictationState) { _, newState in
+            if newState != .recording {
+                wash.end()
+            }
+        }
     }
 }
 
@@ -454,6 +463,12 @@ struct HoldToDiscardStopPill: View {
                     guard isPressed else { return }
                     isPressed = false
                     holdController.touchUp()
+                    // Fire the retreat straight from the release rather than
+                    // only from the `isWarning` `onChange` below, which lands
+                    // a render pass later. `onWarningEnd()` is idempotent, so
+                    // the `onChange` still firing afterward is a no-op.
+                    ladder.reset()
+                    onWarningEnd()
                 }
         )
     }
