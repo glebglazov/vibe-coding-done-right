@@ -2,8 +2,7 @@ import SwiftUI
 
 /// The Compact Keyboard: VCDR's dictation controls without the key rows — a
 /// control row carrying the same content as the Full Keyboard's toolbar strip,
-/// with the chevron at its right end pointing up instead of down, under the
-/// permanently reserved status row.
+/// with the chevron at its right end pointing up instead of down.
 ///
 /// Rendered by `KeyboardView`'s `collapsedView` builder whenever KeyboardKit's
 /// `isKeyboardCollapsed` is set. `KeyboardDisplayModeManager` owns the flag and
@@ -25,11 +24,11 @@ struct CompactKeyboardView: View {
     /// Read by `KeyboardDisplayModeManager` to pin the Compact height — every
     /// point above this is dead space between the controls and the host app.
     ///
-    /// Includes the status row, which is reserved whether or not a run
-    /// is in progress: Compact is permanently that much taller, so the frame
-    /// never moves when recording starts. See vcdr-ios ADR-0004.
+    /// The status text costs nothing here: it shares the control row's line
+    /// with the pills rather than claiming one of its own, so the frame is the
+    /// same whether or not a run is in progress. See vcdr-ios ADR-0004.
     static var intrinsicHeight: CGFloat {
-        topPadding + StatusRow.height + pillHeight + bottomPadding
+        topPadding + pillHeight + bottomPadding
     }
 
     @ObservedObject var controller: KeyboardViewController
@@ -46,41 +45,34 @@ struct CompactKeyboardView: View {
     @State private var narration = HoldNarrationState()
 
     var body: some View {
-        VStack(spacing: 0) {
-            KeyboardStatusRow(
+        HStack {
+            KeyboardStripLeading(controller: controller, narration: narration)
+            Spacer()
+            DictateActionButton(
                 dictationState: controller.dictationState,
-                warningProgress: narration.warningProgress
-            )
-
-            HStack {
-                DictateSettingsPills(controller: controller)
-                Spacer()
-                DictateActionButton(
-                    dictationState: controller.dictationState,
-                    showCapture: true,
-                    captureCount: controller.captureCount,
-                    onStart: { controller.startRecordingFromKeyboard() },
-                    onStop: { controller.stopAndWaitForResult() },
-                    onDiscard: {
-                        wash.beginDiscardUnwind()
-                        narration.end()
-                        controller.discardRecordingFromKeyboard()
-                    },
-                    onInsert: { controller.insertPendingText() },
-                    onCapture: { controller.captureSelectedText() },
-                    onShowFailure: { controller.showFailureReason() },
-                    onWarningRamp: {
-                        wash.ramp(to: $0)
-                        narration.ramp(to: $0)
-                    },
-                    onWarningEnd: {
-                        wash.end()
-                        narration.end()
-                    }
-                )
-                KeyboardModeToggleButton(direction: .expand) {
-                    controller.expandKeyboard()
+                showCapture: true,
+                captureCount: controller.captureCount,
+                onStart: { controller.startRecordingFromKeyboard() },
+                onStop: { controller.stopAndWaitForResult() },
+                onDiscard: {
+                    wash.beginDiscardUnwind()
+                    narration.end()
+                    controller.discardRecordingFromKeyboard()
+                },
+                onInsert: { controller.insertPendingText() },
+                onCapture: { controller.captureSelectedText() },
+                onShowFailure: { controller.showFailureReason() },
+                onWarningRamp: {
+                    wash.ramp(to: $0)
+                    narration.ramp(to: $0)
+                },
+                onWarningEnd: {
+                    wash.end()
+                    narration.end()
                 }
+            )
+            KeyboardModeToggleButton(direction: .expand) {
+                controller.expandKeyboard()
             }
         }
         .padding(.horizontal, Self.horizontalPadding)

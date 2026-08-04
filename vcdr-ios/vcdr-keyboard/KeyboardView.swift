@@ -68,8 +68,8 @@ struct VCDRKeyboardView: View {
     }
 }
 
-/// The Full Keyboard's toolbar strip: the reserved status row over the
-/// dictation controls. Lives in its own view rather than inline in the
+/// The Full Keyboard's toolbar strip: one line carrying the status slot and
+/// the dictation controls. Lives in its own view rather than inline in the
 /// `toolbar:` builder because it holds the Discard Warning wash state — the
 /// strip is what reddens while the Stop pill is held, and the strip's own
 /// background is opaque, so the wash simply tints it.
@@ -79,52 +79,46 @@ struct FullKeyboardToolbar: View {
     @State private var narration = HoldNarrationState()
 
     var body: some View {
-        VStack(spacing: 0) {
-            KeyboardStatusRow(
+        HStack {
+            // Left: settings pills, yielding to the Discard Hint during a hold
+            KeyboardStripLeading(controller: controller, narration: narration)
+                .padding(.leading, 10)
+
+            Spacer()
+
+            // Right: capture button (during recording in any AI mode) + action button
+            DictateActionButton(
                 dictationState: controller.dictationState,
-                warningProgress: narration.warningProgress
+                showCapture: true,
+                captureCount: controller.captureCount,
+                onStart: { controller.startRecordingFromKeyboard() },
+                onStop: { controller.stopAndWaitForResult() },
+                onDiscard: {
+                    wash.beginDiscardUnwind()
+                    narration.end()
+                    controller.discardRecordingFromKeyboard()
+                },
+                onInsert: { controller.insertPendingText() },
+                onCapture: { controller.captureSelectedText() },
+                onShowFailure: { controller.showFailureReason() },
+                onHintBegan: { narration.beginHint() },
+                onWarningRamp: {
+                    wash.ramp(to: $0)
+                    narration.ramp(to: $0)
+                },
+                onWarningEnd: {
+                    wash.end()
+                    narration.end()
+                }
             )
 
-            HStack {
-                // Left: settings pills
-                DictateSettingsPills(controller: controller)
-                    .padding(.leading, 10)
-
-                Spacer()
-
-                // Right: capture button (during recording in any AI mode) + action button
-                DictateActionButton(
-                    dictationState: controller.dictationState,
-                    showCapture: true,
-                    captureCount: controller.captureCount,
-                    onStart: { controller.startRecordingFromKeyboard() },
-                    onStop: { controller.stopAndWaitForResult() },
-                    onDiscard: {
-                        wash.beginDiscardUnwind()
-                        narration.end()
-                        controller.discardRecordingFromKeyboard()
-                    },
-                    onInsert: { controller.insertPendingText() },
-                    onCapture: { controller.captureSelectedText() },
-                    onShowFailure: { controller.showFailureReason() },
-                    onWarningRamp: {
-                        wash.ramp(to: $0)
-                        narration.ramp(to: $0)
-                    },
-                    onWarningEnd: {
-                        wash.end()
-                        narration.end()
-                    }
-                )
-
-                KeyboardModeToggleButton(direction: .collapse) {
-                    controller.collapseKeyboard()
-                }
-                .padding(.trailing, 10)
+            KeyboardModeToggleButton(direction: .collapse) {
+                controller.collapseKeyboard()
             }
-            .padding(.top, 2)
-            .padding(.bottom, 6)
+            .padding(.trailing, 10)
         }
+        .padding(.top, 2)
+        .padding(.bottom, 6)
         .discardWarningWash(progress: wash.progress)
         // Belt-and-braces: whatever ends the run, neither the wash nor the
         // hold narration can outlive it.
@@ -301,6 +295,9 @@ struct DictateActionButton: View {
     var onInsert: () -> Void
     var onCapture: () -> Void
     var onShowFailure: () -> Void
+    /// Fires a quarter-second into a hold, before anything animates, so the
+    /// strip can put the Discard Hint where the settings pills sit.
+    var onHintBegan: () -> Void = {}
     /// Forwarded from the Stop pill's hold so the surrounding strip — not the
     /// pill under the thumb — can carry the Discard Warning.
     var onWarningRamp: (CGFloat) -> Void = { _ in }
@@ -327,6 +324,7 @@ struct DictateActionButton: View {
                     onStop: onStop,
                     onDiscard: onDiscard,
                     onDiscardHaptic: { KeyboardHaptics.medium() },
+                    onHintBegan: onHintBegan,
                     onWarningRamp: onWarningRamp,
                     onWarningEnd: onWarningEnd
                 )
@@ -418,6 +416,7 @@ struct HoldToDiscardStopPill: View {
     let onStop: () -> Void
     let onDiscard: () -> Void
     let onDiscardHaptic: () -> Void
+    let onHintBegan: () -> Void
     let onWarningEnd: () -> Void
 
     @State private var holdController: HoldToDiscardController
@@ -435,6 +434,7 @@ struct HoldToDiscardStopPill: View {
         onStop: @escaping () -> Void,
         onDiscard: @escaping () -> Void,
         onDiscardHaptic: @escaping () -> Void = {},
+        onHintBegan: @escaping () -> Void = {},
         onWarningRamp: @escaping (CGFloat) -> Void = { _ in },
         onWarningEnd: @escaping () -> Void = {}
     ) {
@@ -444,6 +444,7 @@ struct HoldToDiscardStopPill: View {
         self.onStop = onStop
         self.onDiscard = onDiscard
         self.onDiscardHaptic = onDiscardHaptic
+        self.onHintBegan = onHintBegan
         self.onWarningEnd = onWarningEnd
         let ladder = HapticLadderBox()
         _ladder = State(initialValue: ladder)
@@ -485,6 +486,9 @@ struct HoldToDiscardStopPill: View {
             holdController.discardImmediately()
         }
         .onAppear { KeyboardHaptics.prepare() }
+        .onChange(of: hold.isHinting) { _, hinting in
+            if hinting { onHintBegan() }
+        }
         .onChange(of: hold.isWarning) { _, warning in
             if !warning {
                 ladder.reset()

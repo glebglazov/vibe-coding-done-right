@@ -15,11 +15,23 @@ final class HoldNarrationState {
     /// it — and nil again the instant the hold ends, by release or by firing.
     private(set) var warningProgress: CGFloat?
 
+    /// True from a short way into the dwell until the hold ends: the words are
+    /// on screen before the warning ramps, which is the only way a hint about
+    /// what the hold does can be read before the hold does it. Stays true for
+    /// the warning too — a ramp is a hold that is still being narrated.
+    private(set) var isHinting = false
+
+    func beginHint() {
+        isHinting = true
+    }
+
     func ramp(to progress: CGFloat) {
+        isHinting = true
         warningProgress = progress
     }
 
     func end() {
+        isHinting = false
         warningProgress = nil
     }
 }

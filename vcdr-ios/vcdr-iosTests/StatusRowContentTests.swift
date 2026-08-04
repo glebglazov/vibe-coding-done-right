@@ -114,4 +114,23 @@ struct StatusRowContentTests {
         narration.end()
         #expect(narration.warningProgress == nil)
     }
+
+    @Test("the hint outlives the dwell and dies with the hold")
+    func hintLifetime() {
+        let narration = HoldNarrationState()
+        #expect(narration.isHinting == false)
+
+        // Hinting through the dwell, with nothing to narrate yet: the keyboard
+        // shows the resting hint in place of its settings pills.
+        narration.beginHint()
+        #expect(narration.isHinting)
+        #expect(narration.warningProgress == nil)
+
+        narration.ramp(to: 0.4)
+        #expect(narration.isHinting)
+
+        narration.end()
+        #expect(narration.isHinting == false)
+        #expect(narration.warningProgress == nil)
+    }
 }

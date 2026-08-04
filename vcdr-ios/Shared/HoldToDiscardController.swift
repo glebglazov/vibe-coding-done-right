@@ -23,8 +23,13 @@ final class HoldToDiscardController {
     /// Total hold before Discard fires. The keyboard's Discard path derives its
     /// own timing from this constant so the two can never drift apart.
     static let holdDuration: TimeInterval = 3
-    /// Opening stretch of a hold during which nothing at all is shown.
+    /// Opening stretch of a hold during which no *warning* is shown.
     static let dwellDuration: TimeInterval = 1
+    /// How long a hold has to last before the Discard Hint appears. Well inside
+    /// the dwell: the words say what the hold is about to do, so they are only
+    /// worth showing if they arrive before it starts doing it. Long enough that
+    /// an ordinary tap-to-stop never flashes them.
+    static let hintDelay: TimeInterval = 0.25
     /// Stretch over which the Discard Warning ramps 0→1, ending at discard.
     static var warningDuration: TimeInterval { holdDuration - dwellDuration }
     static let cancelledFlashDuration: TimeInterval = 1
@@ -37,6 +42,9 @@ final class HoldToDiscardController {
     // MARK: - State
 
     var isHolding = false
+    /// Whether the Discard Hint should be showing: true from `hintDelay` into
+    /// the hold until it ends, warning included.
+    var isHinting = false
     /// Whether the Discard Warning is showing — false for the whole dwell.
     var isWarning = false
     /// 0→1 position *within the warning window*, not within the whole hold.
@@ -47,6 +55,7 @@ final class HoldToDiscardController {
     private var holdStart: Date?
     private var discardTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
+    private var hintTask: Task<Void, Never>?
     private var didDiscard = false
     private var abandonmentCount = 0
 
@@ -71,9 +80,16 @@ final class HoldToDiscardController {
         guard !isHolding else { return }
         didDiscard = false
         isHolding = true
+        isHinting = false
         isWarning = false
         warningProgress = 0
         holdStart = Date()
+
+        hintTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.hintDelay))
+            guard !Task.isCancelled, let self, self.isHolding else { return }
+            self.isHinting = true
+        }
 
         discardTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.holdDuration))
@@ -98,7 +114,10 @@ final class HoldToDiscardController {
         discardTask = nil
         progressTask?.cancel()
         progressTask = nil
+        hintTask?.cancel()
+        hintTask = nil
         isHolding = false
+        isHinting = false
         isWarning = false
         warningProgress = 0
         holdStart = nil
@@ -144,10 +163,13 @@ final class HoldToDiscardController {
         guard !didDiscard else { return }
         didDiscard = true
         isHolding = false
+        isHinting = false
         isWarning = false
         warningProgress = 1
         progressTask?.cancel()
         progressTask = nil
+        hintTask?.cancel()
+        hintTask = nil
         onDiscardHaptic()
         onDiscard()
     }

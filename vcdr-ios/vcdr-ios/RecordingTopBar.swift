@@ -14,11 +14,17 @@ struct RecordingTopBar: View {
     @State private var showDebugLogs = false
     #endif
 
+    /// Tap-target size of one icon, and so the height of the whole cluster.
+    /// `RecordingView` reserves this for its header line whether or not the
+    /// cluster is rendered, so the status row sharing that line never moves.
+    static let height: CGFloat = 44
+
     private var theme: Theme { Theme.current(for: colorScheme) }
 
+    /// The cluster claims only the width its icons need: it shares its line
+    /// with the status row, which takes everything to its left.
     var body: some View {
         HStack(spacing: 0) {
-            Spacer()
             #if DEBUG
             debugLogsButton
             #endif
@@ -26,7 +32,6 @@ struct RecordingTopBar: View {
             settingsButton
         }
         .padding(.trailing, 12)
-        .padding(.top, 12)
     }
 
     #if DEBUG
@@ -81,7 +86,7 @@ struct RecordingTopBar: View {
         Image(systemName: systemName)
             .font(.system(size: 18))
             .foregroundStyle(theme.onSurfaceVariant)
-            .frame(width: 44, height: 44)
+            .frame(width: Self.height, height: Self.height)
             .contentShape(Rectangle())
     }
 }

@@ -24,18 +24,45 @@ struct HoldToDiscardControllerTests {
         #expect(discardCount == 0)
     }
 
-    @Test("nothing shows during the Discard Dwell")
-    func dwellShowsNothing() async {
+    @Test("no warning during the Discard Dwell, only the hint")
+    func dwellShowsOnlyTheHint() async {
         let controller = HoldToDiscardController(onStop: {}, onDiscard: {})
 
         controller.touchDown()
         try? await Task.sleep(for: .seconds(HoldToDiscardController.dwellDuration - 0.15))
 
         #expect(controller.isHolding)
+        // The hint is up well before the dwell ends — the words explain the
+        // warning, so they have to precede it.
+        #expect(controller.isHinting)
         #expect(controller.isWarning == false)
         #expect(controller.warningProgress == 0)
 
         controller.touchUp()
+        #expect(controller.isHinting == false)
+    }
+
+    @Test("a tap shorter than the hint delay never shows the hint")
+    func tapShowsNoHint() async {
+        let controller = HoldToDiscardController(onStop: {}, onDiscard: {})
+
+        controller.touchDown()
+        try? await Task.sleep(for: .seconds(HoldToDiscardController.hintDelay / 2))
+        controller.touchUp()
+
+        try? await Task.sleep(for: .seconds(HoldToDiscardController.hintDelay))
+        #expect(controller.isHinting == false)
+    }
+
+    @Test("reaching the threshold takes the hint down with the warning")
+    func discardEndsTheHint() async {
+        let controller = HoldToDiscardController(onStop: {}, onDiscard: {})
+
+        controller.touchDown()
+        try? await Task.sleep(for: .seconds(HoldToDiscardController.holdDuration + 0.05))
+
+        #expect(controller.isHinting == false)
+        #expect(controller.isWarning == false)
     }
 
     @Test("warning appears after the dwell and ramps across the warning window")

@@ -30,9 +30,9 @@ struct RecordingView: View {
     private static let warmingPillHeight: CGFloat = 30
     private static let pillBorder: CGFloat = 1.5
     private static let pillFontSize: CGFloat = 12
-    /// Clearance above the status row, which now sits at the top of every
-    /// screen rather than only inside the recording one.
-    private static let statusRowTopPadding: CGFloat = 8
+    /// Clearance under the safe area for the header line — the status row and
+    /// the App Shell icons together.
+    private static let headerTopPadding: CGFloat = 12
     private static let discardTintMaxOpacity: Double = 0.4
     /// Release before the threshold is the recovery gesture — it has to read
     /// as *gone*, not as fading. Fast enough to look instant, slow enough
@@ -51,9 +51,7 @@ struct RecordingView: View {
             discardWarningTint
 
             VStack(spacing: 0) {
-                topBar
-                statusRow
-                    .padding(.top, Self.statusRowTopPadding)
+                header
                 stateContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 bottomArea
@@ -71,7 +69,22 @@ struct RecordingView: View {
         .environment(\.theme, theme)
     }
 
-    // MARK: - Top Bar
+    // MARK: - Header
+
+    /// The status row and the App Shell icons share one line. The icons only
+    /// ever occupy its trailing end, so the row costs no vertical space of its
+    /// own and the screen's content starts that much higher. The line keeps the
+    /// icons' height whether or not they are rendered — while arming and
+    /// recording the cluster is gone and the text has the line to itself,
+    /// centred as it is on the keyboard, but nothing below it shifts.
+    private var header: some View {
+        HStack(spacing: 0) {
+            statusRow
+            topBar
+        }
+        .frame(height: RecordingTopBar.height)
+        .padding(.top, Self.headerTopPadding)
+    }
 
     @ViewBuilder
     private var topBar: some View {

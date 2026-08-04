@@ -25,13 +25,14 @@ final class KeyboardDisplayModeManager {
     /// needs, since anything more is dead space rather than reclaimed screen.
     static var compactKeyboardHeight: CGFloat { CompactKeyboardView.intrinsicHeight }
 
-    /// Height of the Full Keyboard's toolbar area: the control strip plus the
-    /// permanently reserved status row above it. Shared with
-    /// `VCDRKeyboardView`'s `keyboardToolbarStyle` so the predicted Full
-    /// height below and the rendered strip cannot drift apart.
-    static var fullToolbarHeight: CGFloat { controlStripHeight + StatusRow.height }
+    /// Height of the Full Keyboard's toolbar area, which is the control strip
+    /// and nothing else — the status text shares the strip's line rather than
+    /// claiming one above it. Shared with `VCDRKeyboardView`'s
+    /// `keyboardToolbarStyle` so the predicted Full height below and the
+    /// rendered strip cannot drift apart.
+    static var fullToolbarHeight: CGFloat { controlStripHeight }
 
-    /// The dictation control strip on its own — pills, action button, chevron.
+    /// The dictation control strip: status slot, action button, chevron.
     private static let controlStripHeight: CGFloat = 44
 
     /// One notch below `.required`: beats SwiftUI content sizing, still
