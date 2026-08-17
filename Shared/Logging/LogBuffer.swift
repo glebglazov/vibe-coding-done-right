@@ -370,13 +370,21 @@ nonisolated final class LogBuffer: @unchecked Sendable {
         #if DEBUG
         if let directoryOverride { return directoryOverride }
         #endif
+        // Mirrors the stores' platform split: on macOS the app has no App Group
+        // entitlement, and writing into the iOS group container makes TCC treat
+        // every log write as access to another app's data (recurring prompt).
         let root: URL
+        #if os(macOS)
+        root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("VCDR")
+        #else
         if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) {
             root = group.appendingPathComponent("VCDR")
         } else {
             root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("VCDR")
         }
+        #endif
         return root.appendingPathComponent("Logs")
     }
 
