@@ -144,8 +144,13 @@ final class AppDependencies {
             await PromptFetcher.refreshIfNeeded()
         }
 
-        Task { [mediaPlaybackController] in
-            await mediaPlaybackController.prewarmBackend()
+        // Probing MediaRemote triggers the macOS "access data from other apps"
+        // prompt, so only prewarm when the pause feature can actually run.
+        // resolveBackend() resolves lazily on first pause if this is skipped.
+        if settings.audioSettings.pauseMediaDuringRecording {
+            Task { [mediaPlaybackController] in
+                await mediaPlaybackController.prewarmBackend()
+            }
         }
 
         checkPermissions()
