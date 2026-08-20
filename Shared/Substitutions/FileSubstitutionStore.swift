@@ -36,15 +36,36 @@ final class FileSubstitutionStore: SubstitutionStore {
     nonisolated(unsafe) private let encoder: JSONEncoder
     nonisolated(unsafe) private let decoder: JSONDecoder
 
+    /// Sendable payload produced off the main actor by `loadSnapshot`. The
+    /// `@MainActor` store is then installed from this cheaply — no filesystem,
+    /// directory scan, or decode work belongs in `init`.
+    struct Snapshot: Sendable {
+        let storageRoot: URL
+        fileprivate let substitutions: [Substitution]
+    }
+
     // MARK: - Init
 
-    init(storageRoot: URL = FileSubstitutionStore.defaultStorageRoot) {
-        self.substitutionsDir = storageRoot.appendingPathComponent(Self.substitutionsDirName)
+    /// Constructs from a pre-loaded `Snapshot`. Performs no filesystem or
+    /// iCloud work — callers must build the snapshot off the main actor via
+    /// `loadSnapshot(storageRoot:)`.
+    init(snapshot: Snapshot) {
+        self.substitutionsDir = snapshot.storageRoot.appendingPathComponent(Self.substitutionsDirName)
         self.encoder = SubstitutionJSONCoders.makeEncoder()
         self.decoder = SubstitutionJSONCoders.makeDecoder()
+        self.substitutions = snapshot.substitutions
+    }
 
-        ensureDirectoryExists()
-        reload()
+    /// Scans the storage root and decodes live substitutions. Safe to call from
+    /// any thread; pair with `init(snapshot:)` on the main actor.
+    nonisolated static func loadSnapshot(
+        storageRoot: URL = FileSubstitutionStore.defaultStorageRoot
+    ) -> Snapshot {
+        let substitutionsDir = storageRoot.appendingPathComponent(substitutionsDirName)
+        let decoder = SubstitutionJSONCoders.makeDecoder()
+        ensureDirectoryExistsOffMain(substitutionsDir)
+        let substitutions = scanOffMain(substitutionsDir: substitutionsDir, decoder: decoder)
+        return Snapshot(storageRoot: storageRoot, substitutions: substitutions)
     }
 
     // MARK: - SubstitutionStore
@@ -128,9 +149,9 @@ final class FileSubstitutionStore: SubstitutionStore {
 
     // MARK: - Scan
 
-    /// Nonisolated disk scan used by both the synchronous `reload` (called from
-    /// `init`) and the async refresh path (called from a detached task). Decodes
-    /// every snapshot, then suppresses any whose entry was tombstoned later.
+    /// Nonisolated disk scan used by `loadSnapshot`, synchronous `reload`, and
+    /// the async refresh path. Decodes every snapshot, then suppresses any whose
+    /// entry was tombstoned later.
     nonisolated private static func scanOffMain(
         substitutionsDir: URL,
         decoder: JSONDecoder
@@ -185,9 +206,9 @@ final class FileSubstitutionStore: SubstitutionStore {
 
     // MARK: - Filesystem
 
-    private func ensureDirectoryExists() {
+    nonisolated private static func ensureDirectoryExistsOffMain(_ directory: URL) {
         try? FileManager.default.createDirectory(
-            at: substitutionsDir,
+            at: directory,
             withIntermediateDirectories: true
         )
     }

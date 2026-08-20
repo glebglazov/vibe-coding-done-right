@@ -70,7 +70,7 @@ struct SubstitutionStoreTests {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let store = FileSubstitutionStore(storageRoot: root)
+        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         let id = UUID()
         store.upsert(Substitution(id: id, triggerPhrase: "oh my zsh", replacement: "Oh My Zsh"))
 
@@ -82,7 +82,7 @@ struct SubstitutionStoreTests {
         #expect(await eventually { self.fileExists(snapshot) })
 
         // A brand-new store at the same root loads the persisted entry from disk.
-        let reloaded = FileSubstitutionStore(storageRoot: root)
+        let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         #expect(reloaded.substitutions.count == 1)
         let loaded = try #require(reloaded.substitutions.first)
         #expect(loaded.id == id)
@@ -98,7 +98,7 @@ struct SubstitutionStoreTests {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let store = FileSubstitutionStore(storageRoot: root)
+        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         let id = UUID()
         store.upsert(Substitution(id: id, triggerPhrase: "ip", replacement: "IP address"))
         let snapshot = substitutionsDir(in: root).appendingPathComponent("\(id.uuidString).json")
@@ -107,12 +107,12 @@ struct SubstitutionStoreTests {
         store.upsert(Substitution(id: id, triggerPhrase: "ip", replacement: "Internet Protocol", isEnabled: false))
         #expect(store.substitutions.count == 1)
         #expect(await eventually {
-            let reloaded = FileSubstitutionStore(storageRoot: root)
+            let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
             return reloaded.substitutions.first?.replacement == "Internet Protocol"
         })
 
         // Still exactly one file per entry, and the update stuck.
-        let reloaded = FileSubstitutionStore(storageRoot: root)
+        let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         #expect(reloaded.substitutions.count == 1)
         let loaded = try #require(reloaded.substitutions.first)
         #expect(loaded.replacement == "Internet Protocol")
@@ -131,7 +131,7 @@ struct SubstitutionStoreTests {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let store = FileSubstitutionStore(storageRoot: root)
+        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         let sub = Substitution(triggerPhrase: "secret", replacement: "REDACTED")
         store.upsert(sub)
         let dir = substitutionsDir(in: root)
@@ -152,7 +152,7 @@ struct SubstitutionStoreTests {
         #expect(decoded.substitutionID == sub.id)
 
         // A fresh store does not resurrect the deleted entry.
-        let reloaded = FileSubstitutionStore(storageRoot: root)
+        let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         #expect(reloaded.substitutions.isEmpty)
     }
 
@@ -161,7 +161,7 @@ struct SubstitutionStoreTests {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let store = FileSubstitutionStore(storageRoot: root)
+        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         let a = Substitution(triggerPhrase: "a", replacement: "alpha")
         let b = Substitution(triggerPhrase: "b", replacement: "bravo")
         let c = Substitution(triggerPhrase: "c", replacement: "charlie")
@@ -178,7 +178,7 @@ struct SubstitutionStoreTests {
             self.fileExists(dir.appendingPathComponent("\(b.id.uuidString).deleted.json"))
         })
 
-        let reloaded = FileSubstitutionStore(storageRoot: root)
+        let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         let ids = Set(reloaded.substitutions.map(\.id))
         #expect(ids == [a.id, c.id])
     }
@@ -246,7 +246,7 @@ struct SubstitutionStoreTests {
         )
         try writeTombstone(id: id, deletedAt: Date(timeIntervalSince1970: 200), into: dir)
 
-        let store = FileSubstitutionStore(storageRoot: root)
+        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         #expect(store.substitutions.isEmpty)
     }
 
@@ -263,7 +263,7 @@ struct SubstitutionStoreTests {
             into: dir
         )
 
-        let store = FileSubstitutionStore(storageRoot: root)
+        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         #expect(store.substitutions.count == 1)
         #expect(store.substitutions.first?.replacement == "re-added")
     }
@@ -282,7 +282,7 @@ struct SubstitutionStoreTests {
         )
         try writeTombstone(id: id, deletedAt: when, into: dir)
 
-        let store = FileSubstitutionStore(storageRoot: root)
+        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
         #expect(store.substitutions.count == 1)
     }
 
@@ -291,7 +291,9 @@ struct SubstitutionStoreTests {
     @Test("factory falls back to the local store when no ubiquity root is available")
     func factoryFallsBackToLocal() {
         let defaults = ephemeralDefaults()
-        let store = SubstitutionStoreFactory.make(defaults: defaults, ubiquityRoot: nil)
+        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        let bootstrap = SubstitutionStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: nil)
+        let store = SubstitutionStoreFactory.make(bootstrap)
         #expect(store is FileSubstitutionStore)
     }
 
@@ -299,14 +301,24 @@ struct SubstitutionStoreTests {
     func factoryRespectsDisabledSync() {
         let defaults = ephemeralDefaults()
         defaults.set(false, forKey: SubstitutionStoreFactory.syncEnabledDefaultsKey)
-        let store = SubstitutionStoreFactory.make(defaults: defaults, ubiquityRoot: makeTempRoot())
+        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        let bootstrap = SubstitutionStoreFactory.loadBootstrap(
+            syncEnabled: syncEnabled,
+            ubiquityRoot: makeTempRoot()
+        )
+        let store = SubstitutionStoreFactory.make(bootstrap)
         #expect(store is FileSubstitutionStore)
     }
 
     @Test("factory returns the ubiquity-backed store when sync is on and a root is available")
     func factoryReturnsUbiquityWhenAvailable() {
         let defaults = ephemeralDefaults()
-        let store = SubstitutionStoreFactory.make(defaults: defaults, ubiquityRoot: makeTempRoot())
+        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        let bootstrap = SubstitutionStoreFactory.loadBootstrap(
+            syncEnabled: syncEnabled,
+            ubiquityRoot: makeTempRoot()
+        )
+        let store = SubstitutionStoreFactory.make(bootstrap)
         #expect(store is UbiquitySubstitutionStore)
     }
 

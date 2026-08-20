@@ -280,20 +280,22 @@ final class RecordingFlowCoordinator {
     }
 
     /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves
-    /// the iCloud ubiquity container off-main (it can block for seconds on first
-    /// launch), builds the real store via the factory on the main actor, and
-    /// installs it on the proxy — replaying any edits the user made before the
-    /// store was ready. The proxy stays the stable reference handed to the UI
-    /// and pipeline throughout.
+    /// the iCloud ubiquity container and loads the store snapshot off-main
+    /// (scan, decode, and account-token read can block), then installs the real
+    /// store on the main actor from that Sendable snapshot — replaying any
+    /// edits the user made before the store was ready. The proxy stays the
+    /// stable reference handed to the UI and pipeline throughout.
     func bootstrapSubstitutions() async {
         guard !isSubstitutionBootstrapRunning else { return }
         isSubstitutionBootstrapRunning = true
         defer { isSubstitutionBootstrapRunning = false }
         let defaults = SharedConstants.sharedDefaults
-        let ubiquityRoot: URL? = await withBlockingTask(qos: .userInitiated) {
-            UbiquitySubstitutionStore.resolveStorageRoot()
+        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        let bootstrap: SubstitutionStoreFactory.Bootstrap = await withBlockingTask(qos: .userInitiated) {
+            let root = UbiquitySubstitutionStore.resolveStorageRoot()
+            return SubstitutionStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: root)
         }
-        let store = SubstitutionStoreFactory.make(defaults: defaults, ubiquityRoot: ubiquityRoot)
+        let store = SubstitutionStoreFactory.make(bootstrap)
         substitutionStore.setRealStore(store)
     }
 

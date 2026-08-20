@@ -220,18 +220,21 @@ final class AppDependencies {
         await transcriptionHistory.setRealStore(store)
     }
 
-    /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves the
-    /// iCloud ubiquity container off-main (can block for seconds on first launch),
-    /// builds the real store via the factory, and installs it on the proxy —
-    /// flushing any edits the user made before the store was ready.
+    /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves
+    /// the iCloud ubiquity container and loads the store snapshot off-main
+    /// (can block for seconds on first launch), then installs the real store
+    /// on the main actor from that Sendable snapshot — flushing any edits the
+    /// user made before the store was ready.
     private func bootstrapSubstitutions() async {
         let defaults = UserDefaults.standard
+        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
 
-        let ubiquityRoot = await Task.detached(priority: .userInitiated) {
-            UbiquitySubstitutionStore.resolveStorageRoot()
+        let bootstrap = await Task.detached(priority: .userInitiated) {
+            let root = UbiquitySubstitutionStore.resolveStorageRoot()
+            return SubstitutionStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: root)
         }.value
 
-        let store = SubstitutionStoreFactory.make(defaults: defaults, ubiquityRoot: ubiquityRoot)
+        let store = SubstitutionStoreFactory.make(bootstrap)
         substitutionStore.setRealStore(store)
     }
 
