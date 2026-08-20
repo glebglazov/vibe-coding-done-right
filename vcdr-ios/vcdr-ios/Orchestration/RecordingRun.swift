@@ -32,22 +32,26 @@ final class RecordingRun {
     }
 
     private let conversationID = UUID()
-    private let audioRecorder: any RecordingAudioCapturing
+    let audioRecorder: any RecordingAudioCapturing
     private let transcriptionProvider: any StreamingTranscriptionProvider
-    private let streaming: any RecordingStreamingSession
+    let streaming: any RecordingStreamingSession
     private let transcriptProcessor: TranscriptProcessor
     private let completionAdapters: [any RecordingRunCompletionAdapter]
+    let clock: HotMicClock
     private let currentSettings: @MainActor () -> Settings
     private let currentCaptures: @MainActor () -> [String]
     private let currentSubstitutions: @MainActor () -> [Substitution]
     private let onLiveTranscript: @MainActor (String) -> Void
     private let onInterimResult: @MainActor (String) -> Void
     private let onTranscribingMessage: @MainActor (String) -> Void
+    private let onTerminal: @MainActor (RecordingRunTerminalState) -> Void
 
     private var setupTask: Task<Void, Error>?
     private var updateTask: Task<Void, Never>?
+    var armingDeadlineTask: Task<Void, Never>?
     private var terminalState: RecordingRunTerminalState?
     private var latestLiveTranscript = ""
+    var hasReceivedFirstAudioBuffer = false
 
     init(
         audioRecorder: any RecordingAudioCapturing,
@@ -55,24 +59,30 @@ final class RecordingRun {
         streaming: any RecordingStreamingSession = LiveRecordingStreamingSession(),
         transcriptProcessor: TranscriptProcessor,
         completionAdapters: [any RecordingRunCompletionAdapter],
+        clock: HotMicClock? = nil,
         currentSettings: @escaping @MainActor () -> Settings,
         currentCaptures: @escaping @MainActor () -> [String],
         currentSubstitutions: @escaping @MainActor () -> [Substitution] = { [] },
         onLiveTranscript: @escaping @MainActor (String) -> Void,
         onInterimResult: @escaping @MainActor (String) -> Void,
-        onTranscribingMessage: @escaping @MainActor (String) -> Void
+        onTranscribingMessage: @escaping @MainActor (String) -> Void,
+        onTerminal: @escaping @MainActor (RecordingRunTerminalState) -> Void = { _ in }
     ) {
         self.audioRecorder = audioRecorder
         self.transcriptionProvider = transcriptionProvider
         self.streaming = streaming
         self.transcriptProcessor = transcriptProcessor
         self.completionAdapters = completionAdapters
+        // Optional so the default can be built inside this `@MainActor` init —
+        // default-argument expressions evaluate in a nonisolated context.
+        self.clock = clock ?? SystemHotMicClock()
         self.currentSettings = currentSettings
         self.currentCaptures = currentCaptures
         self.currentSubstitutions = currentSubstitutions
         self.onLiveTranscript = onLiveTranscript
         self.onInterimResult = onInterimResult
         self.onTranscribingMessage = onTranscribingMessage
+        self.onTerminal = onTerminal
     }
 
     var isTerminal: Bool { terminalState != nil }
@@ -85,17 +95,30 @@ final class RecordingRun {
         latestLiveTranscript = ""
         onLiveTranscript("")
         updateTask = startConsumingUpdates()
+        // Arming Deadline (ADR-0005): keyed on the first audio buffer, not on
+        // `startCapture` returning — a hung engine start must still fail honest.
+        startArmingDeadline()
 
         let started = await audioRecorder.startCapture { [streaming] buffer in
+            Task { @MainActor [weak self] in
+                self?.noteFirstAudioBuffer()
+            }
             streaming.streamAudio(buffer)
         }
+
+        if isTerminal {
+            return false
+        }
+
         if !started {
+            cancelArmingDeadline()
             cancelSetup()
             _ = await finish(.processingFailure(
                 RecordingRunFailure(message: "Failed to start recording — check microphone permission")
             ))
+            return false
         }
-        return started
+        return true
     }
 
     func stop(deliversToKeyboard: Bool) async -> RecordingRunTerminalState {
@@ -103,6 +126,7 @@ final class RecordingRun {
             return terminalState ?? .cancellation
         }
 
+        cancelArmingDeadline()
         audioRecorder.stopCapture()
         updateTask?.cancel()
 
@@ -152,6 +176,7 @@ final class RecordingRun {
     }
 
     func cancel() async -> RecordingRunTerminalState {
+        cancelArmingDeadline()
         audioRecorder.stopCapture()
         cancelSetup()
         await streaming.cancel()
@@ -208,16 +233,18 @@ final class RecordingRun {
         return await finish(terminal, backgroundTaskID: context.backgroundTaskID)
     }
 
-    private func finish(
+    func finish(
         _ terminal: RecordingRunTerminalState,
         backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     ) async -> RecordingRunTerminalState {
+        cancelArmingDeadline()
         terminalState = terminal
         logTerminal(terminal)
         onTranscribingMessage("")
         for adapter in completionAdapters {
             await adapter.complete(terminal)
         }
+        onTerminal(terminal)
         if backgroundTaskID != .invalid {
             UIApplication.shared.endBackgroundTask(backgroundTaskID)
         }
@@ -243,7 +270,7 @@ final class RecordingRun {
         }
     }
 
-    private func cancelSetup() {
+    func cancelSetup() {
         updateTask?.cancel()
         setupTask?.cancel()
     }

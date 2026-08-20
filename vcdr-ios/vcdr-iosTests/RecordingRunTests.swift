@@ -1,5 +1,6 @@
 import FluidAudio
 import Foundation
+import AVFoundation
 import Testing
 @testable import vcdr_ios
 
@@ -172,6 +173,151 @@ struct RecordingRunTests {
         #expect(history.conversations.isEmpty)
     }
 
+    @Test("Arming Deadline with no first buffer terminates as Processing Failure")
+    func armingDeadlineWithoutFirstBufferIsProcessingFailure() async {
+        let clock = TestClock()
+        // Hang inside startCapture so the deadline must fire before engine
+        // start returns — the 15:00 failure mode from ADR-0005.
+        let capture = ControllableRecordingAudioCapture(hangUntilStopped: true)
+        let adapter = SpyCompletionAdapter()
+        let run = makeRun(audioRecorder: capture, clock: clock, completionAdapters: [adapter])
+
+        let startTask = Task { await run.start() }
+        await settle()
+        #expect(clock.sleepCount == 1)
+        #expect(!run.isTerminal)
+
+        clock.advance()
+        await settle()
+
+        let expected = RecordingRunTerminalState.processingFailure(
+            RecordingRunFailure(message: RecordingRun.armingDeadlineFailureMessage)
+        )
+        #expect(await run.waitForIdle(timeout: .seconds(1)) == expected)
+        #expect(adapter.states == [expected])
+        #expect(await startTask.value == false)
+    }
+
+    @Test("Arming Deadline is keyed on the first buffer, not on engine start returning")
+    func armingDeadlineIgnoresEngineStartWithoutBuffer() async {
+        let clock = TestClock()
+        // Capture returns successfully (engine "started") but never delivers a buffer.
+        let capture = ControllableRecordingAudioCapture(startResult: true)
+        let adapter = SpyCompletionAdapter()
+        let run = makeRun(audioRecorder: capture, clock: clock, completionAdapters: [adapter])
+
+        #expect(await run.start() == true)
+        await settle()
+        #expect(clock.sleepCount == 1)
+        #expect(!run.isTerminal)
+
+        clock.advance()
+        await settle()
+
+        let expected = RecordingRunTerminalState.processingFailure(
+            RecordingRunFailure(message: RecordingRun.armingDeadlineFailureMessage)
+        )
+        #expect(await run.waitForIdle(timeout: .seconds(1)) == expected)
+        #expect(adapter.states == [expected])
+        // Must not collapse into Empty Result — keyboard wire gets Processing Failure.
+        #expect(adapter.states != [.emptyResult])
+    }
+
+    @Test("first audio buffer before the deadline leaves the run alive")
+    func firstBufferCancelsArmingDeadline() async {
+        let clock = TestClock()
+        let capture = ControllableRecordingAudioCapture(startResult: true)
+        let adapter = SpyCompletionAdapter()
+        let run = makeRun(audioRecorder: capture, clock: clock, completionAdapters: [adapter])
+
+        #expect(await run.start() == true)
+        await settle()
+        #expect(clock.sleepCount == 1)
+
+        capture.deliverSilentBuffer()
+        await settle()
+
+        clock.advance()
+        await settle()
+
+        #expect(!run.isTerminal)
+        #expect(adapter.states.isEmpty)
+
+        _ = await run.cancel()
+    }
+
+    @Test("Arming Deadline publishes Processing Failure on the keyboard wire")
+    func armingDeadlineReachesKeyboardWire() async {
+        let clock = TestClock()
+        let capture = ControllableRecordingAudioCapture(startResult: true)
+        let defaults = makeDefaults()
+        let channel = KeyboardChannel(defaults: defaults)
+        let keyboardAdapter = KeyboardChannelRecordingRunCompletionAdapter(
+            keyboardChannel: channel,
+            deliversToKeyboard: true
+        )
+        let run = makeRun(
+            audioRecorder: capture,
+            clock: clock,
+            completionAdapters: [keyboardAdapter]
+        )
+
+        #expect(await run.start() == true)
+        await settle()
+        #expect(clock.sleepCount == 1)
+
+        clock.advance()
+        await settle()
+
+        #expect(
+            await run.waitForIdle(timeout: .seconds(1))
+                == .processingFailure(
+                    RecordingRunFailure(message: RecordingRun.armingDeadlineFailureMessage)
+                )
+        )
+        #expect(channel.readState() == .failed(RecordingRun.armingDeadlineFailureMessage))
+    }
+
+    private func makeRun(
+        audioRecorder: any RecordingAudioCapturing,
+        clock: HotMicClock,
+        completionAdapters: [any RecordingRunCompletionAdapter]
+    ) -> RecordingRun {
+        RecordingRun(
+            audioRecorder: audioRecorder,
+            transcriptionProvider: FakeStreamingTranscriptionProvider(),
+            transcriptProcessor: TranscriptProcessor(
+                makeAIProvider: { _ in
+                    ProviderCascade(
+                        primary: FakeLLMProvider(behavior: .alwaysSucceed(output: "unused")),
+                        fallback: nil,
+                        maxAttempts: 1,
+                        timeout: .seconds(1)
+                    )
+                },
+                onAIProcessingStatus: { _ in },
+                onAIInputText: { _ in }
+            ),
+            completionAdapters: completionAdapters,
+            clock: clock,
+            currentSettings: {
+                RecordingRun.Settings(
+                    promptMode: .verbatim,
+                    textStyle: .casual,
+                    hasAICapability: false
+                )
+            },
+            currentCaptures: { [] },
+            onLiveTranscript: { _ in },
+            onInterimResult: { _ in },
+            onTranscribingMessage: { _ in }
+        )
+    }
+
+    private func settle() async {
+        for _ in 0..<20 { await Task.yield() }
+    }
+
     private func success(
         transcript: String = "raw",
         processed: String? = nil,
@@ -208,6 +354,51 @@ private final class SpyCompletionAdapter: RecordingRunCompletionAdapter {
 
     func complete(_ terminalState: RecordingRunTerminalState) async {
         states.append(terminalState)
+    }
+}
+
+/// Controllable capture seam: can return success without buffers, hang until
+/// `stopCapture`, and deliver a silent first buffer for deadline tests.
+@MainActor
+private final class ControllableRecordingAudioCapture: RecordingAudioCapturing {
+    private let startResult: Bool
+    private let hangUntilStopped: Bool
+    private var onBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
+    private var hangContinuation: CheckedContinuation<Void, Never>?
+
+    init(startResult: Bool = true, hangUntilStopped: Bool = false) {
+        self.startResult = startResult
+        self.hangUntilStopped = hangUntilStopped
+    }
+
+    func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
+        self.onBuffer = onBuffer
+        if hangUntilStopped {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                hangContinuation = cont
+            }
+        }
+        return startResult
+    }
+
+    func stopCapture() {
+        if let hangContinuation {
+            self.hangContinuation = nil
+            hangContinuation.resume()
+        }
+        onBuffer = nil
+    }
+
+    func deliverSilentBuffer() {
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        )!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 160)!
+        buffer.frameLength = 160
+        onBuffer?(buffer)
     }
 }
 

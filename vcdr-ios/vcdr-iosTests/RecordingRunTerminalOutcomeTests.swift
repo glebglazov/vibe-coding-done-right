@@ -116,6 +116,7 @@ struct RecordingRunTerminalOutcomeTests {
         )
 
         #expect(await run.waitForIdle(timeout: .milliseconds(1)) == nil)
+        _ = await run.cancel()
     }
 
     private func makeRun(

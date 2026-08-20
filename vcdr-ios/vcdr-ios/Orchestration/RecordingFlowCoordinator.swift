@@ -558,14 +558,15 @@ final class RecordingFlowCoordinator {
         Logger.app.info("[RecordTiming] audioRecorder.startCapture returned (Capturing) at +\(ContinuousClock.now - recordStart)")
 
         guard started else {
-            // Engine warmup failed (mic seized, route/HAL error). The Recording
-            // Run already terminated in processing failure inside `run.start()`,
-            // and its keyboard completion adapter has already published that
-            // failure on the wire — writing anything here would overwrite the
-            // reason with a state the run did not reach (ADR-0004).
-            state = .error("Microphone unavailable — couldn't start recording")
+            // Engine warmup failed, or the Arming Deadline fired while
+            // `startCapture` was still hanging. `onTerminal` may already have
+            // surfaced the Processing Failure reason — only apply a fallback
+            // when the UI is still showing Arming/Capturing.
+            if state == .arming || state == .recording {
+                state = .error("Microphone unavailable — couldn't start recording")
+                hotMicSession.recordIntentCancelledBeforeCapture()
+            }
             recordingRun = nil
-            hotMicSession.recordIntentCancelledBeforeCapture()
             isStartingRecording = false
             return
         }
@@ -734,6 +735,28 @@ final class RecordingFlowCoordinator {
         }
     }
 
+    /// Surfaces a Processing Failure that lands while the run is still Arming
+    /// or Capturing — including the Arming Deadline firing while
+    /// `startCapture` is hung and `startRecording` has not returned yet.
+    /// Finalizing failures are left to `stopAndTranscribe`'s
+    /// `applyTerminalStateToUI` path.
+    private func handleRecordingRunTerminal(_ terminal: RecordingRunTerminalState) {
+        guard case .processingFailure(let failure) = terminal else { return }
+        let phase = state
+        guard phase == .arming || phase == .recording else { return }
+
+        state = .error(failure.message)
+        recordingRun = nil
+        let wasStillArming = isStartingRecording || phase == .arming
+        isStartingRecording = false
+        setIdleTimerDisabled(false)
+        if wasStillArming {
+            hotMicSession.recordIntentCancelledBeforeCapture()
+        } else {
+            hotMicSession.recordingStopped()
+        }
+    }
+
     private func makeRecordingRun(deliversToKeyboard: Bool) -> RecordingRun {
         RecordingRun(
             audioRecorder: recordingEngine,
@@ -776,6 +799,9 @@ final class RecordingFlowCoordinator {
             },
             onTranscribingMessage: { [weak self] message in
                 self?.transcribingMessage = message
+            },
+            onTerminal: { [weak self] terminal in
+                self?.handleRecordingRunTerminal(terminal)
             }
         )
     }
