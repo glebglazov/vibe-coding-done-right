@@ -11,9 +11,9 @@ import Foundation
 ///   * Account-state observation — surfaces `.paused` when the user signs
 ///     out of iCloud mid-session.
 ///
-/// Construction fails (`init?` returns nil) when the ubiquity container is
-/// unavailable — iCloud signed out, entitlement missing, or capability not
-/// yet provisioned. Callers fall back to a local-only `FileHistoryStore`.
+/// Construction uses a Sendable `Snapshot` loaded off the main actor — when
+/// the ubiquity container is unavailable, callers fall back to a local-only
+/// `FileHistoryStore` before ever reaching this type.
 @MainActor
 @Observable
 final class UbiquityHistoryStore: HistoryStore {
@@ -76,15 +76,39 @@ final class UbiquityHistoryStore: HistoryStore {
         let newFilenames: [String]
     }
 
+    /// Sendable payload produced off the main actor by `loadSnapshot`. Carries
+    /// the inner file-store snapshot plus the account-token read so
+    /// `init(snapshot:)` never touches the filesystem or iCloud.
+    struct Snapshot: Sendable {
+        let file: FileHistoryStore.Snapshot
+        let hasUbiquityIdentity: Bool
+    }
+
     // MARK: - Init
 
-    init?(storageRoot: URL? = UbiquityHistoryStore.resolveStorageRoot()) {
-        guard let storageRoot else { return nil }
-        self.inner = FileHistoryStore(storageRoot: storageRoot)
+    /// Constructs from a pre-loaded `Snapshot`. Starts the metadata query and
+    /// account observer (cheap, MainActor-bound) but performs no scan, decode,
+    /// or `ubiquityIdentityToken` read.
+    init(snapshot: Snapshot) {
+        self.inner = FileHistoryStore(snapshot: snapshot.file)
         self.metadataQuery = NSMetadataQuery()
+        if snapshot.hasUbiquityIdentity {
+            self.syncState = .idle
+        } else {
+            self.syncState = .paused(reason: "iCloud signed out")
+        }
         startWatchingContainer()
         observeAccountStateChanges()
-        refreshAccountState()
+    }
+
+    /// Scans the ubiquity container, decodes the first page, and reads the
+    /// account token. Safe to call from any thread; pair with `init(snapshot:)`
+    /// on the main actor.
+    nonisolated static func loadSnapshot(storageRoot: URL) -> Snapshot {
+        Snapshot(
+            file: FileHistoryStore.loadSnapshot(storageRoot: storageRoot),
+            hasUbiquityIdentity: FileManager.default.ubiquityIdentityToken != nil
+        )
     }
 
     // NB: no deinit. NotificationCenter observer tokens are held in stored

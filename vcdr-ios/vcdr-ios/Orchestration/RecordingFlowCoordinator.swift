@@ -242,19 +242,20 @@ final class RecordingFlowCoordinator {
         await hotMicSession.renewIfAlive()
     }
 
-    /// Resolves the iCloud container and reconciles local ↔︎ ubiquity storage
-    /// off the main actor, then constructs the active store on the main actor
-    /// (stores are `@Observable` / `@MainActor`, so init must hop back).
+    /// Resolves the iCloud container, reconciles local ↔︎ ubiquity storage, and
+    /// loads the history-store snapshot off the main actor, then installs the
+    /// `@Observable` store on the main actor (cheap: metadata query start +
+    /// applying the Sendable snapshot — no scan, decode, or token read).
     ///
     /// The iCloud resolve — `FileManager.url(forUbiquityContainerIdentifier:)`,
     /// reached via `resolveStorageRoot()` — blocks for seconds while iCloud
-    /// provisions the container. It must run on a GCD thread via
-    /// `withBlockingTask`, NOT on a `Task.detached` (cooperative pool): a
-    /// blocking syscall there pins one of the pool's few threads for its whole
-    /// duration and starves other launch work — notably model init, which then
-    /// can't even start until the resolve returns (see ADR-0002 / `BlockingWork`).
-    /// Resolve exactly once and reuse the root for both reconcile and store
-    /// construction so `make` never blocks the main actor a second time.
+    /// provisions the container. Directory scan, first-page decode, and
+    /// `ubiquityIdentityToken` are likewise blocking. All of that runs on a
+    /// GCD thread via `withBlockingTask`, NOT on a `Task.detached` (cooperative
+    /// pool): a blocking syscall there pins one of the pool's few threads for
+    /// its whole duration and starves other launch work — notably model init,
+    /// which then can't even start until the resolve returns (see ADR-0002 /
+    /// ADR-0005 / `BlockingWork`).
     func bootstrapHistory() async {
         Logger.app.info("[LaunchProbe] bootstrapHistory entry main=\(Thread.isMainThread)")
         guard history == nil, !isHistoryBootstrapRunning else {
@@ -265,14 +266,14 @@ final class RecordingFlowCoordinator {
         defer { isHistoryBootstrapRunning = false }
         let defaults = SharedConstants.sharedDefaults
         let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        Logger.app.info("[LaunchProbe] bootstrapHistory before resolve+reconcile (GCD)")
-        let ubiquityRoot: URL? = await withBlockingTask(qos: .userInitiated) {
+        Logger.app.info("[LaunchProbe] bootstrapHistory before resolve+reconcile+snapshot (GCD)")
+        let bootstrap: HistoryStoreFactory.Bootstrap = await withBlockingTask(qos: .userInitiated) {
             let root = UbiquityHistoryStore.resolveStorageRoot()
             HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled, ubiquityRoot: root)
-            return root
+            return HistoryStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: root)
         }
-        Logger.app.info("[LaunchProbe] bootstrapHistory after resolve+reconcile main=\(Thread.isMainThread) iCloud=\(ubiquityRoot != nil)")
-        let history = HistoryStoreFactory.make(defaults: defaults, ubiquityRoot: ubiquityRoot)
+        Logger.app.info("[LaunchProbe] bootstrapHistory after resolve+reconcile+snapshot main=\(Thread.isMainThread)")
+        let history = HistoryStoreFactory.make(bootstrap)
         self.history = history
         historyCompletionAdapter.setHistory(history)
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")

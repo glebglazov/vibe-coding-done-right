@@ -79,7 +79,7 @@ struct CaptureSessionTestEnvironment {
 
         let historyDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("vcdr-test-\(UUID().uuidString)")
-        let history = FileHistoryStore(storageRoot: historyDir)
+        let history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(storageRoot: historyDir))
         self.history = history
 
         let overrides = SessionOverrides()

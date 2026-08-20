@@ -199,32 +199,24 @@ final class AppDependencies {
         }
     }
 
-    /// Deferred history bootstrap: resolves the iCloud ubiquity container off-main
-    /// (can block for seconds on first launch) and then creates the real store.
-    /// Writes that arrived before the store was ready are queued in the proxy and
-    /// flushed once the real store is set.
+    /// Deferred history bootstrap: resolves the iCloud ubiquity container and
+    /// loads the store snapshot off-main (can block for seconds on first
+    /// launch), then installs the real store on the main actor from that
+    /// Sendable snapshot. Writes that arrived before the store was ready are
+    /// queued in the proxy and flushed once the real store is set.
     private func bootstrapHistory() async {
         let defaults = UserDefaults.standard
         let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
 
-        // Run migration off-main — iCloud container resolution can block for seconds.
-        await Task.detached(priority: .userInitiated) {
-            HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled)
+        // Resolve, migrate, and load the snapshot off-main — iCloud container
+        // resolution and the directory scan can block for seconds.
+        let bootstrap = await Task.detached(priority: .userInitiated) {
+            let root = UbiquityHistoryStore.resolveStorageRoot()
+            HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled, ubiquityRoot: root)
+            return HistoryStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: root)
         }.value
 
-        // Resolve the ubiquity container off-main; creating the store itself
-        // still runs on MainActor but the blocking resolution is already done.
-        let ubiquityRoot = await Task.detached(priority: .userInitiated) {
-            UbiquityHistoryStore.resolveStorageRoot()
-        }.value
-
-        let store: any HistoryStore
-        if syncEnabled, let ubiquityRoot {
-            store = UbiquityHistoryStore(storageRoot: ubiquityRoot) ?? FileHistoryStore()
-        } else {
-            store = FileHistoryStore()
-        }
-
+        let store = HistoryStoreFactory.make(bootstrap)
         await transcriptionHistory.setRealStore(store)
     }
 

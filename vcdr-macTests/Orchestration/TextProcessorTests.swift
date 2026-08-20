@@ -14,7 +14,7 @@ private func makeProcessor(
     s.removeFillerWords = false
     let historyDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("vcdr-test-\(UUID().uuidString)")
-    let history = FileHistoryStore(storageRoot: historyDir)
+    let history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(storageRoot: historyDir))
     let ai = ScriptedAIProcessing(results: aiResults)
     let overrides = SessionOverrides()
     let processor = TextProcessor(

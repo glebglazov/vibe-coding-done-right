@@ -7,7 +7,7 @@ import Foundation
 /// The decoder is deliberately tolerant of legacy date formats because
 /// pre-migration files on disk were written with the default
 /// `JSONEncoder` strategy (TimeInterval doubles), and never normalized.
-enum HistoryJSONCoders {
+nonisolated enum HistoryJSONCoders {
 
     static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()

@@ -18,8 +18,8 @@ final class FileHistoryStore: HistoryStore {
 
     // MARK: - Constants
 
-    static let maxConversations = 500
-    static let pageSize = 50
+    nonisolated static let maxConversations = 500
+    nonisolated static let pageSize = 50
 
     // MARK: - State
 
@@ -39,7 +39,7 @@ final class FileHistoryStore: HistoryStore {
     nonisolated(unsafe) private let encoder: JSONEncoder
     nonisolated(unsafe) private let decoder: JSONDecoder
 
-    private struct IndexEntry: Equatable, Sendable {
+    fileprivate struct IndexEntry: Equatable, Sendable {
         let url: URL
         let id: UUID
         let modifiedAt: Date
@@ -47,18 +47,57 @@ final class FileHistoryStore: HistoryStore {
     private var index: [IndexEntry] = []
     private var cursor: Int = 0
 
+    /// Sendable payload produced off the main actor by `loadSnapshot`. The
+    /// `@MainActor` store is then installed from this cheaply — no filesystem,
+    /// directory scan, or decode work belongs in `init`.
+    struct Snapshot: Sendable {
+        let storageRoot: URL
+        fileprivate let index: [IndexEntry]
+        fileprivate let conversations: [Conversation]
+        fileprivate let cursor: Int
+    }
+
     // MARK: - Init
 
-    init(storageRoot: URL = FileHistoryStore.defaultStorageRoot) {
-        self.conversationsDir = storageRoot.appendingPathComponent("conversations")
-        self.legacyFileURL = storageRoot.appendingPathComponent("history.json")
+    /// Constructs from a pre-loaded `Snapshot`. Performs no filesystem or
+    /// iCloud work — callers must build the snapshot off the main actor via
+    /// `loadSnapshot(storageRoot:)`.
+    init(snapshot: Snapshot) {
+        self.conversationsDir = snapshot.storageRoot.appendingPathComponent("conversations")
+        self.legacyFileURL = snapshot.storageRoot.appendingPathComponent("history.json")
         self.encoder = HistoryJSONCoders.makeEncoder()
         self.decoder = HistoryJSONCoders.makeDecoder()
+        self.index = snapshot.index
+        self.conversations = snapshot.conversations
+        self.cursor = snapshot.cursor
+    }
 
-        ensureDirectoryExists()
-        migrateLegacyFileIfNeeded()
-        rebuildIndex()
-        loadNextPage()
+    /// Scans the storage root, migrates legacy data if needed, and decodes the
+    /// first page. Safe to call from any thread; pair with `init(snapshot:)`
+    /// on the main actor.
+    nonisolated static func loadSnapshot(
+        storageRoot: URL = FileHistoryStore.defaultStorageRoot
+    ) -> Snapshot {
+        let conversationsDir = storageRoot.appendingPathComponent("conversations")
+        let legacyFileURL = storageRoot.appendingPathComponent("history.json")
+        let encoder = HistoryJSONCoders.makeEncoder()
+        let decoder = HistoryJSONCoders.makeDecoder()
+
+        ensureDirectoryExistsOffMain(conversationsDir)
+        migrateLegacyFileIfNeededOffMain(
+            legacyFileURL: legacyFileURL,
+            conversationsDir: conversationsDir,
+            encoder: encoder,
+            decoder: decoder
+        )
+        let index = scanIndexOffMain(conversationsDir: conversationsDir)
+        let (conversations, cursor) = loadFirstPageOffMain(index: index, decoder: decoder)
+        return Snapshot(
+            storageRoot: storageRoot,
+            index: index,
+            conversations: conversations,
+            cursor: cursor
+        )
     }
 
     // MARK: - HistoryStore
@@ -258,6 +297,23 @@ final class FileHistoryStore: HistoryStore {
         return try? decoder.decode(Conversation.self, from: data)
     }
 
+    /// Decodes the first page of conversations from a freshly scanned index.
+    /// Used by `loadSnapshot` so the MainActor init never touches disk.
+    nonisolated private static func loadFirstPageOffMain(
+        index: [IndexEntry],
+        decoder: JSONDecoder
+    ) -> (conversations: [Conversation], cursor: Int) {
+        let upper = min(Self.pageSize, Self.maxConversations, index.count)
+        var loaded: [Conversation] = []
+        for i in 0..<upper {
+            guard let conv = readConversationOffMain(at: index[i].url, decoder: decoder) else {
+                continue
+            }
+            loaded.append(conv)
+        }
+        return (loaded, upper)
+    }
+
     private func loadConversation(id: UUID) -> (Conversation, URL)? {
         if let inMemory = conversations.first(where: { $0.id == id }),
            let entry = index.first(where: { $0.id == id }) {
@@ -347,27 +403,29 @@ final class FileHistoryStore: HistoryStore {
         (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
     }
 
-    private static let filenameISO: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        f.timeZone = TimeZone(secondsFromGMT: 0)
-        return f
-    }()
-
     /// Filesystem-friendly ISO 8601 (colons and dots replaced with dashes).
     /// Lexical order still matches chronological order.
-    private static func filenameTimestamp(_ date: Date) -> String {
-        filenameISO.string(from: date)
+    nonisolated private static func filenameTimestamp(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter.string(from: date)
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: ".", with: "-")
     }
 
     // MARK: - Migration
 
-    private func migrateLegacyFileIfNeeded() {
+    nonisolated private static func migrateLegacyFileIfNeededOffMain(
+        legacyFileURL: URL,
+        conversationsDir: URL,
+        encoder: JSONEncoder,
+        decoder: JSONDecoder
+    ) {
         let fm = FileManager.default
+        let migratedMarker = conversationsDir.appendingPathComponent(".migrated")
         guard fm.fileExists(atPath: legacyFileURL.path),
-              !fm.fileExists(atPath: conversationsDir.appendingPathComponent(".migrated").path) else {
+              !fm.fileExists(atPath: migratedMarker.path) else {
             return
         }
         guard let data = try? Data(contentsOf: legacyFileURL),
@@ -375,14 +433,17 @@ final class FileHistoryStore: HistoryStore {
             Self.logger.error("FileHistoryStore migration: legacy file present but not decodable")
             return
         }
-        ensureDirectoryExists()
+        ensureDirectoryExistsOffMain(conversationsDir)
         for conv in legacyConversations {
-            let url = snapshotURL(id: conv.id, createdAt: conv.lastUpdated)
-            Self.writeSnapshotOffMain(conv, to: url, encoder: encoder)
+            let url = conversationsDir.appendingPathComponent(
+                "\(filenameTimestamp(conv.lastUpdated))_\(conv.id.uuidString).json"
+            )
+            writeSnapshotOffMain(conv, to: url, encoder: encoder)
         }
-        let backup = legacyFileURL.deletingLastPathComponent().appendingPathComponent("history.json.migrated-backup")
+        let backup = legacyFileURL.deletingLastPathComponent()
+            .appendingPathComponent("history.json.migrated-backup")
         try? fm.moveItem(at: legacyFileURL, to: backup)
-        try? Data().write(to: conversationsDir.appendingPathComponent(".migrated"))
+        try? Data().write(to: migratedMarker)
         Self.logger.info("FileHistoryStore migrated \(legacyConversations.count) legacy conversations")
     }
 
@@ -390,13 +451,13 @@ final class FileHistoryStore: HistoryStore {
 
     // Routes through the shared `history` channel so these lines land in the
     // persistent log buffer alongside everything else.
-    private static let logger = Logger.history
+    nonisolated private static let logger = Logger.history
 
     // MARK: - Filesystem
 
-    private func ensureDirectoryExists() {
+    nonisolated private static func ensureDirectoryExistsOffMain(_ directory: URL) {
         try? FileManager.default.createDirectory(
-            at: conversationsDir,
+            at: directory,
             withIntermediateDirectories: true
         )
     }

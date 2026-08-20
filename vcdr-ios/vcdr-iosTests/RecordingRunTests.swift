@@ -96,7 +96,7 @@ struct RecordingRunTests {
 
     @Test("history adapter records successful runs only")
     func historyAdapterRecordsSuccessOnly() async {
-        let history = FileHistoryStore(storageRoot: temporaryHistoryRoot())
+        let history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(storageRoot: temporaryHistoryRoot()))
         let adapter = HistoryRecordingRunCompletionAdapter(history: history)
 
         await adapter.complete(.processingFailure(RecordingRunFailure(message: "failed")))
@@ -118,7 +118,7 @@ struct RecordingRunTests {
 
     @Test("history adapter holds successful runs until bootstrap completes")
     func historyAdapterFlushesPendingSuccesses() async {
-        let history = FileHistoryStore(storageRoot: temporaryHistoryRoot())
+        let history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(storageRoot: temporaryHistoryRoot()))
         let adapter = HistoryRecordingRunCompletionAdapter()
 
         let pendingSuccess = success(
@@ -145,7 +145,7 @@ struct RecordingRunTests {
 
     @Test("history adapter does not duplicate runs when bootstrap finishes first")
     func historyAdapterRecordsOnceAfterBootstrap() async {
-        let history = FileHistoryStore(storageRoot: temporaryHistoryRoot())
+        let history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(storageRoot: temporaryHistoryRoot()))
         let adapter = HistoryRecordingRunCompletionAdapter()
         adapter.setHistory(history)
 
@@ -161,7 +161,7 @@ struct RecordingRunTests {
 
     @Test("history adapter does not buffer unsuccessful terminal states")
     func historyAdapterDoesNotBufferUnsuccessfulStates() async {
-        let history = FileHistoryStore(storageRoot: temporaryHistoryRoot())
+        let history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(storageRoot: temporaryHistoryRoot()))
         let adapter = HistoryRecordingRunCompletionAdapter()
 
         await adapter.complete(.emptyResult)
