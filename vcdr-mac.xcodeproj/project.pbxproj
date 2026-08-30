@@ -223,12 +223,12 @@
 			);
 			name = "Copy MediaRemote Adapter";
 			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/MediaRemote/mediaremote-adapter.pl",
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/MediaRemote/MediaRemoteAdapter.dylib",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/MediaRemote/mediaremote-adapter.pl",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/MediaRemote/MediaRemoteAdapter.dylib",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "DEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources/MediaRemote\"\nmkdir -p \"$DEST\"\ncp \"${PROJECT_DIR}/vendor/MediaRemote/mediaremote-adapter.pl\" \"$DEST/\"\ncp \"${PROJECT_DIR}/vendor/MediaRemote/MediaRemoteAdapter.dylib\" \"$DEST/\"\n";
+			shellScript = "DEST=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources/MediaRemote\"\nmkdir -p \"$DEST\"\ncp \"${PROJECT_DIR}/vendor/MediaRemote/mediaremote-adapter.pl\" \"$DEST/\"\ncp \"${PROJECT_DIR}/vendor/MediaRemote/MediaRemoteAdapter.dylib\" \"$DEST/\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -382,6 +382,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R9G7S83AGV;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "vcdr-mac/Info.plist";
@@ -414,6 +415,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = R9G7S83AGV;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "vcdr-mac/Info.plist";
