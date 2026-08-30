@@ -1,4 +1,10 @@
+---
+status: superseded by ADR-0006
+---
+
 # Mic Presence is dismissed at the Presence Deadline, not flipped to a stale "idle" rendering
+
+> **Superseded by [ADR-0006](0006-mic-presence-is-a-live-rendering-of-in-place-reachability.md):** Scheduling the activity's own dismissal with `end(_, .after(deadline))` freezes it, so a force-quit, jetsam or suspended teardown leaves it advertising readiness that no longer exists and cannot be withdrawn. Mic Presence is now kept live and refreshed with `staleDate` set to the keyboard's heartbeat freshness window, so iOS flips it to a not-ready rendering autonomously. This trades autonomous dismissal for autonomous honesty.
 
 For a finite Hot-Session Timeout, the Live Activity that backs Mic Presence is **scheduled to dismiss itself at the Presence Deadline** via ActivityKit's `end(_, dismissalPolicy: .after(deadline))`, set when the idle window is armed. It is no longer kept live with a `staleDate` that the system flips to a "Mic idle" rendering at the deadline. This makes the implementation match the documented Mic Presence contract — *"should end around the timeout deadline rather than remain visible as a stale readiness signal"* — at the cost of the warm-idle window being hosted by an **ended-but-still-visible** activity that cannot be updated.
 
