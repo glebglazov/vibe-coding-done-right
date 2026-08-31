@@ -1,4 +1,3 @@
-import ActivityKit
 import Foundation
 import OSLog
 
@@ -7,100 +6,152 @@ import OSLog
 /// Island — the system orange mic dot cannot be suppressed, this gives it
 /// identity instead. Lifecycle is tied to the hot audio engine, not to the
 /// recording flag.
+///
+/// Every operation is serialized: show, hide and refresh each run to completion
+/// before the next starts. Callers fan in from several places at once (recording
+/// start, idle re-arm, policy change) and the ActivityKit request suspends for
+/// as long as seconds, so without ordering two overlapping shows each saw an
+/// empty slot and requested their own card — leaving an orphan that outlived
+/// teardown and kept advertising readiness with the engine down.
 @MainActor
 final class HotMicActivityController {
-    private var activity: Activity<HotMicActivityAttributes>?
+    private let store: any HotMicActivityStore
+    /// The card this controller believes it owns. The system may hold others.
+    private var activityID: String?
     private var scheduledDismissalDeadline: Date?
+    /// Tail of the serialized operation chain — every new operation awaits it
+    /// before touching state, and becomes the tail in turn.
+    private var lastOperation: Task<Void, Never>?
 
-    init() {
+    /// The store is optional rather than a defaulted argument because
+    /// default-argument expressions evaluate in a nonisolated context and so
+    /// cannot construct this `@MainActor` value.
+    init(store: (any HotMicActivityStore)? = nil) {
+        self.store = store ?? ActivityKitPresenceStore()
         // End any activity that survived a previous app kill. If the engine
-        // comes back up via `start()`, a fresh one is requested.
-        for existing in Activity<HotMicActivityAttributes>.activities {
-            Task { await existing.end(nil, dismissalPolicy: .immediate) }
-        }
+        // comes back up via `start()`, a fresh one is requested — and because
+        // the sweep is the first link in the chain, that request cannot be
+        // swept away by it.
+        enqueue(.sweepStrays)
     }
 
     func start(deadline: Date?) async {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+        guard store.areActivitiesEnabled else {
             Logger.app.info("Live Activities disabled in Settings")
             return
         }
-
-        guard let deadline else {
-            await ensureLiveActivity()
-            return
-        }
-
-        await scheduleDismissal(at: deadline)
+        await enqueue(.show(deadline: deadline)).value
     }
 
     func stop() async {
-        guard let activity else { return }
-        await activity.end(nil, dismissalPolicy: .immediate)
-        self.activity = nil
-        scheduledDismissalDeadline = nil
-        Logger.app.info("Hot mic Live Activity ended")
+        await enqueue(.hide).value
     }
 
-    private func ensureLiveActivity() async {
+    // MARK: - Serialization
+
+    private enum PresenceOperation {
+        case show(deadline: Date?)
+        case hide
+        case sweepStrays
+    }
+
+    /// Appends an operation to the chain. Reading and replacing `lastOperation`
+    /// happens with no suspension in between, so a caller arriving during
+    /// another operation's `await` still lands behind it rather than beside it.
+    @discardableResult
+    private func enqueue(_ operation: PresenceOperation) -> Task<Void, Never> {
+        let predecessor = lastOperation
+        let task = Task { @MainActor [weak self] in
+            await predecessor?.value
+            await self?.perform(operation)
+        }
+        lastOperation = task
+        return task
+    }
+
+    private func perform(_ operation: PresenceOperation) async {
+        switch operation {
+        case .show(let deadline):
+            if let deadline {
+                await showEnding(at: deadline)
+            } else {
+                await showIndefinitely()
+            }
+        case .hide:
+            await hide()
+        case .sweepStrays:
+            await endEveryActivity()
+        }
+    }
+
+    // MARK: - Operations
+
+    private func showIndefinitely() async {
         if scheduledDismissalDeadline != nil {
-            await activity?.end(nil, dismissalPolicy: .immediate)
-            activity = nil
-            scheduledDismissalDeadline = nil
-        } else if let activity {
-            await activity.update(using: makeContentState())
+            // iOS owns the pending dismissal and offers no way to withdraw it,
+            // so an open-ended presence has to trade the card for a fresh one.
+            await endCurrentActivity()
+        } else if let activityID {
+            await store.update(id: activityID)
             return
         }
 
-        activity = await requestActivity()
+        await requestActivity()
     }
 
-    private func scheduleDismissal(at deadline: Date) async {
+    private func showEnding(at deadline: Date) async {
         if let scheduledDismissalDeadline {
             guard deadline < scheduledDismissalDeadline else { return }
-            await activity?.end(nil, dismissalPolicy: .immediate)
-            activity = nil
-            self.scheduledDismissalDeadline = nil
+            await endCurrentActivity()
         }
 
-        if activity == nil {
-            activity = await requestActivity()
+        if activityID == nil {
+            await requestActivity()
         }
 
-        guard let activity else { return }
-        await activity.end(using: makeContentState(), dismissalPolicy: .after(deadline))
+        guard let activityID else { return }
+        await store.end(id: activityID, dismissingAt: deadline)
         scheduledDismissalDeadline = deadline
         Logger.app.info("Hot mic Live Activity scheduled to dismiss at \(deadline)")
     }
 
-    private func requestActivity() async -> Activity<HotMicActivityAttributes>? {
-        do {
-            let attrs = HotMicActivityAttributes()
-            let contentState = makeContentState()
-            // `Activity.request` is synchronous and talks to the ActivityKit
-            // daemon; under cold-launch contention (parallel ANE model compile)
-            // that IPC has been observed to block for ~8s. Running it directly
-            // would pin this `@MainActor` call for that whole time, stalling the
-            // recording-start path and freezing SwiftUI updates. Offload to a GCD
-            // thread via the blocking-task bridge — same pattern as model load —
-            // so the main actor stays free. `Activity` and its attributes/content
-            // are Sendable, so the value crosses back cleanly.
-            let activity = try await withThrowingBlockingTask(qos: .userInitiated) {
-                try Activity.request(attributes: attrs, contentState: contentState)
-            }
-            Logger.app.info("Hot mic Live Activity started")
-            return activity
-        } catch {
-            Logger.app.error("Live Activity request failed: \(error)")
-            return nil
-        }
+    private func hide() async {
+        let endedAnything = await endEveryActivity()
+        guard endedAnything else { return }
+        Logger.app.info("Hot mic Live Activity ended")
     }
 
-    /// Content is intentionally deadline-free. Finite Mic Presence windows are
-    /// represented by ending the activity with `.after(deadline)`, letting iOS
-    /// remove it autonomously at the Presence Deadline while it continues to
-    /// render the same readiness signal.
-    private func makeContentState() -> HotMicActivityAttributes.ContentState {
-        HotMicActivityAttributes.ContentState()
+    private func requestActivity() async {
+        activityID = await store.request()
+        guard activityID != nil else { return }
+        Logger.app.info("Hot mic Live Activity started")
+    }
+
+    private func endCurrentActivity() async {
+        if let activityID {
+            await store.end(id: activityID, dismissingAt: nil)
+        }
+        activityID = nil
+        scheduledDismissalDeadline = nil
+    }
+
+    /// Ends every card the system holds for this app, not only the one this
+    /// controller remembers. A process killed mid-session leaves behind a card
+    /// nothing else clears; it keeps saying "ready" with the mic engine down, so
+    /// withdrawing presence has to reconcile against the system's list.
+    @discardableResult
+    private func endEveryActivity() async -> Bool {
+        var ids = store.liveActivityIDs
+        // The daemon can lag a just-granted request, so the card we hold is not
+        // always in its list yet.
+        if let activityID, !ids.contains(activityID) {
+            ids.append(activityID)
+        }
+        for id in ids {
+            await store.end(id: id, dismissingAt: nil)
+        }
+        activityID = nil
+        scheduledDismissalDeadline = nil
+        return !ids.isEmpty
     }
 }

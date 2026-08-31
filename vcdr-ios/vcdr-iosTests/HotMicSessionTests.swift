@@ -638,9 +638,10 @@ final class FakeWarmEngine: WarmEngine {
 /// refusing to deactivate) surfaced by `endHotSession`.
 struct FakeAudioReleaseError: Error {}
 
-/// Spy `MicPresence` that mirrors `HotMicActivityController`'s idempotency:
-/// repeated `start()` calls for the same live or scheduled presence do not
-/// count as distinct presentations.
+/// Spy `MicPresence` that mirrors `HotMicActivityController`'s serialized
+/// contract: these bodies never suspend, so no two operations can interleave,
+/// and a repeated `start()` for a presence that is already shown refreshes it
+/// rather than counting as a second presentation.
 @MainActor
 final class SpyPresence: MicPresence {
     private(set) var startCalls = 0
