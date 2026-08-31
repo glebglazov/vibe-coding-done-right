@@ -88,6 +88,15 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     private let heartbeatFreshnessWindow: TimeInterval
     private let cancelFreshnessWindow: TimeInterval
 
+    /// How long a Heartbeat stays credible — the window over which the app is
+    /// treated as reachable in place. The keyboard reads it to choose between a
+    /// Darwin command and the Deep-Link Fallback, and Mic Presence rides the
+    /// same window as its stale horizon, so the lock-screen card and the
+    /// keyboard cannot disagree about In-Place Reachability (ADR-0006). Three
+    /// times the app's 5s heartbeat cadence: wide enough to survive a missed
+    /// beat, narrow enough that a dead app is noticed quickly.
+    static let heartbeatFreshnessWindow: TimeInterval = 18
+
     static let appGroupID = "group.glebglazov.vcdr-ios"
     static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
     static let stopDeepLinkURL = URL(string: "vcdr-ios://stop")!
@@ -105,7 +114,7 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     init(
         defaults: UserDefaults,
         notify: @escaping @Sendable (String) -> Void = { _ in },
-        heartbeatFreshnessWindow: TimeInterval = 18,
+        heartbeatFreshnessWindow: TimeInterval = KeyboardChannel.heartbeatFreshnessWindow,
         cancelFreshnessWindow: TimeInterval = 10
     ) {
         self.defaults = defaults

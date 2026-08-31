@@ -35,21 +35,27 @@ extension AudioRecorder: RecordingEngine {}
 /// The lock-screen / Dynamic Island presence shown while the engine is warm,
 /// giving the un-suppressable system mic indicator app identity.
 /// `HotMicActivityController` is the production adapter; tests use a spy.
+///
+/// Presence carries no deadline of its own. It is a live rendering of the
+/// Heartbeat: shown while the session is warm, renewed on every beat, removed
+/// at teardown — and, when the app dies without reaching teardown, left to go
+/// not-ready on its own (ADR-0006). The Presence Deadline stays where the
+/// policy lives, in the Hot Mic Session.
 @MainActor
 protocol MicPresence {
-    /// Shows the presence. `deadline`, when non-nil, is the *Presence Deadline*:
-    /// the wall-clock instant past which readiness must no longer be advertised.
-    /// The adapter only reflects this deadline (for example by scheduling Live
-    /// Activity dismissal) — it never computes timeout policy itself; that lives
-    /// in the Hot Mic Session. `nil` means no inactivity deadline (`.always`, or
-    /// while a recording is in progress).
-    func start(deadline: Date?) async
+    /// Shows the presence, or renews the one already on screen.
+    func start() async
+    /// Renews presence that is already shown, carrying its readiness claim one
+    /// freshness window further. Shows nothing when presence is down — a beat
+    /// renews readiness, it never asserts it.
+    func refresh() async
     func stop() async
 }
 
 /// Suspends for a duration unless cancelled. Production sleeps on the real
-/// clock; tests advance virtual time so idle-timeout transitions are
-/// deterministic without real waits.
+/// clock; tests advance virtual time so idle-timeout transitions and heartbeat
+/// ticks are deterministic without real waits. The session keeps the two on
+/// separate clocks so a test can drive one without stepping the other.
 @MainActor
 protocol HotMicClock {
     func sleep(for duration: Duration) async
@@ -81,6 +87,7 @@ final class HotMicSession {
     private let presence: MicPresence
     private let keyboard: any KeyboardChannelProtocol
     private let clock: HotMicClock
+    private let heartbeatClock: HotMicClock
     private let policy: () -> HotSessionTimeout
     private let now: () -> Date
 
@@ -88,12 +95,14 @@ final class HotMicSession {
     /// session down. Cancelled while recording so long recordings never time
     /// out, and re-armed after every stop.
     private var idleTask: Task<Void, Never>?
-    /// Wall-clock deadline for the current idle window. Persists across
-    /// foreground/background transitions so the timer isn't reset each time
-    /// the app returns to the foreground. Cleared when recording starts,
-    /// when the session tears down, or when policy changes remove the finite
-    /// idle window.
-    private var idleDeadline: Date?
+    /// The *Presence Deadline*: the wall-clock instant past which a finite warm
+    /// window must no longer be honored. Persists across foreground/background
+    /// transitions so the timer isn't reset each time the app returns to the
+    /// foreground. Cleared when recording starts, when the session tears down,
+    /// or when policy changes remove the finite idle window. Readable from
+    /// outside so the promised window can be observed without inferring it from
+    /// what the session told some other collaborator.
+    private(set) var idleDeadline: Date?
     /// Wall-clock instant when the current post-capture idle window began.
     /// Settings changes for finite policies are measured against this original
     /// start so decreasing a timeout shortens the active window while
@@ -137,6 +146,7 @@ final class HotMicSession {
         presence: MicPresence? = nil,
         keyboard: (any KeyboardChannelProtocol)? = nil,
         clock: HotMicClock? = nil,
+        heartbeatClock: HotMicClock? = nil,
         policy: (() -> HotSessionTimeout)? = nil,
         now: (() -> Date)? = nil
     ) {
@@ -144,6 +154,7 @@ final class HotMicSession {
         self.presence = presence ?? HotMicActivityController()
         self.keyboard = keyboard ?? KeyboardChannel.live
         self.clock = clock ?? SystemHotMicClock()
+        self.heartbeatClock = heartbeatClock ?? SystemHotMicClock()
         self.policy = policy ?? { HotSessionTimeout.current() }
         self.now = now ?? { Date() }
         installTimeoutObserver()
@@ -236,9 +247,7 @@ final class HotMicSession {
         idleTask = nil
         idleDeadline = nil
         startHeartbeat()
-        // No Presence Deadline while recording — a long recording must not let
-        // readiness expire mid-capture; the timer re-arms on stop.
-        Task { [presence] in await presence.start(deadline: nil) }
+        Task { [presence] in await presence.start() }
     }
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
@@ -306,11 +315,11 @@ final class HotMicSession {
             if !engine.isRecording { teardown() }
             return
         case .always:
-            // No inactivity Presence Deadline — readiness lives for the app
-            // lifetime, so the presence carries no scheduled dismissal.
+            // No inactivity Presence Deadline — readiness lives for as long as
+            // the app keeps beating.
             idleDeadline = nil
             idleStartedAt = nil
-            Task { [presence] in await presence.start(deadline: nil) }
+            Task { [presence] in await presence.start() }
             return
         default:
             break
@@ -334,11 +343,11 @@ final class HotMicSession {
             return
         }
 
-        // Hand the presence the same wall-clock deadline as the idle timer, so
-        // readiness stops being advertised around the promised window even if
-        // the app is backgrounded or suspended and the in-process timer below
-        // never fires.
-        Task { [presence, deadline] in await presence.start(deadline: deadline) }
+        // The presence gets no deadline: the sleeper below removes the card when
+        // the window expires with the app alive, and an app that was suspended
+        // instead had already stopped beating, so its card has already gone
+        // not-ready on its own.
+        Task { [presence] in await presence.start() }
 
         idleTask = Task { [weak self, clock] in
             await clock.sleep(for: .seconds(remaining))
@@ -386,17 +395,22 @@ final class HotMicSession {
     private func startHeartbeat() {
         keyboard.writeHeartbeat(alive: true)
         guard heartbeatTask == nil else { return }
-        // The periodic refresh sleeps on the real clock — the injected clock is
-        // reserved for the idle-timeout machine, the part tests need to drive
-        // deterministically. The freshness contract only cares about the
-        // initial `alive: true` write (above) and the `alive: false` on stop.
-        heartbeatTask = Task { [weak self] in
+        heartbeatTask = Task { [weak self, heartbeatClock] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: Self.heartbeatInterval)
+                await heartbeatClock.sleep(for: Self.heartbeatInterval)
                 guard !Task.isCancelled, let self else { return }
-                self.keyboard.writeHeartbeat(alive: true)
+                await self.beat()
             }
         }
+    }
+
+    /// One beat of In-Place Reachability. Mic Presence renders the same fact the
+    /// keyboard reads, so the two are renewed in the same breath: the card's
+    /// readiness claim is carried one freshness window further every time the
+    /// timestamp is. Stop beating and the claim lapses on its own.
+    private func beat() async {
+        keyboard.writeHeartbeat(alive: true)
+        await presence.refresh()
     }
 
     /// Cancels the periodic heartbeat and clears the shared timestamp so the

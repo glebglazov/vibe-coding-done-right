@@ -224,7 +224,7 @@ struct HotMicSessionTests {
         await settle()
 
         let originalDeadline = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.tenMinutes.rawValue))
-        #expect(env.presence.deadline == originalDeadline)
+        #expect(env.session.idleDeadline == originalDeadline)
 
         fakeNow = Date(timeIntervalSince1970: 240)
         env.holder.value = .fiveMinutes
@@ -232,7 +232,7 @@ struct HotMicSessionTests {
         await settle()
 
         let shortenedDeadline = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
-        #expect(env.presence.deadline == shortenedDeadline)
+        #expect(env.session.idleDeadline == shortenedDeadline)
         #expect(env.engine.isHot)
 
         env.clock.advance()
@@ -268,14 +268,14 @@ struct HotMicSessionTests {
         await settle()
 
         let originalDeadline = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
-        #expect(env.presence.deadline == originalDeadline)
+        #expect(env.session.idleDeadline == originalDeadline)
 
         fakeNow = Date(timeIntervalSince1970: 60)
         env.holder.value = .tenMinutes
         await env.session.policyChanged()
         await settle()
 
-        #expect(env.presence.deadline == originalDeadline)
+        #expect(env.session.idleDeadline == originalDeadline)
         #expect(env.engine.isHot)
 
         env.clock.advance()
@@ -294,14 +294,14 @@ struct HotMicSessionTests {
         await settle()
 
         #expect(env.presence.isShown)
-        #expect(env.presence.deadline == nil)
+        #expect(env.session.idleDeadline == nil)
 
         env.engine.isRecording = false
         env.session.recordingStopped()
         await settle()
 
         let expected = fixedNow.addingTimeInterval(TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
-        #expect(env.presence.deadline == expected)
+        #expect(env.session.idleDeadline == expected)
         #expect(env.presence.isShown)
         #expect(env.channel.isAppLikelyAlive())
         #expect(env.clock.sleepCount == 1)
@@ -361,7 +361,7 @@ struct HotMicSessionTests {
         await settle()
 
         let originalDeadline = Date(timeIntervalSince1970: TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
-        #expect(env.presence.deadline == originalDeadline)
+        #expect(env.session.idleDeadline == originalDeadline)
 
         fakeNow = Date(timeIntervalSince1970: 60)
         env.session.recordIntentStarted()
@@ -372,7 +372,7 @@ struct HotMicSessionTests {
 
         #expect(env.engine.isHot)
         #expect(env.presence.isShown)
-        #expect(env.presence.deadline == originalDeadline)
+        #expect(env.session.idleDeadline == originalDeadline)
         #expect(env.clock.sleepCount == 2)
 
         env.clock.advance()
@@ -467,65 +467,89 @@ struct HotMicSessionTests {
         #expect(!env.presence.isShown)
     }
 
-    @Test("finite policy hands presence a deadline matching the idle window")
-    func finitePolicyGivesPresenceMatchingDeadline() async {
+    @Test("finite policy keeps the Presence Deadline to itself and shows a live card")
+    func finitePolicyKeepsDeadlineOutOfPresence() async {
         let fixedNow = Date(timeIntervalSince1970: 1000)
-        let env = makeEnv(policy: .fiveMinutes, now: { fixedNow })
+        let beat = TestClock()
+        let env = makeEnv(policy: .fiveMinutes, heartbeatClock: beat, now: { fixedNow })
 
         await env.session.start()
         await settle()
 
-        let expected = fixedNow.addingTimeInterval(TimeInterval(HotSessionTimeout.fiveMinutes.rawValue))
-        #expect(env.presence.deadline == expected)
+        // The warm window is the session's business; presence is handed no
+        // deadline it could surrender its ability to correct the card for.
+        #expect(env.session.idleDeadline == fixedNow.addingTimeInterval(TimeInterval(HotSessionTimeout.fiveMinutes.rawValue)))
         #expect(env.presence.isShown)
+        #expect(env.presence.isRenewable)
 
-        // Cleanup: drain the parked idle sleeper.
+        // And it stays renewable for the whole window, not just its first tick.
+        beat.advance()
+        await settle()
+        #expect(env.presence.refreshCalls == 1)
+        #expect(env.presence.isRenewable)
+
+        // Cleanup: drain the parked idle and heartbeat sleepers.
         env.clock.advance()
+        beat.advance()
         await settle()
     }
 
-    @Test(".always gives presence no deadline but keeps the heartbeat alive")
-    func alwaysPolicyHasNoPresenceDeadline() async {
+    @Test("every heartbeat tick renews Mic Presence alongside the Heartbeat")
+    func heartbeatTickRenewsPresence() async {
+        let beat = TestClock()
+        let env = makeEnv(policy: .always, heartbeatClock: beat)
+
+        await env.session.start()
+        await settle()
+
+        #expect(env.presence.isShown)
+        #expect(env.presence.refreshCalls == 0)
+
+        beat.advance()
+        await settle()
+        #expect(env.presence.refreshCalls == 1)
+        #expect(env.channel.isAppLikelyAlive())
+
+        beat.advance()
+        await settle()
+        #expect(env.presence.refreshCalls == 2)
+
+        // Teardown stops the beat, so nothing renews the card again — iOS lets
+        // its horizon lapse on its own.
+        env.session.reset()
+        await waitUntil { env.presence.stopCalls == 1 }
+        beat.advance()
+        await settle()
+        #expect(env.presence.refreshCalls == 2)
+    }
+
+    @Test(".always keeps presence live and the heartbeat alive")
+    func alwaysPolicyKeepsPresenceLive() async {
         let env = makeEnv(policy: .always)
 
         await env.session.start()
         await settle()
 
         #expect(env.presence.isShown)
-        #expect(env.presence.deadline == nil)
+        #expect(env.presence.isRenewable)
         // Reachability contract is unweakened: heartbeat still signals alive.
         #expect(env.channel.isAppLikelyAlive())
     }
 
-    @Test("recording clears the presence deadline so readiness can't expire mid-capture")
-    func recordingClearsPresenceDeadline() async {
+    @Test("recording keeps presence renewable so readiness can't expire mid-capture")
+    func recordingKeepsPresenceRenewable() async {
         let env = makeEnv(policy: .fiveMinutes)
 
         await env.session.start()
         await settle()
-        #expect(env.presence.deadline != nil)
-
-        env.engine.isRecording = true
-        env.session.recordingStarted()
-        await settle()
-
-        #expect(env.presence.deadline == nil)
-        #expect(env.presence.isShown)
-    }
-
-    @Test("recording keeps presence visible")
-    func recordingKeepsPresenceVisible() async {
-        let env = makeEnv(policy: .fiveMinutes)
-
-        await env.session.start()
-        await settle()
-        #expect(env.presence.isShown)
+        #expect(env.presence.isRenewable)
 
         env.engine.isRecording = true
         env.session.recordingStarted()
         await settle()
 
         #expect(env.presence.isShown)
+        #expect(env.presence.isRenewable)
     }
 
     // MARK: - Environment
@@ -540,7 +564,13 @@ struct HotMicSessionTests {
         let session: HotMicSession
     }
 
-    private func makeEnv(policy: HotSessionTimeout, now: (() -> Date)? = nil) -> Env {
+    /// `heartbeatClock` defaults to the real clock so tests that don't drive
+    /// beats leave no parked sleeper behind; the ones that do pass their own.
+    private func makeEnv(
+        policy: HotSessionTimeout,
+        heartbeatClock: HotMicClock? = nil,
+        now: (() -> Date)? = nil
+    ) -> Env {
         let engine = FakeWarmEngine()
         let presence = SpyPresence()
         let clock = TestClock()
@@ -554,6 +584,7 @@ struct HotMicSessionTests {
             presence: presence,
             keyboard: channel,
             clock: clock,
+            heartbeatClock: heartbeatClock,
             policy: { holder.value },
             now: now
         )
@@ -640,22 +671,29 @@ struct FakeAudioReleaseError: Error {}
 
 /// Spy `MicPresence` that mirrors `HotMicActivityController`'s serialized
 /// contract: these bodies never suspend, so no two operations can interleave,
-/// and a repeated `start()` for a presence that is already shown refreshes it
+/// and a repeated `start()` for a presence that is already shown renews it
 /// rather than counting as a second presentation.
 @MainActor
 final class SpyPresence: MicPresence {
     private(set) var startCalls = 0
     private(set) var stopCalls = 0
+    private(set) var refreshCalls = 0
     private(set) var isShown = false
-    /// The most recent Presence Deadline handed to `start`, so tests can assert
-    /// the deadline tracks the idle window.
-    private(set) var deadline: Date?
 
-    func start(deadline: Date?) async {
-        self.deadline = deadline
+    /// Whether a card is on screen that a beat can still carry forward. A real
+    /// card only stops being renewable by being removed — nothing the session
+    /// does freezes it in place.
+    var isRenewable: Bool { isShown }
+
+    func start() async {
         guard !isShown else { return }
         isShown = true
         startCalls += 1
+    }
+
+    func refresh() async {
+        guard isShown else { return }
+        refreshCalls += 1
     }
 
     func stop() async {

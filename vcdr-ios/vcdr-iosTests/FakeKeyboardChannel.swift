@@ -28,7 +28,7 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
     private var cancelStampFresh: Bool?
     private var recordedInteractions: [Interaction] = []
 
-    init(heartbeatFreshnessWindow: TimeInterval = 18) {
+    init(heartbeatFreshnessWindow: TimeInterval = KeyboardChannel.heartbeatFreshnessWindow) {
         self.heartbeatFreshnessWindow = heartbeatFreshnessWindow
     }
 

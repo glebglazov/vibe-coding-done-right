@@ -6,6 +6,9 @@ import Testing
 @Suite("HotMicActivityController")
 struct HotMicActivityControllerTests {
 
+    /// The horizon every card is stamped with, in seconds.
+    private let freshnessWindow = KeyboardChannel.heartbeatFreshnessWindow
+
     // MARK: - Tests
 
     @Test("two overlapping shows produce exactly one Live Activity")
@@ -15,8 +18,8 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        async let first: Void = controller.start(deadline: nil)
-        async let second: Void = controller.start(deadline: nil)
+        async let first: Void = controller.start()
+        async let second: Void = controller.start()
         // Park inside the ActivityKit request, then give the second caller every
         // chance to slip into the window the old ad-hoc guards left open.
         await waitUntil { store.parkedRequests == 1 }
@@ -36,7 +39,7 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        async let show: Void = controller.start(deadline: nil)
+        async let show: Void = controller.start()
         await waitUntil { store.parkedRequests == 1 }
         async let hide: Void = controller.stop()
         await settle()
@@ -53,7 +56,7 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.start(deadline: nil)
+        await controller.start()
         store.injectStray("stray-from-a-crashed-session")
 
         await controller.stop()
@@ -75,17 +78,56 @@ struct HotMicActivityControllerTests {
         _ = controller
     }
 
-    @Test("a Presence Deadline schedules dismissal instead of ending the card now")
-    func deadlineSchedulesDismissal() async {
+    @Test("a shown card claims readiness exactly one heartbeat freshness window ahead")
+    func staleHorizonIsTheHeartbeatFreshnessWindow() async {
+        let store = FakeActivityStore()
+        let shownAt = Date(timeIntervalSince1970: 1_000)
+        let controller = HotMicActivityController(store: store, now: { shownAt })
+        await settle()
+
+        await controller.start()
+
+        // Same window the keyboard reads to choose between recording in place
+        // and the deep-link bounce — one constant, so the card and the record
+        // control cannot disagree.
+        #expect(store.requestedStaleDates == [shownAt.addingTimeInterval(freshnessWindow)])
+        #expect(store.liveActivityIDs.count == 1)
+    }
+
+    @Test("each refresh carries the horizon a full window past the beat that sent it")
+    func refreshTracksTheHeartbeat() async {
+        let store = FakeActivityStore()
+        var fakeNow = Date(timeIntervalSince1970: 0)
+        let controller = HotMicActivityController(store: store, now: { fakeNow })
+        await settle()
+
+        await controller.start()
+
+        fakeNow = Date(timeIntervalSince1970: 5)
+        await controller.refresh()
+        fakeNow = Date(timeIntervalSince1970: 10)
+        await controller.refresh()
+
+        #expect(store.updatedStaleDates == [
+            Date(timeIntervalSince1970: 5 + freshnessWindow),
+            Date(timeIntervalSince1970: 10 + freshnessWindow)
+        ])
+        // The card stays the one that was requested — refreshing never trades it.
+        #expect(store.requestCalls == 1)
+        #expect(store.liveActivityIDs.count == 1)
+    }
+
+    @Test("a refresh with no card on screen claims nothing")
+    func refreshWithoutPresenceRequestsNothing() async {
         let store = FakeActivityStore()
         let controller = HotMicActivityController(store: store)
         await settle()
-        let deadline = Date().addingTimeInterval(300)
 
-        await controller.start(deadline: deadline)
+        await controller.refresh()
 
-        #expect(store.scheduledDismissals == [deadline])
-        #expect(store.liveActivityIDs.count == 1)
+        #expect(store.requestCalls == 0)
+        #expect(store.updatedStaleDates.isEmpty)
+        #expect(store.liveActivityIDs.isEmpty)
     }
 
     @Test("presence stays silent when the user has disabled Live Activities")
@@ -95,7 +137,7 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.start(deadline: nil)
+        await controller.start()
 
         #expect(store.requestCalls == 0)
     }
@@ -130,11 +172,11 @@ final class FakeActivityStore: HotMicActivityStore {
     var parkRequests = false
 
     private(set) var requestCalls = 0
-    private(set) var updateCalls = 0
     private(set) var endedIDs: [String] = []
-    /// Deadlines handed to `end(id:dismissingAt:)`, so a finite Presence
-    /// Deadline can be told apart from an immediate dismissal.
-    private(set) var scheduledDismissals: [Date] = []
+    /// Stale horizons stamped on cards as they were requested and refreshed —
+    /// how far into the future each call let the readiness claim reach.
+    private(set) var requestedStaleDates: [Date] = []
+    private(set) var updatedStaleDates: [Date] = []
 
     private var live: [String] = []
     private var parked: [CheckedContinuation<Void, Never>] = []
@@ -152,8 +194,9 @@ final class FakeActivityStore: HotMicActivityStore {
         waiting.forEach { $0.resume() }
     }
 
-    func request() async -> String? {
+    func request(staleDate: Date) async -> String? {
         requestCalls += 1
+        requestedStaleDates.append(staleDate)
         let id = "activity-\(requestCalls)"
         if parkRequests {
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -164,17 +207,11 @@ final class FakeActivityStore: HotMicActivityStore {
         return id
     }
 
-    func update(id: String) async {
-        updateCalls += 1
+    func update(id: String, staleDate: Date) async {
+        updatedStaleDates.append(staleDate)
     }
 
-    /// Mirrors iOS: a scheduled dismissal keeps the card on screen until its
-    /// deadline, while an immediate one removes it now.
-    func end(id: String, dismissingAt deadline: Date?) async {
-        if let deadline {
-            scheduledDismissals.append(deadline)
-            return
-        }
+    func end(id: String) async {
         endedIDs.append(id)
         live.removeAll { $0 == id }
     }
