@@ -595,6 +595,85 @@ struct HotMicSessionTests {
         #expect(env.presence.isRenewable)
     }
 
+    // MARK: - Foreground suppression
+
+    @Test("the app coming to the front takes the card down and keeps it down")
+    func foregroundSuppressesPresence() async {
+        let beat = TestClock()
+        let env = makeEnv(policy: .fiveMinutes, heartbeatClock: beat)
+
+        await env.session.start()
+        await settle()
+        #expect(env.presence.isShown)
+
+        await env.session.appEnteredForeground()
+        await settle()
+        #expect(!env.presence.isShown)
+
+        // Nothing the live session does while VCDR is on screen puts it back:
+        // not a renewal (the Deep-Link Fallback's scene activation), not a beat.
+        await env.session.renewIfAlive()
+        await settle()
+        beat.advance()
+        await settle()
+
+        #expect(!env.presence.isShown)
+        #expect(env.presence.startCalls == 1) // only the pre-foreground one
+        #expect(env.channel.isAppLikelyAlive()) // reachability is untouched
+
+        env.session.reset()
+        await settle()
+        beat.advance()
+        await settle()
+    }
+
+    @Test("leaving the app with a warm session brings the card back")
+    func leavingForegroundRestoresPresence() async {
+        let env = makeEnv(policy: .fiveMinutes)
+
+        await env.session.start()
+        await env.session.appEnteredForeground()
+        await settle()
+        #expect(!env.presence.isShown)
+
+        await env.session.appLeftForeground()
+        await settle()
+
+        #expect(env.presence.isShown)
+        #expect(env.presence.recordingFaces.last == false)
+    }
+
+    @Test("leaving the app with no warm session shows nothing")
+    func leavingForegroundWithoutSessionShowsNothing() async {
+        let env = makeEnv(policy: .never)
+
+        await env.session.appEnteredForeground()
+        await env.session.appLeftForeground()
+        await settle()
+
+        #expect(!env.engine.isHot)
+        #expect(!env.presence.isShown)
+        #expect(env.presence.startCalls == 0)
+    }
+
+    @Test("a recording that outlives the app's foreground shows the recording face")
+    func recordingStartedInAppShowsOnLeaving() async {
+        let env = makeEnv(policy: .fiveMinutes)
+
+        await env.session.appEnteredForeground()
+        await env.session.start()
+        env.engine.isRecording = true
+        env.session.recordingStarted()
+        await settle()
+        #expect(!env.presence.isShown)
+
+        await env.session.appLeftForeground()
+        await settle()
+
+        #expect(env.presence.isShown)
+        #expect(env.presence.recordingFaces.last == true)
+    }
+
     // MARK: - Environment
 
     @MainActor

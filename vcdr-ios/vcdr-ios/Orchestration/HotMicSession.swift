@@ -131,6 +131,11 @@ final class HotMicSession {
     /// the stop transition is announced before the run is actually torn down, so
     /// asking the engine at that moment still answers "recording".
     private var isCapturing = false
+    /// True while the VCDR app itself is the app on screen. Mic Presence exists
+    /// to answer "is the mic warm?" from *outside* VCDR — on the lock screen and
+    /// over the keyboard — so it is withdrawn while the app that is the answer is
+    /// already in front of the user, and restored when the app steps aside.
+    private var isForegrounded = false
 
     /// Cadence for the app-alive heartbeat. Small enough that the keyboard's
     /// freshness threshold can be ~3x this without false negatives, large
@@ -259,7 +264,7 @@ final class HotMicSession {
         idleTask = nil
         idleDeadline = nil
         startHeartbeat()
-        Task { [presence] in await presence.start(recording: true) }
+        showPresence()
     }
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
@@ -289,6 +294,24 @@ final class HotMicSession {
             }
         }
         armIdleTimer(timeout)
+    }
+
+    /// The VCDR app came to the front. Withdraw Mic Presence: the card would sit
+    /// on top of the app it describes, including when the keyboard opened the app
+    /// through the Deep-Link Fallback.
+    func appEnteredForeground() async {
+        isForegrounded = true
+        await presence.stop()
+    }
+
+    /// The VCDR app left the front. The card is worth showing again, so restore
+    /// it on whichever face is true right now — but only if there is still a warm
+    /// session to advertise. Requesting it at this transition (rather than once
+    /// suspended) is deliberate: the app is still executing here.
+    func appLeftForeground() async {
+        isForegrounded = false
+        guard engine.isHot else { return }
+        await presence.start(recording: isCapturing)
     }
 
     // MARK: - Idle-timeout state machine
@@ -332,7 +355,7 @@ final class HotMicSession {
             // the app keeps beating.
             idleDeadline = nil
             idleStartedAt = nil
-            Task { [presence, isCapturing] in await presence.start(recording: isCapturing) }
+            showPresence()
             return
         default:
             break
@@ -360,7 +383,7 @@ final class HotMicSession {
         // the window expires with the app alive, and an app that was suspended
         // instead had already stopped beating, so its card has already gone
         // not-ready on its own.
-        Task { [presence, isCapturing] in await presence.start(recording: isCapturing) }
+        showPresence()
 
         idleTask = Task { [weak self, clock] in
             await clock.sleep(for: .seconds(remaining))
@@ -401,6 +424,20 @@ final class HotMicSession {
         Task { [presence] in await presence.stop() }
     }
 
+    /// Shows Mic Presence, or renews the card already on screen, on the face the
+    /// session's Recording Run says is true. Every warm-session path routes its
+    /// presence through here, so foreground suppression has a single gate.
+    /// The foreground check is repeated inside the task: the show is enqueued,
+    /// so an activation landing between arming and the body must win rather than
+    /// be overwritten by a card that was decided on a moment earlier.
+    private func showPresence() {
+        guard !isForegrounded else { return }
+        Task { [weak self] in
+            guard let self, !self.isForegrounded else { return }
+            await self.presence.start(recording: self.isCapturing)
+        }
+    }
+
     // MARK: - Heartbeat
 
     /// Writes the current timestamp to the shared heartbeat key and starts a
@@ -424,6 +461,9 @@ final class HotMicSession {
     /// timestamp is. Stop beating and the claim lapses on its own.
     private func beat() async {
         keyboard.writeHeartbeat(alive: true)
+        // A beat while the app is on screen renews reachability only: there is
+        // no card to carry forward, and it must not put one back.
+        guard !isForegrounded else { return }
         await presence.refresh(recording: isCapturing)
     }
 

@@ -86,10 +86,14 @@ struct VCDRiOSApp: App {
                         // Renew an existing Hot Mic Session without starting a
                         // cold audio engine during shell rendering. Automatic
                         // startup, when configured, happens after model-ready.
-                        Task { await coordinator.renewHotSessionIfAlive() }
+                        Task { await coordinator.handleForegroundActivation() }
                     case .background:
                         Logger.app.info("Scene entering background — isHot=\(coordinator.isHotSessionActive), isRecording=\(coordinator.isRecording)")
                         LogBuffer.shared.flushPendingWrites()
+                        // Requested here rather than once suspended: the app is
+                        // still executing at this transition, so a warm session
+                        // can put its card back on the way out.
+                        Task { await coordinator.handleBackgroundTransition() }
                         // Intentionally NOT tearing down the hot session:
                         // UIBackgroundModes=audio keeps the engine alive, so
                         // the keyboard extension can drive recording via the

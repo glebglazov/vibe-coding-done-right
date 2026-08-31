@@ -242,6 +242,21 @@ final class RecordingFlowCoordinator {
         await hotMicSession.renewIfAlive()
     }
 
+    /// Scene-activation hook. Mic Presence is for reading VCDR's state from
+    /// another app, so it comes down while VCDR itself is on screen — then the
+    /// live session gets its heartbeat and idle deadline renewed.
+    func handleForegroundActivation() async {
+        await hotMicSession.appEnteredForeground()
+        await hotMicSession.renewIfAlive()
+    }
+
+    /// Scene-background hook. Mic Presence goes back up if the Hot Mic Session
+    /// is still warm — including a recording that started in the app and carries
+    /// on after leaving it.
+    func handleBackgroundTransition() async {
+        await hotMicSession.appLeftForeground()
+    }
+
     /// Resolves the iCloud container, reconciles local ↔︎ ubiquity storage, and
     /// loads the history-store snapshot off the main actor, then installs the
     /// `@Observable` store on the main actor (cheap: metadata query start +
