@@ -56,6 +56,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     private var pendingText: String?
     private let keyboardChannel = KeyboardChannel.live
 
+    /// Whether a tap on the record control records in place. Kept outside
+    /// `dictationState` — a run's state and the tap's destination are two
+    /// different facts, and folding them together is what made a single
+    /// keyboard state mean several things before.
+    lazy var reachability = KeyboardReachabilityMonitor(channel: keyboardChannel)
+
     /// Owns the Compact/Full display mode: persistence, the KeyboardKit
     /// collapse flag, and the Compact height constraint.
     private var displayModeManager: KeyboardDisplayModeManager?
@@ -146,6 +152,17 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         // The system can drop view constraints between appearances (rotation,
         // dock changes) — re-pin the Compact height if we're collapsed.
         displayModeManager?.reassertHeight()
+
+        // The heartbeat has no change notification, so the record control's
+        // lit state is polled — but only for as long as the user can see it.
+        reachability.start()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // Nothing on screen to keep honest; an extension that polls while
+        // hidden is spending a memory-constrained process on nobody.
+        reachability.stop()
     }
 
     // MARK: - State Parsing

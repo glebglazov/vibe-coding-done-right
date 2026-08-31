@@ -32,6 +32,7 @@ struct CompactKeyboardView: View {
     }
 
     @ObservedObject var controller: KeyboardViewController
+    @ObservedObject var reachability: KeyboardReachabilityMonitor
 
     /// Drives the Discard Warning wash. Compact paints no background of its own
     /// so the host app shows through; the wash is the one exception, and only
@@ -50,6 +51,7 @@ struct CompactKeyboardView: View {
             Spacer()
             DictateActionButton(
                 dictationState: controller.dictationState,
+                recordsInPlace: reachability.recordsInPlace,
                 showCapture: true,
                 captureCount: controller.captureCount,
                 onStart: { controller.startRecordingFromKeyboard() },

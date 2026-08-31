@@ -44,7 +44,7 @@ struct VCDRKeyboardView: View {
             buttonContent: { $0.view },
             buttonView: { $0.view },
             collapsedView: { _ in
-                CompactKeyboardView(controller: controller)
+                CompactKeyboardView(controller: controller, reachability: controller.reachability)
             },
             emojiKeyboard: { $0.view },
             toolbar: { _ in
@@ -54,7 +54,7 @@ struct VCDRKeyboardView: View {
                 if keyboardContext.isKeyboardCollapsed {
                     EmptyView()
                 } else {
-                    FullKeyboardToolbar(controller: controller)
+                    FullKeyboardToolbar(controller: controller, reachability: controller.reachability)
                 }
             }
         )
@@ -75,6 +75,7 @@ struct VCDRKeyboardView: View {
 /// background is opaque, so the wash simply tints it.
 struct FullKeyboardToolbar: View {
     @ObservedObject var controller: KeyboardViewController
+    @ObservedObject var reachability: KeyboardReachabilityMonitor
     @State private var wash = DiscardWarningWashState()
     @State private var narration = HoldNarrationState()
 
@@ -89,6 +90,7 @@ struct FullKeyboardToolbar: View {
             // Right: capture button (during recording in any AI mode) + action button
             DictateActionButton(
                 dictationState: controller.dictationState,
+                recordsInPlace: reachability.recordsInPlace,
                 showCapture: true,
                 captureCount: controller.captureCount,
                 onStart: { controller.startRecordingFromKeyboard() },
@@ -287,6 +289,9 @@ struct DictateActionButton: View {
     private static let pillBorder: CGFloat = 1.5
 
     var dictationState: DictationState
+    /// Whether a tap on the record control records in place, straight from the
+    /// predicate the tap itself reads.
+    var recordsInPlace: Bool
     var showCapture: Bool
     var captureCount: Int
     var onStart: () -> Void
@@ -307,12 +312,7 @@ struct DictateActionButton: View {
         HStack(spacing: 8) {
             switch dictationState {
             case .idle:
-                Button {
-                    KeyboardHaptics.medium()
-                    onStart()
-                } label: {
-                    actionPill("Start", icon: "mic.fill", color: .blue)
-                }
+                recordButton(color: .blue)
             case .recording:
                 if showCapture {
                     DictateCaptureButton(captureCount: captureCount, onCapture: onCapture)
@@ -343,12 +343,7 @@ struct DictateActionButton: View {
                     actionPill("Insert", icon: "checkmark", color: .green)
                 }
             case .emptyResult:
-                Button {
-                    KeyboardHaptics.medium()
-                    onStart()
-                } label: {
-                    actionPill("Start", icon: "mic.fill", color: .yellow)
-                }
+                recordButton(color: .yellow)
             case .cancelled:
                 actionPill("CANCELLED", icon: "xmark", color: .gray)
             case .failed:
@@ -369,6 +364,26 @@ struct DictateActionButton: View {
                 .accessibilityHint("Opens VCDR to show the reason")
             }
         }
+    }
+
+    /// The record control, lit when a tap records in place and unlit when it
+    /// will open the app instead. Only this control carries the glow: every
+    /// other pill describes a run that has already started, where the question
+    /// of where the next tap lands does not arise.
+    private func recordButton(color: Color) -> some View {
+        Button {
+            KeyboardHaptics.medium()
+            onStart()
+        } label: {
+            actionPill("Start", icon: "mic.fill", color: color)
+                .recordReachabilityGlow(isLit: recordsInPlace, color: color)
+        }
+        .accessibilityLabel("Start")
+        .accessibilityHint(
+            recordsInPlace
+                ? "Records here, without leaving the keyboard"
+                : "Opens VCDR to record"
+        )
     }
 
     private func actionPill(
