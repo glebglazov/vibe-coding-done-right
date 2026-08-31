@@ -18,8 +18,8 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        async let first: Void = controller.start()
-        async let second: Void = controller.start()
+        async let first: Void = controller.start(recording: false)
+        async let second: Void = controller.start(recording: false)
         // Park inside the ActivityKit request, then give the second caller every
         // chance to slip into the window the old ad-hoc guards left open.
         await waitUntil { store.parkedRequests == 1 }
@@ -39,7 +39,7 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        async let show: Void = controller.start()
+        async let show: Void = controller.start(recording: false)
         await waitUntil { store.parkedRequests == 1 }
         async let hide: Void = controller.stop()
         await settle()
@@ -56,7 +56,7 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.start()
+        await controller.start(recording: false)
         store.injectStray("stray-from-a-crashed-session")
 
         await controller.stop()
@@ -85,7 +85,7 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store, now: { shownAt })
         await settle()
 
-        await controller.start()
+        await controller.start(recording: false)
 
         // Same window the keyboard reads to choose between recording in place
         // and the deep-link bounce — one constant, so the card and the record
@@ -101,12 +101,12 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store, now: { fakeNow })
         await settle()
 
-        await controller.start()
+        await controller.start(recording: false)
 
         fakeNow = Date(timeIntervalSince1970: 5)
-        await controller.refresh()
+        await controller.refresh(recording: false)
         fakeNow = Date(timeIntervalSince1970: 10)
-        await controller.refresh()
+        await controller.refresh(recording: false)
 
         #expect(store.updatedStaleDates == [
             Date(timeIntervalSince1970: 5 + freshnessWindow),
@@ -123,11 +123,40 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.refresh()
+        await controller.refresh(recording: false)
 
         #expect(store.requestCalls == 0)
         #expect(store.updatedStaleDates.isEmpty)
         #expect(store.liveActivityIDs.isEmpty)
+    }
+
+    @Test("the requested card carries the face it was shown with")
+    func showCarriesTheRecordingFace() async {
+        let store = FakeActivityStore()
+        let controller = HotMicActivityController(store: store)
+        await settle()
+
+        await controller.start(recording: true)
+
+        #expect(store.requestedFaces == [true])
+    }
+
+    @Test("an on-screen card is re-stamped when the run starts and stops")
+    func faceSwitchesOnTheCardAlreadyShown() async {
+        let store = FakeActivityStore()
+        let controller = HotMicActivityController(store: store)
+        await settle()
+
+        await controller.start(recording: false)
+        await controller.start(recording: true)
+        await controller.refresh(recording: true)
+        await controller.start(recording: false)
+
+        // One card throughout — the face changes on it rather than by trading it
+        // for a second one.
+        #expect(store.requestCalls == 1)
+        #expect(store.liveActivityIDs.count == 1)
+        #expect(store.updatedFaces == [true, true, false])
     }
 
     @Test("presence stays silent when the user has disabled Live Activities")
@@ -137,7 +166,7 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.start()
+        await controller.start(recording: false)
 
         #expect(store.requestCalls == 0)
     }
@@ -177,6 +206,9 @@ final class FakeActivityStore: HotMicActivityStore {
     /// how far into the future each call let the readiness claim reach.
     private(set) var requestedStaleDates: [Date] = []
     private(set) var updatedStaleDates: [Date] = []
+    /// The face each request and update carried, in order.
+    private(set) var requestedFaces: [Bool] = []
+    private(set) var updatedFaces: [Bool] = []
 
     private var live: [String] = []
     private var parked: [CheckedContinuation<Void, Never>] = []
@@ -194,9 +226,10 @@ final class FakeActivityStore: HotMicActivityStore {
         waiting.forEach { $0.resume() }
     }
 
-    func request(staleDate: Date) async -> String? {
+    func request(recording: Bool, staleDate: Date) async -> String? {
         requestCalls += 1
         requestedStaleDates.append(staleDate)
+        requestedFaces.append(recording)
         let id = "activity-\(requestCalls)"
         if parkRequests {
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -207,8 +240,9 @@ final class FakeActivityStore: HotMicActivityStore {
         return id
     }
 
-    func update(id: String, staleDate: Date) async {
+    func update(id: String, recording: Bool, staleDate: Date) async {
         updatedStaleDates.append(staleDate)
+        updatedFaces.append(recording)
     }
 
     func end(id: String) async {

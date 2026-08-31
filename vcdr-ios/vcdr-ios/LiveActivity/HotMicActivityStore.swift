@@ -16,11 +16,13 @@ protocol HotMicActivityStore {
     /// Every Hot Mic Live Activity the system currently holds for this app —
     /// including cards this process never requested, left by a previous run.
     var liveActivityIDs: [String] { get }
-    /// Requests a new activity whose readiness claim expires at `staleDate`,
-    /// answering its identifier, or `nil` when the system refuses.
-    func request(staleDate: Date) async -> String?
-    /// Pushes an on-screen card's readiness claim out to a new `staleDate`.
-    func update(id: String, staleDate: Date) async
+    /// Requests a new activity showing the recording or ready face, whose claim
+    /// expires at `staleDate`, answering its identifier, or `nil` when the
+    /// system refuses.
+    func request(recording: Bool, staleDate: Date) async -> String?
+    /// Re-stamps an on-screen card: which face it shows, and how far its claim
+    /// now reaches.
+    func update(id: String, recording: Bool, staleDate: Date) async
     /// Removes a card now. The card is never ended with a scheduled dismissal:
     /// ending freezes an activity, and a frozen card cannot be corrected when
     /// readiness dies early (ADR-0006).
@@ -34,7 +36,7 @@ struct ActivityKitPresenceStore: HotMicActivityStore {
 
     var liveActivityIDs: [String] { Activity<HotMicActivityAttributes>.activities.map(\.id) }
 
-    func request(staleDate: Date) async -> String? {
+    func request(recording: Bool, staleDate: Date) async -> String? {
         do {
             let attrs = HotMicActivityAttributes()
             // `Activity.request` is synchronous and talks to the ActivityKit
@@ -46,7 +48,10 @@ struct ActivityKitPresenceStore: HotMicActivityStore {
             // so the main actor stays free. `Activity` and its attributes/content
             // are Sendable, so the value crosses back cleanly.
             let activity = try await withThrowingBlockingTask(qos: .userInitiated) {
-                try Activity.request(attributes: attrs, content: Self.content(staleDate: staleDate))
+                try Activity.request(
+                    attributes: attrs,
+                    content: Self.content(recording: recording, staleDate: staleDate)
+                )
             }
             return activity.id
         } catch {
@@ -55,8 +60,8 @@ struct ActivityKitPresenceStore: HotMicActivityStore {
         }
     }
 
-    func update(id: String, staleDate: Date) async {
-        await activity(id)?.update(Self.content(staleDate: staleDate))
+    func update(id: String, recording: Bool, staleDate: Date) async {
+        await activity(id)?.update(Self.content(recording: recording, staleDate: staleDate))
     }
 
     func end(id: String) async {
@@ -67,11 +72,17 @@ struct ActivityKitPresenceStore: HotMicActivityStore {
         Activity<HotMicActivityAttributes>.activities.first { $0.id == id }
     }
 
-    /// `ContentState` is empty because the card makes exactly one claim, and the
-    /// claim is the `staleDate` on the content around it: readiness holds until
-    /// that instant. Past it, iOS renders the not-ready face on its own — the
-    /// only correction that still happens once this process is gone.
-    nonisolated private static func content(staleDate: Date) -> ActivityContent<HotMicActivityAttributes.ContentState> {
-        ActivityContent(state: HotMicActivityAttributes.ContentState(), staleDate: staleDate)
+    /// The state says which of ready and recording the card shows; the
+    /// `staleDate` around it says how long that claim holds. Past it, iOS renders
+    /// the not-ready face on its own — the only correction that still happens
+    /// once this process is gone.
+    nonisolated private static func content(
+        recording: Bool,
+        staleDate: Date
+    ) -> ActivityContent<HotMicActivityAttributes.ContentState> {
+        ActivityContent(
+            state: HotMicActivityAttributes.ContentState(isRecording: recording),
+            staleDate: staleDate
+        )
     }
 }

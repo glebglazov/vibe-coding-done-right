@@ -523,6 +523,49 @@ struct HotMicSessionTests {
         #expect(env.presence.refreshCalls == 2)
     }
 
+    @Test("the card's face follows the Recording Run, and beats carry the current one")
+    func presenceFaceFollowsRecordingRun() async {
+        let beat = TestClock()
+        let env = makeEnv(policy: .always, heartbeatClock: beat)
+
+        await env.session.start()
+        await settle()
+        // Warm and idle: the card claims readiness, not a recording in progress.
+        #expect(env.presence.recordingFaces == [false])
+
+        beat.advance()
+        await settle()
+        #expect(env.presence.recordingFaces == [false, false])
+
+        env.engine.isRecording = true
+        env.session.recordingStarted()
+        await settle()
+        #expect(env.presence.recordingFaces.last == true)
+
+        // A beat mid-recording renews the recording face rather than reverting
+        // the card to "ready" behind the user's back.
+        beat.advance()
+        await settle()
+        #expect(env.presence.recordingFaces.last == true)
+
+        // Stop is announced before the run is torn down, so the engine still
+        // says "recording" here — the face has to follow the transition, not the
+        // engine.
+        env.session.recordingStopped()
+        await settle()
+        #expect(env.presence.recordingFaces.last == false)
+        env.engine.isRecording = false
+
+        beat.advance()
+        await settle()
+        #expect(env.presence.recordingFaces.last == false)
+
+        env.session.reset()
+        await waitUntil { env.presence.stopCalls == 1 }
+        beat.advance()
+        await settle()
+    }
+
     @Test(".always keeps presence live and the heartbeat alive")
     func alwaysPolicyKeepsPresenceLive() async {
         let env = makeEnv(policy: .always)
@@ -679,20 +722,25 @@ final class SpyPresence: MicPresence {
     private(set) var stopCalls = 0
     private(set) var refreshCalls = 0
     private(set) var isShown = false
+    /// The face every call asked for, in order — how the session's Recording Run
+    /// transitions reach the card.
+    private(set) var recordingFaces: [Bool] = []
 
     /// Whether a card is on screen that a beat can still carry forward. A real
     /// card only stops being renewable by being removed — nothing the session
     /// does freezes it in place.
     var isRenewable: Bool { isShown }
 
-    func start() async {
+    func start(recording: Bool) async {
+        recordingFaces.append(recording)
         guard !isShown else { return }
         isShown = true
         startCalls += 1
     }
 
-    func refresh() async {
+    func refresh(recording: Bool) async {
         guard isShown else { return }
+        recordingFaces.append(recording)
         refreshCalls += 1
     }
 

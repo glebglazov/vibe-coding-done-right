@@ -2,77 +2,148 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-struct HotMicLiveActivity: Widget {
-    private static let readyTitle = "Ready to record"
-    /// Shown once the card's stale horizon has passed. VCDR is no longer
-    /// reachable in place, so the card must claim nothing: the next keyboard tap
-    /// opens the app instead of recording where the user is typing (ADR-0006).
-    private static let staleTitle = "VCDR is not running"
-    private static let readyTag = "Ready"
-    private static let staleTag = "Off"
+/// Which of the three things the readiness card can say. Two of them come from
+/// the app's own content state; the third is the system's, and it wins — once
+/// the stale horizon has passed nothing the card claimed is still true.
+private enum PresenceFace {
+    case ready
+    case recording
+    case notReady
 
+    init(isStale: Bool, isRecording: Bool) {
+        if isStale {
+            self = .notReady
+        } else {
+            self = isRecording ? .recording : .ready
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .ready: "Ready to record"
+        case .recording: "Recording…"
+        /// VCDR is no longer reachable in place, so the card must claim nothing:
+        /// the next keyboard tap opens the app instead of recording where the
+        /// user is typing (ADR-0006).
+        case .notReady: "VCDR is not running"
+        }
+    }
+
+    /// The compact trailing slot is a few characters wide, so each face gets a
+    /// word the other two cannot be mistaken for.
+    var tag: String {
+        switch self {
+        case .ready: "Ready"
+        case .recording: "REC"
+        case .notReady: "Off"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .ready: "waveform"
+        case .recording: "mic.fill"
+        case .notReady: "waveform.slash"
+        }
+    }
+
+    /// Recording is the state a user must be able to catch from the corner of an
+    /// eye, so it is the only face that is red; ready is calm, not-ready is
+    /// drained of colour altogether.
+    var accent: Color {
+        switch self {
+        case .ready: .primary
+        case .recording: Color(red: 0.90, green: 0.22, blue: 0.27)
+        case .notReady: .secondary
+        }
+    }
+
+    var isNotReady: Bool { self == .notReady }
+    var isRecording: Bool { self == .recording }
+}
+
+struct HotMicLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: HotMicActivityAttributes.self) { context in
+            let face = PresenceFace(isStale: context.isStale, isRecording: context.state.isRecording)
             HStack(spacing: 12) {
-                iconBadge(size: 40, isStale: context.isStale)
-                caption(isStale: context.isStale, titleFont: .body.weight(.medium))
+                iconBadge(size: 40, face: face)
+                caption(face: face, titleFont: .body.weight(.medium))
                 Spacer()
             }
             .padding()
             .activityBackgroundTint(Color.black.opacity(0.6))
             .activitySystemActionForegroundColor(Color.white)
         } dynamicIsland: { context in
-            DynamicIsland {
+            let face = PresenceFace(isStale: context.isStale, isRecording: context.state.isRecording)
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    iconBadge(size: 32, isStale: context.isStale)
+                    iconBadge(size: 32, face: face)
                 }
-                DynamicIslandExpandedRegion(.trailing) { EmptyView() }
+                DynamicIslandExpandedRegion(.trailing) {
+                    // Only recording earns the trailing slot: a live dot beside
+                    // the wording, so the expanded island reads as in-progress
+                    // rather than merely available.
+                    if face.isRecording {
+                        Circle()
+                            .fill(face.accent)
+                            .frame(width: 10, height: 10)
+                            .frame(maxHeight: .infinity, alignment: .center)
+                    } else {
+                        EmptyView()
+                    }
+                }
                 DynamicIslandExpandedRegion(.center) {
-                    caption(isStale: context.isStale, titleFont: .callout.weight(.medium))
+                    caption(face: face, titleFont: .callout.weight(.medium))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 DynamicIslandExpandedRegion(.bottom) { EmptyView() }
             } compactLeading: {
-                iconBadge(size: 20, isStale: context.isStale)
+                iconBadge(size: 20, face: face)
             } compactTrailing: {
-                Text(context.isStale ? Self.staleTag : Self.readyTag)
+                Text(face.tag)
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(context.isStale ? .secondary : .primary)
+                    .foregroundStyle(face.accent)
             } minimal: {
-                iconBadge(size: 20, isStale: context.isStale)
+                iconBadge(size: 20, face: face)
             }
         }
     }
 
     @ViewBuilder
-    private func caption(isStale: Bool, titleFont: Font) -> some View {
+    private func caption(face: PresenceFace, titleFont: Font) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("VCDR")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text(isStale ? Self.staleTitle : Self.readyTitle)
+            Text(face.title)
                 .font(titleFont)
-                .foregroundStyle(isStale ? .secondary : .primary)
+                .foregroundStyle(face.accent)
         }
     }
 
-    /// Drained of colour once stale, so the card reads as dormant at a glance —
-    /// the wording is the claim, the tint is how far away it is.
+    /// Tinted red while capturing and drained of colour once not ready, so the
+    /// card reads at a glance — the wording is the claim, the tint is how urgent
+    /// it is.
     @ViewBuilder
-    private func iconBadge(size: CGFloat, isStale: Bool) -> some View {
+    private func iconBadge(size: CGFloat, face: PresenceFace) -> some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.32, green: 0.68, blue: 0.70),
-                         Color(red: 0.82, green: 0.42, blue: 0.52)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-            Image(systemName: isStale ? "waveform.slash" : "waveform")
+            if face.isRecording {
+                face.accent
+            } else {
+                LinearGradient(
+                    colors: [Color(red: 0.32, green: 0.68, blue: 0.70),
+                             Color(red: 0.82, green: 0.42, blue: 0.52)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            }
+            Image(systemName: face.symbol)
                 .font(.system(size: size * 0.55, weight: .semibold))
                 .foregroundStyle(.white)
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
-        .grayscale(isStale ? 1 : 0)
-        .opacity(isStale ? 0.5 : 1)
+        .grayscale(face.isNotReady ? 1 : 0)
+        .opacity(face.isNotReady ? 0.5 : 1)
     }
 }

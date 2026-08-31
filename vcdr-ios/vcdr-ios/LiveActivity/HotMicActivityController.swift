@@ -5,7 +5,9 @@ import OSLog
 /// visible "this is VCDR using the mic" signal on the lock screen and Dynamic
 /// Island — the system orange mic dot cannot be suppressed, this gives it
 /// identity instead. Lifecycle is tied to the hot audio engine, not to the
-/// recording flag.
+/// recording flag — the flag only picks which face the card shows, ready or
+/// recording, because from another app those are the only two things a user can
+/// be looking at and they are not interchangeable.
 ///
 /// The card is kept *live* and re-stamped on every Heartbeat tick with a stale
 /// horizon one freshness window wide (ADR-0006). It is never ended with a
@@ -49,16 +51,16 @@ final class HotMicActivityController {
         enqueue(.sweepStrays)
     }
 
-    func start() async {
+    func start(recording: Bool) async {
         guard store.areActivitiesEnabled else {
             Logger.app.info("Live Activities disabled in Settings")
             return
         }
-        await enqueue(.show).value
+        await enqueue(.show(recording: recording)).value
     }
 
-    func refresh() async {
-        await enqueue(.refreshHorizon).value
+    func refresh(recording: Bool) async {
+        await enqueue(.refreshHorizon(recording: recording)).value
     }
 
     func stop() async {
@@ -68,8 +70,8 @@ final class HotMicActivityController {
     // MARK: - Serialization
 
     private enum PresenceOperation {
-        case show
-        case refreshHorizon
+        case show(recording: Bool)
+        case refreshHorizon(recording: Bool)
         case hide
         case sweepStrays
     }
@@ -90,10 +92,10 @@ final class HotMicActivityController {
 
     private func perform(_ operation: PresenceOperation) async {
         switch operation {
-        case .show:
-            await show()
-        case .refreshHorizon:
-            await refreshHorizon()
+        case .show(let recording):
+            await show(recording: recording)
+        case .refreshHorizon(let recording):
+            await refreshHorizon(recording: recording)
         case .hide:
             await hide()
         case .sweepStrays:
@@ -103,12 +105,12 @@ final class HotMicActivityController {
 
     // MARK: - Operations
 
-    private func show() async {
+    private func show(recording: Bool) async {
         if let activityID {
-            await store.update(id: activityID, staleDate: staleDate())
+            await store.update(id: activityID, recording: recording, staleDate: staleDate())
             return
         }
-        activityID = await store.request(staleDate: staleDate())
+        activityID = await store.request(recording: recording, staleDate: staleDate())
         guard activityID != nil else { return }
         Logger.app.info("Hot mic Live Activity started")
     }
@@ -116,9 +118,9 @@ final class HotMicActivityController {
     /// Carries an on-screen card's claim one window further. Requests nothing
     /// when there is no card: a beat renews readiness that presence already
     /// asserts, it never asserts readiness of its own.
-    private func refreshHorizon() async {
+    private func refreshHorizon(recording: Bool) async {
         guard let activityID else { return }
-        await store.update(id: activityID, staleDate: staleDate())
+        await store.update(id: activityID, recording: recording, staleDate: staleDate())
     }
 
     private func hide() async {

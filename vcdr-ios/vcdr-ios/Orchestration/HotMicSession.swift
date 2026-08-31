@@ -41,14 +41,19 @@ extension AudioRecorder: RecordingEngine {}
 /// at teardown — and, when the app dies without reaching teardown, left to go
 /// not-ready on its own (ADR-0006). The Presence Deadline stays where the
 /// policy lives, in the Hot Mic Session.
+///
+/// Presence holds no recording state of its own: the session drives the
+/// Recording Run, so it says which face to show on every call rather than
+/// leaving the renderer to track transitions in parallel.
 @MainActor
 protocol MicPresence {
-    /// Shows the presence, or renews the one already on screen.
-    func start() async
-    /// Renews presence that is already shown, carrying its readiness claim one
-    /// freshness window further. Shows nothing when presence is down — a beat
-    /// renews readiness, it never asserts it.
-    func refresh() async
+    /// Shows the presence, or renews the one already on screen, on the given
+    /// face.
+    func start(recording: Bool) async
+    /// Renews presence that is already shown, carrying its claim one freshness
+    /// window further on the given face. Shows nothing when presence is down —
+    /// a beat renews readiness, it never asserts it.
+    func refresh(recording: Bool) async
     func stop() async
 }
 
@@ -120,6 +125,12 @@ final class HotMicSession {
     /// the engine before it is cancelled; that must be released, not converted
     /// into post-capture warmth.
     private var armingProtectedPriorSession = false
+    /// True between `recordingStarted()` and `recordingStopped()` — the two
+    /// existing Recording Run transitions. Mic Presence reads it to choose
+    /// between its recording and ready faces. It is not `engine.isRecording`:
+    /// the stop transition is announced before the run is actually torn down, so
+    /// asking the engine at that moment still answers "recording".
+    private var isCapturing = false
 
     /// Cadence for the app-alive heartbeat. Small enough that the keyboard's
     /// freshness threshold can be ~3x this without false negatives, large
@@ -242,16 +253,18 @@ final class HotMicSession {
     /// `start()`.
     func recordingStarted() {
         guard engine.isHot else { return }
+        isCapturing = true
         armingProtectedPriorSession = false
         idleTask?.cancel()
         idleTask = nil
         idleDeadline = nil
         startHeartbeat()
-        Task { [presence] in await presence.start() }
+        Task { [presence] in await presence.start(recording: true) }
     }
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
     func recordingStopped() {
+        isCapturing = false
         armingProtectedPriorSession = false
         idleDeadline = nil  // fresh countdown from when recording actually stopped
         armIdleTimer(policy(), allowWhileRecording: true)
@@ -319,7 +332,7 @@ final class HotMicSession {
             // the app keeps beating.
             idleDeadline = nil
             idleStartedAt = nil
-            Task { [presence] in await presence.start() }
+            Task { [presence, isCapturing] in await presence.start(recording: isCapturing) }
             return
         default:
             break
@@ -347,7 +360,7 @@ final class HotMicSession {
         // the window expires with the app alive, and an app that was suspended
         // instead had already stopped beating, so its card has already gone
         // not-ready on its own.
-        Task { [presence] in await presence.start() }
+        Task { [presence, isCapturing] in await presence.start(recording: isCapturing) }
 
         idleTask = Task { [weak self, clock] in
             await clock.sleep(for: .seconds(remaining))
@@ -376,6 +389,7 @@ final class HotMicSession {
         idleDeadline = nil
         idleStartedAt = nil
         armingProtectedPriorSession = false
+        isCapturing = false
         do {
             try engine.endHotSession()
         } catch {
@@ -410,7 +424,7 @@ final class HotMicSession {
     /// timestamp is. Stop beating and the claim lapses on its own.
     private func beat() async {
         keyboard.writeHeartbeat(alive: true)
-        await presence.refresh()
+        await presence.refresh(recording: isCapturing)
     }
 
     /// Cancels the periodic heartbeat and clears the shared timestamp so the
