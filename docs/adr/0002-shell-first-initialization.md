@@ -31,7 +31,7 @@ On macOS specifically:
 
 1. `AppDependencies.init()` is limited to shell-critical work only (`AppSettings`, `SessionOverrides`, lightweight UI helpers, `StyleRegistry`).
 2. All backend initialization (`HistoryMigrator`, `HistoryStoreFactory.make`, `AudioDeviceMonitor` hardware enumeration, transcription model download/compile) moves to the async `AppDependencies.initialize()` path.
-3. When the user attempts recording before transcription is ready, the shell rejects the action with immediate visual feedback (orange indicator buzz + "Not ready" message) rather than accepting the action and blocking later.
+3. When the user attempts recording before transcription is ready, the shell rejects the action with immediate visual feedback (orange indicator buzz + "Not ready" message) rather than accepting the action and blocking later. **Amended by [ADR-0006](0006-recording-is-never-refused-for-an-unready-model.md):** recording is no longer refused for an unready transcription model. The wait moves to the point of need and is narrated with the Model Preparation Phase.
 4. History writes from `CaptureSession`/`TextProcessor` that arrive before the history store is ready are queued in memory and flushed once the store becomes available.
 5. The menu bar tracks transcription readiness as the gating factor for recording. Other backends (history, audio devices) catch up in the background without blocking shell rendering.
 
