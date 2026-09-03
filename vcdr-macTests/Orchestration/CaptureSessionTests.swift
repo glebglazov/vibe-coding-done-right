@@ -58,21 +58,35 @@ struct CaptureSessionSingleCycleTests {
         #expect(env.history.conversations.isEmpty)
     }
 
-    @Test("Provider not ready rejects recording with Backend Rejection")
+    @Test("Recording starts before the model is ready and transcribes once it is")
     @MainActor
-    func providerNotReadyRejectsRecording() async {
-        // Shell-first Initialization: recording is rejected immediately when the
-        // transcription provider is not ready, with visual feedback, rather than
-        // starting a session that would hang at transcribing.
-        let env = CaptureSessionTestEnvironment(
-            mockProvider: MockTranscriptionProvider(isReady: false)
-        )
+    func recordingStartsBeforeTheModelIsReady() async {
+        // ADR-0006: the hotkey is never refused for an unready model. The
+        // utterance is captured and the wait moves to the stop, where the app
+        // genuinely cannot continue without the model.
+        let provider = MockTranscriptionProvider(isReady: false, preparationPhase: .downloadingModel)
+        let env = CaptureSessionTestEnvironment(mockProvider: provider)
         defer { env.cleanup() }
 
         env.session.toggle()
-        // Should stay idle — not transition to recording
-        try? await Task.sleep(for: .milliseconds(100))
-        #expect(env.session.status.phase == .idle)
+        #expect(await env.waitForPhase { $0 == .recording })
+        try? await Task.sleep(for: Self.testRecordingDuration)
+
+        env.session.toggle()
+        #expect(await env.waitForPhase { $0 == .transcribing })
+
+        // The download is announced while the user is still speaking, not only
+        // after — late enough to decide against would be no use at all.
+        #expect(env.fakePanel.calls.contains(
+            .setPreparationNotice("Downloading model — your recording is safe")
+        ))
+
+        await provider.becomeReady()
+        #expect(await env.waitForRest())
+
+        let outcome = await env.session.waitForNextIdle(timeout: .seconds(2))
+        #expect(outcome?.kind == .executed)
+        #expect(outcome?.finalText == "hello world ")
     }
 
     @Test("Transcription error transitions to error state")

@@ -41,6 +41,7 @@ protocol CapturePanelSurface: AnyObject {
     // Content
     func populateImmediateActionText(segments: [InputSegment])
     func setPhase(_ phase: CaptureViewModel.CapturePhase)
+    func setPreparationNotice(_ message: String?)
     func showPreview(text: String, modeName: String?)
     func setError(_ message: String)
     func setAIProcessingError(_ message: String)
@@ -111,6 +112,10 @@ final class CapturePanelAdapter: CapturePanelSurface {
 
     func setPhase(_ phase: CaptureViewModel.CapturePhase) {
         panel.setPhase(phase)
+    }
+
+    func setPreparationNotice(_ message: String?) {
+        panel.setPreparationNotice(message)
     }
 
     func showPreview(text: String, modeName: String?) {

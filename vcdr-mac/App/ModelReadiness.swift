@@ -36,3 +36,24 @@ struct ModelPreparationNarrator {
         return .preparing(label: phase.label(elapsedSeconds: elapsedSeconds))
     }
 }
+
+/// What the capture flow says about a model that is not ready yet. It is the
+/// readiness line plus the one thing this moment needs and the menu bar does
+/// not: that the audio — being spoken, or already spoken and held — is not
+/// lost while the wait runs.
+struct ModelPreparationNotice {
+    private var narrator: ModelPreparationNarrator
+
+    init(now: ContinuousClock.Instant = .now) {
+        narrator = ModelPreparationNarrator(now: now)
+    }
+
+    /// `nil` once the model is ready — the run has nothing left to explain.
+    mutating func line(
+        for phase: ModelPreparationPhase,
+        at now: ContinuousClock.Instant = .now
+    ) -> String? {
+        guard case .preparing(let label) = narrator.readiness(for: phase, at: now) else { return nil }
+        return "\(label) — your recording is safe"
+    }
+}

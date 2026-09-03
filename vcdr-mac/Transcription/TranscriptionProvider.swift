@@ -20,6 +20,10 @@ enum TranscriptionError: LocalizedError {
 protocol TranscriptionProvider: Sendable {
     var name: String { get }
     var isReady: Bool { get async }
+    /// What the provider is doing while it gets ready. Every readiness surface
+    /// — menu bar, settings badge, the recording pill — words the wait from
+    /// this, so none of them has to guess from `isReady` alone.
+    var initPhase: ModelPreparationPhase { get async }
     func initialize() async throws
     func transcribe(audioFileURL: URL) async throws -> String
 }

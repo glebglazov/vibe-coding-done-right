@@ -43,6 +43,7 @@ final class RecordingIndicatorPanel {
     private static let menuBarGap: CGFloat = 8
     private static let cancelledDisplayDuration: Duration = .seconds(1)
     private static let dismissedDisplayDuration: Duration = .seconds(1)
+    private static let discardedDisplayDuration: Duration = .seconds(2)
     private static let successDisplayDuration: Duration = .seconds(1.5)
     private static let copiedDisplayDuration: Duration = .seconds(1.5)
     private static let copyErrorDisplayDuration: Duration = .seconds(2)
@@ -180,10 +181,12 @@ final class RecordingIndicatorPanel {
         showEphemeral(content: CopyErrorIndicatorView(message: message), duration: Self.copyErrorDisplayDuration)
     }
 
-    /// Show a brief "not ready" indicator when the user tries to record before
-    /// the transcription backend has finished initializing. Implements Backend Rejection.
-    func showNotReady() {
-        showEphemeral(content: InfoPillView(icon: "exclamationmark.triangle", iconColor: .orange, label: "Not ready"), duration: Self.copyErrorDisplayDuration)
+    /// Show a brief "recording discarded" indicator when the user cancels a run
+    /// that was still waiting for the model. Cancelling there throws away audio
+    /// the user has already spoken, so the pill names the loss rather than
+    /// showing the bare cancel mark.
+    func showRecordingDiscarded() {
+        showEphemeral(content: InfoPillView(icon: "trash", iconColor: .secondary, label: "Recording discarded"), duration: Self.discardedDisplayDuration)
     }
 
     // MARK: - Private Helpers

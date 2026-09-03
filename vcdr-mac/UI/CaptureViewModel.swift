@@ -42,6 +42,11 @@ final class CaptureViewModel {
     /// the CapturePanel from auto-dismissing when it loses focus to the mode switcher.
     @ObservationIgnored var isSuspendedForModeSwitcher: Bool = false
 
+    /// What the transcription model is doing while it holds this run up; nil
+    /// once it is ready. Takes the minimized pill's line, because a run that
+    /// cannot be transcribed yet is the more urgent thing to say.
+    var preparationNotice: String?
+
     /// Indicates whether cursor context capture is available for the current app.
     /// Updated when recording starts based on frontmost app's AX support.
     var cursorContextAvailable: Bool = false
@@ -100,6 +105,13 @@ final class CaptureViewModel {
     /// Output text from the displayed turn for copy actions.
     var outputText: String? {
         displayedTurn?.output
+    }
+
+    /// What the minimized pill says: the failure while one is showing, then the
+    /// model preparation notice, then the mode it would run.
+    var pillLabel: String {
+        if phaseState.phase == .error, let message = phaseState.errorMessage { return message }
+        return preparationNotice ?? pillModeLabel
     }
 
     /// Mode label for the minimized pill: "Mode · params · dest symbol" + " ⚡" for quick action

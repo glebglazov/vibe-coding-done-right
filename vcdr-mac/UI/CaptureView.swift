@@ -62,7 +62,7 @@ struct CaptureView: View {
                     .foregroundStyle(.green)
             }
 
-            Text((viewModel.phaseState.phase == .error ? viewModel.phaseState.errorMessage : nil) ?? viewModel.pillModeLabel)
+            Text(viewModel.pillLabel)
                 .font(.caption)
                 .foregroundStyle(viewModel.phaseState.phase == .error && viewModel.phaseState.errorMessage != nil ? Color.red : Color.primary)
                 .lineLimit(1)

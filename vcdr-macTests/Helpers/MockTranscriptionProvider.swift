@@ -11,12 +11,27 @@ actor MockTranscriptionProvider: TranscriptionProvider {
     var mockTranscribeError: Error?
     private(set) var transcribeCallCount = 0
 
+    private(set) var initPhase: ModelPreparationPhase
+
     var isReady: Bool { mockIsReady }
 
-    init(isReady: Bool = true, result: String = "Hello world", error: Error? = nil) {
+    init(
+        isReady: Bool = true,
+        preparationPhase: ModelPreparationPhase? = nil,
+        result: String = "Hello world",
+        error: Error? = nil
+    ) {
         self.mockIsReady = isReady
+        self.initPhase = preparationPhase ?? (isReady ? .ready : .loadingModel)
         self.mockTranscribeResult = result
         self.mockTranscribeError = error
+    }
+
+    /// Finishes preparation the way `initialize()` does for the real provider —
+    /// the seam a test uses to let a waiting run through.
+    func becomeReady() {
+        mockIsReady = true
+        initPhase = .ready
     }
 
     func initialize() async throws {

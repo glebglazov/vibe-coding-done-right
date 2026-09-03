@@ -19,6 +19,10 @@ final class CapturePanel {
     static let panelMaxHeightFraction: CGFloat = 0.85
     static let panelOffsetBelowMenuBar: CGFloat = 8
     private static let minimizedPanelWidth: CGFloat = 200
+    /// The pill is sized to its content, and a model preparation notice is a
+    /// sentence rather than a mode name. At the usual width the assurance that
+    /// the recording is safe — the point of the line — would be truncated away.
+    private static let minimizedPanelWidthWithNotice: CGFloat = 380
     private static let minimizedPanelHeight: CGFloat = 40
 
     func show(
@@ -148,6 +152,19 @@ final class CapturePanel {
         viewModel?.phaseState.phase = phase
     }
 
+    /// Shows what the transcription model is doing while it holds this run up,
+    /// or clears the line once it is ready. Only the notice appearing or going
+    /// away resizes the pill — its seconds tick every second, and animating a
+    /// resize at that rate would make the pill twitch.
+    func setPreparationNotice(_ message: String?) {
+        guard let viewModel else { return }
+        let hadNotice = viewModel.preparationNotice != nil
+        viewModel.preparationNotice = message
+        if viewModel.isMinimized, hadNotice != (message != nil) {
+            resizePanelToMinimized()
+        }
+    }
+
     func signalClipboardCapture() {
         viewModel?.feedbackCounters.clipboardCaptureCount += 1
     }
@@ -155,10 +172,15 @@ final class CapturePanel {
     // MARK: - Panel Resize
 
     private func resizePanelToMinimized() {
+        let width = Self.minimizedWidth(hasPreparationNotice: viewModel?.preparationNotice != nil)
         guard let panel,
-              let origin = Self.panelOrigin(width: Self.minimizedPanelWidth, height: Self.minimizedPanelHeight) else { return }
-        let newFrame = NSRect(origin: origin, size: NSSize(width: Self.minimizedPanelWidth, height: Self.minimizedPanelHeight))
+              let origin = Self.panelOrigin(width: width, height: Self.minimizedPanelHeight) else { return }
+        let newFrame = NSRect(origin: origin, size: NSSize(width: width, height: Self.minimizedPanelHeight))
         panel.animateResize(to: newFrame)
+    }
+
+    private static func minimizedWidth(hasPreparationNotice: Bool) -> CGFloat {
+        hasPreparationNotice ? minimizedPanelWidthWithNotice : minimizedPanelWidth
     }
 
     func resizePanelToExpanded() {
@@ -172,7 +194,9 @@ final class CapturePanel {
     func resizePanel() {
         guard let panel, let viewModel else { return }
         let newHeight = Self.calculateHeight(for: viewModel.displayedTurn, hasError: viewModel.phaseState.errorMessage != nil)
-        let targetWidth = viewModel.isMinimized ? Self.minimizedPanelWidth : Self.panelWidth
+        let targetWidth = viewModel.isMinimized
+            ? Self.minimizedWidth(hasPreparationNotice: viewModel.preparationNotice != nil)
+            : Self.panelWidth
         guard let origin = Self.panelOrigin(width: targetWidth, height: newHeight) else { return }
         let newFrame = NSRect(origin: origin, size: NSSize(width: targetWidth, height: newHeight))
         panel.animateResize(to: newFrame)

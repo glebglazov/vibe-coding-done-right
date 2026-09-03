@@ -17,6 +17,8 @@ extension CaptureSession {
         pillResetTask = nil
         autoDismissTask?.cancel()
         autoDismissTask = nil
+        preparationNarrationTask?.cancel()
+        preparationNarrationTask = nil
         indicator.cancelPendingDismiss()
         indicator.hide()
 
@@ -29,16 +31,6 @@ extension CaptureSession {
             if case .transcribing = status.phase {
                 panel.buzz()
             }
-            return
-        }
-
-        // Backend Rejection: if the transcription provider is not ready, reject
-        // immediately with visual feedback rather than starting a session that
-        // would hang at transcribing.
-        if !(await transcription.isReady) {
-            panel.buzz()
-            indicator.showNotReady()
-            Logger.app.info("Recording rejected: transcription not ready")
             return
         }
 
@@ -55,9 +47,9 @@ extension CaptureSession {
 
         run = RunState()
 
-        // Don't gate on model readiness — start audio immediately and let the
-        // model finish loading in the background. If it isn't ready by stop,
-        // `processTranscription` waits for it before calling transcribe.
+        // ADR-0006: the hotkey is never refused for an unready model. Audio
+        // starts now and the model catches up in the background; if it hasn't
+        // by stop, `processTranscription` holds the finished audio for it.
         showPanelMinimized()
 
         let frontmostApp = NSWorkspace.shared.frontmostApplication
@@ -85,6 +77,7 @@ extension CaptureSession {
 
         preparingOK = true
         setStatus(.recording)
+        startPreparationNarration()
         recordingStartInstant = .now
         destinationHotkey.isEnabled = true
         updateCancelHotkey()
@@ -221,6 +214,10 @@ extension CaptureSession {
 
         guard wasTranscribing || wasPreparing || wasRecording else { return }
 
+        let wasWaitingForModel = (preparationNarrationTask != nil)
+        preparationNarrationTask?.cancel()
+        preparationNarrationTask = nil
+
         setStatus(.idle)
 
         if wasTranscribing {
@@ -250,7 +247,14 @@ extension CaptureSession {
         immediateActionTask?.cancel()
         immediateActionTask = nil
         panel.dismiss()
-        indicator.showCancelled()
+        // Cancelling while the model is still preparing throws away audio the
+        // user has already spoken — the pill names that loss instead of showing
+        // the cancel mark that ends an ordinary run.
+        if wasTranscribing && wasWaitingForModel {
+            indicator.showRecordingDiscarded()
+        } else {
+            indicator.showCancelled()
+        }
 
         emit(.cancelled, finalText: nil, destinationID: nil, historyConversationID: nil)
         Logger.app.info("\(wasTranscribing ? "Processing cancelled" : "Recording cancelled")")
@@ -345,6 +349,42 @@ extension CaptureSession {
         panel.show(config: config)
         panel.setPhase(.recording)
         panel.minimize()
+    }
+
+    /// Keeps the pill honest about a model that is not ready: which phase it is
+    /// in, how long it has been there, and that the audio is not lost. It runs
+    /// from recording start rather than from the stop, because a user told only
+    /// after speaking learns the cost of a download too late to decide against
+    /// it. It ends the moment the model is ready, or the run does.
+    private func startPreparationNarration() {
+        preparationNarrationTask?.cancel()
+        preparationNarrationTask = Task { @MainActor [weak self] in
+            var notice = ModelPreparationNotice()
+            var announced = false
+            while !Task.isCancelled {
+                guard let self, self.runAwaitsTranscript else { break }
+                guard let line = notice.line(for: await self.transcription.initPhase) else { break }
+                self.panel.setPreparationNotice(line)
+                announced = true
+                try? await Task.sleep(for: Self.preparationNoticeInterval)
+            }
+            // A cancelled task is a superseded one: whoever cancelled it owns
+            // the panel now, so it must not clear their line or drop their task.
+            guard !Task.isCancelled, let self else { return }
+            if announced {
+                self.panel.setPreparationNotice(nil)
+            }
+            self.preparationNarrationTask = nil
+        }
+    }
+
+    /// The window in which the model still matters to this run: audio is being
+    /// captured, or has been captured and is waiting to be transcribed.
+    private var runAwaitsTranscript: Bool {
+        switch status.phase {
+        case .preparingToRecord, .recording, .transcribing: true
+        default: false
+        }
     }
 
     private func isTransientRecordingPhase() -> Bool {

@@ -173,7 +173,7 @@ Domain expert: "Style Override survives cancel — it is not a Session Override.
 
 Dev: "The user pressed the recording hotkey while the menu bar still shows an orange dot."
 
-Domain expert: "That is Backend Rejection. The shell must reject the action immediately with visual feedback — a buzz on the indicator and a 'Not ready' message — rather than starting a Capture Session that would hang at Transcribing waiting for the model."
+Domain expert: "The Capture Session starts and records. Backend Rejection does not apply to the transcription model — the hotkey is never refused for it. The pill names the Model Preparation Phase from the start, and the run waits for the model after the user stops, where it says the recording is safe."
 
 Dev: "The app was launched for the first time and iCloud container provisioning is still in progress."
 

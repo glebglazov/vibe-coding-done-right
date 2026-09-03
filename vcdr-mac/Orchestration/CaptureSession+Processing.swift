@@ -10,15 +10,13 @@ extension CaptureSession {
     /// and maps the resulting disposition to UI transitions. Cancellation-aware at every await.
     func processTranscription(audioURL: URL) async {
         do {
-            // If the user recorded before the model finished loading, wait for it
-            // here rather than blocking recording start. The panel already shows
-            // "Transcribing..." so the user gets feedback while we wait.
-            if !(await transcription.isReady) {
-                panel.setPhase(.processing)
-                while !(await transcription.isReady) {
-                    try Task.checkCancellation()
-                    try await Task.sleep(for: .milliseconds(100))
-                }
+            // The run may have started before the model was ready — ADR-0006:
+            // the hotkey never refuses. This is the one moment the app cannot
+            // proceed without the model, so the wait lives here. The pill has
+            // been narrating the phase since the recording began.
+            while !(await transcription.isReady) {
+                try Task.checkCancellation()
+                try await Task.sleep(for: Self.modelReadinessPollingInterval)
             }
 
             let transcriptionStart = ContinuousClock.now

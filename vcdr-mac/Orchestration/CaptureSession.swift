@@ -129,6 +129,10 @@ final class CaptureSession {
     static let pillErrorDisplayDuration: Duration = .seconds(1.5)
     static let pillFlashDuration: Duration = .seconds(1)
     static let audioSettleDelayBeforeResume: Duration = .milliseconds(300)
+    /// The Preparation Heartbeat counts whole seconds, so re-reading the phase
+    /// faster than this would only repeat the line already on screen.
+    static let preparationNoticeInterval: Duration = .seconds(1)
+    static let modelReadinessPollingInterval: Duration = .milliseconds(100)
 
     // MARK: - Injected state (stored for internal use)
 
@@ -188,6 +192,10 @@ final class CaptureSession {
     // MARK: - Cancellable tasks (all torn down in deinit)
 
     @ObservationIgnored var processingTask: Task<Void, Never>?
+    /// Alive while an unready model still holds the run up. Its liveness is also
+    /// how cancellation knows the user is discarding a recording rather than
+    /// escaping a hang.
+    @ObservationIgnored var preparationNarrationTask: Task<Void, Never>?
     @ObservationIgnored var immediateActionTask: Task<Void, Never>?
     @ObservationIgnored var autoDismissTask: Task<Void, Never>?
     @ObservationIgnored var pillResetTask: Task<Void, Never>?
@@ -227,6 +235,7 @@ final class CaptureSession {
     }
 
     deinit {
+        preparationNarrationTask?.cancel()
         processingTask?.cancel()
         immediateActionTask?.cancel()
         autoDismissTask?.cancel()

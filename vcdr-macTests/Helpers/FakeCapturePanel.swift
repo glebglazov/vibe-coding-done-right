@@ -22,6 +22,7 @@ final class FakeCapturePanel: CapturePanelSurface {
         case buzz
         case populateImmediateActionText(count: Int)
         case setPhase(CaptureViewModel.CapturePhase)
+        case setPreparationNotice(String?)
         case showPreview(text: String, modeName: String?)
         case setError(String)
         case setAIProcessingError(String)
@@ -72,6 +73,10 @@ final class FakeCapturePanel: CapturePanelSurface {
 
     func setPhase(_ phase: CaptureViewModel.CapturePhase) {
         calls.append(.setPhase(phase))
+    }
+
+    func setPreparationNotice(_ message: String?) {
+        calls.append(.setPreparationNotice(message))
     }
 
     func showPreview(text: String, modeName: String?) {

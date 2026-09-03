@@ -66,6 +66,6 @@ init is deferred. Both ADRs are instances of the Responsiveness-First tenet
   opportunistic audio-preparation phases rather than one `PREPARING` gate.
 - First-launch menu bar icon appears immediately, even when iCloud container provisioning is still in progress.
 - Users can open Settings and browse modes/destinations before transcription is ready, because `AppSettings` loads synchronously from UserDefaults.
-- The recording hotkey is gated on `transcriptionProvider.isReady`; attempting to record while initializing produces a clear rejection instead of a silent hang at "Transcribing...".
+- The recording hotkey is never gated on `transcriptionProvider.isReady` (see [ADR-0006](0006-recording-is-never-refused-for-an-unready-model.md)); recording while initializing starts and captures audio, and the wait for the model happens after the stop, narrated with the Model Preparation Phase instead of hanging silently at "Transcribing...".
 - `CaptureSession` and `TextProcessor` must tolerate a history store that is not yet ready. A small queuing layer is needed for history writes.
 - `AudioDeviceMonitor.refreshDevices()` must be called inside `initialize()` rather than `init()`, so the device list may be empty for a brief moment after launch.
