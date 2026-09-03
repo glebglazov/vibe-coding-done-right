@@ -137,8 +137,7 @@ struct MainWindowView: View {
                     case .transcription:
                         TranscriptionTabView(
                             settings: dependencies.settings,
-                            isTranscriptionReady: dependencies.isTranscriptionReady,
-                            initializationStatus: dependencies.initializationStatus
+                            readiness: dependencies.readiness
                         )
                     case .history:
                         HistoryTabView(

@@ -2,18 +2,13 @@ import SwiftUI
 
 struct TranscriptionTabView: View {
     let settings: AppSettings
-    let isTranscriptionReady: Bool
-    let initializationStatus: String
+    let readiness: ModelReadiness
 
     var body: some View {
         Form {
             Section("Models") {
                 LabeledContent {
-                    ModelStatusBadge(
-                        status: isTranscriptionReady ? .ready
-                            : initializationStatus.hasPrefix("Failed") ? .failed
-                            : .loading(initializationStatus)
-                    )
+                    ModelStatusBadge(readiness: readiness)
                 } label: {
                     Text("Parakeet v3")
                     Text("Multilingual speech-to-text (CoreML)")
@@ -46,13 +41,7 @@ private struct ModelStatusBadge: View {
     private static let badgeVPadding: CGFloat = 4
     private static let badgeCornerRadius: CGFloat = 12
 
-    enum Status {
-        case ready
-        case loading(String)
-        case failed
-    }
-
-    let status: Status
+    let readiness: ModelReadiness
 
     var body: some View {
         HStack(spacing: Self.dotSpacing) {
@@ -70,17 +59,17 @@ private struct ModelStatusBadge: View {
     }
 
     private var badgeColor: Color {
-        switch status {
+        switch readiness {
         case .ready: .green
-        case .loading: .gray
+        case .preparing: .gray
         case .failed: .red
         }
     }
 
     private var badgeText: String {
-        switch status {
+        switch readiness {
         case .ready: "Ready"
-        case .loading(let text): text
+        case .preparing(let label): label
         case .failed: "Error"
         }
     }

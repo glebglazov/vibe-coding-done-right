@@ -24,8 +24,9 @@ final class AppDependencies {
     let audioRecorder: AudioRecorder
     #endif
 
-    private(set) var isTranscriptionReady = false
-    private(set) var initializationStatus = "Loading model..."
+    private(set) var readiness: ModelReadiness =
+        .preparing(label: ModelPreparationPhase.preparing.label(elapsedSeconds: 0))
+    var isTranscriptionReady: Bool { readiness == .ready }
     private(set) var hasMicrophonePermission = false
     private(set) var hasAccessibilityPermission = false
     private(set) var isInitialized = false
@@ -173,15 +174,15 @@ final class AppDependencies {
 
         do {
             let phasePoller = Task {
+                // `readiness` is @Observable: writing it unconditionally at the
+                // poll cadence re-evaluates every SwiftUI body that reads it,
+                // so only the polls that change the visible line are published.
+                var narrator = ModelPreparationNarrator()
                 while !Task.isCancelled {
                     let phase = await transcriptionProvider.initPhase
-                    switch phase {
-                    case .preparing, .downloadingModel:
-                        initializationStatus = "Downloading model..."
-                    case .loadingModel:
-                        initializationStatus = "Compiling model..."
-                    case .ready:
-                        break
+                    let polled = narrator.readiness(for: phase)
+                    if polled != readiness {
+                        readiness = polled
                     }
                     try? await Task.sleep(for: Self.phasePollingInterval)
                 }
@@ -190,11 +191,10 @@ final class AppDependencies {
             try await transcriptionProvider.initialize()
             phasePoller.cancel()
 
-            isTranscriptionReady = true
-            initializationStatus = "Ready"
+            readiness = .ready
             Logger.app.info("App fully initialized")
         } catch {
-            initializationStatus = "Failed: \(error.localizedDescription)"
+            readiness = .failed(message: error.localizedDescription)
             Logger.app.error("Initialization failed: \(error)")
         }
     }

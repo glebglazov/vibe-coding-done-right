@@ -78,10 +78,11 @@ struct MenuBarView: View {
     }
 
     private var statusText: String {
-        if !dependencies.isTranscriptionReady {
-            return dependencies.initializationStatus
+        switch dependencies.readiness {
+        case .preparing(let label): return label
+        case .failed(let message): return "Failed: \(message)"
+        case .ready: return dependencies.session.status.statusText
         }
-        return dependencies.session.status.statusText
     }
 
     private var hotkeyDisplay: String {
