@@ -19,8 +19,25 @@ BUILD_DIR="$(mktemp -d)"
 ARCHIVE="$BUILD_DIR/VCDR.xcarchive"
 EXPORT_DIR="$BUILD_DIR/export"
 APP="$EXPORT_DIR/VCDR.app"
-DMG_OUTPUT="$HOME/Desktop/vcdr.dmg"
 VOLNAME="VCDR"
+TEAM_ID=$(/usr/libexec/PlistBuddy -c 'Print :teamID' ExportOptions.plist)
+
+# An unnotarized build gets a different file name so it cannot be mistaken for a
+# release later: Gatekeeper on macOS 15 refuses it with "cannot be opened".
+if [ "$NOTARIZE" = 1 ]; then
+    DMG_OUTPUT="$HOME/Desktop/vcdr.dmg"
+else
+    DMG_OUTPUT="$HOME/Desktop/vcdr-unnotarized.dmg"
+fi
+
+# Missing credentials fail here in seconds instead of after a multi-minute archive.
+if [ "$NOTARIZE" = 1 ] && ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+    echo "❌ No notary credentials stored under keychain profile '$NOTARY_PROFILE'."
+    echo "   Store them once (prompts for an app-specific password from account.apple.com):"
+    echo "     xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <apple-id> --team-id $TEAM_ID"
+    echo "   Or pass --skip-notarization for a local-only build."
+    exit 1
+fi
 
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
@@ -75,6 +92,12 @@ if [ "$NOTARIZE" = 1 ]; then
     xcrun notarytool submit "$BUILD_DIR/VCDR.zip" \
         --keychain-profile "$NOTARY_PROFILE" --wait
     xcrun stapler staple "$APP"
+    # "Accepted" from notarytool is not enough: the assessment must read
+    # "Notarized Developer ID", or the installed app will still be refused.
+    APP_ASSESSMENT=$(spctl -a -t exec -vv "$APP" 2>&1)
+    printf '%s\n' "$APP_ASSESSMENT"
+    printf '%s' "$APP_ASSESSMENT" | grep -q "source=Notarized Developer ID" \
+        || { echo "❌ App is not assessed as Notarized Developer ID."; exit 1; }
 else
     echo ""
     echo "⏭️  Skipping notarization (--skip-notarization)"
@@ -143,6 +166,11 @@ trap 'rm -rf "$BUILD_DIR"' EXIT
 
 hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG_OUTPUT"
 
+# Gatekeeper evaluates the disk image by its own signature before it looks at the
+# notarization ticket; an unsigned DMG is reported as "no usable signature".
+SIGNING_IDENTITY=$(printf '%s\n' "$SIG_INFO" | sed -n 's/^Authority=\(Developer ID Application:.*\)$/\1/p' | head -1)
+codesign --sign "$SIGNING_IDENTITY" --timestamp "$DMG_OUTPUT"
+
 if [ "$NOTARIZE" = 1 ]; then
     echo ""
     echo "📤 Notarizing DMG..."
@@ -152,7 +180,10 @@ if [ "$NOTARIZE" = 1 ]; then
 
     echo ""
     echo "🔍 Final Gatekeeper assessment..."
-    spctl -a -t open --context context:primary-signature -vv "$DMG_OUTPUT"
+    DMG_ASSESSMENT=$(spctl -a -t open --context context:primary-signature -vv "$DMG_OUTPUT" 2>&1)
+    printf '%s\n' "$DMG_ASSESSMENT"
+    printf '%s' "$DMG_ASSESSMENT" | grep -q "source=Notarized Developer ID" \
+        || { echo "❌ DMG is not assessed as Notarized Developer ID."; exit 1; }
 
     echo ""
     echo "✅ Release build complete and notarized!"
