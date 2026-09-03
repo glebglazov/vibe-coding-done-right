@@ -1,4 +1,3 @@
-#if DEBUG
 import SwiftUI
 
 /// Renders the persisted launch telemetry ring buffer, newest first. Exists to
@@ -95,4 +94,3 @@ private struct LaunchHistoryRow: View {
         String(format: "%.0fms", milliseconds)
     }
 }
-#endif

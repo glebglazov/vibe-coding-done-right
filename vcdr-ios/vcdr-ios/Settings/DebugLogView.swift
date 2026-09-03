@@ -1,4 +1,3 @@
-#if DEBUG
 import SwiftUI
 import UIKit
 
@@ -199,4 +198,3 @@ struct DebugLogView: View {
             && head[4] == "-"
     }
 }
-#endif

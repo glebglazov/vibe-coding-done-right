@@ -3,9 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     let substitutionStore: any SubstitutionStore
     @Environment(\.dismiss) private var dismiss
-    #if DEBUG
+    @State private var diagnosticsUnlock = DiagnosticsUnlock()
     @State private var showClearLogsConfirmation = false
-    #endif
     @AppStorage("appearance") private var appearance: Appearance = .system
     @AppStorage(AudioRecorder.useBuiltInMicOnlyKey) private var useBuiltInMicOnly = true
     @AppStorage(
@@ -38,9 +37,10 @@ struct SettingsView: View {
                 hotSessionSection
                 keyboardSection
                 appearanceSection
-                #if DEBUG
-                debugSection
-                #endif
+                if diagnosticsUnlock.isUnlocked {
+                    diagnosticsSection
+                }
+                versionSection
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -182,10 +182,9 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Debug
+    // MARK: - Diagnostics
 
-    #if DEBUG
-    private var debugSection: some View {
+    private var diagnosticsSection: some View {
         Section {
             NavigationLink("View Logs") {
                 DebugLogView()
@@ -196,10 +195,13 @@ struct SettingsView: View {
             Button("Clear All Logs", role: .destructive) {
                 showClearLogsConfirmation = true
             }
+            Button("Hide Diagnostics") {
+                diagnosticsUnlock.lock()
+            }
         } header: {
-            Text("Debug")
+            Text("Diagnostics")
         } footer: {
-            Text("Visible in Xcode builds only. Reads the persistent log file (App Group), so entries survive app restarts.")
+            Text("Reads the persistent log file (App Group), so entries survive app restarts. \"Hide Diagnostics\" puts this section away until you tap the version row ten times again.")
         }
         .confirmationDialog(
             "Clear all logs?",
@@ -214,7 +216,51 @@ struct SettingsView: View {
             Text("This permanently deletes all saved log entries. This cannot be undone.")
         }
     }
-    #endif
+
+    // MARK: - Version
+
+    /// The Diagnostics Unlock lives here: the row names the running build, and
+    /// ten taps on it reveal the diagnostics section.
+    private var versionSection: some View {
+        Section {
+            Button {
+                registerVersionTap()
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text(Self.versionLabel)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let remaining = diagnosticsUnlock.tapsRemaining {
+                        Text(remaining == 1 ? "1 more tap" : "\(remaining) more taps")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+        }
+    }
+
+    private func registerVersionTap() {
+        guard !diagnosticsUnlock.isUnlocked else { return }
+        diagnosticsUnlock.registerTap()
+        if diagnosticsUnlock.isUnlocked {
+            AppHaptics.medium()
+        } else if diagnosticsUnlock.tapsRemaining != nil {
+            AppHaptics.light()
+        }
+    }
+
+    private static var versionLabel: String {
+        let info = Bundle.main.infoDictionary
+        let marketingVersion = info?["CFBundleShortVersionString"] as? String ?? "unknown"
+        let buildNumber = info?["CFBundleVersion"] as? String ?? "unknown"
+        return "\(marketingVersion) (\(buildNumber))"
+    }
 
     // MARK: - AI Processing
 
