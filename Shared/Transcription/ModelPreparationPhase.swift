@@ -2,7 +2,7 @@ import Foundation
 
 /// What the transcription model is doing while it gets ready. One vocabulary
 /// for both products, so macOS and iOS cannot word the same wait differently.
-enum ModelPreparationPhase: Sendable {
+enum ModelPreparationPhase: Sendable, Equatable {
     /// Initialization has not begun.
     case preparing
     /// Artifacts are being fetched. A launch that finds them already cached
@@ -11,6 +11,66 @@ enum ModelPreparationPhase: Sendable {
     /// Artifacts are on disk, being compiled and loaded.
     case loadingModel
     case ready
+    /// Preparation stopped and waiting will not restart it. The failure rides
+    /// on the phase because only the failing step knows what went wrong; every
+    /// surface downstream reads it from here instead of a status string.
+    case failed(PreparationFailure)
+}
+
+/// Why model preparation stopped. Only causes the app can genuinely tell apart
+/// are named: the transcription backend reports failures as opaque text, so
+/// anything that is not a lost connection is reported as itself rather than
+/// paraphrased into a cause nobody verified.
+enum PreparationFailure: Sendable, Equatable {
+    case offline
+    case unknown
+}
+
+extension PreparationFailure {
+    /// The URL-loading codes that mean the device had no usable connection.
+    /// Everything else — a timeout, a bad payload, a CoreML compile error —
+    /// stays unknown, because it could be the network or could be the model.
+    private static let offlineURLErrorCodes: Set<Int> = [
+        NSURLErrorNotConnectedToInternet,
+        NSURLErrorNetworkConnectionLost,
+        NSURLErrorDataNotAllowed,
+        NSURLErrorInternationalRoamingOff
+    ]
+
+    init(error: Error) {
+        let nsError = error as NSError
+        let isOffline = nsError.domain == NSURLErrorDomain
+            && Self.offlineURLErrorCodes.contains(nsError.code)
+        self = isOffline ? .offline : .unknown
+    }
+
+    /// What went wrong, in one line.
+    var headline: String {
+        switch self {
+        case .offline: "The model download needs an internet connection"
+        case .unknown: "The model could not be prepared"
+        }
+    }
+
+    /// What clears it. Every failure retries; only a lost connection is worth
+    /// asking the user to fix first, because it is the only cause the app knows.
+    var remedy: String {
+        switch self {
+        case .offline: "Waiting will not fix this — reconnect, then try again."
+        case .unknown: "Waiting will not fix this — try again."
+        }
+    }
+
+    /// The whole failure for surfaces that show one line.
+    var message: String { "\(headline). \(remedy)" }
+
+    /// The word a status badge has room for.
+    var badge: String {
+        switch self {
+        case .offline: "Offline"
+        case .unknown: "Failed"
+        }
+    }
 }
 
 extension ModelPreparationPhase {
@@ -29,6 +89,7 @@ extension ModelPreparationPhase {
         case .downloadingModel: phaseLabel = "Downloading model"
         case .loadingModel: phaseLabel = "Loading model"
         case .ready: return "Ready"
+        case .failed(let failure): return failure.headline
         }
         guard elapsedSeconds >= Self.heartbeatRevealThreshold else { return phaseLabel }
         return "\(phaseLabel) · \(elapsedSeconds)s"

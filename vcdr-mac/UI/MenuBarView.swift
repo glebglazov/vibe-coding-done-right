@@ -12,9 +12,15 @@ struct MenuBarView: View {
         VStack(alignment: .leading) {
             HStack {
                 Circle()
-                    .fill(dependencies.isTranscriptionReady ? .green : .orange)
+                    .fill(statusColor)
                     .frame(width: 8, height: 8)
                 Text(statusText)
+            }
+
+            if case .failed = dependencies.readiness {
+                Button("Try Again") {
+                    Task { await dependencies.retryModelPreparation() }
+                }
             }
 
             if let latest = dependencies.transcriptionHistory.latestConversation {
@@ -80,8 +86,16 @@ struct MenuBarView: View {
     private var statusText: String {
         switch dependencies.readiness {
         case .preparing(let label): return label
-        case .failed(let message): return "Failed: \(message)"
+        case .failed(let failure): return failure.message
         case .ready: return dependencies.session.status.statusText
+        }
+    }
+
+    private var statusColor: Color {
+        switch dependencies.readiness {
+        case .ready: .green
+        case .preparing: .orange
+        case .failed: .red
         }
     }
 

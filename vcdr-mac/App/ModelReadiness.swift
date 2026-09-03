@@ -8,7 +8,22 @@ enum ModelReadiness: Equatable {
     /// Phase wording, heartbeat included.
     case preparing(label: String)
     case ready
-    case failed(message: String)
+    /// Preparation stopped. The failure is the one the provider classified at
+    /// the point it gave up, so no surface has to read the backend's words.
+    case failed(PreparationFailure)
+}
+
+extension ModelReadiness {
+    /// The readiness a preparation attempt that threw leaves behind. The
+    /// provider classifies what it catches; anything else escaping
+    /// initialization is classified here so the raw error never reaches a view.
+    static func failed(from error: Error) -> ModelReadiness {
+        if let error = error as? TranscriptionError,
+           case .initializationFailed(let failure) = error {
+            return .failed(failure)
+        }
+        return .failed(PreparationFailure(error: error))
+    }
 }
 
 /// Turns the Model Preparation Phase reported by the transcription provider
@@ -31,7 +46,11 @@ struct ModelPreparationNarrator {
             currentPhase = phase
             phaseStart = now
         }
-        guard phase != .ready else { return .ready }
+        switch phase {
+        case .ready: return .ready
+        case .failed(let failure): return .failed(failure)
+        default: break
+        }
         let elapsedSeconds = Int((now - phaseStart).components.seconds)
         return .preparing(label: phase.label(elapsedSeconds: elapsedSeconds))
     }
@@ -48,12 +67,17 @@ struct ModelPreparationNotice {
         narrator = ModelPreparationNarrator(now: now)
     }
 
-    /// `nil` once the model is ready — the run has nothing left to explain.
+    /// `nil` once the model is ready — the run has nothing left to explain. A
+    /// Preparation Failure drops the assurance: the wait is over and the audio
+    /// this run holds will not be transcribed, so promising it is safe would lie.
     mutating func line(
         for phase: ModelPreparationPhase,
         at now: ContinuousClock.Instant = .now
     ) -> String? {
-        guard case .preparing(let label) = narrator.readiness(for: phase, at: now) else { return nil }
-        return "\(label) — your recording is safe"
+        switch narrator.readiness(for: phase, at: now) {
+        case .ready: nil
+        case .preparing(let label): "\(label) — your recording is safe"
+        case .failed(let failure): failure.message
+        }
     }
 }

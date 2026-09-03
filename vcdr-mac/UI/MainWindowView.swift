@@ -137,7 +137,10 @@ struct MainWindowView: View {
                     case .transcription:
                         TranscriptionTabView(
                             settings: dependencies.settings,
-                            readiness: dependencies.readiness
+                            readiness: dependencies.readiness,
+                            retryPreparation: {
+                                Task { await dependencies.retryModelPreparation() }
+                            }
                         )
                     case .history:
                         HistoryTabView(

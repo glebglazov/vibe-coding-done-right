@@ -34,6 +34,13 @@ actor MockTranscriptionProvider: TranscriptionProvider {
         initPhase = .ready
     }
 
+    /// Preparation gives up the way the real provider does — the failure rides
+    /// on the phase, so every caller waiting on the model learns of it there.
+    func fail(_ failure: PreparationFailure) {
+        mockIsReady = false
+        initPhase = .failed(failure)
+    }
+
     func initialize() async throws {
         // No-op for tests
     }

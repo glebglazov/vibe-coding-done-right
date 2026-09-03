@@ -3,6 +3,7 @@ import SwiftUI
 struct TranscriptionTabView: View {
     let settings: AppSettings
     let readiness: ModelReadiness
+    let retryPreparation: () -> Void
 
     var body: some View {
         Form {
@@ -12,6 +13,15 @@ struct TranscriptionTabView: View {
                 } label: {
                     Text("Parakeet v3")
                     Text("Multilingual speech-to-text (CoreML)")
+                }
+
+                if case .failed(let failure) = readiness {
+                    LabeledContent {
+                        Button("Try Again", action: retryPreparation)
+                    } label: {
+                        Text(failure.headline)
+                        Text(failure.remedy)
+                    }
                 }
             }
 
@@ -70,7 +80,7 @@ private struct ModelStatusBadge: View {
         switch readiness {
         case .ready: "Ready"
         case .preparing(let label): label
-        case .failed: "Error"
+        case .failed(let failure): failure.badge
         }
     }
 }

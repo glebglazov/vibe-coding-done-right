@@ -10,6 +10,12 @@ actor ParakeetProvider: TranscriptionProvider {
 
     private(set) var initPhase: ModelPreparationPhase = .preparing
 
+    /// The attempt currently running. A Preparation Failure offers a retry, so
+    /// re-entry is a real path: actors interleave at await points, and without
+    /// a shared attempt a retry pressed during a slow one would download the
+    /// model twice. A second caller waits on the first attempt instead.
+    private var attempt: Task<Void, Error>?
+
     // MARK: - Constants
     private static let millisecondsPerSecond: Double = 1000
     private static let attosecondsPerMillisecond: Double = 1e15
@@ -23,6 +29,18 @@ actor ParakeetProvider: TranscriptionProvider {
 
     func initialize() async throws {
         guard !isReady else { return }
+        if let attempt {
+            return try await attempt.value
+        }
+        let attempt = Task { try await self.prepare() }
+        self.attempt = attempt
+        let result = await attempt.result
+        self.attempt = nil
+        try result.get()
+    }
+
+    private func prepare() async throws {
+        initPhase = .preparing
         let totalStart = ContinuousClock.now
         Logger.transcription.info("Initializing Parakeet v3 CoreML model...")
 
@@ -55,8 +73,13 @@ actor ParakeetProvider: TranscriptionProvider {
             initPhase = .ready
             Logger.transcription.info("Parakeet v3 ready (total: \(self.elapsedMs(since: totalStart)))")
         } catch {
+            // Classified here, where the failing step and the backend's own
+            // error are both still in hand; the raw text goes to the log and
+            // no further.
+            let failure = PreparationFailure(error: error)
+            initPhase = .failed(failure)
             Logger.transcription.error("Failed to initialize Parakeet: \(error)")
-            throw TranscriptionError.initializationFailed(error.localizedDescription)
+            throw TranscriptionError.initializationFailed(failure)
         }
     }
 

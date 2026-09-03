@@ -15,6 +15,12 @@ extension CaptureSession {
             // proceed without the model, so the wait lives here. The pill has
             // been narrating the phase since the recording began.
             while !(await transcription.isReady) {
+                // A Preparation Failure ends the wait rather than outlasting
+                // it: the model is not coming, and the run must say so instead
+                // of holding the audio forever.
+                if case .failed(let failure) = await transcription.initPhase {
+                    throw TranscriptionError.initializationFailed(failure)
+                }
                 try Task.checkCancellation()
                 try await Task.sleep(for: Self.modelReadinessPollingInterval)
             }

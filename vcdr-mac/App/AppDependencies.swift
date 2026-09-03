@@ -172,29 +172,45 @@ final class AppDependencies {
         await bootstrapSubstitutions()
         await audioDeviceMonitor.start()
 
-        do {
-            let phasePoller = Task {
-                // `readiness` is @Observable: writing it unconditionally at the
-                // poll cadence re-evaluates every SwiftUI body that reads it,
-                // so only the polls that change the visible line are published.
-                var narrator = ModelPreparationNarrator()
-                while !Task.isCancelled {
-                    let phase = await transcriptionProvider.initPhase
-                    let polled = narrator.readiness(for: phase)
-                    if polled != readiness {
-                        readiness = polled
-                    }
-                    try? await Task.sleep(for: Self.phasePollingInterval)
-                }
-            }
+        await prepareTranscriptionModel()
+    }
 
+    /// The action a Preparation Failure carries: run preparation again from
+    /// the start. Only a failed model has anything to retry — a run already
+    /// under way narrates itself.
+    func retryModelPreparation() async {
+        guard case .failed = readiness else { return }
+        readiness = .preparing(label: ModelPreparationPhase.preparing.label(elapsedSeconds: 0))
+        await prepareTranscriptionModel()
+    }
+
+    /// Runs model initialization and keeps `readiness` telling the truth about
+    /// it throughout — the phase while it runs, and what stopped it if it stops.
+    private func prepareTranscriptionModel() async {
+        let phasePoller = Task {
+            // `readiness` is @Observable: writing it unconditionally at the
+            // poll cadence re-evaluates every SwiftUI body that reads it,
+            // so only the polls that change the visible line are published.
+            var narrator = ModelPreparationNarrator()
+            while !Task.isCancelled {
+                let phase = await transcriptionProvider.initPhase
+                let polled = narrator.readiness(for: phase)
+                if polled != readiness {
+                    readiness = polled
+                }
+                try? await Task.sleep(for: Self.phasePollingInterval)
+            }
+        }
+
+        do {
             try await transcriptionProvider.initialize()
             phasePoller.cancel()
 
             readiness = .ready
             Logger.app.info("App fully initialized")
         } catch {
-            readiness = .failed(message: error.localizedDescription)
+            phasePoller.cancel()
+            readiness = .failed(from: error)
             Logger.app.error("Initialization failed: \(error)")
         }
     }

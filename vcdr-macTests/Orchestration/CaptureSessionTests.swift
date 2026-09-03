@@ -89,6 +89,42 @@ struct CaptureSessionSingleCycleTests {
         #expect(outcome?.finalText == "hello world ")
     }
 
+    @Test("A model that will not prepare ends the run and clears once it does")
+    @MainActor
+    func preparationFailureEndsTheRunAndRetrySucceeds() async {
+        let provider = MockTranscriptionProvider(isReady: false, preparationPhase: .downloadingModel)
+        let env = CaptureSessionTestEnvironment(mockProvider: provider)
+        defer { env.cleanup() }
+
+        env.session.toggle()
+        #expect(await env.waitForPhase { $0 == .recording })
+        try? await Task.sleep(for: Self.testRecordingDuration)
+
+        env.session.toggle()
+        #expect(await env.waitForPhase { $0 == .transcribing })
+
+        await provider.fail(.offline)
+
+        // The wait ends rather than outlasting the model, and what the user
+        // reads is the named cause and its remedy — never the backend's words.
+        #expect(await env.waitForPhase { phase in
+            if case .error = phase { return true }
+            return false
+        })
+        #expect(env.fakePanel.calls.contains(.setError(PreparationFailure.offline.message)))
+
+        // The cause goes away: the next run reaches the model and transcribes.
+        await provider.becomeReady()
+        env.session.toggle()
+        #expect(await env.waitForPhase { $0 == .recording })
+        try? await Task.sleep(for: Self.testRecordingDuration)
+
+        env.session.toggle()
+        #expect(await env.waitForRest())
+        let outcome = await env.session.waitForNextIdle(timeout: .seconds(2))
+        #expect(outcome?.kind == .executed)
+    }
+
     @Test("Transcription error transitions to error state")
     @MainActor
     func transcriptionError() async {
