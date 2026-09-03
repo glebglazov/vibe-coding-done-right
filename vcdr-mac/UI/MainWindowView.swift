@@ -33,9 +33,7 @@ struct MainWindowView: View {
         case transcription
         case history
         case variables
-        #if DEBUG
-        case debug
-        #endif
+        case diagnostics
 
         var title: String {
             switch self {
@@ -49,9 +47,7 @@ struct MainWindowView: View {
             case .outputDestinations: "Output"
             case .transcription: "Transcription"
             case .history: "History"
-            #if DEBUG
-            case .debug: "Debug"
-            #endif
+            case .diagnostics: "Diagnostics"
             }
         }
 
@@ -67,9 +63,7 @@ struct MainWindowView: View {
             case .outputDestinations: "arrow.right.square"
             case .transcription: "waveform"
             case .history: "clock.arrow.circlepath"
-            #if DEBUG
-            case .debug: "ant"
-            #endif
+            case .diagnostics: "stethoscope"
             }
         }
     }
@@ -82,6 +76,7 @@ struct MainWindowView: View {
     @State private var selection: Tab? = .home
     @State private var path = NavigationPath()
     @State private var substitutionsViewModel: SubstitutionsViewModel
+    @State private var diagnosticsUnlock = DiagnosticsUnlock()
 
     var body: some View {
         NavigationSplitView(columnVisibility: .constant(.doubleColumn)) {
@@ -95,10 +90,10 @@ struct MainWindowView: View {
                 Section("Advanced") {
                     Label(Tab.variables.title, systemImage: Tab.variables.systemImage)
                         .tag(Tab.variables)
-                    #if DEBUG
-                    Label(Tab.debug.title, systemImage: Tab.debug.systemImage)
-                        .tag(Tab.debug)
-                    #endif
+                    if diagnosticsUnlock.isUnlocked {
+                        Label(Tab.diagnostics.title, systemImage: Tab.diagnostics.systemImage)
+                            .tag(Tab.diagnostics)
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -114,7 +109,8 @@ struct MainWindowView: View {
                             modeSwitcherCoordinator: dependencies.modeSwitcherCoordinator,
                             hasMicrophonePermission: dependencies.hasMicrophonePermission,
                             hasAccessibilityPermission: dependencies.hasAccessibilityPermission,
-                            isInitialized: dependencies.isInitialized
+                            isInitialized: dependencies.isInitialized,
+                            diagnosticsUnlock: diagnosticsUnlock
                         )
                     case .audio:
                         AudioTabView(
@@ -149,14 +145,17 @@ struct MainWindowView: View {
                             history: dependencies.transcriptionHistory,
                             settings: dependencies.settings
                         )
-                    #if DEBUG
-                    case .debug:
-                        DebugTabView(
+                    case .diagnostics:
+                        #if DEBUG
+                        DiagnosticsTabView(
+                            diagnosticsUnlock: diagnosticsUnlock,
                             session: dependencies.session,
                             audioRecorder: dependencies.audioRecorder,
                             isTranscriptionReady: dependencies.isTranscriptionReady
                         )
-                    #endif
+                        #else
+                        DiagnosticsTabView(diagnosticsUnlock: diagnosticsUnlock)
+                        #endif
                     case .none:
                         Text("Select a section")
                             .foregroundStyle(.secondary)
@@ -226,6 +225,12 @@ struct MainWindowView: View {
         .onChange(of: selection) {
             // Reset push navigation when switching tabs
             path = NavigationPath()
+        }
+        .onChange(of: diagnosticsUnlock.isUnlocked) {
+            // The tab the user just hid cannot stay on screen behind them.
+            if !diagnosticsUnlock.isUnlocked, selection == .diagnostics {
+                selection = .home
+            }
         }
     }
 }

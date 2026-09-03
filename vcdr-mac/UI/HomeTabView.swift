@@ -11,6 +11,7 @@ struct HomeTabView: View {
     let hasMicrophonePermission: Bool
     let hasAccessibilityPermission: Bool
     let isInitialized: Bool
+    let diagnosticsUnlock: DiagnosticsUnlock
 
     @AppStorage(HistoryStoreFactory.syncEnabledDefaultsKey) private var syncHistoryViaICloud: Bool = true
     private var needsPermissionAttention: Bool {
@@ -90,6 +91,8 @@ struct HomeTabView: View {
                     hotkey: $settings.hotkeySettings.copyLatestCaptureHotkey
                 )
             }
+
+            versionSection
         }
         .formStyle(.grouped)
         .navigationTitle("Home")
@@ -100,4 +103,36 @@ struct HomeTabView: View {
         }
     }
 
+    // MARK: - Version
+
+    /// The Diagnostics Unlock lives here: the row names the running build, and
+    /// ten clicks on it reveal the Diagnostics tab in the sidebar.
+    private var versionSection: some View {
+        Section {
+            Button {
+                diagnosticsUnlock.registerTap()
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent("Version") {
+                        Text(Self.versionLabel)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let remaining = diagnosticsUnlock.tapsRemaining {
+                        Text(remaining == 1 ? "1 more click" : "\(remaining) more clicks")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+        }
+    }
+
+    private static var versionLabel: String {
+        let info = Bundle.main.infoDictionary
+        let marketingVersion = info?["CFBundleShortVersionString"] as? String ?? "unknown"
+        let buildNumber = info?["CFBundleVersion"] as? String ?? "unknown"
+        return "\(marketingVersion) (\(buildNumber))"
+    }
 }
