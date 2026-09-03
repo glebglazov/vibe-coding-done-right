@@ -8,7 +8,17 @@ import OSLog
 /// This naturally handles push-to-talk (extra modifiers) and toggle mode (no extra modifiers).
 final class DestinationHotkeyManager {
     private let tap = EventTapManager()
-    private var bindings: [(id: UUID, keyCode: CGKeyCode, modifiers: CGEventFlags)] = []
+
+    /// One Output Destination's Activation Hotkey, in the shape the tap matches against.
+    /// Only assigned hotkeys become armed, so the tap is installed only when at least
+    /// one destination can actually be triggered.
+    private struct ArmedBinding: Equatable {
+        let id: UUID
+        let keyCode: UInt16
+        let modifiers: UInt64
+    }
+
+    private var armed: [ArmedBinding] = []
 
     /// When false, matched key events pass through unconsumed.
     var isEnabled: Bool = false
@@ -21,17 +31,34 @@ final class DestinationHotkeyManager {
     /// Called when a destination hotkey is matched. Receives the destination UUID.
     var onDestinationMatched: ((UUID) -> Void)?
 
+    /// The Activation Hotkeys the tap currently matches against, keyed by Output
+    /// Destination. Lets a caller confirm the tap tracks settings without owning
+    /// an event tap of its own.
+    var armedActivationHotkeys: [UUID: HotkeyBinding] {
+        Dictionary(uniqueKeysWithValues: armed.map {
+            ($0.id, HotkeyBinding(keyCode: $0.keyCode, modifiers: $0.modifiers))
+        })
+    }
+
     // MARK: - Registration
 
     func register(bindings: [(UUID, HotkeyBinding)]) {
-        unregister()
-
-        self.bindings = bindings.compactMap { id, hotkey in
+        let incoming = bindings.compactMap { id, hotkey -> ArmedBinding? in
             guard hotkey.isAssigned else { return nil }
-            return (id: id, keyCode: CGKeyCode(hotkey.keyCode), modifiers: CGEventFlags(rawValue: hotkey.modifiers))
+            return ArmedBinding(id: id, keyCode: hotkey.keyCode, modifiers: hotkey.modifiers)
         }
 
-        guard !self.bindings.isEmpty else { return }
+        // Every change to the destination list re-registers, and most of those
+        // changes — a rename, a script edit, a reorder — leave the Activation
+        // Hotkeys alone. Rebuilding a live tap for them would drop key events
+        // during the teardown for no gain.
+        let tapMatchesArmed = tap.isInstalled == !incoming.isEmpty
+        guard incoming != armed || !tapMatchesArmed else { return }
+
+        unregister()
+        armed = incoming
+
+        guard !armed.isEmpty else { return }
         guard AXIsProcessTrusted() else {
             Logger.hotkeys.warning("DestinationHotkeyManager: accessibility not granted")
             return
@@ -54,12 +81,12 @@ final class DestinationHotkeyManager {
             return
         }
 
-        Logger.hotkeys.info("DestinationHotkeyManager: registered \(self.bindings.count) bindings")
+        Logger.hotkeys.info("DestinationHotkeyManager: registered \(self.armed.count) bindings")
     }
 
     func unregister() {
         tap.uninstall()
-        bindings = []
+        armed = []
     }
 
     // MARK: - Shared Matching
@@ -106,7 +133,7 @@ final class DestinationHotkeyManager {
 
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
-        let flatBindings = bindings.map { ($0.id, UInt16($0.keyCode), $0.modifiers.rawValue) }
+        let flatBindings = armed.map { ($0.id, $0.keyCode, $0.modifiers) }
 
         if let matchedID = Self.matchBinding(keyCode: keyCode, modifierBits: flags.rawValue, bindings: flatBindings) {
             Logger.hotkeys.debug("DestinationHotkeyManager: matched destination \(matchedID)")

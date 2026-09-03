@@ -25,9 +25,9 @@ extension CaptureSession {
         let binding = settings.cancelRecordingHotkey
         guard binding.isAssigned else {
             cancelHotkey.isEnabled = false
+            cancelHotkey.unregister()
             return
         }
-        cancelHotkey.isEnabled = false
         cancelHotkey.onKeyDown = { [weak self] in
             guard let self else { return }
             switch self.status.phase {
@@ -42,6 +42,9 @@ extension CaptureSession {
             keyCode: CGKeyCode(binding.keyCode),
             modifiers: CGEventFlags(rawValue: binding.modifiers)
         )
+        // Enablement belongs to the phase, not to the registration. Re-binding
+        // mid-capture must not leave cancel dead for the rest of that run.
+        updateCancelHotkey()
     }
 
     func setupDestinationHotkeys() {
@@ -53,6 +56,25 @@ extension CaptureSession {
             self.stopRecordingAndTranscribe()
         }
         destinationHotkey.register(bindings: bindings)
+    }
+
+    /// Keeps the destination tap a projection of `settings.outputDestinations`, so
+    /// adding, deleting or re-binding a destination arms its Activation Hotkey at
+    /// once instead of at the next launch. Unlike the other hotkeys, destinations
+    /// are edited from several places, so no single call site can own the refresh.
+    ///
+    /// `withObservationTracking` fires its handler once, before the write lands —
+    /// hence the main-actor hop to read the new value, and the re-arm afterwards.
+    func observeDestinationHotkeys() {
+        withObservationTracking {
+            _ = settings.outputDestinations
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.setupDestinationHotkeys()
+                self.observeDestinationHotkeys()
+            }
+        }
     }
 
     /// Enables the cancel hotkey iff the session is in an active capture phase.
