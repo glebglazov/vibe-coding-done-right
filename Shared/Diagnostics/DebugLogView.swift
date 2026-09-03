@@ -1,10 +1,15 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 
-/// Reads the persistent `LogBuffer` file (App Group container) and renders the
-/// log, newest writes last. Survives app restarts and includes every
-/// level — unlike the old `OSLogStore` reader, which was scoped to the current
-/// process and dropped `.debug`/`.info` under the system's retention policy.
+/// Reads the persistent `LogBuffer` file — the app-group container on iOS,
+/// Application Support on macOS — and renders the log, newest writes last.
+/// Survives app restarts and includes every level — unlike the old
+/// `OSLogStore` reader, which was scoped to the current process and dropped
+/// `.debug`/`.info` under the system's retention policy.
 struct DebugLogView: View {
     @State private var lines: [String] = []
     @State private var readCursor: LogBuffer.ReadCursor?
@@ -21,6 +26,16 @@ struct DebugLogView: View {
     /// Bounds `LazyVStack` diffing while copy/share still use every fetched
     /// line in the selected window.
     private static let renderedLineLimit = 500
+    /// iOS names the two toolbar sides after the navigation bar it draws them
+    /// in; macOS has no navigation bar, so the same two sides answer to the
+    /// platform-neutral names.
+    #if os(macOS)
+    private static let windowPlacement: ToolbarItemPlacement = .navigation
+    private static let actionPlacement: ToolbarItemPlacement = .primaryAction
+    #else
+    private static let windowPlacement: ToolbarItemPlacement = .topBarLeading
+    private static let actionPlacement: ToolbarItemPlacement = .topBarTrailing
+    #endif
 
     private var renderedLines: [String] {
         Array(lines.suffix(Self.renderedLineLimit))
@@ -69,9 +84,11 @@ struct DebugLogView: View {
             }
         }
         .navigationTitle("Debug Logs")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: Self.windowPlacement) {
                 Menu {
                     Picker("Window", selection: $sinceMinutes) {
                         ForEach(Self.windowOptions, id: \.self) { minutes in
@@ -82,7 +99,7 @@ struct DebugLogView: View {
                     Label(windowLabel(sinceMinutes), systemImage: "clock")
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: Self.actionPlacement) {
                 Button {
                     copyAll()
                 } label: {
@@ -91,14 +108,14 @@ struct DebugLogView: View {
                 .disabled(lines.isEmpty)
                 .accessibilityLabel(justCopied ? "Copied" : "Copy all logs")
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: Self.actionPlacement) {
                 if !lines.isEmpty {
                     ShareLink(item: lines.joined(separator: "\n")) {
                         Image(systemName: "square.and.arrow.up")
                     }
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: Self.actionPlacement) {
                 Button {
                     Task { await fetch(reload: true) }
                 } label: {
@@ -111,7 +128,13 @@ struct DebugLogView: View {
     }
 
     private func copyAll() {
-        UIPasteboard.general.string = lines.joined(separator: "\n")
+        let text = lines.joined(separator: "\n")
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #else
+        UIPasteboard.general.string = text
+        #endif
         justCopied = true
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.5))

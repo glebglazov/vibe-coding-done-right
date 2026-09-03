@@ -8,7 +8,7 @@ Physical-device cold-launch traces showed the App Shell freezing ~15s during Cor
 
 ## Decision
 
-Bridge blocking synchronous syscalls to a GCD global queue via `withBlockingTask` / `withThrowingBlockingTask` (`vcdr-ios/vcdr-ios/Concurrency/BlockingWork.swift`). GCD grows its pool for blocking work, so the cooperative pool and the main actor stay free. QoS is mapped from the caller's `TaskPriority` (automatic launch = `.utility`, a Recording Run = `.userInitiated`). First applied on iOS in commit `b3f9217`; macOS adopts the same pattern when it gains equivalent blocking calls. Rule 6 in `rules.md` is amended to carve this out from its "prefer Task over DispatchQueue" guidance.
+Bridge blocking synchronous syscalls to a GCD global queue via `withBlockingTask` / `withThrowingBlockingTask` (`Shared/Concurrency/BlockingWork.swift`). GCD grows its pool for blocking work, so the cooperative pool and the main actor stay free. QoS is mapped from the caller's `TaskPriority` (automatic launch = `.utility`, a Recording Run = `.userInitiated`). First applied on iOS in commit `b3f9217`; the helpers now sit in `Shared` so macOS uses the same ones. Rule 6 in `rules.md` is amended to carve this out from its "prefer Task over DispatchQueue" guidance.
 
 ## Considered options
 
