@@ -40,7 +40,7 @@ enum ParakeetProviderTestSupport {
     static var recordLaunchOutcomeForStubLoads = false
 
     /// Observed `initPhase` values when `recordInitPhases` is true.
-    static var recordedInitPhases: [ParakeetProvider.InitPhase] = []
+    static var recordedInitPhases: [ModelPreparationPhase] = []
 
     /// When true, each `initPhase` write is appended to `recordedInitPhases`.
     static var recordInitPhases = false

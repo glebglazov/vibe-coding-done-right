@@ -17,14 +17,7 @@ actor ParakeetProvider: TranscriptionProvider {
     private var initInProgress: [CheckedContinuation<Void, Error>] = []
     private var isInitializing = false
 
-    enum InitPhase: Sendable {
-        case notStarted
-        case downloading
-        case compiling
-        case ready
-    }
-
-    private(set) var initPhase: InitPhase = .notStarted {
+    private(set) var initPhase: ModelPreparationPhase = .preparing {
         didSet {
             if ParakeetProviderTestSupport.recordInitPhases, oldValue != initPhase {
                 ParakeetProviderTestSupport.recordedInitPhases.append(initPhase)
@@ -105,7 +98,7 @@ actor ParakeetProvider: TranscriptionProvider {
         Logger.transcription.info("[InitTiming] artifacts onDisk=\(self.modelsOnDiskAtInit) before download")
 
         do {
-            initPhase = .downloading
+            initPhase = .downloadingModel
             Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=downloading set main=\(Thread.isMainThread)")
             let downloadStart = ContinuousClock.now
             let modelDir = AsrModels.defaultCacheDirectory(for: .v3)
@@ -123,7 +116,7 @@ actor ParakeetProvider: TranscriptionProvider {
                 try await Task.sleep(for: .milliseconds(30))
             }
 
-            initPhase = .compiling
+            initPhase = .loadingModel
             Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=compiling set main=\(Thread.isMainThread)")
             let compileStart = ContinuousClock.now
             let qos = DispatchQoS.QoSClass(priority)

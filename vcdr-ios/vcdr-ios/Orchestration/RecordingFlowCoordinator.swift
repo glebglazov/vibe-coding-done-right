@@ -69,7 +69,7 @@ final class RecordingFlowCoordinator {
     }
 
     var state: State = .idle
-    private(set) var initProgress: String = "Preparing"
+    private(set) var initProgress: String = ModelPreparationPhase.preparing.label(elapsedSeconds: 0)
     /// True while artifacts are already on disk and Transcription Readiness is
     /// still pending. The hero may show READY because Recording Runs can begin
     /// during this window; PREPARING remains reserved for Cold Download.
@@ -204,32 +204,6 @@ final class RecordingFlowCoordinator {
     /// expected encoder specialization to isolate, audio prep must not hold
     /// Transcription Readiness hostage behind route/Bluetooth HAL delays.
     private static let predictedWarmPrewarmBarrierTimeout: Duration = .seconds(2)
-    /// Seconds the model can spend in a single init phase before the
-    /// progress label starts appending elapsed time. Fast inits stay quiet;
-    /// slow ones get a visible tick so the wait reads as bounded.
-    private static let initElapsedRevealThreshold: Int = 2
-    private nonisolated static let initElapsedRevealThresholdForLabel: Int = 2
-
-    /// Renders the init progress label for the given phase + elapsed time.
-    /// Past `initElapsedRevealThreshold` seconds the label gains a "· Ns"
-    /// suffix so a stuck-looking spinner gains a visible heartbeat.
-    nonisolated static func formatInitProgress(
-        phase: ParakeetProvider.InitPhase,
-        elapsedSeconds: Int
-    ) -> String {
-        let base: String
-        switch phase {
-        case .notStarted: base = "Preparing"
-        case .downloading: base = "Downloading model"
-        case .compiling: base = "Loading model"
-        case .ready: return "Ready"
-        }
-        if elapsedSeconds >= initElapsedRevealThresholdForLabel {
-            return "\(base) · \(elapsedSeconds)s"
-        }
-        return base
-    }
-
     var isRecording: Bool { recordingEngine.isRecording }
     var isHotSessionActive: Bool { hotMicSession.isAlive }
     var audioLevels: [Float] { recordingEngine.audioLevels }
@@ -356,7 +330,7 @@ final class RecordingFlowCoordinator {
         publishReadinessPresentation(for: predictedVerdict)
         // Initial label; pollTask below replaces this on the first iteration
         // with phase-true text once `ParakeetProvider.initPhase` advances.
-        initProgress = "Preparing"
+        initProgress = ModelPreparationPhase.preparing.label(elapsedSeconds: 0)
 
         let pollTask = Task {
             Logger.app.info("[LaunchProbe] pollTask started main=\(Thread.isMainThread)")
@@ -368,7 +342,7 @@ final class RecordingFlowCoordinator {
             // animations during init and make the Settings gear feel dead.
             // Past a short grace period we also append elapsed-in-phase so
             // a slow load reads as bounded rather than frozen.
-            var lastPhase: ParakeetProvider.InitPhase?
+            var lastPhase: ModelPreparationPhase?
             var phaseStart = ContinuousClock.now
             var lastWrittenText = ""
             while !Task.isCancelled {
@@ -381,7 +355,7 @@ final class RecordingFlowCoordinator {
                 }
 
                 let elapsedSeconds = Int((ContinuousClock.now - phaseStart).components.seconds)
-                let text = Self.formatInitProgress(phase: phase, elapsedSeconds: elapsedSeconds)
+                let text = phase.label(elapsedSeconds: elapsedSeconds)
                 if text != lastWrittenText {
                     initProgress = text
                     lastWrittenText = text

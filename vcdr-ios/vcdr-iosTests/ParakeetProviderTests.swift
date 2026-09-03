@@ -103,7 +103,7 @@ struct ParakeetProviderTests {
         ParakeetProviderTestSupport.reset()
     }
 
-    @Test("init phase advances downloading then compiling then ready")
+    @Test("init phase advances downloading then loading then ready")
     func initPhaseSequence() async throws {
         ParakeetProviderTestSupport.reset()
         ParakeetProviderTestSupport.bypassRealMLLoad = true
@@ -113,25 +113,13 @@ struct ParakeetProviderTests {
         try await provider.initialize()
 
         let observed = ParakeetProviderTestSupport.recordedInitPhases
-        #expect(observed.contains(.downloading))
-        #expect(observed.contains(.compiling))
+        #expect(observed.contains(.downloadingModel))
+        #expect(observed.contains(.loadingModel))
         #expect(observed.last == .ready)
         let finalPhase = await provider.initPhase
         #expect(finalPhase == .ready)
 
         ParakeetProviderTestSupport.reset()
-    }
-
-    @Test("init progress labels follow downloading compiling ready phases")
-    func initProgressLabelsMatchPhases() {
-        #expect(RecordingFlowCoordinator.formatInitProgress(phase: .notStarted, elapsedSeconds: 0) == "Preparing")
-        #expect(RecordingFlowCoordinator.formatInitProgress(phase: .downloading, elapsedSeconds: 0) == "Downloading model")
-        #expect(RecordingFlowCoordinator.formatInitProgress(phase: .compiling, elapsedSeconds: 0) == "Loading model")
-        #expect(RecordingFlowCoordinator.formatInitProgress(phase: .ready, elapsedSeconds: 99) == "Ready")
-        #expect(
-            RecordingFlowCoordinator.formatInitProgress(phase: .compiling, elapsedSeconds: 5)
-                == "Loading model · 5s"
-        )
     }
 }
 

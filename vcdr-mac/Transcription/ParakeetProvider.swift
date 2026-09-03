@@ -8,14 +8,7 @@ actor ParakeetProvider: TranscriptionProvider {
     private var asr: AsrManager?
     private(set) var isReady = false
 
-    enum InitPhase: Sendable {
-        case notStarted
-        case downloading
-        case compiling
-        case ready
-    }
-
-    private(set) var initPhase: InitPhase = .notStarted
+    private(set) var initPhase: ModelPreparationPhase = .preparing
 
     // MARK: - Constants
     private static let millisecondsPerSecond: Double = 1000
@@ -35,13 +28,13 @@ actor ParakeetProvider: TranscriptionProvider {
 
         do {
             // Phase 1: Download models if not cached (typically instant when cached)
-            initPhase = .downloading
+            initPhase = .downloadingModel
             let downloadStart = ContinuousClock.now
             let modelDir = try await AsrModels.download(version: .v3)
             Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
 
             // Phase 2: Compile CoreML models for Neural Engine (the slow part)
-            initPhase = .compiling
+            initPhase = .loadingModel
             let compileStart = ContinuousClock.now
             let models = try await AsrModels.load(from: modelDir, version: .v3)
             Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: compileStart))")

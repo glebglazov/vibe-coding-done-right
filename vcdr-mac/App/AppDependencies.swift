@@ -176,9 +176,9 @@ final class AppDependencies {
                 while !Task.isCancelled {
                     let phase = await transcriptionProvider.initPhase
                     switch phase {
-                    case .notStarted, .downloading:
+                    case .preparing, .downloadingModel:
                         initializationStatus = "Downloading model..."
-                    case .compiling:
+                    case .loadingModel:
                         initializationStatus = "Compiling model..."
                     case .ready:
                         break
