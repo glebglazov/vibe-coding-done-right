@@ -3,6 +3,24 @@ import AVFoundation
 import CoreAudio
 import OSLog
 
+/// Why `startRecording` did not start a recording. Named so the hotkey path can
+/// tell the one cause the user can fix — a missing permission — from every
+/// other way the microphone can fail to come up.
+enum RecordingStartFailure: Error, Equatable {
+    case microphonePermissionDenied
+    case unknown
+
+    /// What the user reads on the capture pill.
+    var message: String {
+        switch self {
+        case .microphonePermissionDenied:
+            "Microphone access is off. Grant it in System Settings → Privacy & Security → Microphone."
+        case .unknown:
+            "The microphone could not be started. Try again in a moment."
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AudioRecorder {
@@ -21,6 +39,10 @@ final class AudioRecorder {
     #if DEBUG
     /// When set, startRecording() copies this file instead of using the real microphone.
     var testAudioFileURL: URL?
+    /// When set, startRecording() fails immediately with this reason instead of
+    /// touching AVCaptureDevice — lets tests exercise a failed start (including
+    /// permission denial) without a real TCC grant in the test host.
+    var testStartFailure: RecordingStartFailure?
     private var testRecordingURL: URL?
     #endif
 
@@ -72,16 +94,19 @@ final class AudioRecorder {
     /// default input device to that device so AVAudioRecorder uses it instead of
     /// whatever macOS auto-selected (which may be a Bluetooth mic, triggering
     /// the A2DP→HFP codec switch and degrading output quality).
-    func startRecording(deviceUID: String? = nil) async -> Bool {
+    func startRecording(deviceUID: String? = nil) async -> Result<Void, RecordingStartFailure> {
         #if DEBUG
+        if let failure = testStartFailure {
+            return .failure(failure)
+        }
         if let testURL = testAudioFileURL {
-            return startTestRecording(sourceURL: testURL)
+            return startTestRecording(sourceURL: testURL) ? .success(()) : .failure(.unknown)
         }
         #endif
 
         guard await requestMicrophonePermission() else {
             Logger.recording.warning("Microphone permission denied")
-            return false
+            return .failure(.microphonePermissionDenied)
         }
 
         // Route to the preferred input device before AVAudioRecorder activates.
@@ -113,17 +138,17 @@ final class AudioRecorder {
 
             guard audioRecorder?.record() == true else {
                 Logger.recording.error("Failed to start recording")
-                return false
+                return .failure(.unknown)
             }
 
             isRecording = true
             recordingStartTime = .now
             startLevelMonitoring()
             Logger.recording.info("Recording started: \(audioFile.lastPathComponent)")
-            return true
+            return .success(())
         } catch {
             Logger.recording.error("Recording setup failed: \(error)")
-            return false
+            return .failure(.unknown)
         }
     }
 

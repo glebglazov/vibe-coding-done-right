@@ -64,13 +64,12 @@ extension CaptureSession {
         // audio-first means HAL is empty during our input switch. Capture then runs
         // after, doesn't affect perceived recording start, and merges at transcription
         // time in `processTranscription`.
-        let started = await audio.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID)
-        guard started else {
-            setStatus(.error("Failed to start recording"))
-            panel.setError("Failed to start recording")
+        if case .failure(let failure) = await audio.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID) {
+            setStatus(.error(failure.message))
+            panel.setError(failure.message)
             scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
             emit(.failed, finalText: nil, destinationID: nil, historyConversationID: nil)
-            Logger.app.error("Failed to start recording")
+            Logger.app.error("Failed to start recording: \(String(describing: failure))")
             resetErrorAfterDelay()
             return
         }

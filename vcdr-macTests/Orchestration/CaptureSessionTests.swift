@@ -146,6 +146,51 @@ struct CaptureSessionSingleCycleTests {
     }
 }
 
+// MARK: - Recording Start Failures
+
+@Suite("CaptureSession — Recording Start Failures")
+struct CaptureSessionRecordingStartFailureTests {
+
+    @Test("A hotkey press with no microphone permission names the missing permission and how to grant it")
+    @MainActor
+    func microphonePermissionDenied() async {
+        let env = CaptureSessionTestEnvironment()
+        defer { env.cleanup() }
+        // No real TCC grant required: the seam fails the start the same way a
+        // denied AVCaptureDevice authorization would, without touching it.
+        env.audioRecorder.testStartFailure = .microphonePermissionDenied
+
+        env.session.toggle()
+
+        #expect(await env.waitForPhase { phase in
+            if case .error = phase { return true }
+            return false
+        })
+        let message = RecordingStartFailure.microphonePermissionDenied.message
+        #expect(message.localizedCaseInsensitiveContains("microphone"))
+        #expect(message.localizedCaseInsensitiveContains("settings"))
+        #expect(env.fakePanel.calls.contains(.setError(message)))
+    }
+
+    @Test("A recording that fails to start for another reason reports the truth, not a permission problem")
+    @MainActor
+    func nonPermissionFailureStaysTruthful() async {
+        let env = CaptureSessionTestEnvironment()
+        defer { env.cleanup() }
+        env.audioRecorder.testStartFailure = .unknown
+
+        env.session.toggle()
+
+        #expect(await env.waitForPhase { phase in
+            if case .error = phase { return true }
+            return false
+        })
+        let message = RecordingStartFailure.unknown.message
+        #expect(!message.localizedCaseInsensitiveContains("permission"))
+        #expect(env.fakePanel.calls.contains(.setError(message)))
+    }
+}
+
 // MARK: - Preview Branches
 
 @Suite("CaptureSession — Preview Branches")
