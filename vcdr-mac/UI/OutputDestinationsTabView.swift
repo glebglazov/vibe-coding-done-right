@@ -129,8 +129,7 @@ struct OutputDestinationDetailView: View {
 
                 ShortcutRecorderRow(
                     label: "Activation Hotkey",
-                    keyCode: $destination.activationHotkey.keyCode,
-                    modifiers: $destination.activationHotkey.modifiers
+                    hotkey: $destination.activationHotkey
                 )
 
                 if destination.type == .bashScript {

@@ -6,10 +6,8 @@ struct HomeTabView: View {
 
     private static let accessibilitySettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
 
-    let settings: AppSettings
-    let session: CaptureSession
+    @Bindable var settings: AppSettings
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
-    let copyLatestCaptureHandler: CopyLatestCaptureHandler
     let hasMicrophonePermission: Bool
     let hasAccessibilityPermission: Bool
     let isInitialized: Bool
@@ -77,47 +75,19 @@ struct HomeTabView: View {
             Section("Shortcuts") {
                 ShortcutRecorderRow(
                     label: "Toggle Recording",
-                    keyCode: Binding(
-                        get: { settings.toggleRecordingHotkey.keyCode },
-                        set: { session.updateToggleRecordingKeyCode($0) }
-                    ),
-                    modifiers: Binding(
-                        get: { settings.toggleRecordingHotkey.modifiers },
-                        set: { session.updateToggleRecordingModifiers($0) }
-                    )
+                    hotkey: $settings.hotkeySettings.toggleRecordingHotkey
                 )
                 ShortcutRecorderRow(
                     label: "Mode Switcher",
-                    keyCode: Binding(
-                        get: { settings.modeSwitcherHotkey.keyCode },
-                        set: { modeSwitcherCoordinator.updateModeSwitcherKeyCode($0) }
-                    ),
-                    modifiers: Binding(
-                        get: { settings.modeSwitcherHotkey.modifiers },
-                        set: { modeSwitcherCoordinator.updateModeSwitcherModifiers($0) }
-                    )
+                    hotkey: $settings.hotkeySettings.modeSwitcherHotkey
                 )
                 ShortcutRecorderRow(
                     label: "Cancel Capture",
-                    keyCode: Binding(
-                        get: { settings.cancelRecordingHotkey.keyCode },
-                        set: { session.updateCancelRecordingKeyCode($0) }
-                    ),
-                    modifiers: Binding(
-                        get: { settings.cancelRecordingHotkey.modifiers },
-                        set: { session.updateCancelRecordingModifiers($0) }
-                    )
+                    hotkey: $settings.hotkeySettings.cancelRecordingHotkey
                 )
                 ShortcutRecorderRow(
                     label: "Copy Latest Capture",
-                    keyCode: Binding(
-                        get: { settings.copyLatestCaptureHotkey.keyCode },
-                        set: { copyLatestCaptureHandler.updateCopyLatestCaptureKeyCode($0) }
-                    ),
-                    modifiers: Binding(
-                        get: { settings.copyLatestCaptureHotkey.modifiers },
-                        set: { copyLatestCaptureHandler.updateCopyLatestCaptureModifiers($0) }
-                    )
+                    hotkey: $settings.hotkeySettings.copyLatestCaptureHotkey
                 )
             }
         }

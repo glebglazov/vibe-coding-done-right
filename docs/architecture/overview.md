@@ -18,6 +18,31 @@ xcodebuild -scheme vcdr-mac -destination 'platform=macOS' build
 xcodebuild test -scheme vcdr-mac -destination 'platform=macOS' -quiet
 ```
 
+One suite, or one test, by name:
+
+```bash
+xcodebuild test -scheme vcdr-mac -destination 'platform=macOS' \
+  -only-testing:vcdr-macTests/CaptureSessionHotkeyRebindingTests
+```
+
+`-quiet` still lets the app's own `os_log` output through, so pipe it through
+`grep -vF 'AX capture: no focused element'` if the noise gets in the way, and
+grep for `✘` / `Test run with` to read the result.
+
+### Tests must not need a permission grant
+
+The tests run inside their own `VCDR.app` in DerivedData, not the app you
+installed. Accessibility and Microphone are granted per app identity, so that
+host never inherits a grant from a release build, and re-signing it drops any
+grant it did have. A test that reaches a path guarded by `AXIsProcessTrusted()`
+therefore fails on every machine sooner or later.
+
+Route around it rather than granting the host: `CaptureSessionTestEnvironment`
+points the active Mode at the built-in Copy destination so the paste path (which
+simulates Cmd+V through a CGEvent) never runs. Do the same in any new test —
+assert against Copy, a bash destination, or the recorded history, never against
+a real paste.
+
 Tests run as a hosted unit test bundle inside the app process (`BUNDLE_LOADER`). The app detects `XCTestBundlePath` and skips heavy initialization (CoreML model loading, audio device enumeration, CGEvent taps) so the test host launches fast.
 
 Parallel testing is disabled in the scheme — tests share `UserDefaults` state via `StyleRegistry` and other components.

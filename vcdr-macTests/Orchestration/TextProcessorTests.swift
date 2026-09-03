@@ -34,7 +34,8 @@ private func makeInput(
     processingType: ProcessingType = .none,
     showPreview: Bool = false,
     hadDestinationOverride: Bool = false,
-    style: Style = .casual
+    style: Style = .casual,
+    destination: OutputDestination = OutputDestination.makeDefaultCopy()
 ) -> TranscriptionInput {
     let m = mode ?? Mode(
         id: UUID(),
@@ -47,7 +48,7 @@ private func makeInput(
         mode: m,
         captures: [],
         conversationID: UUID(),
-        destination: OutputDestination.makeDefaultCopy(),
+        destination: destination,
         targetAppPID: nil,
         cursorContext: nil,
         parameterValues: [:],
@@ -247,8 +248,11 @@ struct TextProcessorConfirmTests {
     @Test("Confirm with destination override uses overridden destination")
     @MainActor
     func confirmWithDestinationOverride() async throws {
+        // The overridden destination is the one that executes, so it must be a
+        // destination that needs no Accessibility grant — the test host is its own
+        // app bundle and never holds one.
         let (processor, history, _, _) = makeProcessor()
-        let input = makeInput(showPreview: true)
+        let input = makeInput(showPreview: true, destination: .makeDefaultPasteToInitialApp())
 
         let disposition = try await processor.process(input)
         guard case .preview(let handle) = disposition else {
@@ -256,8 +260,7 @@ struct TextProcessorConfirmTests {
             return
         }
 
-        // Confirm with the paste destination instead
-        try await processor.confirm(handle, destinationOverride: OutputDestination.builtInPasteID)
+        try await processor.confirm(handle, destinationOverride: OutputDestination.builtInCopyID)
         #expect(history.conversations.count == 1)
     }
 

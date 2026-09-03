@@ -22,6 +22,7 @@ final class ModeSwitcherCoordinator {
         self.settings = settings
         self.overrides = overrides
         self.styleResolution = styleResolution
+        observeHotkeySettings()
     }
 
     func setupHotkey() {
@@ -148,14 +149,18 @@ final class ModeSwitcherCoordinator {
 
     // MARK: - Settings + Re-registration
 
-    func updateModeSwitcherKeyCode(_ code: UInt16) {
-        settings.modeSwitcherHotkey.keyCode = code
-        setupHotkey()
-    }
-
-    func updateModeSwitcherModifiers(_ mods: UInt64) {
-        settings.modeSwitcherHotkey.modifiers = mods
-        setupHotkey()
+    /// Re-arms this coordinator's tap from `settings`, so a re-bound Mode Switcher
+    /// shortcut applies at once. See `CaptureSession.observeHotkeySettings()`.
+    private func observeHotkeySettings() {
+        withObservationTracking {
+            _ = settings.hotkeySettings
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.setupHotkey()
+                self.observeHotkeySettings()
+            }
+        }
     }
 
     func setHotkeySuppressed(_ suppressed: Bool) {

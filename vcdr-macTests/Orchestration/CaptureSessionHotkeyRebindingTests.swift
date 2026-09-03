@@ -1,29 +1,34 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import vcdr_mac
 
-/// Activation Hotkeys are the one hotkey family edited from several screens
-/// (destination list, destination detail), so the session tracks settings rather
-/// than trusting each call site to refresh. These tests drive the settings path a
-/// user drives and assert the armed set follows — installing the tap itself needs
-/// Accessibility, which a test process does not have.
-@Suite("CaptureSession — Activation Hotkeys")
-struct CaptureSessionDestinationHotkeyTests {
+/// The session re-arms its taps from `settings` rather than trusting each screen
+/// to ask for it. These tests drive the settings path a user drives and assert the
+/// armed set follows — installing a tap itself needs Accessibility, which a test
+/// process does not have, so they assert what the taps target, not what they see.
+@Suite("CaptureSession — Hotkey re-binding")
+struct CaptureSessionHotkeyRebindingTests {
 
     private static let armTimeout: Duration = .seconds(2)
     private static let armPollInterval: Duration = .milliseconds(20)
+
+    @MainActor
+    private func waitFor(_ condition: @escaping () -> Bool) async -> Bool {
+        let start = ContinuousClock.now
+        while start.duration(to: .now) < Self.armTimeout {
+            if condition() { return true }
+            try? await Task.sleep(for: Self.armPollInterval)
+        }
+        return false
+    }
 
     @MainActor
     private func waitForArmed(
         _ session: CaptureSession,
         _ condition: @escaping ([UUID: HotkeyBinding]) -> Bool
     ) async -> Bool {
-        let start = ContinuousClock.now
-        while start.duration(to: .now) < Self.armTimeout {
-            if condition(session.destinationHotkey.armedActivationHotkeys) { return true }
-            try? await Task.sleep(for: Self.armPollInterval)
-        }
-        return false
+        await waitFor { condition(session.destinationHotkey.armedActivationHotkeys) }
     }
 
     @Test("Re-binding a destination's Activation Hotkey arms the new combo without a relaunch")
@@ -79,6 +84,21 @@ struct CaptureSessionDestinationHotkeyTests {
         #expect(await waitForArmed(env.session) { $0[newID] == newBinding })
     }
 
+    @Test("Re-binding the toggle hotkey arms the new combo without a relaunch")
+    @MainActor
+    func togglePicksUpNewBinding() async {
+        let env = CaptureSessionTestEnvironment()
+        defer { env.cleanup() }
+
+        let newBinding = HotkeyBinding(
+            keyCode: KeyCodeMap.escapeKeyCode,
+            modifiers: UInt64(CGEventFlags.maskControl.rawValue)
+        )
+        env.settings.hotkeySettings.toggleRecordingHotkey = newBinding
+
+        #expect(await waitFor { env.session.toggleHotkey.target == newBinding })
+    }
+
     @Test("Re-binding the cancel hotkey mid-capture leaves cancel live for that run")
     @MainActor
     func cancelStaysLiveAfterRebindDuringCapture() async {
@@ -90,8 +110,14 @@ struct CaptureSessionDestinationHotkeyTests {
         env.session.toggle()
         #expect(await env.waitForPhase { $0 == .recording })
 
-        env.session.updateCancelRecordingKeyCode(KeyCodeMap.slashKeyCode)
-        #expect(env.session.cancelHotkey.isEnabled, "Cancel must stay armed for the capture in flight")
+        env.settings.hotkeySettings.cancelRecordingHotkey = HotkeyBinding(
+            keyCode: KeyCodeMap.slashKeyCode,
+            modifiers: UInt64(CGEventFlags.maskAlternate.rawValue)
+        )
+        #expect(
+            await waitFor { env.session.cancelHotkey.isEnabled },
+            "Cancel must stay armed for the capture in flight"
+        )
 
         env.session.cancel()
         #expect(await env.waitForPhase { $0 == .idle })

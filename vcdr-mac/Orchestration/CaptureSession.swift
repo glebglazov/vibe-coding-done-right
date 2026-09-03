@@ -223,7 +223,7 @@ final class CaptureSession {
         self.overrides = deps.overrides
         self.styleProvider = deps.styleProvider
         wirePanelCallbacks()
-        observeDestinationHotkeys()
+        observeHotkeySettings()
     }
 
     deinit {

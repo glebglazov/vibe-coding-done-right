@@ -16,6 +16,7 @@ final class CopyLatestCaptureHandler {
         self.settings = settings
         self.transcriptionHistory = transcriptionHistory
         self.recordingIndicator = recordingIndicator
+        observeHotkeySettings()
     }
 
     func setupHotkey() {
@@ -50,16 +51,20 @@ final class CopyLatestCaptureHandler {
         Logger.actions.info("Copied latest capture to clipboard")
     }
 
-    // MARK: - Settings + Re-registration
+    // MARK: - Settings tracking
 
-    func updateCopyLatestCaptureKeyCode(_ code: UInt16) {
-        settings.copyLatestCaptureHotkey.keyCode = code
-        setupHotkey()
-    }
-
-    func updateCopyLatestCaptureModifiers(_ mods: UInt64) {
-        settings.copyLatestCaptureHotkey.modifiers = mods
-        setupHotkey()
+    /// Re-arms this handler's tap from `settings`, so a re-bound Copy Latest
+    /// Capture shortcut applies at once. See `CaptureSession.observeHotkeySettings()`.
+    private func observeHotkeySettings() {
+        withObservationTracking {
+            _ = settings.hotkeySettings
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.setupHotkey()
+                self.observeHotkeySettings()
+            }
+        }
     }
 
     /// Used while the user is recording a new shortcut in the UI so this hotkey

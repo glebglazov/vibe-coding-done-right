@@ -111,9 +111,7 @@ struct MainWindowView: View {
                     case .home:
                         HomeTabView(
                             settings: dependencies.settings,
-                            session: dependencies.session,
                             modeSwitcherCoordinator: dependencies.modeSwitcherCoordinator,
-                            copyLatestCaptureHandler: dependencies.copyLatestCaptureHandler,
                             hasMicrophonePermission: dependencies.hasMicrophonePermission,
                             hasAccessibilityPermission: dependencies.hasAccessibilityPermission,
                             isInitialized: dependencies.isInitialized

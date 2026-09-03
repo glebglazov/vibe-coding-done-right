@@ -27,6 +27,13 @@ final class GlobalHotkeyManager {
     var onKeyUp: (() -> Void)?
 
     func register(keyCode: CGKeyCode, modifiers: CGEventFlags) -> Bool {
+        // Owners re-register on any settings change, and most changes leave this
+        // hotkey alone. Rebuilding a live tap for them would drop key events
+        // during the teardown for no gain.
+        if keyCode == targetKeyCode, modifiers == targetModifiers, tap.isInstalled {
+            return true
+        }
+
         unregister()
 
         self.targetKeyCode = keyCode
@@ -147,6 +154,12 @@ final class GlobalHotkeyManager {
     }
 
     var isRegistered: Bool { tap.isInstalled }
+
+    /// The combination this tap currently matches against. Lets a caller confirm
+    /// the tap tracks settings without owning an event tap of its own.
+    var target: HotkeyBinding {
+        HotkeyBinding(keyCode: UInt16(targetKeyCode), modifiers: targetModifiers.rawValue)
+    }
 
     deinit { unregister() }
 }

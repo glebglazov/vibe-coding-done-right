@@ -53,20 +53,12 @@ private final class ShortcutEventMonitor {
 
 struct ShortcutRecorderRow: View {
     let label: String
-    @Binding var keyCode: UInt16
-    @Binding var modifiers: UInt64
+    /// Written as one value, so a captured combo is never briefly armed as its
+    /// new key with the old modifiers still attached.
+    @Binding var hotkey: HotkeyBinding
     @State private var isRecording = false
     @State private var eventMonitor = ShortcutEventMonitor()
     @Environment(\.hotkeySuppressionHandler) private var hotkeySuppressionHandler
-
-    // MARK: - Constants
-
-    private static let unassignedKeyCode: UInt16 = 0
-    private static let unassignedModifiers: UInt64 = 0
-
-    private var isAssigned: Bool {
-        keyCode != Self.unassignedKeyCode || modifiers != Self.unassignedModifiers
-    }
 
     var body: some View {
         LabeledContent(label) {
@@ -90,7 +82,7 @@ struct ShortcutRecorderRow: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .disabled(!isAssigned)
+                    .disabled(!hotkey.isAssigned)
                     .help("Clear shortcut")
                 }
 
@@ -109,16 +101,11 @@ struct ShortcutRecorderRow: View {
     }
 
     private var displayString: String {
-        guard isAssigned else { return "Not set" }
-        return GlobalHotkeyManager.shortcutDisplayString(
-            keyCode: CGKeyCode(keyCode),
-            modifiers: CGEventFlags(rawValue: modifiers)
-        )
+        hotkey.isAssigned ? hotkey.displayString : "Not set"
     }
 
     private func clearShortcut() {
-        keyCode = Self.unassignedKeyCode
-        modifiers = Self.unassignedModifiers
+        hotkey = .unassigned
     }
 
     private func toggleRecording() {
@@ -134,8 +121,7 @@ struct ShortcutRecorderRow: View {
         isRecording = true
         hotkeySuppressionHandler?(true)
         eventMonitor.start { [self] capturedKeyCode, capturedModifiers in
-            keyCode = capturedKeyCode
-            modifiers = capturedModifiers
+            hotkey = HotkeyBinding(keyCode: capturedKeyCode, modifiers: capturedModifiers)
             stopRecording()
         }
     }
