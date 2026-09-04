@@ -2,7 +2,7 @@
 """Record one Eval Run — one Eval Arm over one Eval Set — into the Run Ledger.
 
 Usage:
-  export ANTHROPIC_API_KEY=$(op run "op://Private/Anthropic/api_key")
+  export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
   ./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_lean.txt
   ./record_run.py --provider openai-chat --model gemma4:e4b --prompt prompts/prompt_lean.txt
 
@@ -35,6 +35,12 @@ SEED = 0
 
 REQUEST_TIMEOUT_S = 300
 
+# A cloud endpoint sheds load mid-run, and one such refusal would otherwise leave
+# a permanent hole in an archived run that costs a whole re-run to fill.
+TRANSIENT_STATUSES = (429, 500, 502, 503, 529)
+RETRIES = 4
+RETRY_BACKOFF_S = 5
+
 
 def post_json(url, headers, body):
     request = urllib.request.Request(
@@ -43,8 +49,17 @@ def post_json(url, headers, body):
         headers={"content-type": "application/json", **headers},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_S) as response:
-        return json.loads(response.read().decode("utf-8"))
+    for attempt in range(RETRIES):
+        try:
+            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_S) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as refusal:
+            if refusal.code not in TRANSIENT_STATUSES or attempt == RETRIES - 1:
+                raise
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            if attempt == RETRIES - 1:
+                raise
+        time.sleep(RETRY_BACKOFF_S * 2**attempt)
 
 
 def get_json(url, timeout_s=5):
@@ -62,25 +77,50 @@ class AnthropicArm:
         self.api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not self.api_key:
             raise SystemExit(
-                'ANTHROPIC_API_KEY not set. Run: export ANTHROPIC_API_KEY=$(op run "op://Private/Anthropic/api_key")'
+                'ANTHROPIC_API_KEY not set. Run: export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")'
             )
 
     def runtime(self):
         return "anthropic-messages-api 2023-06-01"
 
     def complete(self, system_prompt, user_message):
-        payload = post_json(
+        try:
+            payload = self.messages(system_prompt, user_message)
+        except urllib.error.HTTPError as refusal:
+            if not self.drop_deprecated_temperature(refusal):
+                raise
+            payload = self.messages(system_prompt, user_message)
+        # A reasoning model answers with thinking blocks ahead of its text, so the
+        # reply is the text blocks rather than whatever block came first.
+        return "".join(
+            block["text"] for block in payload["content"] if block["type"] == "text"
+        )
+
+    def messages(self, system_prompt, user_message):
+        return post_json(
             self.endpoint,
             {"x-api-key": self.api_key, "anthropic-version": "2023-06-01"},
             {
                 "model": self.model,
-                "max_tokens": MAX_TOKENS,
-                "temperature": TEMPERATURE,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_message}],
+                **self.sampling,
             },
         )
-        return payload["content"][0]["text"]
+
+    def drop_deprecated_temperature(self, refusal):
+        """Newer models reject `temperature` outright, so pinning it is impossible.
+
+        Sampling is pinned wherever the model still accepts it; where the API
+        refuses, the manifest records what was actually sent rather than a
+        temperature the run never had.
+        """
+        if refusal.code != 400 or "temperature" not in self.sampling:
+            return False
+        if "`temperature` is deprecated" not in refusal.read().decode("utf-8", "replace"):
+            return False
+        del self.sampling["temperature"]
+        return True
 
 
 class OpenAIChatArm:

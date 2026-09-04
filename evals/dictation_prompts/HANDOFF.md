@@ -13,15 +13,16 @@ Comparing two system prompts on a 22-case dictation eval set, to decide whether 
 
 ```bash
 cd /workspaces/vibe-coding-done-right/evals/dictation_prompts
-export ANTHROPIC_API_KEY=$(op run "op://Private/Anthropic/api_key")
+export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
 ./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_readability.txt
 ./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_lean.txt
 ./score_run.py ledger/<run-id>   # per-case table, and ledger/<run-id>/deterministic.json
+./judge_run.py ledger/<run-id>   # rubric scores, and ledger/<run-id>/judge.json
 ```
 
-If `op` isn't installed, any other way to populate `ANTHROPIC_API_KEY` works — the script just needs it exported.
+If `op-cache` isn't installed, any other way to populate `ANTHROPIC_API_KEY` works — the script just needs it exported.
 
-Recording costs one API call per case; scoring costs nothing and calls no model, so any archived run can be rescored at any time and never has to be re-run to be compared.
+Recording costs one API call per case; deterministic scoring costs nothing and calls no model. Judging costs one judge call per case. Both read the ledger only, so any archived run can be rescored and re-judged at any time and never has to be re-run to be compared.
 
 ## What the scorer produces
 
@@ -38,6 +39,23 @@ Per case, a verdict and four numbers:
 - `inv` — words in the output that appear in neither the input nor the reference.
 
 `loss` and `inv` are the over-editing signal. On the role-boundary set they also read as obedience: a model that answered the dictated instruction instead of transcribing it invented most of what it wrote.
+
+## What the judge produces
+
+`judge_run.py` reads the same archived outputs and has a model grade them against
+`agents/assessor.md` — the six-dimension rubric, whose weights it parses out of
+that document rather than restating them. It reaches what no deterministic number
+does: whether the speaker's voice survived, and whether the model over-edited.
+
+The standing judge is `claude-opus-5`, pinned with `--judge-model`. Haiku is a
+contestant in this matrix, so it cannot judge; a run recorded with the same model
+named as judge is refused outright.
+
+A Judge Score is reproducible only within one judge model. So it lands in
+`judge.json` beside — never inside — `deterministic.json`, every case carries the
+judge's model id, and the two axes are read side by side. Nothing averages them
+together, and Judge Scores from different judges are not comparable.
+
 
 ## What to report back
 
@@ -76,7 +94,11 @@ Include:
 - `record_run.py` — records one arm over one eval set into the ledger.
 - `ledger.py` — the ledger itself: fingerprints, and reopening an archived run.
 - `score_run.py` — the deterministic scorer.
+- `judge_run.py` — the judge-axis scorer.
+- `agents/assessor.md` — the rubric the judge scores against.
 - `test_score_run.py` — the metric's own cases.
+- `test_judge_run.py` — the judge's rubric arithmetic and its contestant refusal.
 - `ledger/<run-id>/manifest.json` — what produced the run.
 - `ledger/<run-id>/outputs/<case>.txt` — the arm's raw output, byte-for-byte.
-- `ledger/<run-id>/deterministic.json` — the scores.
+- `ledger/<run-id>/deterministic.json` — the deterministic scores.
+- `ledger/<run-id>/judge.json` — the judge scores, and the judge that produced them.

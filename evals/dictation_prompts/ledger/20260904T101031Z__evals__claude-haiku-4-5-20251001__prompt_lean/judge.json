@@ -1,0 +1,343 @@
+{
+  "run_id": "20260904T101031Z__evals__claude-haiku-4-5-20251001__prompt_lean",
+  "judged_at": "2026-09-04T11:11:42Z",
+  "judge": {
+    "model": "claude-opus-5",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "runtime": "anthropic-messages-api 2023-06-01",
+    "rubric": "agents/assessor.md",
+    "rubric_sha256": "9bd7346d6d5017895b04dea9376de4bbe330908b358ddc5118f147f34ff105f1",
+    "sampling": {
+      "max_tokens": 2048
+    }
+  },
+  "weights": {
+    "punctuation": 0.2,
+    "voice": 0.2,
+    "captures": 0.15,
+    "content": 0.3,
+    "format": 0.15
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "b2081896b1620a31184b35a0031baa67df3a54b70e26639529a164e5495679de"
+  },
+  "overall_mean": 0.889,
+  "dimension_means": {
+    "punctuation": 0.663,
+    "voice": 0.957,
+    "captures": 1.0,
+    "content": 0.883,
+    "format": 1.0
+  },
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.85,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.6,
+        "format": 1.0
+      },
+      "notes": "Meaning and tone preserved with correct comma placement, but the trailing hedges were left in place instead of being fronted into their clauses as the transform requires."
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.82,
+      "dimensions": {
+        "punctuation": 0.1,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Correct reordering and wording, but no capitalization, no terminal period, and missing the comma before 'depending'."
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.67,
+      "dimensions": {
+        "punctuation": 0.1,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.5,
+        "format": 1.0
+      },
+      "notes": "Output is unchanged from the dictation: no capitalization or terminal period, and the split-infinitive adverb was not repositioned, though meaning and voice are intact."
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Missing the comma before \"because\"; otherwise identical to expected."
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.91,
+      "dimensions": {
+        "punctuation": 0.7,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.9,
+        "format": 1.0
+      },
+      "notes": "Used a comma instead of the expected colon after the topic clause, so the topic:list structure the case exercises is flattened into a four-item run-on list."
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.83,
+      "dimensions": {
+        "punctuation": 0.15,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Correctly collapsed the doubled 'and then', but omitted the sentence-initial capital, the comma before 'and we had', and the final period."
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period instead of the expected em-dash between the two clauses; all hedges and wording otherwise preserved."
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.8,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Output is the raw dictation verbatim: no cascade commas, no sentence capitalization, and no terminal period, though all content and voice are intact."
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.905,
+      "dimensions": {
+        "punctuation": 0.6,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Failed to split the run-on into two sentences (comma splice instead of a period) and omitted the comma before the final 'and'; meaning and voice fully intact."
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.955,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Missing the colon after 'works is' and kept an extra conjunction ('and users') that the expected output dropped; otherwise identical."
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "overall": 0.984,
+      "dimensions": {
+        "punctuation": 0.92,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Only difference is the omitted comma before \"because\"; correction collapsed correctly and reasoning clause kept."
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "overall": 0.58,
+      "dimensions": {
+        "punctuation": 0.25,
+        "voice": 0.55,
+        "captures": 1.0,
+        "content": 0.4,
+        "format": 1.0
+      },
+      "notes": "Collapsed the quoted self-correction instead of preserving it as dialogue, dropping the 'oh wait, no' aside, the quotation marks, and the em-dash/commas."
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.886,
+      "dimensions": {
+        "punctuation": 0.8,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.82,
+        "format": 1.0
+      },
+      "notes": "Left fillers 'basically', 'like', and 'I mean' in place, used a semicolon instead of an em-dash for the runbook aside, and dropped the comma before 'because'."
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.9,
+      "dimensions": {
+        "punctuation": 0.55,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Missing the em-dash expansion of the second 'what if' and several commas (email/name list, before 'and we'd'), and it merged the 'But what if' into the prior sentence."
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.89,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 0.85,
+        "captures": 1.0,
+        "content": 0.9,
+        "format": 1.0
+      },
+      "notes": "Dropped the 'kind of' hedge, used a period instead of the em-dash clarification, and omitted the comma before 'because'."
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.785,
+      "dimensions": {
+        "punctuation": 0.5,
+        "voice": 0.8,
+        "captures": 1.0,
+        "content": 0.75,
+        "format": 1.0
+      },
+      "notes": "Left fillers 'like' and 'basically' in, dropped 'I mean' and replaced the em-dash with a period, and missed several commas (before 'and', after 'remote')."
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Missing the comma before 'and also'; everything else matches exactly."
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "judge_model": "claude-opus-5",
+      "overall": 0.984,
+      "dimensions": {
+        "punctuation": 0.92,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period/new sentence instead of the expected em-dash before 'can you take a look?', otherwise identical including the capture block."
+    },
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "overall": 0.865,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.65,
+        "format": 1.0
+      },
+      "notes": "Missing comma after \"я думаю\" and kept the extra \"и\" before \"документация\"; failed the required reorder to \"как минимум два месяца\"."
+    }
+  ]
+}
