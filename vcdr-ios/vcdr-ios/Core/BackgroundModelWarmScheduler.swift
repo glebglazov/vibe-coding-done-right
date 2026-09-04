@@ -54,10 +54,9 @@ enum BackgroundModelWarmScheduler {
         }
     }
 
+    /// The build as a purge trigger compares it: a stored key, so it keeps its
+    /// own spelling rather than borrowing the version row's.
     private static func appVersion() -> String {
-        let info = Bundle.main.infoDictionary
-        let marketingVersion = info?["CFBundleShortVersionString"] as? String ?? "unknown"
-        let buildNumber = info?["CFBundleVersion"] as? String ?? "unknown"
-        return "\(marketingVersion)-\(buildNumber)"
+        "\(AppVersion.marketingVersion)-\(AppVersion.buildNumber)"
     }
 }

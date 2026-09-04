@@ -247,7 +247,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text(Self.versionLabel)
+                        Text(AppVersion.label)
                             .foregroundStyle(.secondary)
                     }
                     if let remaining = diagnosticsUnlock.tapsRemaining {
@@ -270,13 +270,6 @@ struct SettingsView: View {
         } else if diagnosticsUnlock.tapsRemaining != nil {
             AppHaptics.light()
         }
-    }
-
-    private static var versionLabel: String {
-        let info = Bundle.main.infoDictionary
-        let marketingVersion = info?["CFBundleShortVersionString"] as? String ?? "unknown"
-        let buildNumber = info?["CFBundleVersion"] as? String ?? "unknown"
-        return "\(marketingVersion) (\(buildNumber))"
     }
 
     // MARK: - AI Processing

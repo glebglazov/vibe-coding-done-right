@@ -134,7 +134,7 @@ struct HomeTabView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     LabeledContent("Version") {
-                        Text(Self.versionLabel)
+                        Text(AppVersion.label)
                             .foregroundStyle(.secondary)
                     }
                     if let remaining = diagnosticsUnlock.tapsRemaining {
@@ -147,12 +147,5 @@ struct HomeTabView: View {
             .buttonStyle(.plain)
             .contentShape(Rectangle())
         }
-    }
-
-    private static var versionLabel: String {
-        let info = Bundle.main.infoDictionary
-        let marketingVersion = info?["CFBundleShortVersionString"] as? String ?? "unknown"
-        let buildNumber = info?["CFBundleVersion"] as? String ?? "unknown"
-        return "\(marketingVersion) (\(buildNumber))"
     }
 }
