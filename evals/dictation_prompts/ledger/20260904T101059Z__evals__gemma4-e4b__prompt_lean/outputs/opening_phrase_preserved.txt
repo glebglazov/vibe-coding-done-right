@@ -1,0 +1,1 @@
+I've been thinking about this on and off for weeks. What if we just moved the entire cache layer to the edge instead of regional clusters?

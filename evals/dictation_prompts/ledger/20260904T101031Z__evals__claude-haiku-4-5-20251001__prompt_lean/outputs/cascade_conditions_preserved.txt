@@ -1,0 +1,1 @@
+the check runs first and if it passes you hit the cache and if that misses you query the DB and if the DB is slow we fall back to a cached response
