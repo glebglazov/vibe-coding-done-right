@@ -1,12 +1,12 @@
 # Dictation prompt A/B — run + assess
 
-Comparing two system prompts on a 22-case dictation eval set, to decide whether a lean principles-based prompt can replace the current rules+6-examples live prompt without regressing.
+Comparing two system prompts on a 28-case dictation eval set, to decide whether a lean principles-based prompt can replace the current rules+6-examples live prompt without regressing.
 
 ## Context
 
 - **A (live)**: `prompts/prompt_readability.txt` — the prompt currently shipped in `vcdr-mac/Core/Settings/BuiltInPrompts.swift` as `defaultDictation`. Has rules + 6 few-shot examples.
 - **B (lean)**: `prompts/prompt_lean.txt` — new principles-only prompt, ~1/3 the length, no few-shot examples.
-- **Evals**: `evals.json` — 28 cases across 8 categories (readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual). Expected outputs encode the *aggressive-readability* target — what a careful human would write if they polished the dictation by hand. The seven `multilingual` cases each name where their reference was quoted from, in `reference_source`, and every case names where its reference came from in `reference_provenance` — see [Where the answer key came from](#where-the-answer-key-came-from-2026-09-04) before reading any score as model quality.
+- **Evals**: `evals.json` — 28 cases across 8 categories (readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual). Expected outputs encode the *aggressive-readability* target — what a careful human would write if they polished the dictation by hand. The seven `multilingual` cases each name their reference's origin in `reference_source`, and every case names where its reference came from in `reference_provenance` — see [Where the answer key came from](#where-the-answer-key-came-from-2026-09-04) before reading any score as model quality.
 - **Goal**: readability with voice/style preservation. Model: `claude-haiku-4-5-20251001`.
 
 ## Run
@@ -204,7 +204,7 @@ The fit that does survive is `97a3139`'s own, and it is the tighter one:
   to fit the other is not settled by the history, so the record states the fit and
   not a direction. Either way, an arm running `prompt_readability` is not scored
   independently of the key.
-- The seven `multilingual` cases (`3fcff6f`) quote an external text verbatim —
+- The six `multilingual` cases added by `3fcff6f` quote an external text verbatim —
   Tatoeba, a `ru.wikipedia` revision, a type in this repository — named per case
   in `reference_source`, with the mechanical rule that derives the input from it.
   No candidate prompt could have shaped them, and they are fitted toward nothing.

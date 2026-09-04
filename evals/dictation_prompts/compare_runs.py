@@ -309,7 +309,7 @@ def headline(comparison, axis):
                 1
                 for case in comparable
                 if case["answered"][arm["label"]]
-                and (case["deterministic"][arm["label"]] or {}).get("verdict") == "EXACT"
+                and (case[DETERMINISTIC][arm["label"]] or {}).get("verdict") == "EXACT"
             )
             for arm in comparison["arms"]
         },
@@ -375,10 +375,10 @@ def deterministic_section(comparison, fitted_note=None):
         row = [case["id"], case["category"]]
         for label in labels:
             row += [
-                score_text(case, "deterministic", label, "word_score"),
-                score_text(case, "deterministic", label, "punctuation_score"),
+                score_text(case, DETERMINISTIC, label, "word_score"),
+                score_text(case, DETERMINISTIC, label, "punctuation_score"),
             ]
-        row.append(winner_text(case, "deterministic"))
+        row.append(winner_text(case, DETERMINISTIC))
         rows.append(row)
 
     category_header = ["category", "cases", "n/c"] + [f"{label} word" for label in labels]
@@ -389,7 +389,7 @@ def deterministic_section(comparison, fitted_note=None):
             category["not_comparable"],
             *(
                 mean_text(
-                    category["deterministic"][label]["word_score"],
+                    category[DETERMINISTIC][label]["word_score"],
                     category["answered"][label],
                     category["compared"],
                 )
@@ -399,7 +399,7 @@ def deterministic_section(comparison, fitted_note=None):
         for category in by_category(comparison)
     ]
 
-    counts = headline(comparison, "deterministic")
+    counts = headline(comparison, DETERMINISTIC)
     metrics = {
         arm["label"]: run_metric(comparison, arm["label"]) for arm in comparison["arms"]
     }
@@ -554,12 +554,13 @@ def detail_section(comparison, runs):
         if len(outputs) < 2 or len(set(outputs.values())) == 1:
             continue
         scores = " ".join(
-            f"{label}={score_text(case, 'deterministic', label, 'word_score')}"
+            f"{label}={score_text(case, DETERMINISTIC, label, 'word_score')}"
             for label in outputs
         )
         lines += [
             "",
-            f"--- {case['id']}  [{case['category']}]  word {scores}  winner={case['winner']['deterministic']} ---",
+            f"--- {case['id']}  [{case['category']}]  word {scores}  "
+            f"winner={case['winner'][DETERMINISTIC]} ---",
             f"{'EXPECTED':<9}: {reference.get(case['id'], REFERENCE_CHANGED)}",
             *(f"{label:<9}: {text}" for label, text in outputs.items()),
         ]
@@ -596,9 +597,6 @@ def fitted_reading(comparison, provenance):
     """
     if provenance is None:
         return None
-    fitted_prompts = {
-        prompt for record in provenance.values() for prompt in record["fitted_toward"]
-    }
     return {
         "compared": len(provenance),
         "unknown": sum(
@@ -624,7 +622,6 @@ def fitted_reading(comparison, provenance):
                 & {arm["prompt_name"] for arm in comparison["arms"]}
             )
         ),
-        "fitted_prompts": sorted(fitted_prompts),
     }
 
 
