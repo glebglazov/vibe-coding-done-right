@@ -37,8 +37,11 @@ struct SettingsView: View {
                 hotSessionSection
                 keyboardSection
                 appearanceSection
-                if diagnosticsUnlock.isUnlocked {
+                if diagnosticsUnlock.showsSurfaces {
                     diagnosticsSection
+                }
+                if diagnosticsUnlock.isRevealed {
+                    diagnosticsSettingsSection
                 }
                 versionSection
             }
@@ -195,13 +198,10 @@ struct SettingsView: View {
             Button("Clear All Logs", role: .destructive) {
                 showClearLogsConfirmation = true
             }
-            Button("Hide Diagnostics") {
-                diagnosticsUnlock.lock()
-            }
         } header: {
             Text("Diagnostics")
         } footer: {
-            Text("Reads the persistent log file (App Group), so entries survive app restarts. \"Hide Diagnostics\" puts this section away until you tap the version row ten times again.")
+            Text("Reads the persistent log file (App Group), so entries survive app restarts.")
         }
         .confirmationDialog(
             "Clear all logs?",
@@ -214,6 +214,23 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This permanently deletes all saved log entries. This cannot be undone.")
+        }
+    }
+
+    // MARK: - Diagnostics Settings
+
+    /// Sits beside the version row rather than among the diagnostics rows: a
+    /// switch that hid the way back to itself would be a trap.
+    private var diagnosticsSettingsSection: some View {
+        Section {
+            Toggle("Show Diagnostics", isOn: $diagnosticsUnlock.isShown)
+            Button("Forget Diagnostics", role: .destructive) {
+                diagnosticsUnlock.forget()
+            }
+        } header: {
+            Text("Diagnostics Settings")
+        } footer: {
+            Text("The switch only hides the diagnostics rows — the app keeps recording its log either way. \"Forget Diagnostics\" also puts this section away until you tap the version row ten times again.")
         }
     }
 
@@ -246,9 +263,9 @@ struct SettingsView: View {
     }
 
     private func registerVersionTap() {
-        guard !diagnosticsUnlock.isUnlocked else { return }
+        guard !diagnosticsUnlock.isRevealed else { return }
         diagnosticsUnlock.registerTap()
-        if diagnosticsUnlock.isUnlocked {
+        if diagnosticsUnlock.isRevealed {
             AppHaptics.medium()
         } else if diagnosticsUnlock.tapsRemaining != nil {
             AppHaptics.light()

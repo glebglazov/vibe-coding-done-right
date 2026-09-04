@@ -90,7 +90,7 @@ struct MainWindowView: View {
                 Section("Advanced") {
                     Label(Tab.variables.title, systemImage: Tab.variables.systemImage)
                         .tag(Tab.variables)
-                    if diagnosticsUnlock.isUnlocked {
+                    if diagnosticsUnlock.showsSurfaces {
                         Label(Tab.diagnostics.title, systemImage: Tab.diagnostics.systemImage)
                             .tag(Tab.diagnostics)
                     }
@@ -150,13 +150,12 @@ struct MainWindowView: View {
                     case .diagnostics:
                         #if DEBUG
                         DiagnosticsTabView(
-                            diagnosticsUnlock: diagnosticsUnlock,
                             session: dependencies.session,
                             audioRecorder: dependencies.audioRecorder,
                             isTranscriptionReady: dependencies.isTranscriptionReady
                         )
                         #else
-                        DiagnosticsTabView(diagnosticsUnlock: diagnosticsUnlock)
+                        DiagnosticsTabView()
                         #endif
                     case .none:
                         Text("Select a section")
@@ -228,9 +227,9 @@ struct MainWindowView: View {
             // Reset push navigation when switching tabs
             path = NavigationPath()
         }
-        .onChange(of: diagnosticsUnlock.isUnlocked) {
+        .onChange(of: diagnosticsUnlock.showsSurfaces) {
             // The tab the user just hid cannot stay on screen behind them.
-            if !diagnosticsUnlock.isUnlocked, selection == .diagnostics {
+            if !diagnosticsUnlock.showsSurfaces, selection == .diagnostics {
                 selection = .home
             }
         }

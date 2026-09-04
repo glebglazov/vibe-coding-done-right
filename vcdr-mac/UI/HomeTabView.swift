@@ -11,7 +11,7 @@ struct HomeTabView: View {
     let hasMicrophonePermission: Bool
     let hasAccessibilityPermission: Bool
     let isInitialized: Bool
-    let diagnosticsUnlock: DiagnosticsUnlock
+    @Bindable var diagnosticsUnlock: DiagnosticsUnlock
 
     @AppStorage(HistoryStoreFactory.syncEnabledDefaultsKey) private var syncHistoryViaICloud: Bool = true
     private var needsPermissionAttention: Bool {
@@ -92,6 +92,9 @@ struct HomeTabView: View {
                 )
             }
 
+            if diagnosticsUnlock.isRevealed {
+                diagnosticsSettingsSection
+            }
             versionSection
         }
         .formStyle(.grouped)
@@ -100,6 +103,23 @@ struct HomeTabView: View {
             ToolbarItem(placement: .primaryAction) {
                 Color.clear.frame(width: 0, height: 0)
             }
+        }
+    }
+
+    // MARK: - Diagnostics Settings
+
+    /// Sits beside the version row rather than in the Diagnostics tab: a switch
+    /// that hid the way back to itself would be a trap.
+    private var diagnosticsSettingsSection: some View {
+        Section {
+            Toggle("Show Diagnostics", isOn: $diagnosticsUnlock.isShown)
+            Button("Forget Diagnostics") {
+                diagnosticsUnlock.forget()
+            }
+        } header: {
+            Text("Diagnostics")
+        } footer: {
+            Text("The switch only hides the Diagnostics tab — the app keeps recording its log either way. \"Forget Diagnostics\" also puts this section away until you click the version row ten times again.")
         }
     }
 

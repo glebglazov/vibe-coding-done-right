@@ -3,8 +3,9 @@ import SwiftUI
 /// The Mac end of the Diagnostics Unlock. Every build shows the persistent log;
 /// only a Debug build also carries the test-audio import and the scenario
 /// runner, which change how the app behaves and so are not diagnostics.
+///
+/// The way back out lives in Home, beside the version row, not here.
 struct DiagnosticsTabView: View {
-    let diagnosticsUnlock: DiagnosticsUnlock
     #if DEBUG
     let session: CaptureSession
     let audioRecorder: AudioRecorder
@@ -20,13 +21,6 @@ struct DiagnosticsTabView: View {
 
     var body: some View {
         content
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Hide Diagnostics") {
-                        diagnosticsUnlock.lock()
-                    }
-                }
-            }
     }
 
     @ViewBuilder
