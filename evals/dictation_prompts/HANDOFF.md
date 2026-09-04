@@ -18,6 +18,8 @@ export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
 ./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_lean.txt
 ./score_run.py ledger/<run-id>   # per-case table, and ledger/<run-id>/deterministic.json
 ./judge_run.py ledger/<run-id>   # rubric scores, and ledger/<run-id>/judge.json
+./compare_runs.py ledger/<run-a> ledger/<run-b>   # the two arms side by side
+./index_ledger.py                # regenerate ledger/index.md
 ```
 
 If `op-cache` isn't installed, any other way to populate `ANTHROPIC_API_KEY` works — the script just needs it exported.
@@ -57,6 +59,49 @@ judge's model id, and the two axes are read side by side. Nothing averages them
 together, and Judge Scores from different judges are not comparable.
 
 
+## What a comparison produces
+
+`compare_runs.py` takes two or more ledger directories and lays their arms side
+by side. It reads the score files already written beside each run, so it calls no
+model, needs no live arm, and does not re-run or re-score anything: adding an arm
+to the matrix costs one recording, and comparing it against every arm ever
+recorded costs nothing.
+
+Per case and per category it prints two tables:
+
+- **DETERMINISTIC AXIS** — each arm's `word` and `punct`, the per-case winner
+  (highest word score; punctuation, then verdict, break the tie), per-category
+  means, and the headline counts: cases compared, exact matches per arm, wins per
+  arm, ties.
+- **JUDGE AXIS** — each arm's `overall`, named with the judge that produced it.
+
+The two axes are separate readings and never combine. Nothing averages them, and
+arms judged by different judges — or one judged and one not — are labelled as not
+comparable on the judge axis, because a Judge Score holds only within one judge
+model. A winner is named only where at least two arms carry a score.
+
+Two arms are compared on a case only where their **Case Fingerprints** agree.
+Where they do not — the reference was corrected, or one arm never recorded the
+case — the row reads `n/c`, is excluded from every mean and headline count, and
+the reason is listed under NOT COMPARABLE. Every other cell is untouched, which
+is what lets the eval set grow and its references be corrected without
+invalidating the ledger's history. `./test_compare_runs.py` pins that: it
+re-records an arm after correcting one case's reference and asserts the affected
+row falls out while every other row reads exactly as it did before.
+
+Comparing runs over two different eval sets is refused outright — two eval sets
+are never scored against each other.
+
+Finally, DETAIL quotes the reference and each arm's actual output for every
+comparable case where the arms differ.
+
+## What the index is
+
+`ledger/index.md` is a browsable table of every run the ledger holds: what
+produced it, and its means on each axis. `./index_ledger.py` regenerates it from
+the runs themselves, so it cannot drift — never edit it by hand, and re-run the
+command after recording, scoring or judging.
+
 ## What to report back
 
 **Headline**: A exact / B exact / A-wins / B-wins / ties.
@@ -95,10 +140,14 @@ Include:
 - `ledger.py` — the ledger itself: fingerprints, and reopening an archived run.
 - `score_run.py` — the deterministic scorer.
 - `judge_run.py` — the judge-axis scorer.
+- `compare_runs.py` — lays recorded arms side by side, on both axes.
+- `index_ledger.py` — regenerates `ledger/index.md` from the runs.
 - `agents/assessor.md` — the rubric the judge scores against.
 - `test_score_run.py` — the metric's own cases.
 - `test_judge_run.py` — the judge's rubric arithmetic and its contestant refusal.
+- `test_compare_runs.py` — what a comparison may and may not compare.
 - `ledger/<run-id>/manifest.json` — what produced the run.
 - `ledger/<run-id>/outputs/<case>.txt` — the arm's raw output, byte-for-byte.
 - `ledger/<run-id>/deterministic.json` — the deterministic scores.
 - `ledger/<run-id>/judge.json` — the judge scores, and the judge that produced them.
+- `ledger/index.md` — every run in the ledger, generated.
