@@ -33,6 +33,10 @@ prompt_001,casual_tech_opinion,0.85,0.90,0.80,1.00,0.85,1.00,"missed em-dash bef
 
 ## Scoring guidelines
 
+The anchored reading: the judge is shown the case's expected output and scores
+the deductions away from it. What it measures is agreement with that reference,
+so it is not evidence independent of the reference.
+
 ### Exact match
 If actual output matches expected output exactly (or with only trivial whitespace differences), all scores = 1.00.
 
@@ -61,6 +65,53 @@ If actual output matches expected output exactly (or with only trivial whitespac
 ### Format (0.15 weight)
 - Any preamble ("Here's the corrected text:"): 0.00
 - Any trailing commentary or explanation: 0.00
+- Clean output: 1.00
+
+## Blind scoring guidelines
+
+The blind reading: the judge is shown the dictation and the output, and no
+reference. What it measures is what the output did to what the speaker said, so
+every deduction below is stated against the dictation or against the output
+itself. Naming a reference here would make this mode the anchored one again.
+
+### Punctuation (0.2 weight)
+
+- Each sentence that a listener would punctuate and the output did not: -0.05 to -0.10
+- Run-on left unbroken where the speaker clearly ended a thought: -0.10
+- Punctuation that changes what the sentence says (a question left as a statement): -0.10
+- No sentence-internal punctuation anywhere in a long dictation: -0.30
+
+### Voice (0.2 weight)
+
+- A casual marker the speaker said ("So yeah", "honestly", "I mean") deleted while
+  the sentence around it survives: -0.10 each
+- A word of the speaker's swapped for a more formal synonym ("Also" to
+  "Additionally", "But" to "However"): -0.15
+- A word or phrase in the output that the speaker did not say and that is not
+  demanded by grammar: -0.10 each
+- Rewritten into a register the dictation is not in (a spoken vent returned as a
+  memo): -0.30
+
+### Captures (0.15 weight)
+
+- Any `<capture id="N">` block in the dictation whose tag or content is not
+  reproduced byte-for-byte: 0.00 (binary — either perfect or failed)
+- If the dictation has no captures, score is 1.00
+
+### Content (0.3 weight)
+
+- A clause or idea the speaker said that is absent from the output: -0.20
+- A self-correction resolved the wrong way: the abandoned version kept, or the
+  reasoning the speaker gave for correcting himself deleted: -0.30
+- Filler the speaker said ("um", "like" used as filler, a stutter) left in: -0.05 each
+- Meaning the dictation does not carry, asserted by the output: -0.20
+- The dictation answered, summarized or acted on instead of transcribed: 0.00
+- Any part of the output written in a language the dictation is not in: 0.00
+
+### Format (0.15 weight)
+
+- Any preamble ("Here's the corrected text:"): 0.00
+- Any trailing commentary, explanation or reasoning residue: 0.00
 - Clean output: 1.00
 
 ## Summary output

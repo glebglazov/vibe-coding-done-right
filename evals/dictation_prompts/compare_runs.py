@@ -27,7 +27,7 @@ import argparse
 import sys
 from statistics import mean
 
-from ledger import ScoredRun, case_fingerprint, eval_set_cases
+from ledger import JUDGE_FILES, ScoredRun, case_fingerprint, eval_set_cases
 from score_run import SCORE_DIGITS, VERDICT_ORDER
 
 # What a cell says when the arms did not answer the same case.
@@ -41,6 +41,28 @@ The two axes below are separate readings and are not comparable with each other.
 A Deterministic Score is a pure function of the reference output; a Judge Score
 is one model's reading of a rubric. Neither is averaged into the other, and a
 cell of one never answers a cell of the other."""
+
+MODE_SEPARATION = """\
+The judge axis is printed once per mode, and the modes are not comparable with
+each other. A blind reading never saw the reference; an anchored one scores
+deductions away from it and so is not evidence independent of the deterministic
+axis. Neither is averaged into the other, and no column holds both."""
+
+DETERMINISTIC = "deterministic"
+
+
+def judge_axis(mode):
+    """How a comparison names one judge mode's scores: an axis of its own, so no
+    table and no mean can hold two modes at once."""
+    return f"judge:{mode}"
+
+
+def axis_readings(run):
+    """Every axis this run carries a score file for, keyed as a comparison names it."""
+    return {
+        DETERMINISTIC: run.deterministic,
+        **{judge_axis(mode): scores for mode, scores in run.judges.items()},
+    }
 
 
 def arm_label(index):
@@ -73,7 +95,7 @@ def axis_cells(runs, axis, case_id):
     """Each arm's score for the case on one axis, keyed by arm label."""
     cells = {}
     for index, run in enumerate(runs):
-        scores = getattr(run, axis)
+        scores = axis_readings(run).get(axis)
         cells[arm_label(index)] = scores.cases.get(case_id) if scores else None
     return cells
 
@@ -124,10 +146,9 @@ def case_order(runs):
     return ordered
 
 
-def compare_case(runs, case_id):
+def compare_case(runs, case_id, axes):
     comparable, note = comparability(runs, case_id)
-    deterministic = axis_cells(runs, "deterministic", case_id)
-    judge = axis_cells(runs, "judge", case_id)
+    cells = {axis: axis_cells(runs, axis, case_id) for axis in axes}
     category = next(
         run.category(case_id) for run in runs if run.category(case_id) is not None
     )
@@ -140,13 +161,22 @@ def compare_case(runs, case_id):
             arm_label(index): run.fingerprint(case_id) is not None
             for index, run in enumerate(runs)
         },
-        "deterministic": deterministic,
-        "judge": judge,
+        **cells,
         "winner": {
-            "deterministic": winner(deterministic, deterministic_rank) if comparable else None,
-            "judge": winner(judge, judge_rank) if comparable else None,
+            axis: winner(cells[axis], rank_on(axis)) if comparable else None
+            for axis in axes
         },
     }
+
+
+def rank_on(axis):
+    return deterministic_rank if axis == DETERMINISTIC else judge_rank
+
+
+def judge_modes(runs):
+    """The judge modes any of these arms was read in, in the order the ledger names
+    them, so a comparison prints one table per mode and never one table for both."""
+    return [mode for mode in JUDGE_FILES if any(mode in run.judges for run in runs)]
 
 
 def compare(runs):
@@ -156,19 +186,25 @@ def compare(runs):
             f"these runs answer different eval sets ({', '.join(sorted(eval_sets))}); "
             "two eval sets are never scored against each other."
         )
+    modes = judge_modes(runs)
+    axes = [DETERMINISTIC, *(judge_axis(mode) for mode in modes)]
     return {
         "eval_set": sorted(eval_sets)[0],
+        "judge_modes": modes,
         "arms": [
             {
                 "label": arm_label(index),
                 "run_id": run.run_id,
                 "metric": run.deterministic.summary["metric"] if run.deterministic else None,
-                "judged_by": run.judge.summary["judge"]["model"] if run.judge else None,
+                "judged_by": {
+                    mode: run.judges[mode].summary["judge"]["model"] if mode in run.judges else None
+                    for mode in modes
+                },
                 **run.arm,
             }
             for index, run in enumerate(runs)
         ],
-        "cases": [compare_case(runs, case_id) for case_id in case_order(runs)],
+        "cases": [compare_case(runs, case_id, axes) for case_id in case_order(runs)],
     }
 
 
@@ -202,18 +238,21 @@ def by_category(comparison):
                 "category": category,
                 "compared": len(comparable),
                 "not_comparable": len(rows) - len(comparable),
-                "deterministic": {
+                DETERMINISTIC: {
                     arm["label"]: {
-                        "word_score": cell_mean(rows, "deterministic", arm["label"], "word_score"),
+                        "word_score": cell_mean(rows, DETERMINISTIC, arm["label"], "word_score"),
                         "punctuation_score": cell_mean(
-                            rows, "deterministic", arm["label"], "punctuation_score"
+                            rows, DETERMINISTIC, arm["label"], "punctuation_score"
                         ),
                     }
                     for arm in comparison["arms"]
                 },
-                "judge": {
-                    arm["label"]: cell_mean(rows, "judge", arm["label"], "overall")
-                    for arm in comparison["arms"]
+                **{
+                    judge_axis(mode): {
+                        arm["label"]: cell_mean(rows, judge_axis(mode), arm["label"], "overall")
+                        for arm in comparison["arms"]
+                    }
+                    for mode in comparison["judge_modes"]
                 },
                 "answered": {
                     arm["label"]: sum(
@@ -371,20 +410,29 @@ def run_metric(comparison, label):
     return arm.get("metric") or "not scored"
 
 
-def judge_section(comparison):
+def judge_section(comparison, mode):
+    """One judge mode's table. An arm read in another mode is not scored here and
+    wins nothing here: a blind reading and an anchored one measure different things,
+    and putting them in one column would rank one against the other."""
+    axis = judge_axis(mode)
     labels = [arm["label"] for arm in comparison["arms"]]
     judges = {
-        arm["label"]: f"judged by {arm['judged_by']}" if arm["judged_by"] else "not judged"
+        arm["label"]: (
+            f"judged by {arm['judged_by'][mode]}"
+            if arm["judged_by"][mode]
+            else f"not judged {mode}"
+        )
         for arm in comparison["arms"]
     }
     lines = [
-        "JUDGE AXIS — "
+        f"JUDGE AXIS ({mode}) — "
         + " | ".join(f"{label}: {judge}" for label, judge in judges.items())
     ]
-    if len({arm["judged_by"] for arm in comparison["arms"]}) > 1:
+    if len({arm["judged_by"][mode] for arm in comparison["arms"]}) > 1:
         lines.append(
-            "These arms were judged by different judges, or one was not judged: a Judge "
-            "Score holds only within one judge model, so these columns do not compare."
+            f"These arms were judged by different judges, or one was not judged {mode}: a "
+            "Judge Score holds only within one judge model and one mode, so these columns "
+            "do not compare."
         )
 
     header = ["case", "category", *(f"{label} overall" for label in labels), "winner"]
@@ -392,8 +440,8 @@ def judge_section(comparison):
         [
             case["id"],
             case["category"],
-            *(score_text(case, "judge", label, "overall") for label in labels),
-            winner_text(case, "judge"),
+            *(score_text(case, axis, label, "overall") for label in labels),
+            winner_text(case, axis),
         ]
         for case in comparison["cases"]
     ]
@@ -405,7 +453,7 @@ def judge_section(comparison):
             category["compared"],
             *(
                 mean_text(
-                    category["judge"][label],
+                    category[axis][label],
                     category["answered"][label],
                     category["compared"],
                 )
@@ -415,7 +463,7 @@ def judge_section(comparison):
         for category in by_category(comparison)
     ]
 
-    counts = headline(comparison, "judge")
+    counts = headline(comparison, axis)
     return [
         *lines,
         "",
@@ -505,10 +553,16 @@ def report(comparison, runs):
         f"({arm['prompt_sha256'][:12]})"
         for arm in comparison["arms"]
     ]
+    preamble = [f"COMPARISON — eval set {comparison['eval_set']}", "", *arms, "", AXIS_SEPARATION]
+    if len(comparison["judge_modes"]) > 1:
+        preamble += ["", MODE_SEPARATION]
     sections = [
-        [f"COMPARISON — eval set {comparison['eval_set']}", "", *arms, "", AXIS_SEPARATION],
+        preamble,
         deterministic_section(comparison),
-        judge_section(comparison),
+        *(
+            [judge_section(comparison, mode) for mode in comparison["judge_modes"]]
+            or [["JUDGE AXIS — none of these arms has been judged."]]
+        ),
         not_comparable_section(comparison),
         detail_section(comparison, runs),
     ]

@@ -21,14 +21,18 @@ from pathlib import Path
 
 from compare_runs import (
     AXIS_SEPARATION,
+    MODE_SEPARATION,
     NOT_COMPARABLE,
     TIE,
+    UNSCORED,
     by_category,
     compare,
+    judge_axis,
     not_comparable_section,
     report,
 )
 from ledger import (
+    JUDGE_FILES,
     ArchivedRun,
     ScoredRun,
     case_fingerprint,
@@ -79,7 +83,20 @@ def write_eval_set(path, cases):
     path.write_text(json.dumps({"evals": cases}, ensure_ascii=False))
 
 
-def record(directory, eval_set_path, model, outputs, judged_by=None, judge_overall=JUDGE_OVERALL, subset=None):
+ANCHORED = judge_axis("anchored")
+BLIND = judge_axis("blind")
+
+
+def record(
+    directory,
+    eval_set_path,
+    model,
+    outputs,
+    judged_by=None,
+    judge_overall=JUDGE_OVERALL,
+    subset=None,
+    judge_mode="anchored",
+):
     """One run archived and scored as the ledger's own commands would leave it."""
     cases = subset_cases(json.loads(eval_set_path.read_text())["evals"], subset)
     (directory / "outputs").mkdir(parents=True)
@@ -123,11 +140,15 @@ def record(directory, eval_set_path, model, outputs, judged_by=None, judge_overa
     scores = score_run(ArchivedRun(directory))
     (directory / "deterministic.json").write_text(json.dumps(scores))
     if judged_by:
-        (directory / "judge.json").write_text(
+        (directory / JUDGE_FILES[judge_mode]).write_text(
             json.dumps(
                 {
                     "run_id": directory.name,
-                    "judge": {"model": judged_by, "rubric": "agents/assessor.md"},
+                    "judge": {
+                        "model": judged_by,
+                        "mode": judge_mode,
+                        "rubric": "agents/assessor.md",
+                    },
                     "overall_mean": 0.9,
                     "dimension_means": {},
                     "cases": [
@@ -135,6 +156,7 @@ def record(directory, eval_set_path, model, outputs, judged_by=None, judge_overa
                             "id": case["id"],
                             "category": case["category"],
                             "judge_model": judged_by,
+                            "judge_mode": judge_mode,
                             "overall": judge_overall[case["id"]],
                         }
                         for case in cases
@@ -194,6 +216,49 @@ def test_arms_are_compared_per_case_and_per_category():
     with_ledger(body)
 
 
+def test_a_blind_reading_is_never_ranked_against_an_anchored_one():
+    """The two judge modes measure different things — one saw the reference, one
+    did not — so they are two tables, never two columns of one, and neither arm
+    wins anything in the other's mode."""
+
+    def body(ledger):
+        blind = record(
+            ledger.a.directory.parent / "run-blind",
+            ledger.eval_set,
+            "model-b",
+            OUTPUTS_B,
+            "judge-x",
+            {case_id: 1.0 for case_id in JUDGE_OVERALL},
+            judge_mode="blind",
+        )
+        runs = [ledger.a, blind]
+        comparison = compare(runs)
+        assert comparison["judge_modes"] == ["blind", "anchored"], comparison["judge_modes"]
+
+        case = cells(comparison, "hedge_fronted")
+        # A carries only an anchored score, B only a blind one, so neither mode
+        # has two scores to rank and neither names a winner.
+        assert case[ANCHORED]["B"] is None and case[BLIND]["A"] is None, case
+        assert case["winner"][ANCHORED] is None and case["winner"][BLIND] is None, case
+
+        printed = report(comparison, runs)
+        assert MODE_SEPARATION in printed, printed
+        assert "JUDGE AXIS (blind)" in printed and "JUDGE AXIS (anchored)" in printed, printed
+        assert "not judged blind" in printed and "not judged anchored" in printed, printed
+        # Each mode's own table carries the arm that was read in it, and reads the
+        # other arm as unscored rather than as a rival.
+        blind_row, anchored_row = (
+            next(
+                line for line in section.splitlines() if line.startswith("hedge_fronted")
+            )
+            for section in printed.split("JUDGE AXIS (")[1:]
+        )
+        assert blind_row.split()[2:] == [UNSCORED, "1.0", UNSCORED], blind_row
+        assert anchored_row.split()[2:] == ["0.9", UNSCORED, UNSCORED], anchored_row
+
+    with_ledger(body)
+
+
 def test_a_changed_case_is_not_comparable_and_the_rest_are_untouched():
     def body(ledger):
         before = compare([ledger.a, ledger.b])
@@ -228,8 +293,8 @@ def test_the_two_axes_are_reported_apart():
         case = cells(comparison, "hedge_fronted")
         assert case["deterministic"]["B"]["word_score"] is not None, case
         # One arm's Judge Score with nothing beside it is a reading, not a result.
-        assert case["judge"]["B"] is None, case
-        assert case["winner"]["judge"] is None, case
+        assert case[ANCHORED]["B"] is None, case
+        assert case["winner"][ANCHORED] is None, case
 
         printed = report(comparison, [ledger.c, unjudged])
         assert AXIS_SEPARATION in printed, printed
@@ -271,7 +336,7 @@ def test_an_arm_that_scored_zero_reads_as_zero_and_not_as_unscored():
             if row["category"] == "readability_transform"
         )
         assert category["deterministic"]["B"]["word_score"] == 0.0, category
-        assert category["judge"]["B"] == 0.0, category
+        assert category[ANCHORED]["B"] == 0.0, category
 
         printed = report(comparison, [ledger.c, silent]).splitlines()
         rows = [line for line in printed if line.startswith("readability_transform")]

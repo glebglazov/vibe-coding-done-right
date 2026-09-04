@@ -23,7 +23,8 @@ export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
 ./record_run.py --provider s1-mini --model hf.co/superwhisper/s1-mini-GGUF:Q4_K_M \
                 --prompt prompts/s1_mini.txt --subset multilingual   # the non-English category alone
 ./score_run.py ledger/<run-id>   # per-case table, and ledger/<run-id>/deterministic.json
-./judge_run.py ledger/<run-id>   # rubric scores, and ledger/<run-id>/judge.json
+./judge_run.py ledger/<run-id>                    # blind: no reference shown -> judge_blind.json
+./judge_run.py --mode anchored ledger/<run-id>    # the reference too -> judge.json
 ./compare_runs.py ledger/<run-a> ledger/<run-b>   # the two arms side by side
 ./index_ledger.py                # regenerate ledger/index.md
 ```
@@ -71,9 +72,42 @@ The standing judge is `claude-opus-5`, pinned with `--judge-model`. Haiku is a
 contestant in this matrix, so it cannot judge; a run recorded with the same model
 named as judge is refused outright.
 
-A Judge Score is reproducible only within one judge model. So it lands in
-`judge.json` beside — never inside — `deterministic.json`, every case carries the
-judge's model id, and the two axes are read side by side. Nothing averages them
+### The two judge modes, and what each measures
+
+`--mode blind` (the default) shows the judge the dictation and the arm's output,
+and nothing else: no expected output, and not the eval set's `exercises` line
+either, which names the transformation the reference wants in prose. It scores
+against `agents/assessor.md`'s **Blind scoring guidelines**, whose every deduction
+is stated against the dictation or the output itself. **This is the mode that is a
+second opinion**: it can disagree with the reference, because it has never seen it.
+
+`--mode anchored` shows the judge the expected output too, and scores against the
+**Scoring guidelines**, which open with "if actual output matches expected output
+exactly, all scores = 1.00" and define every dimension as deductions away from
+that reference. **An anchored Judge Score is not evidence independent of the
+reference**, and so not independent of the deterministic axis either, which is a
+pure function of that same reference. Where the two axes agreed under this mode,
+the agreement was a property of the shared anchor.
+
+The modes are kept apart the way the axes are:
+
+- Two files. Blind lands in `judge_blind.json`, anchored in `judge.json`; neither
+  overwrites the other, and a file whose recorded mode disagrees with the file it
+  sits in is refused rather than read as either.
+- The mode is on the file (`judge.mode`) and on every case (`judge_mode`), because
+  these rows get copied around. A file written before the modes were told apart
+  names none and is the anchored reading — that is what its judge saw.
+- A comparison prints one table per mode and never one column holding both, and
+  `ledger/index.md` carries one judge column per mode.
+- Nothing averages a blind score with an anchored one, or either with a
+  Deterministic Score.
+
+A blind rubric that named a reference would be an anchored rubric under another
+name, so `judge_run.py` refuses to judge blind if the rubric sections it applies
+mention an expected or reference output at all.
+
+A Judge Score is reproducible only within one judge model and one mode. Every case
+carries both, and the two axes are read side by side. Nothing averages them
 together, and Judge Scores from different judges are not comparable.
 
 
@@ -91,12 +125,15 @@ Per case and per category it prints two tables:
   (highest word score; punctuation, then verdict, break the tie), per-category
   means, and the headline counts: cases compared, cases each arm answered, exact
   matches per arm, wins per arm, ties.
-- **JUDGE AXIS** — each arm's `overall`, named with the judge that produced it.
+- **JUDGE AXIS (blind)** and **JUDGE AXIS (anchored)** — one table per judge mode,
+  each arm's `overall`, named with the judge that produced it. An arm read in the
+  other mode is unscored here and wins nothing here.
 
 The two axes are separate readings and never combine. Nothing averages them, and
-arms judged by different judges — or one judged and one not — are labelled as not
-comparable on the judge axis, because a Judge Score holds only within one judge
-model. A winner is named only where at least two arms carry a score.
+arms judged by different judges — or by different modes, or one judged and one
+not — are labelled as not comparable on the judge axis, because a Judge Score
+holds only within one judge model and one mode. A winner is named only where at
+least two arms carry a score in the same mode.
 
 Two arms are compared on a case only where their **Case Fingerprints** agree.
 Where they do not — the reference was corrected between the runs — the whole row
@@ -129,6 +166,10 @@ the runs themselves, so it cannot drift — never edit it by hand, and re-run th
 command after recording, scoring or judging.
 
 ## Local models vs Haiku (2026-09-04)
+
+**Every judge number in this section is an anchored reading** — the judge was shown the
+case's expected output. See "The blind reading" below for what that mode does and does not
+measure; the same arms read blind do not order the same way.
 
 Two of this section's readings are superseded below, by the S1-mini section: `qwen3.5:2b` was
 re-measured with thinking off and does answer, and `gemma4:e2b` is no longer the only viable local
@@ -190,6 +231,10 @@ Reproduce the six-way comparison from the ledger (no model call, no re-run):
 ```
 
 ## S1-mini, a purpose-built normalizer (2026-09-04)
+
+**Every judge number in this section is an anchored reading** — the judge was shown the
+case's expected output. See "The blind reading" below for what that mode does and does not
+measure; the same arms read blind do not order the same way.
 
 A seventh arm: `hf.co/superwhisper/s1-mini-GGUF:Q4_K_M` — a 0.6B text normalizer built for exactly
 this workload (Apache 2.0 plus a naming clause; the model keeps the name "S1-mini" by
@@ -288,6 +333,10 @@ Reproduce the three-way model comparison from the ledger (no model call, no re-r
 ```
 
 ## The multilingual reading (2026-09-04)
+
+**Every judge number in this section is an anchored reading** — the judge was shown the
+case's expected output. See "The blind reading" below for what that mode does and does not
+measure; the same arms read blind do not order the same way.
 
 The non-English category was one case, so the question the whole local-model decision rests on was
 a single data point — and the purpose-built normalizer had been excused from it on an assumption
@@ -392,6 +441,90 @@ category (no model call, no re-run):
   ledger/20260904T142156Z__evals-english__hf.co-superwhisper-s1-mini-GGUF-Q4_K_M__s1_mini
 ```
 
+## The blind reading, and what it does to the anchored one (2026-09-04)
+
+The judge axis exists to read what the token metric cannot see. Until now it did
+not: the judge was shown the case's expected output and scored deductions away
+from it, so both axes were anchored to the same reference and their agreement was
+a property of that anchor rather than two readings converging.
+
+Three arms were re-judged blind by `claude-opus-5` — the same archived outputs,
+the same rubric dimensions and weights, no reference in the prompt. The anchored
+files are untouched and stand as the record of what that mode read.
+
+**The ordering does not survive.** Anchored, the three arms rank A (0.955) >
+B (0.925) > C (0.897), and Haiku wins 10 cases to gemma's 2. Blind, they rank
+B (0.983) > A (0.974) > C (0.970), and gemma wins 6 cases to Haiku's 3 with 11
+ties. Haiku loses the top of the table.
+
+| arm | anchored overall | blind overall | anchored wins | blind wins |
+|---|---|---|---|---|
+| A — haiku / prompt_readability (22 cases) | 0.955 | 0.974 | 10 | 3 |
+| B — gemma4:e2b / prompt_readability (22 cases) | 0.925 | 0.983 | 2 | 6 |
+| C — s1-mini / s1_mini, english subset (21 cases) | 0.897 | 0.970 | 3 | 2 |
+| ties | | | 7 | 11 |
+
+Per category, which is where it has to be said, since a run-level mean can hide a
+swap in both directions:
+
+| category | cases | anchored order | blind order | survives? |
+|---|---|---|---|---|
+| readability_transform | 6 | A 0.983 > B 0.922 > C 0.848 | B 0.99 > C 0.981 > A 0.967 | **no — reversed**, A goes first to last |
+| voice_preservation | 3 | A 0.993 > C 0.983 > B 0.98 | A = B = C = 1.0 | **no** — the order collapses to a tie |
+| content_preservation | 3 | B 0.985 > A 0.945 > C 0.907 | B = C 0.993 > A 0.98 | partly — B stays over A, C rises from last to tied first |
+| self_correction | 2 | A 0.985 > B 0.812 > C 0.715 | A 0.97 > B 0.935 > C 0.78 | **yes** — same order, gaps much smaller |
+| realistic_mixed | 4 | C 0.92 > A 0.871 > B 0.868 | C 0.988 > A 0.961 > B 0.958 | **yes** |
+| passthrough | 2 | B = C 0.99 > A 0.958 | B = C 1.0 > A 0.98 | **yes** |
+| capture | 1 | C 0.984 > A 0.98 > B 0.96 | A = B = C = 1.0 | **no** — the order collapses to a tie |
+| multilingual | 1 | A 0.94 > B 0.9 | B 1.0 > A 0.945 | **no — reversed** (C was not asked this case) |
+
+So the anchored reading was not harmless, and this has to be said out loud:
+**every judge number recorded in this ledger before today is an anchored reading,
+and an anchored reading is in part a reading of the reference's authorship.** The
+expected outputs encode one particular writer's target — an aggressive-readability
+polish, written to a Claude-shaped idea of what the sentence should become — and
+the anchored judge rewards the arm whose output most resembles it. Haiku's lead
+over the local models on the judge axis is largely that resemblance, not a quality
+the judge found in the text on its own. Where the two agree — self_correction,
+realistic_mixed, passthrough — the finding is a real one and holds without the
+reference.
+
+Two more things the blind reading shows:
+
+- **Everything scores higher blind** (0.97–0.983 against 0.897–0.955), and the
+  spread between arms collapses from 0.058 to 0.013. A blind judge asked "is this
+  clean, in the speaker's voice, and unchanged in meaning?" answers yes for all
+  three arms nearly all the time. The blind axis separates arms poorly, and that is
+  itself the reading: on the dimensions decidable without a reference, these three
+  arms are close to each other, and the anchored axis' separation is separation on
+  agreement with one writer's taste.
+- **Punctuation is where the modes disagree most** — 0.809/0.873/0.911 anchored
+  against 0.952/0.982/0.987 blind. The anchored judge was scoring departures from
+  the reference's punctuation style; the blind judge scores whether the sentence is
+  punctuated correctly at all, and by that standard all three arms are fine.
+
+Reproduce (no re-recording; the outputs are archived):
+
+```bash
+export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
+for run in ledger/20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability \
+           ledger/20260904T115807Z__evals__gemma4-e2b__prompt_readability \
+           ledger/20260904T142156Z__evals-english__hf.co-superwhisper-s1-mini-GGUF-Q4_K_M__s1_mini; do
+  ./judge_run.py --mode blind "$run"
+done
+./compare_runs.py ledger/20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability \
+                  ledger/20260904T115807Z__evals__gemma4-e2b__prompt_readability \
+                  ledger/20260904T142156Z__evals-english__hf.co-superwhisper-s1-mini-GGUF-Q4_K_M__s1_mini
+```
+
+Reopening those first two runs needed one change to the ledger: `ArchivedRun`
+checked the whole eval set's fingerprint, so a run recorded before the
+multilingual category was widened could no longer be scored or judged at all,
+though every case it answered was untouched. The check is now per case — every case
+the run answered must still fingerprint to what it answered — which is the same
+guarantee stated the way the comparison already states it, and is what lets the set
+grow without stranding the runs recorded before it.
+
 ## What to report back
 
 **Headline**: A exact / B exact / A-wins / B-wins / ties.
@@ -441,5 +574,6 @@ Include:
 - `ledger/<run-id>/manifest.json` — what produced the run.
 - `ledger/<run-id>/outputs/<case>.txt` — the arm's raw output, byte-for-byte.
 - `ledger/<run-id>/deterministic.json` — the deterministic scores.
-- `ledger/<run-id>/judge.json` — the judge scores, and the judge that produced them.
+- `ledger/<run-id>/judge.json` — the anchored judge scores (the judge saw the reference).
+- `ledger/<run-id>/judge_blind.json` — the blind judge scores (the judge did not).
 - `ledger/index.md` — every run in the ledger, generated.

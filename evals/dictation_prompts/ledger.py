@@ -64,9 +64,12 @@ def eval_set_cases(name):
 class ArchivedRun:
     """One recorded run, reopened for scoring.
 
-    Loading verifies the eval set still fingerprints to what the run was recorded
-    against — a reference output edited since then would silently change every
-    score computed from it.
+    Loading verifies that every case the run answered still fingerprints to what
+    it answered — a reference output edited since then would silently change every
+    score computed from it. The check is per case rather than over the whole set,
+    for the same reason a comparison's is: a set that has grown since the run was
+    recorded still holds every case the run answered, and asking a run about cases
+    it was never asked is a question nobody put to it.
     """
 
     def __init__(self, directory):
@@ -74,17 +77,19 @@ class ArchivedRun:
         self.manifest = read_json(self.directory / "manifest.json")
         self.eval_set = self.manifest["eval_set"]
 
-        eval_set_path = HERE / self.eval_set["name"]
-        self.cases = subset_cases(
-            eval_set_cases(self.eval_set["name"]), self.eval_set.get("subset")
-        )
-        fingerprint = eval_set_fingerprint(self.cases)
-        if fingerprint != self.eval_set["fingerprint"]:
+        answered = {entry["id"]: entry["case_fingerprint"] for entry in self.manifest["cases"]}
+        on_disk = {case["id"]: case for case in eval_set_cases(self.eval_set["name"])}
+        changed = [
+            case_id
+            for case_id, fingerprint in answered.items()
+            if case_id not in on_disk or case_fingerprint(on_disk[case_id]) != fingerprint
+        ]
+        if changed:
             raise SystemExit(
-                f"{eval_set_path.name} has changed since {self.run_id} was recorded "
-                f"({fingerprint[:12]} != {self.eval_set['fingerprint'][:12]}): "
-                "the run's outputs no longer answer these cases."
+                f"{self.eval_set['name']} has changed since {self.run_id} was recorded "
+                f"({', '.join(changed)}): the run's outputs no longer answer these cases."
             )
+        self.cases = [on_disk[case_id] for case_id in answered]
 
     @property
     def run_id(self):
@@ -98,6 +103,13 @@ class ArchivedRun:
             if "output_file" in entry:
                 output = (self.directory / entry["output_file"]).read_text()
             yield by_id[entry["id"]], output
+
+
+# The two readings the judge axis holds, and the file each lands in. A blind
+# reading and an anchored one are different measurements of different things, so
+# neither overwrites the other and neither is read out of the other's file.
+JUDGE_FILES = {"blind": "judge_blind.json", "anchored": "judge.json"}
+DEFAULT_JUDGE_MODE = "anchored"
 
 
 class AxisScores:
@@ -123,12 +135,34 @@ class ScoredRun:
         self.manifest = read_json(self.directory / "manifest.json")
         self.recorded = {entry["id"]: entry for entry in self.manifest["cases"]}
         self.deterministic = self.axis("deterministic.json")
-        self.judge = self.axis("judge.json")
+        self.judges = self.judge_readings()
 
     def axis(self, filename):
         """One axis' scores, or None where this run has not been scored on it."""
         path = self.directory / filename
         return AxisScores(read_json(path)) if path.exists() else None
+
+    def judge_readings(self):
+        """Every judge reading this run carries, keyed by the mode that produced it.
+
+        A file judged before the modes were told apart names no mode, and is the
+        anchored reading — that is what the judge saw. A file whose recorded mode
+        disagrees with the file it sits in is refused rather than filed under
+        either, since which one it is decides who it may be compared with.
+        """
+        readings = {}
+        for mode, filename in JUDGE_FILES.items():
+            scores = self.axis(filename)
+            if scores is None:
+                continue
+            recorded = scores.summary["judge"].get("mode", DEFAULT_JUDGE_MODE)
+            if recorded != mode:
+                raise SystemExit(
+                    f"{self.directory / filename} records judge mode {recorded!r}, "
+                    f"which belongs in {JUDGE_FILES.get(recorded, 'no known file')}."
+                )
+            readings[mode] = scores
+        return readings
 
     @property
     def run_id(self):

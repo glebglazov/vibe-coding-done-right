@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 import judge_run
-from judge_run import Judge, judge_run as judge_archived_run
+from judge_run import MODES, Judge, judge_run as judge_archived_run
 from ledger import LEDGER, ArchivedRun
 from test_runner import run_tests
 
@@ -66,8 +66,8 @@ class StubBackend:
         return self.reply
 
 
-def judge_with(**dimensions):
-    return Judge(StubBackend(json.dumps({**PERFECT, **dimensions})))
+def judge_with(mode="anchored", **dimensions):
+    return Judge(StubBackend(json.dumps({**PERFECT, **dimensions})), MODES[mode])
 
 
 def case(case_id):
@@ -92,6 +92,38 @@ def test_overall_uses_the_rubrics_documented_weights():
     halved_voice = judge_with(voice=0.5)
     dimensions, _ = halved_voice.score(case("casual_voice_preserved"), "anything")
     assert halved_voice.overall(dimensions) == 0.9, dimensions
+
+
+def test_a_blind_reading_shows_the_judge_no_reference():
+    """The point of the blind mode: what the judge sees is the dictation and the
+    output. A reference anywhere in it — the expected output, or the eval set's
+    prose description of the transformation it wants — would make this a second
+    look at the answer key rather than a second opinion."""
+    subject = case("spoken_order_quantity")
+    prompt = judge_with("blind").prompt_for(subject, "anything")
+    assert subject["input"] in prompt and "anything" in prompt, prompt
+    assert subject["expected_output"] not in prompt, prompt
+    assert subject["exercises"] not in prompt, prompt
+    assert "expected" not in prompt.lower(), prompt
+
+    # And the rubric it applies scores against no reference either, so a deduction
+    # cannot smuggle one back in.
+    rubric = judge_with("blind").rubric
+    assert not judge_run.REFERENCE_MENTION.search(rubric), rubric
+
+    anchored = judge_with("anchored").prompt_for(subject, "anything")
+    assert subject["expected_output"] in anchored, anchored
+
+
+def test_a_judge_file_says_which_mode_read_it():
+    """Two readings, two files, and each row saying which one it is: a blind score
+    and an anchored score are different measurements, and one is never read as
+    the other."""
+    blind = judge_with("blind")
+    scores = judge_archived_run(RUN, blind)
+    assert scores["judge"]["mode"] == "blind", scores["judge"]
+    assert all(score["judge_mode"] == "blind" for score in scores["cases"]), scores["cases"][0]
+    assert blind.mode.filename != MODES["anchored"].filename, blind.mode.filename
 
 
 def test_capture_tag_preservation_is_scored_binary():

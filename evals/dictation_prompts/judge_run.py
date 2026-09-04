@@ -10,11 +10,22 @@ speaker's voice survived, and whether the model over-edited. It reads each
 archived output against the project's rubric in agents/assessor.md, so the
 dimensions and weights live in that document rather than here.
 
-A Judge Score is reproducible only within one judge model, so every case carries
-the id of the judge that produced it, the scores land in judge.json beside — not
-inside — deterministic.json, and nothing here ever averages the two axes
-together. Judging reads the ledger only: a run is judged, and re-judged, without
-being re-run.
+The judge reads in one of two modes, and which one it was is the whole meaning of
+the number:
+
+  --mode blind      the dictation and the output, and no reference at all. A
+                    second opinion: it can disagree with the reference, because
+                    it has never seen it.
+  --mode anchored   the dictation, the output and the case's expected output,
+                    scored as deductions away from that reference. It measures
+                    agreement with the reference, so it is not evidence
+                    independent of the deterministic axis, which is a pure
+                    function of that same reference.
+
+The two modes land in two files, are never averaged, and are never ranked in one
+column. A Judge Score is reproducible only within one judge model and one mode,
+so every case carries both. Judging reads the ledger only: a run is judged, and
+re-judged, without being re-run.
 """
 
 import argparse
@@ -24,7 +35,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ledger import HERE, ArchivedRun, sha256_hex
+from ledger import HERE, JUDGE_FILES, ArchivedRun, sha256_hex
 from record_run import ANTHROPIC_ENDPOINT, AnthropicArm
 
 # The standing judge, per ADR 0001: pinned independently of the arms so a model
@@ -33,15 +44,10 @@ from record_run import ANTHROPIC_ENDPOINT, AnthropicArm
 DEFAULT_JUDGE_MODEL = "claude-opus-5"
 
 RUBRIC = HERE / "agents" / "assessor.md"
-# The rubric proper. Its other sections describe the pre-ledger workflow — read
-# the eval set yourself, append to results/scores.csv — which this supersedes.
-RUBRIC_SECTIONS = ("Scoring dimensions", "Scoring guidelines")
 
 SCORE_DIGITS = 3
 
-JUDGE_INSTRUCTIONS = """
-You are scoring one dictation-cleanup output against the rubric above.
-
+REPLY_FORMAT = """
 Score only the dimensions punctuation, voice, captures, content and format, each
 from 0.00 to 1.00, applying the rubric's deduction tables. Do not compute the
 weighted average; that is done for you from your dimension scores.
@@ -49,10 +55,29 @@ weighted average; that is done for you from your dimension scores.
 Reply with one JSON object and nothing else:
 
 {"punctuation": 0.0, "voice": 0.0, "captures": 0.0, "content": 0.0,
- "format": 0.0, "notes": "one short sentence naming the differences that cost"}
+ "format": 0.0, "notes": "one short sentence naming what cost the output"}
 """.strip()
 
-CASE = """
+ANCHORED_INSTRUCTIONS = f"""
+You are scoring one dictation-cleanup output against the rubric above. You are
+shown the expected output; score how far the output departs from it.
+
+{REPLY_FORMAT}
+""".strip()
+
+BLIND_INSTRUCTIONS = f"""
+You are scoring one dictation-cleanup output against the rubric above.
+
+You are not shown a reference answer, and there is not one. Score what the output
+did to what the speaker said: whether the speaker's voice survived, whether it was
+edited past what cleanup needs, whether the meaning changed, whether the format is
+clean. Do not guess at how someone else would have written it — a wording you
+would not have chosen is not a deduction unless the rubric names it as one.
+
+{REPLY_FORMAT}
+""".strip()
+
+ANCHORED_CASE = """
 Eval case: {id} (category: {category})
 What it exercises: {exercises}
 
@@ -69,22 +94,73 @@ What it exercises: {exercises}
 </actual_output>
 """.strip()
 
+# No expected output, and no "what it exercises" either: the eval set writes that
+# line as the transformation it wants, which is the reference in prose.
+BLIND_CASE = """
+Eval case: {id} (category: {category})
+
+<dictation>
+{input}
+</dictation>
+
+<actual_output>
+{actual}
+</actual_output>
+""".strip()
+
+
+class Mode:
+    """One way of reading a case: which half of the rubric applies, what the judge
+    is shown, and where the scores land."""
+
+    def __init__(self, name, guidelines, instructions, case_template):
+        self.name = name
+        # The rubric proper. The assessor document's other sections describe the
+        # pre-ledger workflow — read the eval set yourself, append to
+        # results/scores.csv — which this supersedes.
+        self.sections = ("Scoring dimensions", guidelines)
+        self.instructions = instructions
+        self.case_template = case_template
+        self.filename = JUDGE_FILES[name]
+
+
+MODES = {
+    mode.name: mode
+    for mode in (
+        Mode("blind", "Blind scoring guidelines", BLIND_INSTRUCTIONS, BLIND_CASE),
+        Mode("anchored", "Scoring guidelines", ANCHORED_INSTRUCTIONS, ANCHORED_CASE),
+    )
+}
+DEFAULT_MODE = "blind"
+
+# What a blind prompt must not contain. The rubric is a document a human edits, so
+# a deduction rewritten against the reference would otherwise turn the blind mode
+# back into the anchored one without anything saying so.
+REFERENCE_MENTION = re.compile(r"expected output|reference (output|answer)", re.IGNORECASE)
+
 CAPTURE_TAG = re.compile(r"<capture\b")
 WEIGHT_LINE = re.compile(r"^\s*-\s+\*\*overall\*\*.*?:(.*)$", re.MULTILINE | re.IGNORECASE)
 WEIGHT = re.compile(r"([a-z]+)\s+(\d*\.?\d+)")
 JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 
 
-def rubric_text():
-    """Only the scoring half of the assessor document, which is the rubric itself."""
+def rubric_text(mode):
+    """The half of the assessor document this mode scores against, which is the
+    rubric it applies: the shared dimensions, and that mode's deduction tables."""
     sections = {
         title.strip(): body
         for title, body in re.findall(r"^## ([^\n]+)$(.*?)(?=^## |\Z)", RUBRIC.read_text(), re.MULTILINE | re.DOTALL)
     }
-    missing = [name for name in RUBRIC_SECTIONS if name not in sections]
+    missing = [name for name in mode.sections if name not in sections]
     if missing:
         raise SystemExit(f"{RUBRIC.name} no longer holds {' and '.join(missing)}; cannot judge.")
-    return "\n\n".join(f"## {name}{sections[name].rstrip()}" for name in RUBRIC_SECTIONS)
+    rubric = "\n\n".join(f"## {name}{sections[name].rstrip()}" for name in mode.sections)
+    if mode.name == "blind" and REFERENCE_MENTION.search(rubric):
+        raise SystemExit(
+            f"{RUBRIC.name}'s {' and '.join(mode.sections)} now name a reference output; "
+            "a blind reading that scores against one is an anchored reading."
+        )
+    return rubric
 
 
 def rubric_weights(rubric):
@@ -111,16 +187,23 @@ class Judge:
     measured, and the judge is chosen so that it is not.
     """
 
-    def __init__(self, backend):
+    def __init__(self, backend, mode=MODES[DEFAULT_MODE]):
         self.backend = backend
         self.model = backend.model
-        self.rubric = rubric_text()
+        self.mode = mode
+        self.rubric = rubric_text(mode)
         self.weights = rubric_weights(self.rubric)
-        self.system_prompt = f"{self.rubric}\n\n{JUDGE_INSTRUCTIONS}"
+        self.system_prompt = f"{self.rubric}\n\n{mode.instructions}"
+
+    def prompt_for(self, case, actual):
+        """What the judge is shown for one case — the whole of it, so a test can
+        read it and see for itself what the mode did or did not include."""
+        return self.mode.case_template.format(actual=actual, **case)
 
     def identity(self):
         return {
             "model": self.model,
+            "mode": self.mode.name,
             "endpoint": self.backend.endpoint,
             "runtime": self.backend.runtime(),
             "rubric": str(RUBRIC.relative_to(HERE)),
@@ -129,7 +212,7 @@ class Judge:
         }
 
     def score(self, case, actual):
-        reply = self.backend.complete(self.system_prompt, CASE.format(actual=actual, **case))
+        reply = self.backend.complete(self.system_prompt, self.prompt_for(case, actual))
         return self.read(reply, case)
 
     def read(self, reply, case):
@@ -162,7 +245,7 @@ def judge_run(run, judge):
     reproducible under different conditions, so they are reported side by side and
     never folded into one number.
     """
-    print(f"{run.run_id}\njudge: {judge.model} | rubric: {RUBRIC.name}\n---")
+    print(f"{run.run_id}\njudge: {judge.model} ({judge.mode.name}) | rubric: {RUBRIC.name}\n---")
 
     scores = []
     for case, output in run.outputs():
@@ -171,8 +254,10 @@ def judge_run(run, judge):
             "id": case["id"],
             "category": case["category"],
             # On the case, not only in the header: a Judge Score read apart from
-            # its judge means nothing, and these rows get copied around.
+            # the judge and the mode that produced it means nothing, and these rows
+            # get copied around.
             "judge_model": judge.model,
+            "judge_mode": judge.mode.name,
         }
         if output is None:
             score["error"] = "no output recorded for this case"
@@ -233,7 +318,8 @@ def report(scores):
     )
     lines = [
         scores["run_id"],
-        f"judge: {scores['judge']['model']} | rubric: {scores['judge']['rubric']} "
+        f"judge: {scores['judge']['model']} ({scores['judge']['mode']}) | "
+        f"rubric: {scores['judge']['rubric']} "
         f"({scores['judge']['rubric_sha256'][:12]})",
         "",
         header,
@@ -263,6 +349,15 @@ def main():
         default=DEFAULT_JUDGE_MODEL,
         help=f"model that grades the run (default: {DEFAULT_JUDGE_MODEL})",
     )
+    parser.add_argument(
+        "--mode",
+        choices=sorted(MODES),
+        default=DEFAULT_MODE,
+        help=(
+            "blind: the dictation and the output, no reference. anchored: the "
+            f"reference too, scored as deductions from it (default: {DEFAULT_MODE})"
+        ),
+    )
     parser.add_argument("--endpoint", default=ANTHROPIC_ENDPOINT, help="judge endpoint URL")
     arguments = parser.parse_args()
 
@@ -273,9 +368,11 @@ def main():
             "a model must not grade its own arm. Pass --judge-model."
         )
 
-    judge = Judge(AnthropicArm(arguments.judge_model, arguments.endpoint))
+    judge = Judge(AnthropicArm(arguments.judge_model, arguments.endpoint), MODES[arguments.mode])
     scores = judge_run(run, judge)
-    destination = run.directory / "judge.json"
+    # One file per mode: a blind reading never overwrites the anchored record of
+    # what that mode read, and neither is ever read as the other.
+    destination = run.directory / judge.mode.filename
     destination.write_text(json.dumps(scores, indent=2, ensure_ascii=False) + "\n")
     print(f"---\n{report(scores)}\n\nJudged: {destination}")
     return sum(1 for score in scores["cases"] if "error" in score)
