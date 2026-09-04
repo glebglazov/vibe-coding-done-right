@@ -17,6 +17,12 @@ Content preservation (R17) shows up as two asymmetric counts: words the speaker
 said and the reference kept that the output dropped, and words the output
 introduced that neither the speaker nor the reference used.
 
+An output that came back in another language than it was dictated in is not
+scored on that curve at all: a translation reads as a mildly low word score while
+being a category error, so it takes the LANG verdict of its own. The languages a
+case holds are read off its script and its function words, which is why a
+technical term inside a Russian sentence is not mistaken for English.
+
 Both eval sets score on this one axis. A role-boundary case where the model
 obeyed the dictated instruction instead of transcribing it produces text sharing
 almost no order with the reference transcript, and lands at FAIL.
@@ -31,9 +37,10 @@ from statistics import mean
 
 from ledger import ArchivedRun
 
-# Bump when the numbers change meaning: a score is readable only under the metric
-# that produced it, and archived score files outlive any one version of this file.
-METRIC = "token-edit-distance/1"
+# Bump when the numbers or the verdicts change meaning: a score is readable only
+# under the metric that produced it, and archived score files outlive any one
+# version of this file.
+METRIC = "token-edit-distance/2"
 
 # Style the harness classes as harmless, folded away before anything is measured.
 STYLE_FOLDS = {"—": "-", "–": "-", "’": "'", "‘": "'", "“": '"', "”": '"'}
@@ -46,7 +53,31 @@ CLOSE_SCORE = 0.9
 DIFF_SCORE = 0.75
 SCORE_DIGITS = 3
 
-VERDICT_ORDER = ["EXACT", "NORM", "CLOSE", "DIFF", "FAIL", "ERROR"]
+VERDICT_ORDER = ["EXACT", "NORM", "CLOSE", "DIFF", "FAIL", "LANG", "ERROR"]
+
+# The languages this eval set holds, and how a text names the ones it is written
+# in. Cyrillic script names Russian, the one Cyrillic language here; the two
+# Latin-alphabet languages are named by the function words neither of them can
+# avoid. A dictation case is a sentence or two, which is far too little text for
+# anything statistical.
+LETTER = re.compile(r"[^\W\d_]")
+CYRILLIC = re.compile(r"[\u0400-\u04ff]")
+LATIN_MARKERS = {
+    "en": {
+        "the", "and", "that", "this", "is", "are", "not", "of", "to", "for",
+        "with", "have", "you", "we", "they", "i", "but", "about", "it", "he",
+        "she", "there",
+    },
+    "de": {
+        "der", "die", "das", "und", "nicht", "ist", "sind", "ich", "wir", "sie",
+        "ihr", "euch", "dass", "ein", "eine", "einen", "zu", "mit", "für",
+        "auf", "von", "wenn", "aber", "haben", "sein", "noch", "schon", "auch",
+        "mal", "nach", "über", "werden", "würde",
+    },
+}
+# Cyrillic letters below this share of a text are a quoted word or a stray
+# character rather than the text being written in Russian.
+CYRILLIC_IS_PRESENT = 0.15
 
 
 def normalize(text):
@@ -118,11 +149,63 @@ def invention(spoken, reference, actual):
     return sum((Counter(actual) - (Counter(spoken) | Counter(reference))).values())
 
 
-def verdict(expected, actual, word_score):
+def cyrillic_share(text):
+    """How much of a text's letters are Cyrillic, or None where it has no letters."""
+    letters = LETTER.findall(text)
+    if not letters:
+        return None
+    return sum(1 for letter in letters if CYRILLIC.match(letter)) / len(letters)
+
+
+def latin_language(text):
+    """The Latin-alphabet language whose function words a text uses, as a set, so
+    that a text using neither language's words names neither.
+
+    Naming a language by the words it cannot avoid is also what keeps an English
+    technical term inside a Russian sentence — Docker, rkt — from counting as
+    English: a term is a noun, and no sentence is built out of nouns.
+    """
+    words = set(word_sequence(normalize(text)))
+    hits = {name: len(words & markers) for name, markers in LATIN_MARKERS.items()}
+    most = max(hits.values())
+    leaders = {name for name, count in hits.items() if count == most}
+    return leaders if most and len(leaders) == 1 else set()
+
+
+def languages(text):
+    """Every language of this eval set a text is written in: one, two where it
+    code-switches, or none where nothing here decides."""
+    share = cyrillic_share(text)
+    if share is None:
+        return frozenset()
+    russian = {"ru"} if share >= CYRILLIC_IS_PRESENT else set()
+    return frozenset(russian | latin_language(text))
+
+
+def language_drift(spoken_input, actual):
+    """What was dictated and what was answered, where they are not written in the
+    same languages.
+
+    A translated output is a category error rather than a bad transcript: every
+    word of it is "wrong" and yet an edit distance reads that as a mildly low
+    score, which is how a translation passes for a near miss. Sets rather than
+    single languages, so half of a code-switched sentence coming back in the
+    other half's language is named too — which is the failure the local arms
+    actually have.
+    """
+    dictated, answered = languages(spoken_input), languages(actual)
+    if dictated and answered and dictated != answered:
+        return {"input": sorted(dictated), "output": sorted(answered)}
+    return None
+
+
+def verdict(expected, actual, word_score, drift):
     if actual == expected:
         return "EXACT"
     if normalize(actual) == normalize(expected):
         return "NORM"
+    if drift:
+        return "LANG"
     if word_score > CLOSE_SCORE:
         return "CLOSE"
     if word_score > DIFF_SCORE:
@@ -141,14 +224,16 @@ def score_case(spoken_input, expected, actual):
     punctuation_score, punctuation_edits = sequence_score(
         punctuation_sequence(expected_normal), punctuation_sequence(actual_normal)
     )
+    drift = language_drift(spoken_input, actual)
     return {
-        "verdict": verdict(expected, actual, word_score),
+        "verdict": verdict(expected, actual, word_score, drift),
         "word_score": word_score,
         "word_edits": word_edits,
         "punctuation_score": punctuation_score,
         "punctuation_edits": punctuation_edits,
         "content_loss": content_loss(spoken_words, reference_words, actual_words),
         "invented": invention(spoken_words, reference_words, actual_words),
+        **({"language_drift": drift} if drift else {}),
     }
 
 
@@ -192,6 +277,15 @@ def score_run(run):
 ROW = "{id:<36} {category:<22} {verdict:<8} {word:>6} {punct:>6} {loss:>5} {invented:>4}"
 
 
+def drift_line(case):
+    """Which language a case was dictated in, and which one it came back in."""
+    drift = case["language_drift"]
+    return (
+        f"language drift: {case['id']} dictated {'+'.join(drift['input'])}, "
+        f"answered {'+'.join(drift['output'])}"
+    )
+
+
 def report(scores):
     header = ROW.format(
         id="case",
@@ -222,6 +316,9 @@ def report(scores):
                 invented=score.get("invented", "-"),
             )
         )
+    drifted = [case for case in scores["cases"] if "language_drift" in case]
+    if drifted:
+        lines += ["", *(drift_line(case) for case in drifted)]
     verdicts = " ".join(f"{name}={count}" for name, count in scores["verdicts"].items())
     lines += [
         "",

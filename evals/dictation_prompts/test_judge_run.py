@@ -20,7 +20,23 @@ from test_runner import run_tests
 
 HERE = Path(__file__).resolve().parent
 
-RUN = sorted(LEDGER.glob("*__claude-haiku-4-5-20251001__prompt_lean"))[0]
+def haiku_run():
+    """The most recent Haiku run in the ledger that still answers the eval set as
+    it stands.
+
+    A run recorded before the set grew cannot be reopened for scoring — that is
+    the ledger's own guard, and picking around it here keeps these cases about the
+    judge rather than about which run happens to be oldest.
+    """
+    for directory in sorted(LEDGER.glob("*__claude-haiku-4-5-20251001__*"), reverse=True):
+        try:
+            return ArchivedRun(directory)
+        except SystemExit:
+            continue
+    raise AssertionError("no Haiku run in the ledger answers the eval set as it stands")
+
+
+RUN = haiku_run()
 
 PERFECT = {
     "punctuation": 1,
@@ -91,7 +107,7 @@ def test_a_case_without_capture_tags_scores_captures_by_definition():
 
 
 def test_every_judged_case_carries_the_judge_that_produced_it():
-    scores = judge_archived_run(ArchivedRun(RUN), judge_with())
+    scores = judge_archived_run(RUN, judge_with())
     assert scores["judge"]["model"] == "claude-opus-5", scores["judge"]
     assert all(score["judge_model"] == "claude-opus-5" for score in scores["cases"])
     # The judge axis reports only itself: no deterministic number is read in, and
@@ -101,7 +117,9 @@ def test_every_judged_case_carries_the_judge_that_produced_it():
 
 def test_a_model_may_not_grade_its_own_arm():
     argv = sys.argv
-    sys.argv = ["judge_run.py", str(RUN), "--judge-model", "claude-haiku-4-5-20251001"]
+    sys.argv = [
+        "judge_run.py", str(RUN.directory), "--judge-model", "claude-haiku-4-5-20251001"
+    ]
     try:
         judge_run.main()
     except SystemExit as refusal:

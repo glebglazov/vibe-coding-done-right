@@ -19,7 +19,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-from compare_runs import AXIS_SEPARATION, NOT_COMPARABLE, TIE, by_category, compare, report
+from compare_runs import (
+    AXIS_SEPARATION,
+    NOT_COMPARABLE,
+    TIE,
+    by_category,
+    compare,
+    not_comparable_section,
+    report,
+)
 from ledger import (
     ArchivedRun,
     ScoredRun,
@@ -202,7 +210,8 @@ def test_a_changed_case_is_not_comparable_and_the_rest_are_untouched():
             assert cells(after, case_id) == cells(before, case_id), case_id
 
         printed = report(after, [ledger.a, ledger.c])
-        assert "voice_kept: case fingerprints differ" in printed, printed
+        notes = "\n".join(not_comparable_section(after))
+        assert "case fingerprints differ" in notes and "voice_kept" in notes, notes
         assert NOT_COMPARABLE in printed, printed
         # The case nobody may compare is quoted in neither the detail nor a mean.
         assert "total mess" not in printed, printed
@@ -275,8 +284,9 @@ def test_an_arm_that_scored_zero_reads_as_zero_and_not_as_unscored():
 
 def test_an_arm_is_compared_only_on_the_subset_it_was_asked():
     """An arm that cannot answer part of the set — an English-only model against
-    the multilingual case — records a named subset of the one eval set. The case
-    it was never asked falls out instead of scoring against an answer it never gave."""
+    the multilingual cases — records a named subset of the one eval set. The case
+    it was never asked reads n/c in its own column, and the arms that were asked it
+    are compared there as usual."""
 
     def body(ledger):
         write_eval_set(ledger.eval_set, CASES)
@@ -293,27 +303,42 @@ def test_an_arm_is_compared_only_on_the_subset_it_was_asked():
         assert "passthrough_short" not in subset["case_ids"], subset
 
         root = ledger.a.directory.parent
-        whole = record(root / "run-whole", ledger.eval_set, "model-a", OUTPUTS_A, "judge-x")
+        asked = record(root / "run-asked", ledger.eval_set, "model-a", OUTPUTS_A, "judge-x")
+        also_asked = record(
+            root / "run-also-asked", ledger.eval_set, "model-b", OUTPUTS_B, "judge-x"
+        )
         partial = record(
-            root / "run-partial", ledger.eval_set, "model-b", OUTPUTS_B, "judge-x",
+            root / "run-partial", ledger.eval_set, "model-c", OUTPUTS_B, "judge-x",
             subset=subset,
         )
         assert partial.eval_set["case_count"] == len(CASES) - 1, partial.eval_set
 
-        comparison = compare([whole, partial])
+        runs = [asked, also_asked, partial]
+        comparison = compare(runs)
         skipped = cells(comparison, "passthrough_short")
-        assert not skipped["comparable"], skipped
+        assert skipped["answered"] == {"A": True, "B": True, "C": False}, skipped
         assert "not recorded by run-partial" in skipped["note"], skipped
-        assert all(
-            case["comparable"]
-            for case in comparison["cases"]
-            if case["id"] != "passthrough_short"
-        ), comparison
+        # The two arms that were asked it are still compared on it; both answered
+        # the reference, so neither beats the other.
+        assert skipped["comparable"] and skipped["winner"]["deterministic"] == TIE, skipped
 
         passthrough = next(
             row for row in by_category(comparison) if row["category"] == "passthrough"
         )
-        assert (passthrough["compared"], passthrough["not_comparable"]) == (0, 1), passthrough
+        assert (passthrough["compared"], passthrough["not_comparable"]) == (1, 0), passthrough
+        assert passthrough["answered"] == {"A": 1, "B": 1, "C": 0}, passthrough
+        assert passthrough["deterministic"]["C"]["word_score"] is None, passthrough
+
+        printed = report(comparison, runs)
+        row = next(
+            line for line in printed.splitlines() if line.startswith("passthrough_short")
+        )
+        # Only the arm that was not asked reads n/c, in its two cells.
+        assert row.count(NOT_COMPARABLE) == 2, row
+        assert "A answered 3" in printed and "C answered 2" in printed, printed
+        notes = "\n".join(not_comparable_section(comparison))
+        assert "not recorded by run-partial" in notes, notes
+        assert "passthrough_short" in notes, notes
 
     with_ledger(body)
 

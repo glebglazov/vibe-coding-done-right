@@ -325,16 +325,26 @@ def named_subset(document, name, eval_set_path):
             f"{eval_set_path.name} defines no subset {name!r} "
             f"(it defines: {', '.join(sorted(definitions)) or 'none'})"
         )
-    excluded = set(definitions[name]["excludes_categories"])
+    admitted = admitted_categories(definitions[name], document["evals"])
     return {
         "name": name,
         "why": definitions[name]["why"],
         "case_ids": [
-            case["id"]
-            for case in document["evals"]
-            if case["category"] not in excluded
+            case["id"] for case in document["evals"] if case["category"] in admitted
         ],
     }
+
+
+def admitted_categories(definition, cases):
+    """The categories a subset admits: the ones it names, or every one it does not
+    exclude.
+
+    A subset is written whichever way says less. An English-only arm is every
+    category but one; a multilingual reading is one category out of eight.
+    """
+    if "includes_categories" in definition:
+        return set(definition["includes_categories"])
+    return {case["category"] for case in cases} - set(definition["excludes_categories"])
 
 
 def repo_commit():

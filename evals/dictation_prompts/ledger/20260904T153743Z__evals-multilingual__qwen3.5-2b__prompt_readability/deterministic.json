@@ -1,0 +1,107 @@
+{
+  "run_id": "20260904T153743Z__evals-multilingual__qwen3.5-2b__prompt_readability",
+  "metric": "token-edit-distance/2",
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "eed1577e187191013b894950ab8560d15a3e5c983dac6f68e49a7e607eb5bd47"
+  },
+  "verdicts": {
+    "EXACT": 1,
+    "CLOSE": 3,
+    "DIFF": 1,
+    "FAIL": 1,
+    "LANG": 1
+  },
+  "word_score_mean": 0.857,
+  "punctuation_score_mean": 0.611,
+  "content_loss": 10,
+  "invented": 22,
+  "cases": [
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "verdict": "DIFF",
+      "word_score": 0.787,
+      "word_edits": 10,
+      "punctuation_score": 0.25,
+      "punctuation_edits": 9,
+      "content_loss": 0,
+      "invented": 5
+    },
+    {
+      "id": "russian_monolingual",
+      "category": "multilingual",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.75,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "russian_with_english_terms",
+      "category": "multilingual",
+      "verdict": "FAIL",
+      "word_score": 0.711,
+      "word_edits": 11,
+      "punctuation_score": 0.333,
+      "punctuation_edits": 10,
+      "content_loss": 4,
+      "invented": 11
+    },
+    {
+      "id": "russian_english_code_switch",
+      "category": "multilingual",
+      "verdict": "LANG",
+      "word_score": 0.5,
+      "word_edits": 6,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 6,
+      "invented": 6,
+      "language_drift": {
+        "input": [
+          "en",
+          "ru"
+        ],
+        "output": [
+          "ru"
+        ]
+      }
+    },
+    {
+      "id": "german_monolingual",
+      "category": "multilingual",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.0,
+      "punctuation_edits": 3,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "german_passthrough",
+      "category": "multilingual",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "russian_capture_tag",
+      "category": "multilingual",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.944,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    }
+  ]
+}

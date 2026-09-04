@@ -1,0 +1,87 @@
+{
+  "run_id": "20260904T153651Z__evals-multilingual__gemma4-e2b__prompt_readability",
+  "recorded_at": "2026-09-04T15:36:51Z",
+  "repo_commit": "309238817fefc6242ecdaacd44e58076962ad10b",
+  "arm": {
+    "model": "gemma4:e2b",
+    "endpoint": "http://127.0.0.1:11434/v1/chat/completions",
+    "runtime": "ollama 0.33.2",
+    "prompt_name": "prompt_readability",
+    "prompt_sha256": "c45255b56888a22aa59d29adaef5c62193bf2af5c979862f9db1ce69e23fb7b5",
+    "sampling": {
+      "temperature": 0,
+      "seed": 0,
+      "max_tokens": 2048
+    },
+    "thinking_disabled": null
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "eed1577e187191013b894950ab8560d15a3e5c983dac6f68e49a7e607eb5bd47",
+    "case_count": 7,
+    "subset": {
+      "name": "multilingual",
+      "why": "The non-English category read on its own. An arm asked this subset answers every case of that category and nothing else, so two arms measured here compare case for case, and an arm recorded over the whole set answers the same cases and stays comparable with both.",
+      "case_ids": [
+        "russian_mixed",
+        "russian_monolingual",
+        "russian_with_english_terms",
+        "russian_english_code_switch",
+        "german_monolingual",
+        "german_passthrough",
+        "russian_capture_tag"
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "case_fingerprint": "ed58e06a2a5a0e0f8dd79934febad1313e2ae64f781076b43d461e41ccfa88e7",
+      "latency_ms": 16802,
+      "output_file": "outputs/russian_mixed.txt"
+    },
+    {
+      "id": "russian_monolingual",
+      "category": "multilingual",
+      "case_fingerprint": "3f0649e660a19a4559c8a725c3b2b0adb247f0189753b8c05f6e923051bebf12",
+      "latency_ms": 5171,
+      "output_file": "outputs/russian_monolingual.txt"
+    },
+    {
+      "id": "russian_with_english_terms",
+      "category": "multilingual",
+      "case_fingerprint": "cb04680d479b70a13891e7d1ebc0a8b535b650cd72dc85875fdab353602f0281",
+      "latency_ms": 7558,
+      "output_file": "outputs/russian_with_english_terms.txt"
+    },
+    {
+      "id": "russian_english_code_switch",
+      "category": "multilingual",
+      "case_fingerprint": "2a26fecd7331b92e16e965ab04ea363da3358da36059a67de5f35a790ff05b1c",
+      "latency_ms": 5449,
+      "output_file": "outputs/russian_english_code_switch.txt"
+    },
+    {
+      "id": "german_monolingual",
+      "category": "multilingual",
+      "case_fingerprint": "bb50e56ff52aa9884744d7621c3fea1b5cc464c12d00860ba1d30543d77a03f7",
+      "latency_ms": 6294,
+      "output_file": "outputs/german_monolingual.txt"
+    },
+    {
+      "id": "german_passthrough",
+      "category": "multilingual",
+      "case_fingerprint": "0a262f84912e7fb9a2ed0531fe1ea147b6144f2adc855d5c9b74b87848a55414",
+      "latency_ms": 4331,
+      "output_file": "outputs/german_passthrough.txt"
+    },
+    {
+      "id": "russian_capture_tag",
+      "category": "multilingual",
+      "case_fingerprint": "d9e2baefd99ef74250c3e5a1ab4b6a6bff13d7d45c96122dcf35f59184b36b79",
+      "latency_ms": 6298,
+      "output_file": "outputs/russian_capture_tag.txt"
+    }
+  ]
+}

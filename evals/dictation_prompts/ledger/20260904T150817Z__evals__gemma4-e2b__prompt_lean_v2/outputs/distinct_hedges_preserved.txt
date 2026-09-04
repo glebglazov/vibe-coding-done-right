@@ -1,0 +1,1 @@
+I guess, maybe we could probably just skip the integration tests this time. I think nobody really looks at them anymore.

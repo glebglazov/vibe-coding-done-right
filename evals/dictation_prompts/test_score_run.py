@@ -38,6 +38,22 @@ FALSE_START_KEPT = FALSE_START_CASE["expected_output"].replace(
 )
 
 
+GERMAN_CASE = CASES["german_monolingual"]
+# The German reference's own English rendering: Tatoeba #5683710, the human
+# translation of #5683711, which is the sentence the case quotes. Nothing here
+# is written by a model, least of all by one under test.
+GERMAN_IN_ENGLISH = (
+    "The project was supposed to be done yesterday. "
+    "If any of you ever miss a deadline again, heads will roll!"
+)
+
+CODE_SWITCH_CASE = CASES["russian_english_code_switch"]
+# What S1-mini answered this case in run
+# 20260904T153649Z__evals-multilingual__hf.co-superwhisper-s1-mini-GGUF-Q4_K_M__s1_mini:
+# the Russian frame kept, the English clause translated into Russian.
+CODE_SWITCH_TRANSLATED = "Я думал, что это хорошая идея, но сейчас я не так уверенно."
+
+
 def score_reorder(actual):
     return score_case(REORDER_CASE["input"], REORDER_CASE["expected_output"], actual)
 
@@ -104,6 +120,43 @@ def test_content_loss_and_invention_are_counted_asymmetrically():
     # "because" is the speaker's word the reference kept; "however" is neither's.
     assert invented["content_loss"] == 1, invented
     assert invented["invented"] == 1, invented
+
+
+def test_german_answered_in_english_is_named_a_language_change():
+    score = score_case(
+        GERMAN_CASE["input"], GERMAN_CASE["expected_output"], GERMAN_IN_ENGLISH
+    )
+    assert score["verdict"] == "LANG", score
+    assert score["language_drift"] == {"input": ["de"], "output": ["en"]}, score
+    # Why the verdict has to exist: the punctuation of a translation is perfect,
+    # and a truncated German answer scores about as low on words as this does. The
+    # numbers cannot tell a category error from a bad transcript; the verdict does.
+    assert score["punctuation_score"] == 1.0, score
+    truncated = score_case(GERMAN_CASE["input"], GERMAN_CASE["expected_output"], "Das Projekt.")
+    assert truncated["verdict"] == "FAIL", truncated
+    assert abs(truncated["word_score"] - score["word_score"]) < 0.2, (truncated, score)
+
+
+def test_translating_half_a_code_switched_sentence_is_named():
+    score = score_case(
+        CODE_SWITCH_CASE["input"],
+        CODE_SWITCH_CASE["expected_output"],
+        CODE_SWITCH_TRANSLATED,
+    )
+    assert score["verdict"] == "LANG", score
+    assert score["language_drift"] == {"input": ["en", "ru"], "output": ["ru"]}, score
+    # The Russian half still matches, so the primary score reads a translated
+    # clause as a near miss rather than as the category error it is.
+    assert score["word_score"] == 0.5, score
+
+
+def test_an_english_term_in_a_russian_sentence_is_not_a_language_change():
+    """A Russian sentence naming Docker and rkt is still one language: a technical
+    term is a noun, and no sentence is built out of nouns."""
+    case = CASES["russian_with_english_terms"]
+    score = score_case(case["input"], case["expected_output"], case["expected_output"])
+    assert score["verdict"] == "EXACT", score
+    assert "language_drift" not in score, score
 
 
 def test_removing_a_filler_the_reference_also_drops_is_not_content_loss():

@@ -1,9 +1,13 @@
 {
-  "description": "Fresh eval set for the readability-with-style-preservation dictation prompt. Expected outputs represent what a careful human would write if they polished the dictation (aggressive-readability target), not mechanical transformations. Each case has a `category` and `exercises` tag. Categories: readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual.",
+  "description": "Fresh eval set for the readability-with-style-preservation dictation prompt. Expected outputs represent what a careful human would write if they polished the dictation (aggressive-readability target), not mechanical transformations. Each case has a `category` and `exercises` tag. New cases record how their reference was authored in `reference_source`. Categories: readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual.",
   "subsets": {
     "english": {
       "why": "An English-only arm must not be asked the non-English cases. Naming the subset here keeps one eval set: the arm records the cases it admits, and a comparison drops the rest as not comparable rather than a fork of the set putting the same references in two places.",
       "excludes_categories": ["multilingual"]
+    },
+    "multilingual": {
+      "why": "The non-English category read on its own. An arm asked this subset answers every case of that category and nothing else, so two arms measured here compare case for case, and an arm recorded over the whole set answers the same cases and stays comparable with both.",
+      "includes_categories": ["multilingual"]
     }
   },
   "evals": [
@@ -159,7 +163,56 @@
       "category": "multilingual",
       "exercises": "Russian dictation: reorder 'два месяца как минимум' -> 'как минимум два месяца'; natural punctuation; preserve 'Слушай' opener.",
       "input": "слушай я думаю нам нужно переехать на новый фреймворк потому что старый постоянно ломается и документация у него отстой и никто в команде его не любит. я уже два месяца как минимум об этом думаю но всё не было времени нормально обсудить",
-      "expected_output": "Слушай, я думаю, нам нужно переехать на новый фреймворк, потому что старый постоянно ломается, документация у него отстой, и никто в команде его не любит. Я уже как минимум два месяца об этом думаю, но всё не было времени нормально обсудить."
+      "expected_output": "Слушай, я думаю, нам нужно переехать на новый фреймворк, потому что старый постоянно ломается, документация у него отстой, и никто в команде его не любит. Я уже как минимум два месяца об этом думаю, но всё не было времени нормально обсудить.",
+      "reference_source": "Authored together with the original eval set by the Claude model family, before this field existed. Retained as the legacy multilingual case: an Anthropic arm answering it is answering a reference from its own model family, which the six cases beside it are not."
+    },
+    {
+      "id": "russian_monolingual",
+      "category": "multilingual",
+      "exercises": "Russian monolingual: restore the sentence boundary and the commas, keep every word, answer in Russian.",
+      "reference_source": "Tatoeba sentence #1682438 (CC BY 2.0 FR), verbatim; the input is that reference lowercased with its punctuation removed.",
+      "input": "у меня на компьютере установлено слишком много программ может быть если я удалю некоторые из них мой компьютер будет работать намного быстрее",
+      "expected_output": "У меня на компьютере установлено слишком много программ. Может быть, если я удалю некоторые из них, мой компьютер будет работать намного быстрее."
+    },
+    {
+      "id": "russian_with_english_terms",
+      "category": "multilingual",
+      "exercises": "English technical terms inside Russian sentences: Kubernetes, K8s, Docker and rkt must come back with their own capitalization, untranslated and untransliterated.",
+      "reference_source": "The first two sentences of the Russian Wikipedia article «Kubernetes» (revision 152709276, CC BY-SA 4.0), verbatim; the input is that reference lowercased with its punctuation removed.",
+      "input": "kubernetes k8s открытое программное обеспечение для оркестровки контейнеризированных приложений автоматизации их развёртывания масштабирования и координации в условиях кластера поддерживает основные технологии контейнеризации включая docker rkt также возможна поддержка технологий аппаратной виртуализации",
+      "expected_output": "Kubernetes (K8s) — открытое программное обеспечение для оркестровки контейнеризированных приложений — автоматизации их развёртывания, масштабирования и координации в условиях кластера. Поддерживает основные технологии контейнеризации, включая Docker, rkt, также возможна поддержка технологий аппаратной виртуализации."
+    },
+    {
+      "id": "russian_english_code_switch",
+      "category": "multilingual",
+      "exercises": "Code-switch mid-sentence: the Russian frame and the English clause both survive as dictated, and neither half is translated into the other's language.",
+      "reference_source": "Two verbatim halves of one aligned Tatoeba pair — the Russian clause of #13259226 and the English clause of its translation #11611733 (CC BY 2.0 FR) — spliced at the comma both sources carry; the input is that reference lowercased with its punctuation removed, a contraction's apostrophe kept as the set's other inputs keep it.",
+      "input": "я думал что это хорошая идея but now i'm not so sure",
+      "expected_output": "Я думал, что это хорошая идея, but now I'm not so sure."
+    },
+    {
+      "id": "german_monolingual",
+      "category": "multilingual",
+      "exercises": "German dictation: restore noun capitalization, the sentence boundary and the exclamation, and answer in German rather than translating into English.",
+      "reference_source": "Tatoeba sentence #5683711 (CC BY 2.0 FR), verbatim; the input is that reference lowercased with its punctuation removed.",
+      "input": "das projekt hätte eigentlich gestern fertig sein müssen wenn einer von euch je wieder eine frist versäumt dann rollen köpfe",
+      "expected_output": "Das Projekt hätte eigentlich gestern fertig sein müssen. Wenn einer von euch je wieder eine Frist versäumt, dann rollen Köpfe!"
+    },
+    {
+      "id": "german_passthrough",
+      "category": "multilingual",
+      "exercises": "Non-English passthrough: the input is already correct German, so the only correct answer is the input returned unchanged — no translation, no rewriting.",
+      "reference_source": "Tatoeba sentence #12567092 (CC BY 2.0 FR), verbatim; the input is the same sentence unchanged, which is what makes the case a passthrough.",
+      "input": "Wollen wir irgendwo zusammen einen Kaffee trinken gehen?",
+      "expected_output": "Wollen wir irgendwo zusammen einen Kaffee trinken gehen?"
+    },
+    {
+      "id": "russian_capture_tag",
+      "category": "multilingual",
+      "exercises": "Russian prose around a capture block: the <capture id=\"1\"> block comes back byte-for-byte, Swift identifiers included, while the Russian around it is punctuated.",
+      "reference_source": "Two verbatim Tatoeba sentences (#7862116 and #7110376, CC BY 2.0 FR) as the prose; the capture block quotes the stored properties of Shared/Substitutions/SubstitutionTombstone.swift in this repository and round-trips unchanged. The input is the prose lowercased with its punctuation removed, and the capture block byte-for-byte.",
+      "input": "вот вам простейший пример я не уверен что это хорошая идея\n\n<capture id=\"1\">struct SubstitutionTombstone: Codable, Equatable, Sendable {\n    let substitutionID: UUID\n    let deletedAt: Date\n}</capture>",
+      "expected_output": "Вот вам простейший пример. Я не уверен, что это хорошая идея.\n\n<capture id=\"1\">struct SubstitutionTombstone: Codable, Equatable, Sendable {\n    let substitutionID: UUID\n    let deletedAt: Date\n}</capture>"
     }
   ]
 }
