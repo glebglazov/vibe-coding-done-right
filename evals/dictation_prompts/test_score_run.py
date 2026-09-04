@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from score_run import CLOSE_SCORE, score_case
+from test_runner import run_tests
 
 HERE = Path(__file__).resolve().parent
 
@@ -111,19 +112,5 @@ def test_removing_a_filler_the_reference_also_drops_is_not_content_loss():
     assert score["content_loss"] == 0, score
 
 
-def main():
-    failures = 0
-    for name, case in sorted(globals().items()):
-        if not name.startswith("test_"):
-            continue
-        try:
-            case()
-            print(f"PASS {name}")
-        except AssertionError as failure:
-            failures += 1
-            print(f"FAIL {name}: {failure}")
-    return failures
-
-
 if __name__ == "__main__":
-    sys.exit(1 if main() else 0)
+    sys.exit(1 if run_tests(globals()) else 0)

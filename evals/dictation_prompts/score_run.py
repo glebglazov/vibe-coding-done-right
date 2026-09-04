@@ -193,21 +193,22 @@ ROW = "{id:<36} {category:<22} {verdict:<8} {word:>6} {punct:>6} {loss:>5} {inve
 
 
 def report(scores):
+    header = ROW.format(
+        id="case",
+        category="category",
+        verdict="verdict",
+        word="word",
+        punct="punct",
+        loss="loss",
+        invented="inv",
+    )
     lines = [
         scores["run_id"],
         f"metric: {scores['metric']} | set: {scores['eval_set']['name']} "
         f"({scores['eval_set']['fingerprint'][:12]})",
         "",
-        ROW.format(
-            id="case",
-            category="category",
-            verdict="verdict",
-            word="word",
-            punct="punct",
-            loss="loss",
-            invented="inv",
-        ),
-        "-" * 86,
+        header,
+        "-" * len(header),
     ]
     for score in scores["cases"]:
         lines.append(

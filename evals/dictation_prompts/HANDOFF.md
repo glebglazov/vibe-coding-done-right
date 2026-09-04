@@ -203,6 +203,7 @@ Include:
 - `test_score_run.py` — the metric's own cases.
 - `test_judge_run.py` — the judge's rubric arithmetic and its contestant refusal.
 - `test_compare_runs.py` — what a comparison may and may not compare.
+- `test_runner.py` — the runner the three test files share.
 - `ledger/<run-id>/manifest.json` — what produced the run.
 - `ledger/<run-id>/outputs/<case>.txt` — the arm's raw output, byte-for-byte.
 - `ledger/<run-id>/deterministic.json` — the deterministic scores.

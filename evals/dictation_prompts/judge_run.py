@@ -81,6 +81,9 @@ def rubric_text():
         title.strip(): body
         for title, body in re.findall(r"^## ([^\n]+)$(.*?)(?=^## |\Z)", RUBRIC.read_text(), re.MULTILINE | re.DOTALL)
     }
+    missing = [name for name in RUBRIC_SECTIONS if name not in sections]
+    if missing:
+        raise SystemExit(f"{RUBRIC.name} no longer holds {' and '.join(missing)}; cannot judge.")
     return "\n\n".join(f"## {name}{sections[name].rstrip()}" for name in RUBRIC_SECTIONS)
 
 
@@ -219,21 +222,22 @@ ROW = "{id:<36} {overall:>7} {content:>7} {punctuation:>11} {voice:>6} {captures
 
 
 def report(scores):
+    header = ROW.format(
+        id="case",
+        overall="overall",
+        content="content",
+        punctuation="punctuation",
+        voice="voice",
+        captures="captures",
+        format="format",
+    )
     lines = [
         scores["run_id"],
         f"judge: {scores['judge']['model']} | rubric: {scores['judge']['rubric']} "
         f"({scores['judge']['rubric_sha256'][:12]})",
         "",
-        ROW.format(
-            id="case",
-            overall="overall",
-            content="content",
-            punctuation="punctuation",
-            voice="voice",
-            captures="captures",
-            format="format",
-        ),
-        "-" * 86,
+        header,
+        "-" * len(header),
     ]
     for score in scores["cases"]:
         dimensions = score.get("dimensions", {})

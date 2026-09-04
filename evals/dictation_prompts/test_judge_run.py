@@ -16,6 +16,7 @@ from pathlib import Path
 import judge_run
 from judge_run import Judge, judge_run as judge_archived_run
 from ledger import LEDGER, ArchivedRun
+from test_runner import run_tests
 
 HERE = Path(__file__).resolve().parent
 
@@ -111,19 +112,5 @@ def test_a_model_may_not_grade_its_own_arm():
         sys.argv = argv
 
 
-def main():
-    failures = 0
-    for name, test in sorted(globals().items()):
-        if not name.startswith("test_"):
-            continue
-        try:
-            test()
-            print(f"PASS {name}")
-        except AssertionError as failure:
-            failures += 1
-            print(f"FAIL {name}: {failure}")
-    return failures
-
-
 if __name__ == "__main__":
-    sys.exit(1 if main() else 0)
+    sys.exit(1 if run_tests(globals()) else 0)

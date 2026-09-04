@@ -22,6 +22,7 @@ from pathlib import Path
 from compare_runs import AXIS_SEPARATION, NOT_COMPARABLE, TIE, compare, report
 from ledger import ArchivedRun, ScoredRun, case_fingerprint, eval_set_fingerprint
 from score_run import score_run
+from test_runner import run_tests
 
 CASES = [
     {
@@ -251,19 +252,5 @@ def test_two_eval_sets_are_never_compared():
     with_ledger(body)
 
 
-def main():
-    failures = 0
-    for name, case in sorted(globals().items()):
-        if not name.startswith("test_"):
-            continue
-        try:
-            case()
-            print(f"PASS {name}")
-        except AssertionError as failure:
-            failures += 1
-            print(f"FAIL {name}: {failure}")
-    return failures
-
-
 if __name__ == "__main__":
-    sys.exit(1 if main() else 0)
+    sys.exit(1 if run_tests(globals()) else 0)
