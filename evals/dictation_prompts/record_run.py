@@ -321,7 +321,7 @@ def named_subset(document, name, eval_set_path):
     """
     definitions = document.get("subsets", {})
     if name not in definitions:
-        sys.exit(
+        raise SystemExit(
             f"{eval_set_path.name} defines no subset {name!r} "
             f"(it defines: {', '.join(sorted(definitions)) or 'none'})"
         )
@@ -357,7 +357,7 @@ def record(arm, prompt_path, eval_set_path, subset_name=None):
     # A manifest names its set by filename, so a set living anywhere else would
     # archive a run nothing could rescore from a fresh checkout.
     if eval_set_path.parent != HERE:
-        sys.exit(
+        raise SystemExit(
             f"eval set must sit beside the ledger commands ({HERE}): {eval_set_path}"
         )
     document = json.loads(eval_set_path.read_text())

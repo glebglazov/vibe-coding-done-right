@@ -108,6 +108,10 @@ command after recording, scoring or judging.
 
 ## Local models vs Haiku (2026-09-04)
 
+Two of this section's readings are superseded below, by the S1-mini section: `qwen3.5:2b` was
+re-measured with thinking off and does answer, and `gemma4:e2b` is no longer the only viable local
+candidate. The six rows here stand as the record of what these six arms did.
+
 The three-model, two-prompt matrix this whole set exists to produce: `claude-haiku-4-5-20251001`,
 `qwen3.5:2b` and `gemma4:e2b`, each on `prompt_lean` and `prompt_readability`, over `evals.json`.
 Both local models were pulled via `ollama pull` and confirmed to serve at
