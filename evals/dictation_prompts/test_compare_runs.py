@@ -19,7 +19,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from compare_runs import AXIS_SEPARATION, NOT_COMPARABLE, TIE, compare, report
+from compare_runs import AXIS_SEPARATION, NOT_COMPARABLE, TIE, by_category, compare, report
 from ledger import ArchivedRun, ScoredRun, case_fingerprint, eval_set_fingerprint
 from score_run import score_run
 from test_runner import run_tests
@@ -64,7 +64,7 @@ def write_eval_set(path, cases):
     path.write_text(json.dumps({"evals": cases}, ensure_ascii=False))
 
 
-def record(directory, eval_set_path, model, outputs, judged_by=None):
+def record(directory, eval_set_path, model, outputs, judged_by=None, judge_overall=JUDGE_OVERALL):
     """One run archived and scored as the ledger's own commands would leave it."""
     cases = json.loads(eval_set_path.read_text())["evals"]
     (directory / "outputs").mkdir(parents=True)
@@ -119,7 +119,7 @@ def record(directory, eval_set_path, model, outputs, judged_by=None):
                             "id": case["id"],
                             "category": case["category"],
                             "judge_model": judged_by,
-                            "overall": JUDGE_OVERALL[case["id"]],
+                            "overall": judge_overall[case["id"]],
                         }
                         for case in cases
                     ],
@@ -231,6 +231,36 @@ def test_comparing_reads_the_scores_and_not_the_eval_set():
 
         printed = report(without_set, [ledger.a, ledger.b])
         assert "no longer holds the case" in printed, printed
+
+    with_ledger(body)
+
+
+def test_an_arm_that_scored_zero_reads_as_zero_and_not_as_unscored():
+    """A category mean of 0.0 is a measurement — the worst arm must still be
+    readable per category, not blanked like an arm nobody scored."""
+
+    def body(ledger):
+        silent = record(
+            ledger.a.directory.parent / "run-silent",
+            ledger.eval_set,
+            "model-silent",
+            {case["id"]: "" for case in CASES},
+            "judge-x",
+            {case["id"]: 0.0 for case in CASES},
+        )
+        comparison = compare([ledger.c, silent])
+        category = next(
+            row for row in by_category(comparison)
+            if row["category"] == "readability_transform"
+        )
+        assert category["deterministic"]["B"]["word_score"] == 0.0, category
+        assert category["judge"]["B"] == 0.0, category
+
+        printed = report(comparison, [ledger.c, silent]).splitlines()
+        rows = [line for line in printed if line.startswith("readability_transform")]
+        # One row per axis, and neither may spend the unscored sentinel on a zero.
+        assert len(rows) == 2, rows
+        assert all(row.rstrip().endswith("0.0") for row in rows), rows
 
     with_ledger(body)
 

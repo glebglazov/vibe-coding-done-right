@@ -191,6 +191,12 @@ def run_id(eval_set_name, model, prompt_name, recorded_at):
 
 
 def record(arm, prompt_path, eval_set_path):
+    # A manifest names its set by filename, so a set living anywhere else would
+    # archive a run nothing could rescore from a fresh checkout.
+    if eval_set_path.parent != HERE:
+        sys.exit(
+            f"eval set must sit beside the ledger commands ({HERE}): {eval_set_path}"
+        )
     cases = json.loads(eval_set_path.read_text())["evals"]
     system_prompt = prompt_path.read_text()
     recorded_at = datetime.now(timezone.utc)

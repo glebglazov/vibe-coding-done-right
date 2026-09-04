@@ -42,7 +42,7 @@ def eval_set_cases(name):
     """The cases of the eval set a run names, as they stand on disk now.
 
     A run names its set by filename, read from beside this module; an absolute
-    path is honoured as given, which is how a scratch copy of a set is read.
+    path is honoured as given, which is how a test's scratch copy of a set is read.
     """
     return read_json(HERE / name)["evals"]
 

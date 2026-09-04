@@ -234,6 +234,12 @@ def winner_text(case, axis):
     return case["winner"][axis] or UNSCORED
 
 
+def mean_text(value):
+    """A category mean, where a measured 0.0 must read as 0.0 and only an absent
+    mean reads as unscored."""
+    return UNSCORED if value is None else f"{value}"
+
+
 def score_text(cell, key, comparable):
     if not comparable:
         return NOT_COMPARABLE
@@ -281,7 +287,7 @@ def deterministic_section(comparison):
             category["compared"],
             category["not_comparable"],
             *(
-                category["deterministic"][label]["word_score"] or UNSCORED
+                mean_text(category["deterministic"][label]["word_score"])
                 for label in labels
             ),
         ]
@@ -350,7 +356,7 @@ def judge_section(comparison):
         [
             category["category"],
             category["compared"],
-            *(category["judge"][label] or UNSCORED for label in labels),
+            *(mean_text(category["judge"][label]) for label in labels),
         ]
         for category in by_category(comparison)
     ]
