@@ -1,0 +1,343 @@
+{
+  "run_id": "20260904T115807Z__evals__gemma4-e2b__prompt_readability",
+  "judged_at": "2026-09-04T12:09:59Z",
+  "judge": {
+    "model": "claude-opus-5",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "runtime": "anthropic-messages-api 2023-06-01",
+    "rubric": "agents/assessor.md",
+    "rubric_sha256": "9bd7346d6d5017895b04dea9376de4bbe330908b358ddc5118f147f34ff105f1",
+    "sampling": {
+      "max_tokens": 2048
+    }
+  },
+  "weights": {
+    "punctuation": 0.2,
+    "voice": 0.2,
+    "captures": 0.15,
+    "content": 0.3,
+    "format": 0.15
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "b2081896b1620a31184b35a0031baa67df3a54b70e26639529a164e5495679de"
+  },
+  "overall_mean": 0.925,
+  "dimension_means": {
+    "punctuation": 0.873,
+    "voice": 0.952,
+    "captures": 1.0,
+    "content": 0.868,
+    "format": 1.0
+  },
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.85,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.6,
+        "format": 1.0
+      },
+      "notes": "Hedges left trailing with commas instead of fronted as 'I think...' / 'I guess...', so the target readability transform wasn't applied, though meaning and tone are intact."
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.865,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.55,
+        "format": 1.0
+      },
+      "notes": "Failed the target transform: the adverb 'eventually' was left in the split-infinitive position instead of moved before 'wants', though punctuation, voice, and formatting are correct."
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.845,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.55,
+        "format": 1.0
+      },
+      "notes": "Both redundant 'I think' tics were left in (the core transform), and the comma before 'because' is missing."
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.97,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a comma instead of the colon that sets off the list of parallel symptoms; otherwise identical."
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period instead of the expected em-dash before 'we should just rewrite', otherwise identical."
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Added an unnecessary comma after the opening \"So\"; otherwise identical to expected."
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period instead of the expected em-dash to join the clauses; all hedges and meaning preserved."
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.99,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Added extra (grammatically defensible) commas after each conditional clause, otherwise identical to expected."
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.965,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Used a comma instead of the colon after the wordy intro and retained an extra 'and' before 'users', but meaning, voice, and formatting are intact."
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "overall": 0.81,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 0.85,
+        "captures": 1.0,
+        "content": 0.5,
+        "format": 1.0
+      },
+      "notes": "Failed to collapse the self-correction — kept the discarded 'Postgres' choice and the 'actually wait no' filler instead of stating only the final decision."
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "overall": 0.815,
+      "dimensions": {
+        "punctuation": 0.6,
+        "voice": 0.85,
+        "captures": 1.0,
+        "content": 0.75,
+        "format": 1.0
+      },
+      "notes": "Closing quote misplaced so the narrator's final sentence is swallowed into the quote (meaning change), plus a period instead of the em-dash and an added comma after \"So\"."
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.91,
+      "dimensions": {
+        "punctuation": 0.65,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Replaced all expected em-dash asides with periods/semicolon and dropped the comma before 'because', slightly clipping the conversational flow; content, fillers, and format otherwise correct."
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.95,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a comma instead of the em-dash after 'gamified it' and kept 'and...and' instead of the expected serial commas, plus a missing comma before 'and you could unlock'."
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.8,
+      "dimensions": {
+        "punctuation": 0.6,
+        "voice": 0.7,
+        "captures": 1.0,
+        "content": 0.8,
+        "format": 1.0
+      },
+      "notes": "Dropped the 'kind of' voice marker and 'thing', used a period instead of the em-dash, added a stray comma after 'So', and left 'sixty seconds' unnumeralized."
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.81,
+      "dimensions": {
+        "punctuation": 0.8,
+        "voice": 0.7,
+        "captures": 1.0,
+        "content": 0.7,
+        "format": 1.0
+      },
+      "notes": "Kept filler 'basically', left 'forty-five' unnumeralized, dropped the semantic 'I mean' and sentence-initial 'And', and used a semicolon where an em-dash was expected."
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Missing the comma before 'and also'; otherwise identical to expected."
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "judge_model": "claude-opus-5",
+      "overall": 0.96,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Added comma after \"So\" and used a period instead of the expected em-dash before \"can you take a look?\"; capture block preserved exactly."
+    },
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "overall": 0.9,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.7,
+        "format": 1.0
+      },
+      "notes": "Failed the key reordering of 'два месяца как минимум' -> 'как минимум два месяца' and retained the extra 'и' before 'документация' that the expected output dropped."
+    }
+  ]
+}

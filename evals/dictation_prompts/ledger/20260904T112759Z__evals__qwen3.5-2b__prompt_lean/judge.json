@@ -1,0 +1,343 @@
+{
+  "run_id": "20260904T112759Z__evals__qwen3.5-2b__prompt_lean",
+  "judged_at": "2026-09-04T12:02:13Z",
+  "judge": {
+    "model": "claude-opus-5",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "runtime": "anthropic-messages-api 2023-06-01",
+    "rubric": "agents/assessor.md",
+    "rubric_sha256": "9bd7346d6d5017895b04dea9376de4bbe330908b358ddc5118f147f34ff105f1",
+    "sampling": {
+      "max_tokens": 2048
+    }
+  },
+  "weights": {
+    "punctuation": 0.2,
+    "voice": 0.2,
+    "captures": 0.15,
+    "content": 0.3,
+    "format": 0.15
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "b2081896b1620a31184b35a0031baa67df3a54b70e26639529a164e5495679de"
+  },
+  "overall_mean": 0.143,
+  "dimension_means": {
+    "punctuation": 0.0,
+    "voice": 0.0,
+    "captures": 0.955,
+    "content": 0.0,
+    "format": 0.0
+  },
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty, so all content, punctuation, and voice are lost and nothing was produced."
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is entirely empty, so no punctuation, voice, or content was produced and nothing usable was returned."
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output was completely empty, so no punctuation, voice, or content was preserved and nothing usable was returned."
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty, losing all content, punctuation, and voice; no text produced at all."
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty — no punctuation, voice, or content preserved, and nothing usable was produced."
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty — no cleaned text produced at all, so all meaning, punctuation, and voice are lost."
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty: no text produced, so all content, punctuation, voice, and format requirements fail."
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is entirely empty, losing all content, punctuation, and voice; no captures existed so that dimension is unaffected."
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is entirely empty, so all content, punctuation, and voice are lost and nothing usable was returned."
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is entirely empty: no text, no punctuation, and the whole cascade sentence is lost."
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty: no text produced, so all content, punctuation, voice, and format requirements fail."
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty; no punctuation, voice, or content preserved and nothing produced at all (no captures in eval, so captures scores 1.00)."
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty — no text produced, so all content, punctuation, voice, and format requirements fail."
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty, so all content, punctuation, voice, and formatting are missing."
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "The output is entirely empty, so no punctuation, voice, or content was produced at all."
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty, so no punctuation, voice, or content was produced and nothing usable was returned."
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty — no text produced, so all content, punctuation, voice, and format requirements fail."
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty, so no punctuation, voice, or content was produced and the format fails entirely."
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty — the entire sentence, its capitalization, and question mark are missing."
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty — all content, punctuation, and voice lost; no usable text returned."
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "judge_model": "claude-opus-5",
+      "overall": 0.0,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 0.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is entirely empty: no cleaned text, no punctuation, and the capture block is missing."
+    },
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "overall": 0.15,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Output is empty — no text produced, so all content, punctuation, and voice requirements are unmet."
+    }
+  ]
+}

@@ -1,0 +1,177 @@
+{
+  "run_id": "20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability",
+  "recorded_at": "2026-09-04T11:44:58Z",
+  "repo_commit": "4562b52b04e6cd2ecce02529263e0cf9d16a5881",
+  "arm": {
+    "model": "claude-haiku-4-5-20251001",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "runtime": "anthropic-messages-api 2023-06-01",
+    "prompt_name": "prompt_readability",
+    "prompt_sha256": "c45255b56888a22aa59d29adaef5c62193bf2af5c979862f9db1ce69e23fb7b5",
+    "sampling": {
+      "temperature": 0,
+      "max_tokens": 2048
+    }
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "b2081896b1620a31184b35a0031baa67df3a54b70e26639529a164e5495679de",
+    "case_count": 22
+  },
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "case_fingerprint": "ec9295cf743b57e0454a3367e4491a147d77234ccf7cd98e2d4f0756c16726db",
+      "latency_ms": 1032,
+      "output_file": "outputs/trailing_hedge_fronted.txt"
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "case_fingerprint": "12dc3a17a69ed007528050fa7dc2a7672029e27d1926af179873ec1adb492e9d",
+      "latency_ms": 745,
+      "output_file": "outputs/spoken_order_quantity.txt"
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "case_fingerprint": "868bf14fff4f8e086a5da10a40bb0e1c92ed66777c03f42bfafc0cee3e20639d",
+      "latency_ms": 990,
+      "output_file": "outputs/split_infinitive_adverb.txt"
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "case_fingerprint": "5ef6b0683cdea8fbff8ca601c47c0b4d06b49eb44774542dc19252a0f8ffea17",
+      "latency_ms": 2308,
+      "output_file": "outputs/tic_dedup_i_think.txt"
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "case_fingerprint": "88e500ae0f73c3a5d2fef7b9cafccc99a235c346bd483280cacdeb4db8090563",
+      "latency_ms": 833,
+      "output_file": "outputs/list_collapse_and.txt"
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "case_fingerprint": "68e38d0bb6ce5551aeaed2eb96c86396684c85ecb39444be10bcf771dd498fcb",
+      "latency_ms": 832,
+      "output_file": "outputs/false_start_double_connector.txt"
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "case_fingerprint": "38b838975c8be310962c88c63caf7a88077c82f121e7201d70d4e7d33fa21763",
+      "latency_ms": 1302,
+      "output_file": "outputs/casual_voice_preserved.txt"
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "case_fingerprint": "527cfb2b28a1b56407674691f11cdb354d612d8ae3a8d575d94baa7734c61244",
+      "latency_ms": 1093,
+      "output_file": "outputs/opening_phrase_preserved.txt"
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "case_fingerprint": "6c1529063ccd063d4b7732a7fb3abfd8c8557fb90868ba58f8a7881970b6701a",
+      "latency_ms": 4047,
+      "output_file": "outputs/distinct_hedges_preserved.txt"
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "case_fingerprint": "da9eb7187d0a2a39875f2c30622e30da9792b8499bfe37389cfd29ef7c860697",
+      "latency_ms": 838,
+      "output_file": "outputs/cascade_conditions_preserved.txt"
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "case_fingerprint": "9921e0c7d5265d2462cc9f8546b9f2eaa52299c7cd219ca3475c34a68d03f74f",
+      "latency_ms": 904,
+      "output_file": "outputs/sequential_events_preserved.txt"
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "case_fingerprint": "35ee22d8fc3871e865d5ae91fbc9f9880a0ec00e675d245c2b000ae81e5fdf3a",
+      "latency_ms": 4555,
+      "output_file": "outputs/wordy_intro_preserved.txt"
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "case_fingerprint": "f4ba605184f718d7129b30bb18319f390affb073e0627dcf542776d97b6d2cb5",
+      "latency_ms": 1393,
+      "output_file": "outputs/self_correction_own.txt"
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "case_fingerprint": "d6492cf3b9cf0dbad22f97cdc206b0c131d7af3f4577321f6b73c8cd85a3486a",
+      "latency_ms": 976,
+      "output_file": "outputs/self_correction_quoted.txt"
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "case_fingerprint": "b9f5f264140409b483b5923f1c36ecb85154f9e713279544160dda2208dc98db",
+      "latency_ms": 1273,
+      "output_file": "outputs/meeting_retro_mixed.txt"
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "case_fingerprint": "aba8c75c6dc383428166484d9a85be37ae5f609f9945e749d1dfcc9d7b40739c",
+      "latency_ms": 1289,
+      "output_file": "outputs/product_idea_mixed.txt"
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "case_fingerprint": "991d9aa2031c8df23d23a8cc58816d441e584a94d177ce658ba420c372c0b63e",
+      "latency_ms": 1348,
+      "output_file": "outputs/technical_explanation_mixed.txt"
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "case_fingerprint": "a9432b78a90cc9df114869606b48ed94150d503aea4e9ade6cc042e0d6126df2",
+      "latency_ms": 979,
+      "output_file": "outputs/frustration_vent_mixed.txt"
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "case_fingerprint": "23ee1055388210d96857bdd641f6082aca62475d7a247e3b67eaa7dfd931a7fa",
+      "latency_ms": 881,
+      "output_file": "outputs/short_greeting_passthrough.txt"
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "case_fingerprint": "c180ee3864b59d27bfea8ed949969043704f77e29ca69f81e1858793f42008b1",
+      "latency_ms": 871,
+      "output_file": "outputs/short_task_list_passthrough.txt"
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "case_fingerprint": "13e32388bba305d73f611ebabdef331873a8a208ed7daa08f643375461a13f1b",
+      "latency_ms": 1121,
+      "output_file": "outputs/capture_with_code.txt"
+    },
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "case_fingerprint": "ed58e06a2a5a0e0f8dd79934febad1313e2ae64f781076b43d461e41ccfa88e7",
+      "latency_ms": 1405,
+      "output_file": "outputs/russian_mixed.txt"
+    }
+  ]
+}

@@ -102,6 +102,63 @@ produced it, and its means on each axis. `./index_ledger.py` regenerates it from
 the runs themselves, so it cannot drift — never edit it by hand, and re-run the
 command after recording, scoring or judging.
 
+## Local models vs Haiku (2026-09-04)
+
+The three-model, two-prompt matrix this whole set exists to produce: `claude-haiku-4-5-20251001`,
+`qwen3.5:2b` and `gemma4:e2b`, each on `prompt_lean` and `prompt_readability`, over `evals.json`.
+Both local models were pulled via `ollama pull` and confirmed to serve at
+`http://127.0.0.1:11434/v1/chat/completions` under `ollama 0.33.2`. All three models ran on
+`prompt_lean` before any model ran on `prompt_readability`, so an interrupted matrix would still
+answer whether a ceiling belongs to the model or the prompt. All six arms are in the ledger, each
+scored on both axes:
+
+| run | word | punct | judge |
+|---|---|---|---|
+| haiku / prompt_lean | 0.948 | 0.57 | 0.889 |
+| qwen3.5:2b / prompt_lean | 0.0 | 0.0 | 0.143 |
+| gemma4:e2b / prompt_lean | 0.921 | 0.628 | 0.877 |
+| haiku / prompt_readability | 0.977 | 0.831 | 0.955 |
+| qwen3.5:2b / prompt_readability | 0.0 | 0.0 | 0.143 |
+| gemma4:e2b / prompt_readability | 0.936 | 0.744 | 0.925 |
+
+**qwen3.5:2b violates the output-format requirement (R14) on every one of the 22 cases, on both
+prompts.** Its `content` field comes back empty; probing the raw endpoint shows why: with the full
+system prompt (~920 prompt tokens for `prompt_lean`), the model spends its entire `max_tokens: 2048`
+budget on the `reasoning` field and hits `finish_reason: "length"` before writing an answer. This is
+recorded and scored as returned — 0.0 on every axis — not patched around (raising `max_tokens` or
+disabling thinking would hide a real failure of this model at this sampling config). `gemma4:e2b`
+shows no such leakage; its outputs are clean text with no preamble or reasoning residue.
+
+Measured per-case latency (mean / min / max over 22 cases, from each manifest's `latency_ms`):
+
+| model | prompt | mean | min | max |
+|---|---|---|---|---|
+| qwen3.5:2b | prompt_lean | 37.9 s | 31.4 s | 77.5 s |
+| qwen3.5:2b | prompt_readability | 33.7 s | 31.6 s | 57.3 s |
+| gemma4:e2b | prompt_lean | 7.3 s | 3.5 s | 28.4 s |
+| gemma4:e2b | prompt_readability | 7.1 s | 3.5 s | 14.1 s |
+
+Both are faster than the 28 s/case reference point from the 9.6 GB model. qwen3.5:2b's latency is
+inflated by burning its whole token budget on reasoning it then discards.
+
+`gemma4:e2b` is the only viable local candidate here: on the deterministic axis it tracks Haiku
+within noise on both prompts (no large prompt-length gap — the long-prompt risk the vault research
+flags does not show up for this model), and the judge axis agrees (0.877 / 0.925 vs Haiku's
+0.889 / 0.955). qwen3.5:2b cannot be assessed on content quality at all under this harness's sampling
+config, since it never emits one.
+
+Reproduce the six-way comparison from the ledger (no model call, no re-run):
+
+```bash
+./compare_runs.py \
+  ledger/20260904T101031Z__evals__claude-haiku-4-5-20251001__prompt_lean \
+  ledger/20260904T112759Z__evals__qwen3.5-2b__prompt_lean \
+  ledger/20260904T114209Z__evals__gemma4-e2b__prompt_lean \
+  ledger/20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability \
+  ledger/20260904T114536Z__evals__qwen3.5-2b__prompt_readability \
+  ledger/20260904T115807Z__evals__gemma4-e2b__prompt_readability
+```
+
 ## What to report back
 
 **Headline**: A exact / B exact / A-wins / B-wins / ties.

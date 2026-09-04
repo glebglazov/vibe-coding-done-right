@@ -12,3 +12,8 @@ it, so it is never read against another judge's column or against `word`.
 | 20260904T101031Z__evals__claude-haiku-4-5-20251001__prompt_lean | 2026-09-04T10:10:31Z | evals.json | 22 | claude-haiku-4-5-20251001 | prompt_lean | anthropic-messages-api 2023-06-01 | 0.948 | 0.57 | 8 | 0 | 0.889 (claude-opus-5) |
 | 20260904T101059Z__evals__gemma4-e4b__prompt_lean | 2026-09-04T10:10:59Z | evals.json | 22 | gemma4:e4b | prompt_lean | ollama 0.33.2 | 0.946 | 0.783 | 7 | 2 | — |
 | 20260904T101108Z__evals_role_boundary__claude-haiku-4-5-20251001__prompt_readability | 2026-09-04T10:11:08Z | evals_role_boundary.json | 9 | claude-haiku-4-5-20251001 | prompt_readability | anthropic-messages-api 2023-06-01 | 0.779 | 0.67 | 18 | 119 | — |
+| 20260904T112759Z__evals__qwen3.5-2b__prompt_lean | 2026-09-04T11:27:59Z | evals.json | 22 | qwen3.5:2b | prompt_lean | ollama 0.33.2 | 0.0 | 0.0 | 695 | 0 | 0.143 (claude-opus-5) |
+| 20260904T114209Z__evals__gemma4-e2b__prompt_lean | 2026-09-04T11:42:09Z | evals.json | 22 | gemma4:e2b | prompt_lean | ollama 0.33.2 | 0.921 | 0.628 | 3 | 0 | 0.877 (claude-opus-5) |
+| 20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability | 2026-09-04T11:44:58Z | evals.json | 22 | claude-haiku-4-5-20251001 | prompt_readability | anthropic-messages-api 2023-06-01 | 0.977 | 0.831 | 16 | 5 | 0.955 (claude-opus-5) |
+| 20260904T114536Z__evals__qwen3.5-2b__prompt_readability | 2026-09-04T11:45:36Z | evals.json | 22 | qwen3.5:2b | prompt_readability | ollama 0.33.2 | 0.0 | 0.0 | 695 | 0 | 0.143 (claude-opus-5) |
+| 20260904T115807Z__evals__gemma4-e2b__prompt_readability | 2026-09-04T11:58:07Z | evals.json | 22 | gemma4:e2b | prompt_readability | ollama 0.33.2 | 0.936 | 0.744 | 6 | 0 | 0.925 (claude-opus-5) |

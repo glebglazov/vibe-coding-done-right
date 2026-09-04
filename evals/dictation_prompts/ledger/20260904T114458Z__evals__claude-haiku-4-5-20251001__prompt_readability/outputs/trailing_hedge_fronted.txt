@@ -1,0 +1,1 @@
+I think the migration ran overnight without issues, and I guess we can close the ticket tomorrow.
