@@ -1,0 +1,1 @@
+I think we should use PostgreSQL. Actually, wait—no, MongoDB would be better because the data is pretty document-shaped anyway.

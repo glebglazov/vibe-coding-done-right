@@ -16,6 +16,10 @@ cd /workspaces/vibe-coding-done-right/evals/dictation_prompts
 export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
 ./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_readability.txt
 ./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_lean.txt
+./record_run.py --provider openai-chat --model qwen3.5:2b --prompt prompts/prompt_lean.txt \
+                --disable-thinking          # send the setting that turns thinking mode off
+./record_run.py --provider s1-mini --model hf.co/superwhisper/s1-mini-GGUF:Q4_K_M \
+                --prompt prompts/s1_mini.txt --subset english   # only the cases the arm admits
 ./score_run.py ledger/<run-id>   # per-case table, and ledger/<run-id>/deterministic.json
 ./judge_run.py ledger/<run-id>   # rubric scores, and ledger/<run-id>/judge.json
 ./compare_runs.py ledger/<run-a> ledger/<run-b>   # the two arms side by side
@@ -159,6 +163,100 @@ Reproduce the six-way comparison from the ledger (no model call, no re-run):
   ledger/20260904T115807Z__evals__gemma4-e2b__prompt_readability
 ```
 
+## S1-mini, a purpose-built normalizer (2026-09-04)
+
+A seventh arm: `hf.co/superwhisper/s1-mini-GGUF:Q4_K_M` — a 0.6B text normalizer built for exactly
+this workload (Apache 2.0 plus a naming clause; the model keeps the name "S1-mini" by
+"Superwhisper"). `ollama pull hf.co/superwhisper/s1-mini-GGUF:Q4_K_M` is the whole install, 484 MB.
+
+**It is comparable on the model axis, not on the prompt axis.** S1-mini is a normalizer, not an
+instruction follower: it will not read `prompt_lean` or `prompt_readability`. It requires its own
+system prompt, committed verbatim as `prompts/s1_mini.txt`, and a control line
+`[Styling: …] [Structure: …] [Context: …]` at the head of every input. That prompt is the model's
+own scaffolding rather than a candidate under test, so a row of this arm against a Haiku or gemma
+row answers "which model", never "which prompt". Read its numbers against the other models', not
+against the two prompts' spread.
+
+**The pinned tone, and what it leaves unmeasured.** One arm, one tone: `Styling: semi-formal`,
+`Structure: prose`, `Context: general`. Semi-formal is the register whose output shape matches this
+eval set's references — standard written English with contractions kept. Left unmeasured: the other
+three registers (`casual`, `semi-casual`, `formal` — the README documents four, not five),
+`Structure: lists`, and `Context: email`. A reference set written to the aggressive-readability
+target cannot score those; measuring them needs references written for them. The model's published
+94.8% token accuracy is on its own held-out English set, not on this one, and the two numbers do not
+answer each other.
+
+**English only, so it answers a subset of the one eval set.** `evals.json` now names its subsets;
+`english` is every case outside the `multilingual` category, and `--subset english` records those 21.
+No copy of the eval set was made. `russian_mixed` reads `n/c` in every comparison, with the reason
+named (`not recorded by <run-id>`), and is excluded from every mean and headline count.
+
+**Thinking off is a property of the arm.** Every arm now records `arm.thinking_disabled` in its
+manifest — what it sent to turn thinking off, or `null` where it sent nothing:
+
+- `--provider openai-chat --disable-thinking` sends `reasoning_effort: "none"`. This is what
+  `qwen3.5:2b` needed; `chat_template_kwargs` and ollama's `think: false` are both ignored on that
+  endpoint.
+- `--provider s1-mini` cannot use any request field: the chat template ollama builds for this GGUF
+  opens a `<think>` block it never closes, and the model — trained with thinking off — answers with
+  an empty string through `/v1/chat/completions` whatever is sent. So the arm posts to
+  `/api/generate` with `raw: true` and writes the documented turn layout itself, empty think block
+  included. That prefix is the setting, and the manifest records it.
+
+**Where S1-mini lands** (means over the 21 English cases, from the comparison below):
+
+| category | S1-mini | haiku / prompt_readability | gemma4:e2b / prompt_readability |
+|---|---|---|---|
+| readability_transform (6) | 0.799 | 0.99 | 0.877 |
+| voice_preservation (3) | 1.0 | 1.0 | 1.0 |
+| content_preservation (3) | 0.963 | 0.947 | 0.987 |
+| self_correction (2) | 0.865 | 1.0 | 0.834 |
+| realistic_mixed (4) | 0.971 | 0.947 | 0.954 |
+| passthrough (2) | 1.0 | 0.974 | 1.0 |
+| capture (1) | 1.0 | 1.0 | 1.0 |
+
+Headline, deterministic axis: 21 compared, 1 n/c; S1-mini exact 3 / wins 2, Haiku exact 10 / wins 9,
+gemma exact 4 / wins 2, 8 ties. Judge axis (claude-opus-5 throughout): S1-mini 3 wins, Haiku 9,
+gemma 2, 7 ties; run-level judge overall 0.897 for S1-mini against 0.955 (Haiku) and 0.925 (gemma) —
+but those two run-level means include `russian_mixed` and S1-mini's does not, so the per-category
+table above is the honest read.
+
+It loses where the eval set asks for a *rewrite* rather than a normalization: fronting a trailing
+"I think", de-duplicating a tic, reading "weeks, like 3 to 4" as "three to four weeks". It wins on
+the long realistic cases, where the bigger models over-edit and it does not. It preserves captures
+and passthroughs perfectly.
+
+**Latency.** 0.31 s/case mean (min 0.08 s, max 2.02 s, 6.5 s for all 21 cases) — roughly 23× faster
+than `gemma4:e2b` at ~7.1 s/case, and 3–5× faster than Haiku's cloud round trip at 1.07–1.41 s/case,
+with no network in the path at all.
+
+### qwen3.5:2b, measured again with thinking off
+
+The earlier `qwen3.5:2b` runs scored 0.0 on every axis because the model burned its whole
+`max_tokens` budget on a `reasoning` field. That was a reading of one sampling config, not of the
+model. Both are re-recorded with `--disable-thinking`; the zero-scoring runs stay in the ledger
+untouched, as the record of what that config does.
+
+| run | word | punct | judge | mean latency |
+|---|---|---|---|---|
+| qwen3.5:2b / prompt_lean, thinking on | 0.0 | 0.0 | 0.143 | 37.9 s |
+| qwen3.5:2b / prompt_lean, thinking off | 0.837 | 0.529 | 0.803 | 1.2 s |
+| qwen3.5:2b / prompt_readability, thinking on | 0.0 | 0.0 | 0.143 | 33.7 s |
+| qwen3.5:2b / prompt_readability, thinking off | 0.892 | 0.696 | 0.836 | 1.8 s |
+
+With thinking off the model answers, ~30× faster, and lands below both `gemma4:e2b` and S1-mini on
+both axes. It is the only local arm that still loses content at scale (83 words dropped and 53
+invented on `prompt_lean`, mostly on `capture_with_code` and `russian_mixed`).
+
+Reproduce the three-way model comparison from the ledger (no model call, no re-run):
+
+```bash
+./compare_runs.py \
+  ledger/20260904T142156Z__evals-english__hf.co-superwhisper-s1-mini-GGUF-Q4_K_M__s1_mini \
+  ledger/20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability \
+  ledger/20260904T115807Z__evals__gemma4-e2b__prompt_readability
+```
+
 ## What to report back
 
 **Headline**: A exact / B exact / A-wins / B-wins / ties.
@@ -188,11 +286,12 @@ Include:
 
 ## Files
 
-- `evals.json` — 22 test cases (fresh set; old set was overwritten).
+- `evals.json` — 22 test cases (fresh set; old set was overwritten), and the named subsets an arm may be asked instead of all of them.
 - `evals_role_boundary.json` — 9 role-boundary cases, scored on the same axis.
 - `prompts/prompt_readability.txt` — A (current live).
 - `prompts/prompt_lean.txt` — B (candidate).
 - `prompts/prompt_current.txt` — legacy strict prompt, retained as historical baseline.
+- `prompts/s1_mini.txt` — S1-mini's required system prompt, verbatim; not a candidate prompt.
 - `record_run.py` — records one arm over one eval set into the ledger.
 - `ledger.py` — the ledger itself: fingerprints, and reopening an archived run.
 - `score_run.py` — the deterministic scorer.

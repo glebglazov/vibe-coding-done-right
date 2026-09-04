@@ -17,3 +17,6 @@ it, so it is never read against another judge's column or against `word`.
 | 20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability | 2026-09-04T11:44:58Z | evals.json | 22 | claude-haiku-4-5-20251001 | prompt_readability | anthropic-messages-api 2023-06-01 | 0.977 | 0.831 | 16 | 5 | 0.955 (claude-opus-5) |
 | 20260904T114536Z__evals__qwen3.5-2b__prompt_readability | 2026-09-04T11:45:36Z | evals.json | 22 | qwen3.5:2b | prompt_readability | ollama 0.33.2 | 0.0 | 0.0 | 695 | 0 | 0.143 (claude-opus-5) |
 | 20260904T115807Z__evals__gemma4-e2b__prompt_readability | 2026-09-04T11:58:07Z | evals.json | 22 | gemma4:e2b | prompt_readability | ollama 0.33.2 | 0.936 | 0.744 | 6 | 0 | 0.925 (claude-opus-5) |
+| 20260904T142156Z__evals-english__hf.co-superwhisper-s1-mini-GGUF-Q4_K_M__s1_mini | 2026-09-04T14:21:56Z | evals.json | 21 | hf.co/superwhisper/s1-mini-GGUF:Q4_K_M | s1_mini | ollama 0.33.2 | 0.919 | 0.739 | 9 | 4 | 0.897 (claude-opus-5) |
+| 20260904T142208Z__evals__qwen3.5-2b__prompt_lean | 2026-09-04T14:22:08Z | evals.json | 22 | qwen3.5:2b | prompt_lean | ollama 0.33.2 | 0.837 | 0.529 | 83 | 53 | 0.803 (claude-opus-5) |
+| 20260904T142234Z__evals__qwen3.5-2b__prompt_readability | 2026-09-04T14:22:34Z | evals.json | 22 | qwen3.5:2b | prompt_readability | ollama 0.33.2 | 0.892 | 0.696 | 13 | 16 | 0.836 (claude-opus-5) |

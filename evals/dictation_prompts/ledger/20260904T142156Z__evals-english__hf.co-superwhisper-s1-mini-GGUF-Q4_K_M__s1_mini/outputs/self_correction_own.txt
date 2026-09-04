@@ -1,0 +1,1 @@
+I think we should use MongoDB. Because the data is pretty document-shaped. Anyway

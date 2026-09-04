@@ -4,7 +4,10 @@
 Usage:
   export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
   ./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_lean.txt
-  ./record_run.py --provider openai-chat --model gemma4:e4b --prompt prompts/prompt_lean.txt
+  ./record_run.py --provider openai-chat --model qwen3.5:2b --prompt prompts/prompt_lean.txt \\
+                  --disable-thinking
+  ./record_run.py --provider s1-mini --model hf.co/superwhisper/s1-mini-GGUF:Q4_K_M \\
+                  --prompt prompts/s1_mini.txt --subset english
 
 Every run lands in ledger/<run-id>/ as a manifest plus one file per case holding
 the model's output byte-for-byte, so the run can be rescored forever without
@@ -22,16 +25,33 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ledger import HERE, LEDGER, case_fingerprint, eval_set_fingerprint, sha256_hex
+from ledger import (
+    HERE,
+    LEDGER,
+    case_fingerprint,
+    eval_set_fingerprint,
+    sha256_hex,
+    subset_cases,
+)
 
 ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
 OPENAI_CHAT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions"
+S1_MINI_ENDPOINT = "http://127.0.0.1:11434/api/generate"
+
+# What turns a Qwen3 chat template's thinking branch off on the local runtime.
+# Without it qwen3.5:2b spends its whole token budget on a reasoning field and
+# answers nothing at all, which is a reading of a sampling config rather than of
+# the model.
+NO_THINKING = {"reasoning_effort": "none"}
 
 MAX_TOKENS = 2048
 # A local runtime defaults to temperature 1, so a reproducible run has to pin
 # sampling rather than inherit it.
 TEMPERATURE = 0
 SEED = 0
+
+# The turn separator of the chat format S1-mini was trained on.
+IM_END = "<|im_end|>"
 
 REQUEST_TIMEOUT_S = 300
 
@@ -67,10 +87,27 @@ def get_json(url, timeout_s=5):
         return json.loads(response.read().decode("utf-8"))
 
 
+def ollama_version(origin):
+    """The local runtime naming itself, or None where it will not say."""
+    try:
+        return f"ollama {get_json(f'{origin}/api/version')['version']}"
+    except (urllib.error.URLError, KeyError, ValueError, OSError):
+        return None
+
+
+def dictation_message(case_input):
+    """The shape the app sends, so an arm measures what ships."""
+    return f"<dictation>{case_input}</dictation>"
+
+
 class AnthropicArm:
     """The cloud backend: the Anthropic messages API, called as the app calls it."""
 
-    def __init__(self, model, endpoint):
+    def __init__(self, model, endpoint, disable_thinking=False):
+        if disable_thinking:
+            raise SystemExit(
+                "--disable-thinking is a local-runtime setting; this API sends no such field"
+            )
         self.model = model
         self.endpoint = endpoint
         self.sampling = {"temperature": TEMPERATURE, "max_tokens": MAX_TOKENS}
@@ -82,6 +119,12 @@ class AnthropicArm:
 
     def runtime(self):
         return "anthropic-messages-api 2023-06-01"
+
+    def request_settings(self):
+        return {}
+
+    def user_message(self, case_input):
+        return dictation_message(case_input)
 
     def complete(self, system_prompt, user_message):
         try:
@@ -126,7 +169,7 @@ class AnthropicArm:
 class OpenAIChatArm:
     """The local backend: an OpenAI-compatible chat-completions endpoint."""
 
-    def __init__(self, model, endpoint):
+    def __init__(self, model, endpoint, disable_thinking=False):
         self.model = model
         self.endpoint = endpoint
         self.sampling = {
@@ -134,14 +177,18 @@ class OpenAIChatArm:
             "seed": SEED,
             "max_tokens": MAX_TOKENS,
         }
+        self.thinking_disabled = dict(NO_THINKING) if disable_thinking else None
 
     def runtime(self):
         """Ask the server what it is, so the manifest names what actually served the run."""
         origin = self.endpoint.split("/v1/")[0]
-        try:
-            return f"ollama {get_json(f'{origin}/api/version')['version']}"
-        except (urllib.error.URLError, KeyError, ValueError, OSError):
-            return f"openai-compatible endpoint at {origin}"
+        return ollama_version(origin) or f"openai-compatible endpoint at {origin}"
+
+    def request_settings(self):
+        return {"thinking_disabled": self.thinking_disabled}
+
+    def user_message(self, case_input):
+        return dictation_message(case_input)
 
     def complete(self, system_prompt, user_message):
         payload = post_json(
@@ -154,6 +201,7 @@ class OpenAIChatArm:
                     {"role": "user", "content": user_message},
                 ],
                 "stream": False,
+                **(self.thinking_disabled or {}),
                 **self.sampling,
                 # Ollama reads sampling from `options`; the top-level keys above are
                 # what every other OpenAI-compatible server reads. Pin it in both.
@@ -163,16 +211,130 @@ class OpenAIChatArm:
         return payload["choices"][0]["message"]["content"]
 
 
-ARMS = {"anthropic": AnthropicArm, "openai-chat": OpenAIChatArm}
+class S1MiniArm:
+    """S1-mini, served locally through the raw completion endpoint.
+
+    This model is a normalizer rather than an instruction follower: it takes its
+    own system prompt plus a control line naming styling, structure and context,
+    and it was trained with thinking off. The chat endpoint cannot serve it —
+    the chat template built for this GGUF opens a `<think>` block it never
+    closes, and the model answers with an empty string — so the arm writes the
+    documented turn layout itself, empty think block included.
+    """
+
+    TONES = ("casual", "semi-casual", "semi-formal", "formal")
+    # The eval set's references are flowing prose with no email layout, so two
+    # of the control line's three axes are pinned and only the tone is chosen.
+    STRUCTURE = "prose"
+    CONTEXT = "general"
+
+    def __init__(self, model, endpoint, tone):
+        self.model = model
+        self.endpoint = endpoint
+        self.tone = tone
+        self.sampling = {
+            "temperature": TEMPERATURE,
+            "seed": SEED,
+            "num_predict": MAX_TOKENS,
+        }
+        self.thinking_disabled = {"assistant_prefix_think_block": "empty"}
+
+    @property
+    def control_line(self):
+        return (
+            f"[Styling: {self.tone}] [Structure: {self.STRUCTURE}] "
+            f"[Context: {self.CONTEXT}]"
+        )
+
+    def runtime(self):
+        origin = self.endpoint.split("/api/")[0]
+        return ollama_version(origin) or f"llama.cpp-backed endpoint at {origin}"
+
+    def request_settings(self):
+        return {
+            "thinking_disabled": self.thinking_disabled,
+            "control_line": self.control_line,
+        }
+
+    def user_message(self, case_input):
+        return f"{self.control_line}\n{case_input}"
+
+    def complete(self, system_prompt, user_message):
+        payload = post_json(
+            self.endpoint,
+            {},
+            {
+                "model": self.model,
+                "prompt": self.turns(system_prompt, user_message),
+                # Raw: the runtime applies no chat template, so what the model
+                # reads is exactly what this arm wrote.
+                "raw": True,
+                "stream": False,
+                "stop": [IM_END],
+                "options": self.sampling,
+            },
+        )
+        return payload["response"]
+
+    def turns(self, system_prompt, user_message):
+        """The turn layout the model was trained on, its answer's opening included.
+
+        The empty think block is the whole of what disables thinking here: no
+        request field reaches a template baked into the GGUF. The prompt file
+        ends with a newline and the trained prefix does not, so it is trimmed.
+        """
+        return (
+            f"<|im_start|>system\n{system_prompt.rstrip()}{IM_END}\n"
+            f"<|im_start|>user\n{user_message}{IM_END}\n"
+            "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        )
+
+
+ARMS = {
+    "anthropic": AnthropicArm,
+    "openai-chat": OpenAIChatArm,
+    "s1-mini": S1MiniArm,
+}
 DEFAULT_ENDPOINTS = {
     "anthropic": ANTHROPIC_ENDPOINT,
     "openai-chat": OPENAI_CHAT_ENDPOINT,
+    "s1-mini": S1_MINI_ENDPOINT,
 }
 
 
-def user_message(case_input):
-    """The shape the app sends, so an arm measures what ships."""
-    return f"<dictation>{case_input}</dictation>"
+def build_arm(arguments):
+    """The arm the command line names, with the settings only its provider takes."""
+    endpoint = arguments.endpoint or DEFAULT_ENDPOINTS[arguments.provider]
+    if arguments.provider == "s1-mini":
+        return S1MiniArm(arguments.model, endpoint, arguments.tone)
+    return ARMS[arguments.provider](
+        arguments.model, endpoint, arguments.disable_thinking
+    )
+
+
+def named_subset(document, name, eval_set_path):
+    """The cases a named subset admits, resolved against the eval set's own definitions.
+
+    A subset lives with the set rather than in a copy of it: an English-only arm
+    is asked the English cases of the one set, and its scores stay side by side
+    with every arm recorded over the whole of it.
+    """
+    definitions = document.get("subsets", {})
+    if name not in definitions:
+        sys.exit(
+            f"{eval_set_path.name} defines no subset {name!r} "
+            f"(it defines: {', '.join(sorted(definitions)) or 'none'})"
+        )
+    excluded = set(definitions[name]["excludes_categories"])
+    return {
+        "name": name,
+        "why": definitions[name]["why"],
+        "case_ids": [
+            case["id"]
+            for case in document["evals"]
+            if case["category"] not in excluded
+        ],
+    }
 
 
 def repo_commit():
@@ -184,25 +346,28 @@ def repo_commit():
     ).stdout.strip()
 
 
-def run_id(eval_set_name, model, prompt_name, recorded_at):
+def run_id(eval_set_name, model, prompt_name, subset, recorded_at):
     stamp = recorded_at.strftime("%Y%m%dT%H%M%SZ")
     slug = model.replace("/", "-").replace(":", "-")
-    return f"{stamp}__{Path(eval_set_name).stem}__{slug}__{prompt_name}"
+    scope = Path(eval_set_name).stem + (f"-{subset['name']}" if subset else "")
+    return f"{stamp}__{scope}__{slug}__{prompt_name}"
 
 
-def record(arm, prompt_path, eval_set_path):
+def record(arm, prompt_path, eval_set_path, subset_name=None):
     # A manifest names its set by filename, so a set living anywhere else would
     # archive a run nothing could rescore from a fresh checkout.
     if eval_set_path.parent != HERE:
         sys.exit(
             f"eval set must sit beside the ledger commands ({HERE}): {eval_set_path}"
         )
-    cases = json.loads(eval_set_path.read_text())["evals"]
+    document = json.loads(eval_set_path.read_text())
+    subset = named_subset(document, subset_name, eval_set_path) if subset_name else None
+    cases = subset_cases(document["evals"], subset)
     system_prompt = prompt_path.read_text()
     recorded_at = datetime.now(timezone.utc)
 
     directory = LEDGER / run_id(
-        eval_set_path.name, arm.model, prompt_path.stem, recorded_at
+        eval_set_path.name, arm.model, prompt_path.stem, subset, recorded_at
     )
     outputs = directory / "outputs"
     outputs.mkdir(parents=True, exist_ok=True)
@@ -218,7 +383,9 @@ def record(arm, prompt_path, eval_set_path):
         print(f"  [{index:2d}/{len(cases)}] {case['id']:<40}", end="", flush=True)
         started = time.monotonic()
         try:
-            output = arm.complete(system_prompt, user_message(case["input"]))
+            output = arm.complete(
+                system_prompt, arm.user_message(case["input"])
+            )
             error = None
         except (urllib.error.URLError, OSError, KeyError, ValueError) as failure:
             output, error = None, f"{type(failure).__name__}: {failure}"
@@ -251,11 +418,13 @@ def record(arm, prompt_path, eval_set_path):
             "prompt_name": prompt_path.stem,
             "prompt_sha256": sha256_hex(system_prompt),
             "sampling": arm.sampling,
+            **arm.request_settings(),
         },
         "eval_set": {
             "name": eval_set_path.name,
             "fingerprint": eval_set_fingerprint(cases),
             "case_count": len(cases),
+            **({"subset": subset} if subset else {}),
         },
         "cases": recorded_cases,
     }
@@ -289,16 +458,28 @@ def main():
     parser.add_argument(
         "--endpoint", help="override the provider's default endpoint URL"
     )
+    parser.add_argument(
+        "--subset",
+        help="name of the eval set's subset to ask the arm, instead of every case",
+    )
+    parser.add_argument(
+        "--disable-thinking",
+        action="store_true",
+        help="send the setting that turns the local model's thinking mode off",
+    )
+    parser.add_argument(
+        "--tone",
+        choices=S1MiniArm.TONES,
+        default="semi-formal",
+        help="s1-mini only: the styling its control line asks for (default: semi-formal)",
+    )
     arguments = parser.parse_args()
 
-    arm = ARMS[arguments.provider](
-        arguments.model,
-        arguments.endpoint or DEFAULT_ENDPOINTS[arguments.provider],
-    )
     return record(
-        arm,
+        build_arm(arguments),
         Path(arguments.prompt).resolve(),
         Path(arguments.eval_set).resolve(),
+        arguments.subset,
     )
 
 

@@ -20,7 +20,14 @@ import tempfile
 from pathlib import Path
 
 from compare_runs import AXIS_SEPARATION, NOT_COMPARABLE, TIE, by_category, compare, report
-from ledger import ArchivedRun, ScoredRun, case_fingerprint, eval_set_fingerprint
+from ledger import (
+    ArchivedRun,
+    ScoredRun,
+    case_fingerprint,
+    eval_set_fingerprint,
+    subset_cases,
+)
+from record_run import named_subset
 from score_run import score_run
 from test_runner import run_tests
 
@@ -64,9 +71,9 @@ def write_eval_set(path, cases):
     path.write_text(json.dumps({"evals": cases}, ensure_ascii=False))
 
 
-def record(directory, eval_set_path, model, outputs, judged_by=None, judge_overall=JUDGE_OVERALL):
+def record(directory, eval_set_path, model, outputs, judged_by=None, judge_overall=JUDGE_OVERALL, subset=None):
     """One run archived and scored as the ledger's own commands would leave it."""
-    cases = json.loads(eval_set_path.read_text())["evals"]
+    cases = subset_cases(json.loads(eval_set_path.read_text())["evals"], subset)
     (directory / "outputs").mkdir(parents=True)
     for case in cases:
         (directory / "outputs" / f"{case['id']}.txt").write_text(outputs[case["id"]])
@@ -89,6 +96,7 @@ def record(directory, eval_set_path, model, outputs, judged_by=None, judge_overa
                     "name": str(eval_set_path),
                     "fingerprint": eval_set_fingerprint(cases),
                     "case_count": len(cases),
+                    **({"subset": subset} if subset else {}),
                 },
                 "cases": [
                     {
@@ -261,6 +269,51 @@ def test_an_arm_that_scored_zero_reads_as_zero_and_not_as_unscored():
         # One row per axis, and neither may spend the unscored sentinel on a zero.
         assert len(rows) == 2, rows
         assert all(row.rstrip().endswith("0.0") for row in rows), rows
+
+    with_ledger(body)
+
+
+def test_an_arm_is_compared_only_on_the_subset_it_was_asked():
+    """An arm that cannot answer part of the set — an English-only model against
+    the multilingual case — records a named subset of the one eval set. The case
+    it was never asked falls out instead of scoring against an answer it never gave."""
+
+    def body(ledger):
+        write_eval_set(ledger.eval_set, CASES)
+        document = {
+            "subsets": {
+                "prose": {
+                    "why": "the arm under test cannot answer a bare passthrough",
+                    "excludes_categories": ["passthrough"],
+                }
+            },
+            "evals": CASES,
+        }
+        subset = named_subset(document, "prose", ledger.eval_set)
+        assert "passthrough_short" not in subset["case_ids"], subset
+
+        root = ledger.a.directory.parent
+        whole = record(root / "run-whole", ledger.eval_set, "model-a", OUTPUTS_A, "judge-x")
+        partial = record(
+            root / "run-partial", ledger.eval_set, "model-b", OUTPUTS_B, "judge-x",
+            subset=subset,
+        )
+        assert partial.eval_set["case_count"] == len(CASES) - 1, partial.eval_set
+
+        comparison = compare([whole, partial])
+        skipped = cells(comparison, "passthrough_short")
+        assert not skipped["comparable"], skipped
+        assert "not recorded by run-partial" in skipped["note"], skipped
+        assert all(
+            case["comparable"]
+            for case in comparison["cases"]
+            if case["id"] != "passthrough_short"
+        ), comparison
+
+        passthrough = next(
+            row for row in by_category(comparison) if row["category"] == "passthrough"
+        )
+        assert (passthrough["compared"], passthrough["not_comparable"]) == (0, 1), passthrough
 
     with_ledger(body)
 

@@ -38,6 +38,20 @@ def eval_set_fingerprint(cases):
     return sha256_hex(*(case_fingerprint(case) for case in cases))
 
 
+def subset_cases(cases, subset):
+    """The cases an arm was asked to answer: the whole set, or a named subset of it.
+
+    An arm that cannot answer part of a set — an English-only model against the
+    one multilingual case — records the subset rather than a fork of the set, so
+    every case it did answer stays comparable with every arm recorded over all
+    of them.
+    """
+    if subset is None:
+        return cases
+    admitted = set(subset["case_ids"])
+    return [case for case in cases if case["id"] in admitted]
+
+
 def eval_set_cases(name):
     """The cases of the eval set a run names, as they stand on disk now.
 
@@ -61,7 +75,9 @@ class ArchivedRun:
         self.eval_set = self.manifest["eval_set"]
 
         eval_set_path = HERE / self.eval_set["name"]
-        self.cases = eval_set_cases(self.eval_set["name"])
+        self.cases = subset_cases(
+            eval_set_cases(self.eval_set["name"]), self.eval_set.get("subset")
+        )
         fingerprint = eval_set_fingerprint(self.cases)
         if fingerprint != self.eval_set["fingerprint"]:
             raise SystemExit(

@@ -1,0 +1,1 @@
+I think we need to move to a new framework because the old one keeps breaking and its documentation is terrible, and nobody in our team likes it. I've been thinking about this for at least two months, but there's not really been time to discuss it properly.

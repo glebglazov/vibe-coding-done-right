@@ -1,0 +1,329 @@
+{
+  "run_id": "20260904T142156Z__evals-english__hf.co-superwhisper-s1-mini-GGUF-Q4_K_M__s1_mini",
+  "judged_at": "2026-09-04T14:24:54Z",
+  "judge": {
+    "model": "claude-opus-5",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "runtime": "anthropic-messages-api 2023-06-01",
+    "rubric": "agents/assessor.md",
+    "rubric_sha256": "9bd7346d6d5017895b04dea9376de4bbe330908b358ddc5118f147f34ff105f1",
+    "sampling": {
+      "max_tokens": 2048
+    }
+  },
+  "weights": {
+    "punctuation": 0.2,
+    "voice": 0.2,
+    "captures": 0.15,
+    "content": 0.3,
+    "format": 0.15
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "ca8cd98b3a91c8e86b7fc861d23eda569f47bfd62f693475ef5d35f356f3cf33"
+  },
+  "overall_mean": 0.897,
+  "dimension_means": {
+    "punctuation": 0.809,
+    "voice": 0.931,
+    "captures": 1.0,
+    "content": 0.83,
+    "format": 1.0
+  },
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.86,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.6,
+        "format": 1.0
+      },
+      "notes": "Hedges left trailing with commas instead of being fronted into their clauses as the transform requires, though meaning, voice, and punctuation are otherwise intact."
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.74,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 0.7,
+        "captures": 1.0,
+        "content": 0.5,
+        "format": 1.0
+      },
+      "notes": "Failed the spoken-order transform (kept 'take weeks, like 3 to 4'), left the filler 'like' in, and used digits instead of spelled-out numbers."
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.88,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.6,
+        "format": 1.0
+      },
+      "notes": "Failed the intended readability transform: 'eventually' was left in the split-infinitive slot rather than moved before 'wants', though punctuation, voice, and meaning are otherwise intact."
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.83,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.5,
+        "format": 1.0
+      },
+      "notes": "Failed the core task: both 'I think' tic repetitions were left in, and the comma before 'because' is missing."
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 0.78,
+      "dimensions": {
+        "punctuation": 0.35,
+        "voice": 0.85,
+        "captures": 1.0,
+        "content": 0.8,
+        "format": 1.0
+      },
+      "notes": "Failed the list-collapse transform: no colon after the topic and the repeated 'and's were kept instead of becoming a comma series, though meaning and wording are otherwise intact."
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.97,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period instead of the expected em-dash, slightly clipping the run-on casual rhythm; everything else matches."
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period instead of the expected em-dash to join the two clauses; everything else matches."
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.83,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 0.85,
+        "captures": 1.0,
+        "content": 0.7,
+        "format": 1.0
+      },
+      "notes": "Split the cascade into two sentences and dropped one 'and' connector, altering the intended run-on chain structure; also added extra internal commas."
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.935,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Failed to split the run-on into two sentences (kept a comma+and instead of a period) and omitted the comma before the final 'and we deployed'; content and voice intact."
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "overall": 0.955,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Missing the colon after \"works is\" and the comma splitting \"a user, users can...\" (kept the spoken \"and\"), otherwise faithful and clean."
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "overall": 0.745,
+      "dimensions": {
+        "punctuation": 0.3,
+        "voice": 0.8,
+        "captures": 1.0,
+        "content": 0.75,
+        "format": 1.0
+      },
+      "notes": "Broke one sentence into fragments with no final period and orphaned 'Anyway', missed the comma before 'because', and expanded 'Mongo' to 'MongoDB'."
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "overall": 0.685,
+      "dimensions": {
+        "punctuation": 0.7,
+        "voice": 0.7,
+        "captures": 1.0,
+        "content": 0.35,
+        "format": 1.0
+      },
+      "notes": "Collapsed the quoted self-correction instead of preserving it as dialogue, losing the 'oh wait, no' hesitation and the em-dash/comma punctuation inside the quote."
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.861,
+      "dimensions": {
+        "punctuation": 0.65,
+        "voice": 0.85,
+        "captures": 1.0,
+        "content": 0.87,
+        "format": 1.0
+      },
+      "notes": "No em-dashes for the two asides (used periods instead), left fillers 'basically' and 'like' in, and converted 'twenty' to '20'."
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.915,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Missed the em-dash expansion after 'gamified it' (used a comma) and dropped the serial-comma list punctuation; also left one 'Like,' filler that the expected output removed."
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period instead of the expected em-dash before 'we use this sliding window thing'; everything else matches."
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "overall": 0.924,
+      "dimensions": {
+        "punctuation": 0.82,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 0.9,
+        "format": 1.0
+      },
+      "notes": "Left the fillers 'like' and 'basically' in, dropped the comma before 'and nobody actually listens', and used a period instead of the em-dash before 'I mean'."
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Missing the comma before 'and also'; otherwise identical to expected."
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "judge_model": "claude-opus-5",
+      "overall": 0.984,
+      "dimensions": {
+        "punctuation": 0.92,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period split instead of the expected em-dash before \"can you take a look?\"; capture block preserved exactly."
+    }
+  ]
+}

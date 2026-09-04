@@ -1,5 +1,11 @@
 {
   "description": "Fresh eval set for the readability-with-style-preservation dictation prompt. Expected outputs represent what a careful human would write if they polished the dictation (aggressive-readability target), not mechanical transformations. Each case has a `category` and `exercises` tag. Categories: readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual.",
+  "subsets": {
+    "english": {
+      "why": "An English-only arm must not be asked the non-English cases. Naming the subset here keeps one eval set: the arm records the cases it admits, and a comparison drops the rest as not comparable rather than a fork of the set putting the same references in two places.",
+      "excludes_categories": ["multilingual"]
+    }
+  },
   "evals": [
     {
       "id": "trailing_hedge_fronted",
