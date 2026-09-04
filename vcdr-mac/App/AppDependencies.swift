@@ -25,7 +25,7 @@ final class AppDependencies {
     #endif
 
     private(set) var readiness: ModelReadiness =
-        .preparing(label: ModelPreparationPhase.preparing.label(elapsedSeconds: 0))
+        .preparing(label: ModelPreparationPhase.initialLabel)
     var isTranscriptionReady: Bool { readiness == .ready }
     private(set) var hasMicrophonePermission = false
     private(set) var hasAccessibilityPermission = false
@@ -180,7 +180,7 @@ final class AppDependencies {
     /// under way narrates itself.
     func retryModelPreparation() async {
         guard case .failed = readiness else { return }
-        readiness = .preparing(label: ModelPreparationPhase.preparing.label(elapsedSeconds: 0))
+        readiness = .preparing(label: ModelPreparationPhase.initialLabel)
         await prepareTranscriptionModel()
     }
 

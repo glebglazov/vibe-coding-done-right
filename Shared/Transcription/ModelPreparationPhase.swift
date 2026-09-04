@@ -78,6 +78,10 @@ extension ModelPreparationPhase {
     /// Heartbeat. Fast preparations stay quiet; slow ones get a visible tick.
     static let heartbeatRevealThreshold: Int = 2
 
+    /// What a readiness surface says before the provider has reported a phase:
+    /// the opening phase, with no Preparation Heartbeat accrued yet.
+    static let initialLabel = ModelPreparationPhase.preparing.label(elapsedSeconds: 0)
+
     /// The label every readiness surface renders for this phase. Past the
     /// reveal threshold it carries a Preparation Heartbeat — the seconds spent
     /// in the phase — because the transcription backend reports no progress of

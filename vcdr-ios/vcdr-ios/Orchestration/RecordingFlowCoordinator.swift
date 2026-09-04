@@ -69,7 +69,7 @@ final class RecordingFlowCoordinator {
     }
 
     var state: State = .idle
-    private(set) var initProgress: String = ModelPreparationPhase.preparing.label(elapsedSeconds: 0)
+    private(set) var initProgress: String = ModelPreparationPhase.initialLabel
     /// True while artifacts are already on disk and Transcription Readiness is
     /// still pending. The hero may show READY because Recording Runs can begin
     /// during this window; PREPARING remains reserved for Cold Download.
@@ -330,7 +330,7 @@ final class RecordingFlowCoordinator {
         publishReadinessPresentation(for: predictedVerdict)
         // Initial label; pollTask below replaces this on the first iteration
         // with phase-true text once `ParakeetProvider.initPhase` advances.
-        initProgress = ModelPreparationPhase.preparing.label(elapsedSeconds: 0)
+        initProgress = ModelPreparationPhase.initialLabel
 
         let pollTask = Task {
             Logger.app.info("[LaunchProbe] pollTask started main=\(Thread.isMainThread)")

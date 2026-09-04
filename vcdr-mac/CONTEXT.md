@@ -177,7 +177,7 @@ Domain expert: "The Capture Session starts and records. Backend Rejection does n
 
 Dev: "The app was launched for the first time and iCloud container provisioning is still in progress."
 
-Domain expert: "Shell-first Initialization means the MenuBarExtra and Settings window render regardless. The menu bar tracks transcription readiness as the gating factor for recording. History and audio device enumeration catch up in the background."
+Domain expert: "Shell-first Initialization means the MenuBarExtra and Settings window render regardless. The menu bar names the Model Preparation Phase; it does not gate recording on it. History and audio device enumeration catch up in the background."
 
 Dev: "A Capture Session completed before the history store finished initializing."
 
