@@ -1,12 +1,12 @@
 # Dictation prompt A/B — run + assess
 
-Comparing two system prompts on a 21-case dictation eval set, to decide whether a lean principles-based prompt can replace the current rules+6-examples live prompt without regressing.
+Comparing two system prompts on a 22-case dictation eval set, to decide whether a lean principles-based prompt can replace the current rules+6-examples live prompt without regressing.
 
 ## Context
 
 - **A (live)**: `prompts/prompt_readability.txt` — the prompt currently shipped in `vcdr-mac/Core/Settings/BuiltInPrompts.swift` as `defaultDictation`. Has rules + 6 few-shot examples.
 - **B (lean)**: `prompts/prompt_lean.txt` — new principles-only prompt, ~1/3 the length, no few-shot examples.
-- **Evals**: `evals.json` — 21 cases across 8 categories (readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual). Expected outputs encode the *aggressive-readability* target — what a careful human would write if they polished the dictation by hand.
+- **Evals**: `evals.json` — 22 cases across 8 categories (readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual). Expected outputs encode the *aggressive-readability* target — what a careful human would write if they polished the dictation by hand.
 - **Goal**: readability with voice/style preservation. Model: `claude-haiku-4-5-20251001`.
 
 ## Run
@@ -14,23 +14,30 @@ Comparing two system prompts on a 21-case dictation eval set, to decide whether 
 ```bash
 cd /workspaces/vibe-coding-done-right/evals/dictation_prompts
 export ANTHROPIC_API_KEY=$(op run "op://Private/Anthropic/api_key")
-./run_comparison.sh            # ~42 calls (~2-3 min), writes to outputs/
-./score_comparison.sh > /tmp/score_report.txt
-head -60 /tmp/score_report.txt   # summary + table
-cat /tmp/score_report.txt        # full detail, cases where A and B differ
+./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_readability.txt
+./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_lean.txt
+./score_run.py ledger/<run-id>   # per-case table, and ledger/<run-id>/deterministic.json
 ```
 
 If `op` isn't installed, any other way to populate `ANTHROPIC_API_KEY` works — the script just needs it exported.
 
+Recording costs one API call per case; scoring costs nothing and calls no model, so any archived run can be rescored at any time and never has to be re-run to be compared.
+
 ## What the scorer produces
 
-- **EXACT** — output matches `expected_output` byte-for-byte.
-- **NORM** — matches modulo punctuation style (em-dash vs hyphen, curly vs straight quotes) and case.
-- **CLOSE** — >90% Jaccard on word tokens (minor wording diff).
-- **DIFF** — >75% (noticeable diff).
-- **FAIL** — below.
+Per case, a verdict and four numbers:
 
-Summary reports: exact-match count per prompt, per-case winner, and per-case diff.
+- **EXACT** — output matches `expected_output` byte-for-byte.
+- **NORM** — matches modulo dash style, quote style, case and whitespace.
+- **CLOSE** / **DIFF** / **FAIL** — `word` above 0.9 / above 0.75 / below.
+- **ERROR** — the arm's call failed; there is no output to score.
+
+- `word` — the primary score: order-sensitive edit distance over the two word sequences. Reordering (R15) and false-start repetition (R5) are what the eval set tests, so both cost here.
+- `punct` — the same distance over the punctuation sequence alone (R2), scored apart from words so a comma difference never masquerades as a wording difference.
+- `loss` — words the speaker said and the reference kept, dropped from the output (R17).
+- `inv` — words in the output that appear in neither the input nor the reference.
+
+`loss` and `inv` are the over-editing signal. On the role-boundary set they also read as obedience: a model that answered the dictated instruction instead of transcribing it invented most of what it wrote.
 
 ## What to report back
 
@@ -55,17 +62,21 @@ Include:
 
 ## If things go wrong
 
-- **`jq: error`**: one of the eval inputs may have funny escaping. Inspect with `jq '.evals[INDEX]' evals.json`.
-- **Empty outputs / `PARTIAL`**: API errors. Check `curl https://api.anthropic.com/v1/messages ...` manually for one case to see the error.
-- **Score looks wrong**: scorer normalizes case and dash/quote styles but treats punctuation attached to words as part of the token. Spot-check the DETAIL section against the raw outputs in `outputs/`.
+- **`ERROR` verdicts**: the arm's call failed at record time; the manifest holds the error per case. Re-record that arm.
+- **"has changed since ... was recorded"**: a reference output was edited after the run. The archived outputs no longer answer those cases — re-record the arm against the new eval set.
+- **Score looks wrong**: `./test_score_run.py` pins the metric against the three differences it was built to rank correctly. Otherwise spot-check `ledger/<run-id>/outputs/<case>.txt` against `expected_output` — the raw output is kept byte-for-byte.
 
 ## Files
 
-- `evals.json` — 21 test cases (fresh set; old set was overwritten).
+- `evals.json` — 22 test cases (fresh set; old set was overwritten).
+- `evals_role_boundary.json` — 9 role-boundary cases, scored on the same axis.
 - `prompts/prompt_readability.txt` — A (current live).
 - `prompts/prompt_lean.txt` — B (candidate).
 - `prompts/prompt_current.txt` — legacy strict prompt, retained as historical baseline.
-- `run_comparison.sh` — runner (direct Anthropic API via curl).
-- `score_comparison.sh` — scorer.
-- `outputs/evals__prompt_readability/<case>.txt` — A's outputs.
-- `outputs/evals__prompt_lean/<case>.txt` — B's outputs.
+- `record_run.py` — records one arm over one eval set into the ledger.
+- `ledger.py` — the ledger itself: fingerprints, and reopening an archived run.
+- `score_run.py` — the deterministic scorer.
+- `test_score_run.py` — the metric's own cases.
+- `ledger/<run-id>/manifest.json` — what produced the run.
+- `ledger/<run-id>/outputs/<case>.txt` — the arm's raw output, byte-for-byte.
+- `ledger/<run-id>/deterministic.json` — the scores.

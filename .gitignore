@@ -11,6 +11,9 @@
 .cache/
 tmp/
 
+# Python bytecode
+__pycache__/
+
 # Xcode user data
 xcuserdata/
 

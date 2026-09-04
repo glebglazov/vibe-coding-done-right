@@ -12,7 +12,6 @@ spending on models again.
 """
 
 import argparse
-import hashlib
 import json
 import os
 import subprocess
@@ -23,8 +22,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-LEDGER = HERE / "ledger"
+from ledger import HERE, LEDGER, case_fingerprint, eval_set_fingerprint, sha256_hex
 
 ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
 OPENAI_CHAT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions"
@@ -130,25 +128,6 @@ DEFAULT_ENDPOINTS = {
     "anthropic": ANTHROPIC_ENDPOINT,
     "openai-chat": OPENAI_CHAT_ENDPOINT,
 }
-
-
-def sha256_hex(*parts):
-    digest = hashlib.sha256()
-    for part in parts:
-        chunk = part.encode("utf-8")
-        # Length-prefix each part so no pair of fields can be re-split ambiguously.
-        digest.update(f"{len(chunk)}:".encode("ascii"))
-        digest.update(chunk)
-    return digest.hexdigest()
-
-
-def case_fingerprint(case):
-    """A case's meaning: its input together with the reference output it is judged against."""
-    return sha256_hex(case["input"], case["expected_output"])
-
-
-def eval_set_fingerprint(cases):
-    return sha256_hex(*(case_fingerprint(case) for case in cases))
 
 
 def user_message(case_input):
