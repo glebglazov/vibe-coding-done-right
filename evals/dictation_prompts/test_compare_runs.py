@@ -79,8 +79,53 @@ OUTPUTS_B = {
 JUDGE_OVERALL = {"hedge_fronted": 0.9, "voice_kept": 0.8, "passthrough_short": 1.0}
 
 
-def write_eval_set(path, cases):
-    path.write_text(json.dumps({"evals": cases}, ensure_ascii=False))
+def write_eval_set(path, cases, provenance=None):
+    document = {"evals": cases}
+    if provenance:
+        document["reference_provenance"] = provenance
+    path.write_text(json.dumps(document, ensure_ascii=False))
+
+
+QUOTED = {
+    "records": {
+        "quoted": {
+            "origin": "quoted_source",
+            "fitted_toward": [],
+            "basis": "Quoted verbatim from a source no candidate prompt wrote.",
+        }
+    }
+}
+FITTED_BASIS = "Authored in the commit that added prompt_readability and named it the winner."
+FITTED = {
+    "records": {
+        "authored_with": {
+            "origin": "authored_with_the_candidate_prompts",
+            "fitted_toward": ["prompt_readability"],
+            "basis": FITTED_BASIS,
+        }
+    }
+}
+
+
+def naming(record_id, cases):
+    """The same cases, each naming the provenance record its reference came from."""
+    return [{**case, "reference_provenance": record_id} for case in cases]
+
+
+def scores_only(printed):
+    """A comparison read as it read before any provenance was recorded: the
+    fitted-reference block, the note that carries it into the tables and the mark on
+    the arm it names, all taken back out."""
+    kept, inside_block = [], False
+    for line in printed.splitlines():
+        if line.startswith("FITTED REFERENCES"):
+            inside_block = True
+        elif line.startswith("DETERMINISTIC AXIS"):
+            inside_block = False
+        if inside_block or line.startswith("Fitted references: "):
+            continue
+        kept.append(line.replace(" | references fitted toward this prompt", ""))
+    return "\n".join(kept)
 
 
 ANCHORED = judge_axis("anchored")
@@ -96,6 +141,7 @@ def record(
     judge_overall=JUDGE_OVERALL,
     subset=None,
     judge_mode="anchored",
+    prompt_name="prompt_lean",
 ):
     """One run archived and scored as the ledger's own commands would leave it."""
     cases = subset_cases(json.loads(eval_set_path.read_text())["evals"], subset)
@@ -113,7 +159,7 @@ def record(
                     "model": model,
                     "endpoint": "https://example.invalid/v1/messages",
                     "runtime": "test",
-                    "prompt_name": "prompt_lean",
+                    "prompt_name": prompt_name,
                     "prompt_sha256": "0" * 64,
                     "sampling": {"temperature": 0},
                 },
@@ -404,6 +450,70 @@ def test_an_arm_is_compared_only_on_the_subset_it_was_asked():
         notes = "\n".join(not_comparable_section(comparison))
         assert "not recorded by run-partial" in notes, notes
         assert "passthrough_short" in notes, notes
+
+    with_ledger(body)
+
+
+def test_recording_where_a_reference_came_from_changes_no_score():
+    """Provenance is written beside a reference, never into it: the Case Fingerprint
+    is the input and the reference alone, so every run already in the ledger reads
+    exactly as it did before the answer key's history was written down."""
+
+    def body(ledger):
+        write_eval_set(ledger.eval_set, CASES)
+        runs = [ledger.a, ledger.b]
+        before = compare(runs)
+        printed_before = report(before, runs)
+
+        write_eval_set(ledger.eval_set, naming("quoted", CASES), QUOTED)
+        on_disk = json.loads(ledger.eval_set.read_text())["evals"]
+        assert [case_fingerprint(case) for case in on_disk] == [
+            case_fingerprint(case) for case in CASES
+        ], on_disk
+
+        after = compare(runs)
+        assert after == before, after
+        printed_after = report(after, runs)
+        assert scores_only(printed_after) == scores_only(printed_before), printed_after
+        # Nothing here was fitted toward either arm's prompt, so nothing is warned about.
+        assert "Fitted references: " not in printed_after, printed_after
+
+    with_ledger(body)
+
+
+def test_an_arm_is_named_where_the_references_were_fitted_toward_its_own_prompt():
+    """A score against a key authored with the arm's own prompt is agreement with a
+    specification, not model quality. The comparison says so next to the numbers, and
+    a case whose origin nothing settles is counted as unknown rather than assumed."""
+
+    def body(ledger):
+        cases = naming("authored_with", CASES[:2]) + [CASES[2]]
+        write_eval_set(ledger.eval_set, cases, FITTED)
+        root = ledger.a.directory.parent
+        lean = record(root / "run-lean", ledger.eval_set, "model-a", OUTPUTS_A, "judge-x")
+        fitted = record(
+            root / "run-fitted",
+            ledger.eval_set,
+            "model-b",
+            OUTPUTS_B,
+            "judge-x",
+            prompt_name="prompt_readability",
+        )
+        runs = [lean, fitted]
+        printed = report(compare(runs), runs)
+
+        assert "2 of 3 compared references were fitted toward this prompt" in printed, printed
+        assert "A  prompt_lean — no compared reference was fitted" in printed, printed
+        assert "1 of 3 compared references record no provenance" in printed, printed
+        assert FITTED_BASIS.split(" that ")[0] in printed, printed
+        # The arm identity header, then both tables that read the reference.
+        assert printed.count("references fitted toward this prompt") == 1, printed
+        assert printed.count("Fitted references: B (prompt_readability, 2/3") == 2, printed
+
+        # The warning is the only thing the fit adds: no cell of either table moves.
+        write_eval_set(ledger.eval_set, CASES)
+        neutral = report(compare(runs), runs)
+        assert scores_only(printed) == scores_only(neutral), printed
 
     with_ledger(body)
 

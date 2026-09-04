@@ -52,13 +52,40 @@ def subset_cases(cases, subset):
     return [case for case in cases if case["id"] in admitted]
 
 
-def eval_set_cases(name):
-    """The cases of the eval set a run names, as they stand on disk now.
+def eval_set_document(name):
+    """The eval set a run names, as it stands on disk now.
 
     A run names its set by filename, read from beside this module; an absolute
     path is honoured as given, which is how a test's scratch copy of a set is read.
     """
-    return read_json(HERE / name)["evals"]
+    return read_json(HERE / name)
+
+
+def eval_set_cases(name):
+    return eval_set_document(name)["evals"]
+
+
+# What a case's provenance says when the history does not settle it. A case naming
+# no record, or one its set does not define, is unknown rather than given the
+# origin its neighbours carry: a plausible provenance is worse than none, because
+# it reads as evidence.
+UNKNOWN_PROVENANCE = {
+    "origin": "unknown",
+    "fitted_toward": [],
+    "basis": "The repository's history does not settle where this reference came from.",
+}
+
+
+def case_provenance(case, document):
+    """Where one case's reference came from: the record it names in its own eval set.
+
+    A score is distance from a reference, so what the reference is fitted toward
+    decides what the score is evidence of. The records sit once at the top of the
+    set and a case names one, so the answer key's history is stated in one place
+    and every case that shares it says the same thing.
+    """
+    records = document.get("reference_provenance", {}).get("records", {})
+    return records.get(case.get("reference_provenance"), UNKNOWN_PROVENANCE)
 
 
 class ArchivedRun:

@@ -21,13 +21,26 @@ The deterministic axis and the judge axis are reported as two separate readings.
 A Deterministic Score is reproducible forever; a Judge Score holds only within
 one judge model. Nothing here averages them, and no cell of one is weighed
 against a cell of the other.
+
+Both of those axes measure distance from a reference, so the report says where the
+reference came from. An arm whose own prompt the references were authored with is
+named beside its numbers: its score is agreement with a key written to its own
+specification, which is not the same reading as another arm's.
 """
 
 import argparse
 import sys
+import textwrap
 from statistics import mean
 
-from ledger import JUDGE_FILES, ScoredRun, case_fingerprint, eval_set_cases
+from ledger import (
+    JUDGE_FILES,
+    ScoredRun,
+    case_fingerprint,
+    case_provenance,
+    eval_set_cases,
+    eval_set_document,
+)
 from score_run import SCORE_DIGITS, VERDICT_ORDER
 
 # What a cell says when the arms did not answer the same case.
@@ -35,6 +48,10 @@ NOT_COMPARABLE = "n/c"
 TIE = "="
 UNSCORED = "-"
 REFERENCE_CHANGED = "(the eval set no longer holds the case these runs answered)"
+PROVENANCE_UNREADABLE = (
+    "FITTED REFERENCES — the eval set is not on disk here, so where these references "
+    "came from cannot be read and no arm may be called neutral."
+)
 
 AXIS_SEPARATION = """\
 The two axes below are separate readings and are not comparable with each other.
@@ -346,7 +363,7 @@ def table(header, rows, gap="  "):
     return lines
 
 
-def deterministic_section(comparison):
+def deterministic_section(comparison, fitted_note=None):
     labels = [arm["label"] for arm in comparison["arms"]]
     header = ["case", "category"]
     for label in labels:
@@ -388,6 +405,7 @@ def deterministic_section(comparison):
     }
     return [
         f"DETERMINISTIC AXIS — {' | '.join(f'{label}: {metric}' for label, metric in metrics.items())}",
+        *([fitted_note] if fitted_note else []),
         "",
         *table(header, rows),
         "",
@@ -410,7 +428,7 @@ def run_metric(comparison, label):
     return arm.get("metric") or "not scored"
 
 
-def judge_section(comparison, mode):
+def judge_section(comparison, mode, fitted_note=None):
     """One judge mode's table. An arm read in another mode is not scored here and
     wins nothing here: a blind reading and an anchored one measure different things,
     and putting them in one column would rank one against the other."""
@@ -434,6 +452,8 @@ def judge_section(comparison, mode):
             "Judge Score holds only within one judge model and one mode, so these columns "
             "do not compare."
         )
+    if fitted_note:
+        lines.append(fitted_note)
 
     header = ["case", "category", *(f"{label} overall" for label in labels), "winner"]
     rows = [
@@ -546,21 +566,140 @@ def detail_section(comparison, runs):
     return lines
 
 
+def reference_provenance(comparison):
+    """Where each compared case's reference came from, as the eval set on disk records it.
+
+    Read the same way the references themselves are — from the set beside this
+    module, tolerating its absence — so a comparison stays a read of the scores.
+    A case nobody may compare is not in the reading: its reference is not what
+    anything here was ranked on.
+    """
+    try:
+        document = eval_set_document(comparison["eval_set"])
+    except FileNotFoundError:
+        return None
+    on_disk = {case["id"]: case for case in document["evals"]}
+    return {
+        case["id"]: case_provenance(on_disk.get(case["id"], {}), document)
+        for case in comparison["cases"]
+        if case["comparable"]
+    }
+
+
+def fitted_reading(comparison, provenance):
+    """How many of the compared references each arm's own prompt was fitted toward.
+
+    An arm ranked against a key authored alongside the prompt it runs is measured
+    on that key's specification as much as on model quality. That is a property of
+    the comparison, so it is counted here and printed with the numbers rather than
+    left to a document nobody opens.
+    """
+    if provenance is None:
+        return None
+    fitted_prompts = {
+        prompt for record in provenance.values() for prompt in record["fitted_toward"]
+    }
+    return {
+        "compared": len(provenance),
+        "unknown": sum(
+            1 for record in provenance.values() if record["origin"] == "unknown"
+        ),
+        "arms": [
+            {
+                "label": arm["label"],
+                "prompt_name": arm["prompt_name"],
+                "fitted": sum(
+                    1
+                    for record in provenance.values()
+                    if arm["prompt_name"] in record["fitted_toward"]
+                ),
+            }
+            for arm in comparison["arms"]
+        ],
+        "bases": list(
+            dict.fromkeys(
+                record["basis"]
+                for record in provenance.values()
+                if set(record["fitted_toward"])
+                & {arm["prompt_name"] for arm in comparison["arms"]}
+            )
+        ),
+        "fitted_prompts": sorted(fitted_prompts),
+    }
+
+
+def fitted_arms(reading):
+    return [arm for arm in reading["arms"] if arm["fitted"]] if reading else []
+
+
+def fitted_axis_note(reading):
+    """The line that sits beside the numbers, naming every arm whose own prompt the
+    references were fitted toward. None where no arm here is in that position."""
+    named = [
+        f"{arm['label']} ({arm['prompt_name']}, "
+        f"{arm['fitted']}/{reading['compared']} references)"
+        for arm in fitted_arms(reading)
+    ]
+    if not named:
+        return None
+    return (
+        "Fitted references: "
+        + ", ".join(named)
+        + " — ranked against a key authored with their own prompt, so these columns "
+        "are not a neutral reading of model quality."
+    )
+
+
+def fitted_reference_section(reading):
+    """Where the answer key came from, stated before any number is read."""
+    if reading is None:
+        return [PROVENANCE_UNREADABLE]
+    lines = ["FITTED REFERENCES — where the key these arms are ranked against came from", ""]
+    for arm in reading["arms"]:
+        plural = "reference was" if arm["fitted"] == 1 else "references were"
+        fitted = (
+            f"{arm['fitted']} of {reading['compared']} compared {plural} fitted "
+            "toward this prompt"
+            if arm["fitted"]
+            else "no compared reference was fitted toward this prompt"
+        )
+        lines.append(f"  {arm['label']}  {arm['prompt_name']} — {fitted}.")
+    if reading["unknown"]:
+        lines.append(
+            f"  {reading['unknown']} of {reading['compared']} compared references record "
+            "no provenance: unknown, not assumed neutral."
+        )
+    for basis in reading["bases"]:
+        lines += ["", textwrap.fill(basis, width=88, initial_indent="  ", subsequent_indent="  ")]
+    return lines
+
+
 def report(comparison, runs):
+    reading = fitted_reading(comparison, reference_provenance(comparison))
+    fitted = {arm["label"] for arm in fitted_arms(reading)}
     arms = [
         f"  {arm['label']}  {arm['run_id']}\n"
         f"     {arm['model']} @ {arm['endpoint']} | {arm['runtime']} | prompt {arm['prompt_name']} "
         f"({arm['prompt_sha256'][:12]})"
+        + (" | references fitted toward this prompt" if arm["label"] in fitted else "")
         for arm in comparison["arms"]
     ]
     preamble = [f"COMPARISON — eval set {comparison['eval_set']}", "", *arms, "", AXIS_SEPARATION]
     if len(comparison["judge_modes"]) > 1:
         preamble += ["", MODE_SEPARATION]
+    note = fitted_axis_note(reading) if reading else None
     sections = [
         preamble,
-        deterministic_section(comparison),
+        fitted_reference_section(reading),
+        deterministic_section(comparison, note),
         *(
-            [judge_section(comparison, mode) for mode in comparison["judge_modes"]]
+            [
+                # A blind reading never saw the reference, so a key fitted toward an
+                # arm's prompt cannot have reached it; the note belongs only where
+                # the reference was in front of the scorer.
+                judge_section(comparison, mode, note if mode == "anchored" else None)
+                for mode in comparison["judge_modes"]
+            ]
             or [["JUDGE AXIS — none of these arms has been judged."]]
         ),
         not_comparable_section(comparison),

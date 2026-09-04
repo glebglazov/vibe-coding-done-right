@@ -6,7 +6,7 @@ Comparing two system prompts on a 22-case dictation eval set, to decide whether 
 
 - **A (live)**: `prompts/prompt_readability.txt` — the prompt currently shipped in `vcdr-mac/Core/Settings/BuiltInPrompts.swift` as `defaultDictation`. Has rules + 6 few-shot examples.
 - **B (lean)**: `prompts/prompt_lean.txt` — new principles-only prompt, ~1/3 the length, no few-shot examples.
-- **Evals**: `evals.json` — 28 cases across 8 categories (readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual). Expected outputs encode the *aggressive-readability* target — what a careful human would write if they polished the dictation by hand. The seven `multilingual` cases each name where their reference was quoted from, in `reference_source`.
+- **Evals**: `evals.json` — 28 cases across 8 categories (readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual). Expected outputs encode the *aggressive-readability* target — what a careful human would write if they polished the dictation by hand. The seven `multilingual` cases each name where their reference was quoted from, in `reference_source`, and every case names where its reference came from in `reference_provenance` — see [Where the answer key came from](#where-the-answer-key-came-from-2026-09-04) before reading any score as model quality.
 - **Goal**: readability with voice/style preservation. Model: `claude-haiku-4-5-20251001`.
 
 ## Run
@@ -164,6 +164,91 @@ comparable case where the arms differ.
 produced it, and its means on each axis. `./index_ledger.py` regenerates it from
 the runs themselves, so it cannot drift — never edit it by hand, and re-run the
 command after recording, scoring or judging.
+
+## Where the answer key came from (2026-09-04)
+
+Both scored axes measure distance from `expected_output`, so what a score means
+depends on where that text came from. Every case in `evals.json` and
+`evals_role_boundary.json` now names a `reference_provenance` record, and the
+records sit once at the top of each set: the commit the reference was authored
+in, who authored it, the candidate prompt (if any) it was fitted toward, and the
+evidence for that. A case naming no record — or one its set does not define —
+reads as **unknown**, and is never given the origin its neighbours carry. No case
+in either set is unknown today.
+
+Provenance is written beside a reference, never into one. The Case Fingerprint is
+the input and the reference alone, so every run already in the ledger compares
+exactly as it did before; `./test_compare_runs.py` pins that a pre-existing
+comparison reads identically after the provenance is recorded.
+
+**What the history says.** `git log --follow` on `evals.json` gives seven
+commits. Two of them revised expected outputs toward a candidate prompt: `c71bb88`
+("toward aggressive compaction and restructuring", 17 outputs changed, reporting
+`prompt_007` scoring best against the outputs it had just moved) and `7be5444`
+("use prompts which modify text less", 23 changed). **Neither reaches any case in
+the set today**: `97a3139` replaced all 22 cases with fresh ones, and no input or
+expected output now here is carried over from the cases those two revisions
+touched — the closest surviving match to any pre-`97a3139` case is under half
+similar and shares no text. The revised outputs are gone with the cases that held
+them.
+
+The fit that does survive is `97a3139`'s own, and it is the tighter one:
+
+- The 21 English cases and `russian_mixed` were authored **in the same commit**
+  that added `prompts/prompt_readability.txt` and `prompts/prompt_lean.txt`, and
+  that commit reports `prompt_readability` winning 12/22 EXACT against those very
+  expected outputs. The set description written there names the
+  aggressive-readability target, which is `prompt_readability`'s design goal. The
+  commit carries a `Co-Authored-By: Claude Opus 4.7` trailer — the same model
+  family as the cloud arm measured against the key. Which of the two was written
+  to fit the other is not settled by the history, so the record states the fit and
+  not a direction. Either way, an arm running `prompt_readability` is not scored
+  independently of the key.
+- The seven `multilingual` cases (`3fcff6f`) quote an external text verbatim —
+  Tatoeba, a `ru.wikipedia` revision, a type in this repository — named per case
+  in `reference_source`, with the mechanical rule that derives the input from it.
+  No candidate prompt could have shaped them, and they are fitted toward nothing.
+- The nine cases of `evals_role_boundary.json` (`e924e66`) were authored in the
+  commit that added the role-boundary rule to `prompt_readability.txt` and split
+  `prompt_readability_baseline.txt` off as the control without that rule. They
+  state the behaviour the rule was written to produce, so they are fitted toward
+  `prompt_readability` too.
+
+**What a comparison prints.** `compare_runs.py` reads the provenance of the cases
+it actually compares and says, next to the numbers rather than only here:
+
+- the arm identity header marks any arm with `| references fitted toward this
+  prompt`;
+- a `FITTED REFERENCES` block gives each arm its count (`22 of 22 compared
+  references were fitted toward this prompt`), the number of compared references
+  with no provenance, and the record's own evidence;
+- a `Fitted references: …` line sits under the DETERMINISTIC AXIS header and under
+  the **anchored** judge table — the two readings that saw the key. The blind judge
+  table carries no such line, because a blind reading never saw the reference and
+  a key fitted toward a prompt cannot reach it.
+
+The counts are per comparison, so they follow the cases: a `prompt_readability`
+arm over the whole set reads 22/22, and the same arm over the `multilingual`
+subset reads 1/7 — only the legacy `russian_mixed` case there is fitted.
+
+**How to read the numbers now.** On the whole English set, a `prompt_readability`
+arm's deterministic score, and its anchored judge score, are agreement with a key
+authored alongside its own prompt: a reading of specification fit as much as of
+model quality. A `prompt_lean` arm on the same cases is measured against a key
+written toward the other candidate, which is a handicap of unknown size, not a
+neutral baseline either. Comparisons *between models on one prompt* — Haiku vs
+gemma4:e2b, both on `prompt_readability` — are unaffected, since both arms carry
+the same fit. Comparisons *between prompts* are the ones the provenance qualifies.
+
+**What would have to change for a score to be read as neutral.** References
+authored from a source independent of every prompt under test, by someone who is
+not a model of a family under test; frozen before any arm is measured; and never
+revised after seeing an arm's output, with the winner not declared in the commit
+that writes the key. The `multilingual` category already meets the first of these
+and is the closest thing here to a neutral deterministic reading; the blind judge
+axis is neutral by construction, since it never sees the key at all. Rewriting the
+English references to meet the rest is a product decision about what good
+dictation cleanup *is*, so nothing here rewrites one.
 
 ## Local models vs Haiku (2026-09-04)
 
@@ -554,14 +639,14 @@ Include:
 
 ## Files
 
-- `evals.json` — 28 test cases (fresh set; old set was overwritten), the named subsets an arm may be asked instead of all of them, and each multilingual case's `reference_source`.
-- `evals_role_boundary.json` — 9 role-boundary cases, scored on the same axis.
+- `evals.json` — 28 test cases (fresh set; old set was overwritten), the named subsets an arm may be asked instead of all of them, each multilingual case's `reference_source`, and the `reference_provenance` record every case names.
+- `evals_role_boundary.json` — 9 role-boundary cases, scored on the same axis, with their own provenance record.
 - `prompts/prompt_readability.txt` — A (current live).
 - `prompts/prompt_lean.txt` — B (candidate).
 - `prompts/prompt_current.txt` — legacy strict prompt, retained as historical baseline.
 - `prompts/s1_mini.txt` — S1-mini's required system prompt, verbatim; not a candidate prompt.
 - `record_run.py` — records one arm over one eval set into the ledger.
-- `ledger.py` — the ledger itself: fingerprints, and reopening an archived run.
+- `ledger.py` — the ledger itself: fingerprints, reference provenance, and reopening an archived run.
 - `score_run.py` — the deterministic scorer.
 - `judge_run.py` — the judge-axis scorer.
 - `compare_runs.py` — lays recorded arms side by side, on both axes.

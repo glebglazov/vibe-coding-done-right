@@ -1,5 +1,24 @@
 {
   "description": "Fresh eval set for the readability-with-style-preservation dictation prompt. Expected outputs represent what a careful human would write if they polished the dictation (aggressive-readability target), not mechanical transformations. Each case has a `category` and `exercises` tag. New cases record how their reference was authored in `reference_source`. Categories: readability_transform, voice_preservation, content_preservation, self_correction, realistic_mixed, passthrough, capture, multilingual.",
+  "reference_provenance": {
+    "why": "Where each case's reference came from, so a score computed against it can be read for what it is. A case names the record its reference was authored in; a case naming no record, or one this set does not define, is unknown and is not given a plausible origin. Two earlier commits revised this set's expected outputs toward a candidate prompt (c71bb88, \"toward aggressive compaction and restructuring\", 17 outputs changed, reporting prompt_007 scoring best against them; then 7be5444, \"use prompts which modify text less\", 23 changed), but 97a3139 replaced every case in the set, and no input or expected output now here is carried over from the cases those two revisions touched. The fit that survives in this set is 97a3139's own.",
+    "records": {
+      "97a3139": {
+        "origin": "authored_with_the_candidate_prompts",
+        "authored_in": "97a3139 (2026-04-24) — evals(dictation): A/B harness for prompt optimization",
+        "authored_by": "Claude Opus 4.7, per that commit's Co-Authored-By trailer — the same model family as the cloud arm now measured against these references",
+        "fitted_toward": ["prompt_readability"],
+        "basis": "Every case naming this record was added by 97a3139, in the one commit that also added prompts/prompt_readability.txt and prompts/prompt_lean.txt and reports prompt_readability as the winner at 12/22 EXACT against these very expected outputs; the set description written in the same commit names the aggressive-readability target, which is prompt_readability's design goal. Which of the two was written to fit the other is not settled by the history, so the fit is recorded and the direction is not: either way an arm running prompt_readability is not scored independently of the key."
+      },
+      "3fcff6f": {
+        "origin": "quoted_source",
+        "authored_in": "3fcff6f (2026-09-04) — feat(evals): measure every arm on non-English dictation instead of one case",
+        "authored_by": "quoted from the external text named in this case's reference_source; the input is derived from that text by the mechanical rule the same field states",
+        "fitted_toward": [],
+        "basis": "The reference is an external text quoted verbatim (Tatoeba, ru.wikipedia, a type in this repository), named per case in reference_source, so no candidate prompt's output could have shaped it. 3fcff6f revised no expected output already in the set."
+      }
+    }
+  },
   "subsets": {
     "english": {
       "why": "An English-only arm must not be asked the non-English cases. Naming the subset here keeps one eval set: the arm records the cases it admits, and a comparison drops the rest as not comparable rather than a fork of the set putting the same references in two places.",
@@ -15,6 +34,7 @@
       "id": "trailing_hedge_fronted",
       "category": "readability_transform",
       "exercises": "Trailing 'I think' / 'I guess' fronted within their own clauses.",
+      "reference_provenance": "97a3139",
       "input": "the migration ran overnight without issues I think and we can close the ticket tomorrow I guess",
       "expected_output": "I think the migration ran overnight without issues, and I guess we can close the ticket tomorrow."
     },
@@ -22,6 +42,7 @@
       "id": "spoken_order_quantity",
       "category": "readability_transform",
       "exercises": "Spoken-order quantity 'weeks like three to four' -> written 'three to four weeks'.",
+      "reference_provenance": "97a3139",
       "input": "the rollout will take weeks like three to four depending on the market",
       "expected_output": "The rollout will take three to four weeks, depending on the market."
     },
@@ -29,6 +50,7 @@
       "id": "split_infinitive_adverb",
       "category": "readability_transform",
       "exercises": "Adverb in split-infinitive position moved before the verb it modifies.",
+      "reference_provenance": "97a3139",
       "input": "he wants to eventually hand off the whole project to a new team",
       "expected_output": "He eventually wants to hand off the whole project to a new team."
     },
@@ -36,6 +58,7 @@
       "id": "tic_dedup_i_think",
       "category": "readability_transform",
       "exercises": "First 'I think' governs the thought; drop the two tic repetitions, keep all content.",
+      "reference_provenance": "97a3139",
       "input": "I think we should do a post-mortem because I think this kept coming up and I think everyone keeps hitting it differently",
       "expected_output": "I think we should do a post-mortem, because this kept coming up and everyone keeps hitting it differently."
     },
@@ -43,6 +66,7 @@
       "id": "list_collapse_and",
       "category": "readability_transform",
       "exercises": "Topic + 'and X and Y and Z' list of parallel symptoms -> 'topic: X, Y, and Z'.",
+      "reference_provenance": "97a3139",
       "input": "the release notes need work and the screenshots are outdated and the install instructions are missing a step and the release date is wrong",
       "expected_output": "The release notes need work: the screenshots are outdated, the install instructions are missing a step, and the release date is wrong."
     },
@@ -50,6 +74,7 @@
       "id": "false_start_double_connector",
       "category": "readability_transform",
       "exercises": "False-start repetition 'and then and then' collapses to single 'and then'.",
+      "reference_provenance": "97a3139",
       "input": "and then and then we hit the scaling wall and we had to restart the whole node pool",
       "expected_output": "And then we hit the scaling wall, and we had to restart the whole node pool."
     },
@@ -57,6 +82,7 @@
       "id": "casual_voice_preserved",
       "category": "voice_preservation",
       "exercises": "Casual, opinionated voice: keep 'honestly', 'dumpster fire', 'But yeah', and the speaker's rhythm.",
+      "reference_provenance": "97a3139",
       "input": "honestly the whole refactor has been a dumpster fire from day one. But yeah I don't think it's salvageable anymore we should just rewrite the module from scratch",
       "expected_output": "Honestly, the whole refactor has been a dumpster fire from day one. But yeah, I don't think it's salvageable anymore — we should just rewrite the module from scratch."
     },
@@ -64,6 +90,7 @@
       "id": "opening_phrase_preserved",
       "category": "voice_preservation",
       "exercises": "'So I've been thinking' opening phrase must be preserved intact.",
+      "reference_provenance": "97a3139",
       "input": "so I've been thinking about this on and off for weeks. what if we just moved the entire cache layer to the edge instead of regional clusters",
       "expected_output": "So I've been thinking about this on and off for weeks. What if we just moved the entire cache layer to the edge instead of regional clusters?"
     },
@@ -71,6 +98,7 @@
       "id": "distinct_hedges_preserved",
       "category": "voice_preservation",
       "exercises": "Different hedge words (guess, maybe, probably, I think) are all semantic — none is a tic, keep them all.",
+      "reference_provenance": "97a3139",
       "input": "I guess maybe we could probably just skip the integration tests this time I think nobody really looks at them anymore",
       "expected_output": "I guess maybe we could probably just skip the integration tests this time — I think nobody really looks at them anymore."
     },
@@ -78,6 +106,7 @@
       "id": "cascade_conditions_preserved",
       "category": "content_preservation",
       "exercises": "Every 'and if X' is a distinct cascade step; keep all connectors, do NOT split into separate sentences.",
+      "reference_provenance": "97a3139",
       "input": "the check runs first and if it passes you hit the cache and if that misses you query the DB and if the DB is slow we fall back to a cached response",
       "expected_output": "The check runs first, and if it passes you hit the cache, and if that misses you query the DB, and if the DB is slow we fall back to a cached response."
     },
@@ -85,6 +114,7 @@
       "id": "sequential_events_preserved",
       "category": "content_preservation",
       "exercises": "Chain of events joined by 'and' — split the run-on into two sentences but preserve sequential 'and' connectors (each is a discrete action).",
+      "reference_provenance": "97a3139",
       "input": "we pushed the build and waited for the smoke tests and everything passed and then Sarah approved it and we deployed to staging",
       "expected_output": "We pushed the build and waited for the smoke tests. Everything passed, and then Sarah approved it, and we deployed to staging."
     },
@@ -92,6 +122,7 @@
       "id": "wordy_intro_preserved",
       "category": "content_preservation",
       "exercises": "'The way the thing with X works is' is a characteristic wordy spoken intro; preserve it, do not tighten.",
+      "reference_provenance": "97a3139",
       "input": "so the way the thing with the permissions system works is you have a user and users can belong to multiple groups and groups have roles",
       "expected_output": "So the way the thing with the permissions system works is: you have a user, users can belong to multiple groups, and groups have roles."
     },
@@ -99,6 +130,7 @@
       "id": "self_correction_own",
       "category": "self_correction",
       "exercises": "Speaker's own mid-thought correction — collapse to final decision but KEEP the reasoning clause.",
+      "reference_provenance": "97a3139",
       "input": "I think we should use postgres. actually wait no mongo would be better because the data is pretty document-shaped anyway",
       "expected_output": "I think we should use Mongo, because the data is pretty document-shaped anyway."
     },
@@ -106,6 +138,7 @@
       "id": "self_correction_quoted",
       "category": "self_correction",
       "exercises": "Quoted self-correction from someone else — preserve inside quotation marks as dialogue, do NOT collapse.",
+      "reference_provenance": "97a3139",
       "input": "Jess was like we should meet Monday. oh wait no Tuesday because Monday is a holiday. so we rescheduled everything",
       "expected_output": "Jess was like \"we should meet Monday — oh wait, no, Tuesday, because Monday is a holiday.\" So we rescheduled everything."
     },
@@ -113,6 +146,7 @@
       "id": "meeting_retro_mixed",
       "category": "realistic_mixed",
       "exercises": "Longer meeting-style dictation: filler removal, casual voice preserved, numbered items structured, em-dashes for asides.",
+      "reference_provenance": "97a3139",
       "input": "okay so after the retro I think we need to basically like address three things. first the incident response is way too slow we had like twenty minutes of downtime on Thursday and nobody paged the right team. second we need to fix the runbook it's wildly out of date I mean nothing in there matches our current infra. and third we should probably invest in like better monitoring because right now we're basically flying blind between alerts",
       "expected_output": "Okay, so after the retro, I think we need to address three things. First, the incident response is way too slow — we had twenty minutes of downtime on Thursday and nobody paged the right team. Second, we need to fix the runbook — it's wildly out of date, nothing in there matches our current infra. And third, we should probably invest in better monitoring, because right now we're basically flying blind between alerts."
     },
@@ -120,6 +154,7 @@
       "id": "product_idea_mixed",
       "category": "realistic_mixed",
       "exercises": "Product-idea rambling: filler removal ('like' × many), question-mark recognition, em-dash expansion of 'what if'.",
+      "reference_provenance": "97a3139",
       "input": "here's an idea I had on the walk today. what if we made the onboarding like actually fun. like right now it's this boring form where you enter your email and your name and whatever. but what if we gamified it and you like earned points for filling things in and you could like unlock features by completing steps. I think people would actually enjoy it and we'd probably get way better completion rates",
       "expected_output": "Here's an idea I had on the walk today. What if we made the onboarding actually fun? Right now it's this boring form where you enter your email, your name, and whatever. But what if we gamified it — you earned points for filling things in, and you could unlock features by completing steps? I think people would actually enjoy it, and we'd probably get way better completion rates."
     },
@@ -127,6 +162,7 @@
       "id": "technical_explanation_mixed",
       "category": "realistic_mixed",
       "exercises": "Technical explanation: keep 'kind of weird' voice marker, em-dash for clarification, 429/60 number formatting, preserve contrasting 'but the downside' clause.",
+      "reference_provenance": "97a3139",
       "input": "so the way our rate limiter works is kind of weird. we don't actually use a fixed window like most people do. we use this sliding window thing where we count requests in the last sixty seconds and if you exceed the limit we return a 429. the cool thing is it adapts to burst traffic better. but the downside is it's more expensive computationally because you have to track every request",
       "expected_output": "So the way our rate limiter works is kind of weird. We don't actually use a fixed window like most people do — we use this sliding window thing where we count requests in the last 60 seconds, and if you exceed the limit we return a 429. The cool thing is it adapts to burst traffic better. But the downside is it's more expensive computationally, because you have to track every request."
     },
@@ -134,6 +170,7 @@
       "id": "frustration_vent_mixed",
       "category": "realistic_mixed",
       "exercises": "Frustrated rambling: preserve 'honestly', 'just', 'I mean' when semantic, remove 'like' / 'basically' as fillers, number formatting (forty-five -> 45), proper nouns (jira, slack).",
+      "reference_provenance": "97a3139",
       "input": "honestly I'm so tired of the standup format we have. we spend like forty five minutes every day going around and everyone just basically reads their jira tickets out loud and nobody actually listens. and half the team is remote so they're muted anyway. I think we should just kill it and do async updates in slack instead I mean nobody would miss it",
       "expected_output": "Honestly, I'm so tired of the standup format we have. We spend 45 minutes every day going around, and everyone just reads their Jira tickets out loud, and nobody actually listens. And half the team is remote, so they're muted anyway. I think we should just kill it and do async updates in Slack instead — I mean, nobody would miss it."
     },
@@ -141,6 +178,7 @@
       "id": "short_greeting_passthrough",
       "category": "passthrough",
       "exercises": "Short conversational input — just punctuation + capitalization, no creative treatment.",
+      "reference_provenance": "97a3139",
       "input": "hey are you free this afternoon for a quick sync",
       "expected_output": "Hey, are you free this afternoon for a quick sync?"
     },
@@ -148,6 +186,7 @@
       "id": "short_task_list_passthrough",
       "category": "passthrough",
       "exercises": "Short reminder — keep conjunction 'and also', add punctuation, no splitting.",
+      "reference_provenance": "97a3139",
       "input": "remind me to email the finance team about the invoice and also pick up groceries on the way home",
       "expected_output": "Remind me to email the finance team about the invoice, and also pick up groceries on the way home."
     },
@@ -155,6 +194,7 @@
       "id": "capture_with_code",
       "category": "capture",
       "exercises": "<capture id=\"1\"> block must be preserved byte-for-byte, including newlines and special characters inside code.",
+      "reference_provenance": "97a3139",
       "input": "so here's the snippet for the rate limiter I was talking about. I think the bug is in how we're handling the cleanup can you take a look\n\n<capture id=\"1\">function rateLimiter(userId) {\n  const now = Date.now();\n  const requests = cache.get(userId) || [];\n  const recent = requests.filter(t => t > now - 60000);\n  if (recent.length >= 100) return false;\n  cache.set(userId, [...recent, now]);\n  return true;\n}</capture>",
       "expected_output": "So here's the snippet for the rate limiter I was talking about. I think the bug is in how we're handling the cleanup — can you take a look?\n\n<capture id=\"1\">function rateLimiter(userId) {\n  const now = Date.now();\n  const requests = cache.get(userId) || [];\n  const recent = requests.filter(t => t > now - 60000);\n  if (recent.length >= 100) return false;\n  cache.set(userId, [...recent, now]);\n  return true;\n}</capture>"
     },
@@ -162,6 +202,7 @@
       "id": "russian_mixed",
       "category": "multilingual",
       "exercises": "Russian dictation: reorder 'два месяца как минимум' -> 'как минимум два месяца'; natural punctuation; preserve 'Слушай' opener.",
+      "reference_provenance": "97a3139",
       "input": "слушай я думаю нам нужно переехать на новый фреймворк потому что старый постоянно ломается и документация у него отстой и никто в команде его не любит. я уже два месяца как минимум об этом думаю но всё не было времени нормально обсудить",
       "expected_output": "Слушай, я думаю, нам нужно переехать на новый фреймворк, потому что старый постоянно ломается, документация у него отстой, и никто в команде его не любит. Я уже как минимум два месяца об этом думаю, но всё не было времени нормально обсудить.",
       "reference_source": "Authored together with the original eval set by the Claude model family, before this field existed. Retained as the legacy multilingual case: an Anthropic arm answering it is answering a reference from its own model family, which the six cases beside it are not."
@@ -170,6 +211,7 @@
       "id": "russian_monolingual",
       "category": "multilingual",
       "exercises": "Russian monolingual: restore the sentence boundary and the commas, keep every word, answer in Russian.",
+      "reference_provenance": "3fcff6f",
       "reference_source": "Tatoeba sentence #1682438 (CC BY 2.0 FR), verbatim; the input is that reference lowercased with its punctuation removed.",
       "input": "у меня на компьютере установлено слишком много программ может быть если я удалю некоторые из них мой компьютер будет работать намного быстрее",
       "expected_output": "У меня на компьютере установлено слишком много программ. Может быть, если я удалю некоторые из них, мой компьютер будет работать намного быстрее."
@@ -178,6 +220,7 @@
       "id": "russian_with_english_terms",
       "category": "multilingual",
       "exercises": "English technical terms inside Russian sentences: Kubernetes, K8s, Docker and rkt must come back with their own capitalization, untranslated and untransliterated.",
+      "reference_provenance": "3fcff6f",
       "reference_source": "The first two sentences of the Russian Wikipedia article «Kubernetes» (revision 152709276, CC BY-SA 4.0), verbatim; the input is that reference lowercased with its punctuation removed.",
       "input": "kubernetes k8s открытое программное обеспечение для оркестровки контейнеризированных приложений автоматизации их развёртывания масштабирования и координации в условиях кластера поддерживает основные технологии контейнеризации включая docker rkt также возможна поддержка технологий аппаратной виртуализации",
       "expected_output": "Kubernetes (K8s) — открытое программное обеспечение для оркестровки контейнеризированных приложений — автоматизации их развёртывания, масштабирования и координации в условиях кластера. Поддерживает основные технологии контейнеризации, включая Docker, rkt, также возможна поддержка технологий аппаратной виртуализации."
@@ -186,6 +229,7 @@
       "id": "russian_english_code_switch",
       "category": "multilingual",
       "exercises": "Code-switch mid-sentence: the Russian frame and the English clause both survive as dictated, and neither half is translated into the other's language.",
+      "reference_provenance": "3fcff6f",
       "reference_source": "Two verbatim halves of one aligned Tatoeba pair — the Russian clause of #13259226 and the English clause of its translation #11611733 (CC BY 2.0 FR) — spliced at the comma both sources carry; the input is that reference lowercased with its punctuation removed, a contraction's apostrophe kept as the set's other inputs keep it.",
       "input": "я думал что это хорошая идея but now i'm not so sure",
       "expected_output": "Я думал, что это хорошая идея, but now I'm not so sure."
@@ -194,6 +238,7 @@
       "id": "german_monolingual",
       "category": "multilingual",
       "exercises": "German dictation: restore noun capitalization, the sentence boundary and the exclamation, and answer in German rather than translating into English.",
+      "reference_provenance": "3fcff6f",
       "reference_source": "Tatoeba sentence #5683711 (CC BY 2.0 FR), verbatim; the input is that reference lowercased with its punctuation removed.",
       "input": "das projekt hätte eigentlich gestern fertig sein müssen wenn einer von euch je wieder eine frist versäumt dann rollen köpfe",
       "expected_output": "Das Projekt hätte eigentlich gestern fertig sein müssen. Wenn einer von euch je wieder eine Frist versäumt, dann rollen Köpfe!"
@@ -202,6 +247,7 @@
       "id": "german_passthrough",
       "category": "multilingual",
       "exercises": "Non-English passthrough: the input is already correct German, so the only correct answer is the input returned unchanged — no translation, no rewriting.",
+      "reference_provenance": "3fcff6f",
       "reference_source": "Tatoeba sentence #12567092 (CC BY 2.0 FR), verbatim; the input is the same sentence unchanged, which is what makes the case a passthrough.",
       "input": "Wollen wir irgendwo zusammen einen Kaffee trinken gehen?",
       "expected_output": "Wollen wir irgendwo zusammen einen Kaffee trinken gehen?"
@@ -210,6 +256,7 @@
       "id": "russian_capture_tag",
       "category": "multilingual",
       "exercises": "Russian prose around a capture block: the <capture id=\"1\"> block comes back byte-for-byte, Swift identifiers included, while the Russian around it is punctuated.",
+      "reference_provenance": "3fcff6f",
       "reference_source": "Two verbatim Tatoeba sentences (#7862116 and #7110376, CC BY 2.0 FR) as the prose; the capture block quotes the stored properties of Shared/Substitutions/SubstitutionTombstone.swift in this repository and round-trips unchanged. The input is the prose lowercased with its punctuation removed, and the capture block byte-for-byte.",
       "input": "вот вам простейший пример я не уверен что это хорошая идея\n\n<capture id=\"1\">struct SubstitutionTombstone: Codable, Equatable, Sendable {\n    let substitutionID: UUID\n    let deletedAt: Date\n}</capture>",
       "expected_output": "Вот вам простейший пример. Я не уверен, что это хорошая идея.\n\n<capture id=\"1\">struct SubstitutionTombstone: Codable, Equatable, Sendable {\n    let substitutionID: UUID\n    let deletedAt: Date\n}</capture>"
