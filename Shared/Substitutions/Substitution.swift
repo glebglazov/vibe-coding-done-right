@@ -31,8 +31,8 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
     var extras: [String: AnyJSON]
 
     /// The phrase that goes in the singular `triggerPhrase` key for builds that
-    /// predate the array (see ADR-0008), and the one phrase that call sites
-    /// still editing a single Trigger Phrase read and write.
+    /// predate the array (see ADR-0008). A landing pad written on encode, not a
+    /// field an editor works through: both editors edit `triggerPhrases`.
     var triggerPhrase: String {
         get { triggerPhrases.first ?? "" }
         set {

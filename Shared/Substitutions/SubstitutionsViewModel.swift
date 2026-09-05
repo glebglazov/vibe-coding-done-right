@@ -3,7 +3,9 @@ import Observation
 import SwiftUI
 
 /// Drives the Substitutions settings tab. Owns the editable list shown in the
-/// UI and persists every add / edit / delete through the `SubstitutionStore`.
+/// UI and persists every edit and delete through the `SubstitutionStore`; an
+/// add is a draft row only, reaching the store on its first commit that carries
+/// a Replacement.
 ///
 /// The UI list (`drafts`) is the view's source of truth for *ordering* so a row
 /// doesn't jump while the user is typing — the store re-sorts newest-edited
