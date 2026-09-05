@@ -4,8 +4,9 @@ import SwiftUI
 /// Sync Time when the last one settled, and that same older time behind a
 /// "catching up" note when it did not.
 ///
-/// Both history lists show the same words. Font and colour come from the
-/// control the platform wraps this in.
+/// Both platforms show the same words, on the history list and on the
+/// Substitutions screen alike. Font and colour come from the control the
+/// platform wraps this in.
 struct SyncStatusLabel: View {
     let passState: SyncReconciler.PassState
     let lastSyncTime: Date?

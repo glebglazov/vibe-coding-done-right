@@ -91,6 +91,7 @@ final class LocalSubstitutionStore: SubstitutionStore, RecordFileSyncedStore {
     /// that turn out to be one Substitution two devices made separately, writes
     /// out whatever the database then owes the directory, and republishes the
     /// list.
+    ///
     /// - Returns: the entries the directory would not take, which is the part
     ///   of a pass's Outstanding Work only the database can see.
     @discardableResult

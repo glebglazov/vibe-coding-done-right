@@ -71,9 +71,10 @@ final class SyncReconciler {
     private let watcher = ContainerWatcher()
     private var observerTokens: [NSObjectProtocol] = []
 
-    /// De-duplicates overlapping passes. A pull-to-refresh arriving while a
+    /// Keeps passes from overlapping. A pull-to-refresh arriving while a
     /// query-driven pass is still merging would otherwise scan the same
-    /// directory twice and publish the same list twice.
+    /// directory at the same time and publish the same list twice; it waits
+    /// its turn as `passQueued` instead.
     private var passInFlight = false
 
     /// An ask that arrived mid-pass. The running pass read the directory
