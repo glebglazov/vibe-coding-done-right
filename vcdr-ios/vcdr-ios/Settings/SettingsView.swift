@@ -16,7 +16,7 @@ struct SettingsView: View {
         store: SharedConstants.sharedDefaults
     ) private var defaultStyleRaw = TextStyle.casual.rawValue
     @AppStorage(
-        HistoryStoreFactory.syncEnabledDefaultsKey,
+        HistorySync.syncEnabledDefaultsKey,
         store: SharedConstants.sharedDefaults
     ) private var syncHistoryViaICloud: Bool = true
     @AppStorage(HotSessionTimeout.storageKey)

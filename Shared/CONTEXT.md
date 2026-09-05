@@ -42,6 +42,16 @@ _Avoid_: AIProvider, full backend list, selectable provider enum
 Each platform publishes which backends appear in settings and mode pickers. iOS may register Apple when AFM is available; macOS registers local-agent backends separately. Registration is explicit — never derived from `CaseIterable.allCases` on a shared enum.
 _Avoid_: allCases picker, shared Apple case, automatic backend discovery
 
+### History Storage
+
+**Local Store**:
+The on-device database every history read answers from — launch, the history list and paging. It lives in the app's own storage (the app group on iOS, Application Support on macOS) and never in the iCloud container, because a database cannot be synced as a file: iCloud file coordination resolves a conflict between its files as a corrupted database rather than a merge.
+_Avoid_: cache, local mirror, offline copy
+
+**Record File**:
+One conversation, or one delete of it, as a single JSON file in the directory the devices sync through. Record Files are the transport, not the store: a write lands in the Local Store first and is exported to its Record File behind that, and the Local Store remembers what still owes a file so an export deferred by an unreachable container still happens later.
+_Avoid_: snapshot file, iCloud store, history file
+
 ## Initialization
 
 **Shell-first Initialization**:

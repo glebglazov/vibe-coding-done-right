@@ -32,6 +32,7 @@ final class FileHistoryStore: HistoryStore {
     var hasMorePages: Bool { cursor < index.count && conversations.count < Self.maxConversations }
 
     let conversationsDir: URL
+    private let archive: ConversationFileArchive
     private let legacyFileURL: URL
     // nonisolated(unsafe) — JSONEncoder/Decoder are immutable after init
     // and thread-safe for concurrent encode/decode. Captured by detached
@@ -39,11 +40,10 @@ final class FileHistoryStore: HistoryStore {
     nonisolated(unsafe) private let encoder: JSONEncoder
     nonisolated(unsafe) private let decoder: JSONDecoder
 
-    fileprivate struct IndexEntry: Equatable, Sendable {
-        let url: URL
-        let id: UUID
-        let modifiedAt: Date
-    }
+    /// One shape for the on-disk record layout: the archive owns the
+    /// filenames, the tombstone suppression and the entries both this store
+    /// and the Local Store's import path read.
+    fileprivate typealias IndexEntry = ConversationFileArchive.Entry
     private var index: [IndexEntry] = []
     private var cursor: Int = 0
 
@@ -64,6 +64,7 @@ final class FileHistoryStore: HistoryStore {
     /// `loadSnapshot(storageRoot:)`.
     init(snapshot: Snapshot) {
         self.conversationsDir = snapshot.storageRoot.appendingPathComponent("conversations")
+        self.archive = ConversationFileArchive(directory: conversationsDir)
         self.legacyFileURL = snapshot.storageRoot.appendingPathComponent("history.json")
         self.encoder = HistoryJSONCoders.makeEncoder()
         self.decoder = HistoryJSONCoders.makeDecoder()
@@ -83,14 +84,15 @@ final class FileHistoryStore: HistoryStore {
         let encoder = HistoryJSONCoders.makeEncoder()
         let decoder = HistoryJSONCoders.makeDecoder()
 
-        ensureDirectoryExistsOffMain(conversationsDir)
+        let archive = ConversationFileArchive(directory: conversationsDir)
+        archive.ensureDirectoryExists()
         migrateLegacyFileIfNeededOffMain(
             legacyFileURL: legacyFileURL,
-            conversationsDir: conversationsDir,
+            archive: archive,
             encoder: encoder,
             decoder: decoder
         )
-        let index = scanIndexOffMain(conversationsDir: conversationsDir)
+        let index = archive.liveEntries()
         let (conversations, cursor) = loadFirstPageOffMain(index: index, decoder: decoder)
         return Snapshot(
             storageRoot: storageRoot,
@@ -143,42 +145,42 @@ final class FileHistoryStore: HistoryStore {
         refreshIndexEntry(id: conversationID, url: fileURL, modifiedAt: now)
 
         let encoder = self.encoder
+        let archive = self.archive
+        let filename = fileURL.lastPathComponent
         Task.detached(priority: .utility) {
-            Self.writeSnapshotOffMain(conversation, to: fileURL, encoder: encoder)
+            archive.writeSnapshot(conversation, named: filename, encoder: encoder)
         }
     }
 
     func removeConversation(_ conversation: Conversation) {
         let now = Date()
         let id = conversation.id
-        let url = tombstoneURL(id: id, deletedAt: now)
         conversations.removeAll { $0.id == id }
         index.removeAll { $0.id == id }
         cursor = min(cursor, index.count)
 
         let encoder = self.encoder
+        let archive = self.archive
         Task.detached(priority: .utility) {
-            Self.writeTombstoneOffMain(id: id, deletedAt: now, url: url, encoder: encoder)
+            archive.writeTombstone(id: id, deletedAt: now, encoder: encoder)
         }
     }
 
     func clearAll() {
         let now = Date()
-        var pending: [(id: UUID, url: URL)] = []
-        for conv in conversations {
-            pending.append((conv.id, tombstoneURL(id: conv.id, deletedAt: now)))
-        }
+        var pending: [UUID] = conversations.map(\.id)
         for entry in index where !conversations.contains(where: { $0.id == entry.id }) {
-            pending.append((entry.id, tombstoneURL(id: entry.id, deletedAt: now)))
+            pending.append(entry.id)
         }
         conversations.removeAll()
         index.removeAll()
         cursor = 0
 
         let encoder = self.encoder
+        let archive = self.archive
         Task.detached(priority: .utility) {
-            for item in pending {
-                Self.writeTombstoneOffMain(id: item.id, deletedAt: now, url: item.url, encoder: encoder)
+            for id in pending {
+                archive.writeTombstone(id: id, deletedAt: now, encoder: encoder)
             }
         }
     }
@@ -217,7 +219,7 @@ final class FileHistoryStore: HistoryStore {
         let loaded = await Task.detached(priority: .utility) {
             slice.compactMap { entry -> Conversation? in
                 guard !existingIDs.contains(entry.id) else { return nil }
-                return Self.readConversationOffMain(at: entry.url, decoder: decoder)
+                return ConversationFileArchive.readConversation(at: entry.url, decoder: decoder)
             }
         }.value
         conversations.append(contentsOf: loaded)
@@ -233,9 +235,9 @@ final class FileHistoryStore: HistoryStore {
     /// iCloud resolves placeholders. MainActor state is mutated only on the
     /// hop back at the end.
     func rebuildIndexAndReloadFirstPageAsync() async {
-        let dir = conversationsDir
+        let archive = self.archive
         let newIndex = await Task.detached(priority: .utility) {
-            Self.scanIndexOffMain(conversationsDir: dir)
+            archive.liveEntries()
         }.value
         self.index = newIndex
         self.cursor = 0
@@ -252,49 +254,8 @@ final class FileHistoryStore: HistoryStore {
 
     // MARK: - Disk I/O
 
-    /// Nonisolated so it can run inside `Task.detached` — callers precompute
-    /// the destination URL on MainActor to avoid touching instance state here.
-    nonisolated private static func writeSnapshotOffMain(
-        _ conversation: Conversation,
-        to url: URL,
-        encoder: JSONEncoder
-    ) {
-        do {
-            let data = try encoder.encode(conversation)
-            try data.write(to: url, options: .atomic)
-        } catch {
-            Self.logger.error("FileHistoryStore write snapshot failed: \(error)")
-        }
-    }
-
-    nonisolated private static func writeTombstoneOffMain(
-        id: UUID,
-        deletedAt: Date,
-        url: URL,
-        encoder: JSONEncoder
-    ) {
-        let tombstone = ConversationTombstone(conversationID: id, deletedAt: deletedAt)
-        do {
-            let data = try encoder.encode(tombstone)
-            try data.write(to: url, options: .atomic)
-        } catch {
-            Self.logger.error("FileHistoryStore write tombstone failed: \(error)")
-        }
-    }
-
     private func readConversation(at url: URL) -> Conversation? {
-        Self.readConversationOffMain(at: url, decoder: decoder)
-    }
-
-    /// Nonisolated so it can run inside `Task.detached` during async
-    /// pagination — reads a snapshot file and decodes it without touching
-    /// instance state.
-    nonisolated private static func readConversationOffMain(
-        at url: URL,
-        decoder: JSONDecoder
-    ) -> Conversation? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? decoder.decode(Conversation.self, from: data)
+        ConversationFileArchive.readConversation(at: url, decoder: decoder)
     }
 
     /// Decodes the first page of conversations from a freshly scanned index.
@@ -306,9 +267,10 @@ final class FileHistoryStore: HistoryStore {
         let upper = min(Self.pageSize, Self.maxConversations, index.count)
         var loaded: [Conversation] = []
         for i in 0..<upper {
-            guard let conv = readConversationOffMain(at: index[i].url, decoder: decoder) else {
-                continue
-            }
+            guard let conv = ConversationFileArchive.readConversation(
+                at: index[i].url,
+                decoder: decoder
+            ) else { continue }
             loaded.append(conv)
         }
         return (loaded, upper)
@@ -329,53 +291,8 @@ final class FileHistoryStore: HistoryStore {
     // MARK: - Index
 
     func rebuildIndex() {
-        index = Self.scanIndexOffMain(conversationsDir: conversationsDir)
+        index = archive.liveEntries()
         cursor = 0
-    }
-
-    /// Nonisolated disk scan used by both the synchronous `rebuildIndex`
-    /// (called from `init`) and the async refresh path (called from a
-    /// detached task). Returns the index directly so callers decide how to
-    /// publish it to actor-isolated state.
-    nonisolated private static func scanIndexOffMain(conversationsDir: URL) -> [IndexEntry] {
-        let fm = FileManager.default
-        let keys: [URLResourceKey] = [.contentModificationDateKey]
-        guard let urls = try? fm.contentsOfDirectory(
-            at: conversationsDir,
-            includingPropertiesForKeys: keys,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
-
-        var tombstones: [UUID: Date] = [:]
-        var snapshots: [(url: URL, id: UUID, modifiedAt: Date)] = []
-
-        for url in urls {
-            let name = url.lastPathComponent
-            guard let modifiedAt = mtimeOffMain(for: url) else { continue }
-            if name.hasSuffix(".deleted.json") {
-                let base = String(name.dropLast(".deleted.json".count))
-                if let id = extractIDOffMain(from: base) {
-                    if tombstones[id].map({ modifiedAt > $0 }) ?? true {
-                        tombstones[id] = modifiedAt
-                    }
-                }
-            } else if name.hasSuffix(".json") {
-                let base = String(name.dropLast(".json".count))
-                if let id = extractIDOffMain(from: base) {
-                    snapshots.append((url, id, modifiedAt))
-                }
-            }
-        }
-
-        let live = snapshots.filter { snap in
-            guard let tombstoneAt = tombstones[snap.id] else { return true }
-            return snap.modifiedAt > tombstoneAt
-        }
-        return live
-            .sorted { $0.modifiedAt > $1.modifiedAt }
-            .map { IndexEntry(url: $0.url, id: $0.id, modifiedAt: $0.modifiedAt) }
     }
 
     private func refreshIndexEntry(id: UUID, url: URL, modifiedAt: Date) {
@@ -387,43 +304,21 @@ final class FileHistoryStore: HistoryStore {
     // MARK: - Filenames
 
     private func snapshotURL(id: UUID, createdAt: Date) -> URL {
-        conversationsDir.appendingPathComponent("\(Self.filenameTimestamp(createdAt))_\(id.uuidString).json")
-    }
-
-    private func tombstoneURL(id: UUID, deletedAt: Date) -> URL {
-        conversationsDir.appendingPathComponent("\(Self.filenameTimestamp(deletedAt))_\(id.uuidString).deleted.json")
-    }
-
-    nonisolated private static func extractIDOffMain(from base: String) -> UUID? {
-        guard let underscore = base.range(of: "_", options: .backwards) else { return nil }
-        return UUID(uuidString: String(base[underscore.upperBound...]))
-    }
-
-    nonisolated private static func mtimeOffMain(for url: URL) -> Date? {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-    }
-
-    /// Filesystem-friendly ISO 8601 (colons and dots replaced with dashes).
-    /// Lexical order still matches chronological order.
-    nonisolated private static func filenameTimestamp(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return formatter.string(from: date)
-            .replacingOccurrences(of: ":", with: "-")
-            .replacingOccurrences(of: ".", with: "-")
+        conversationsDir.appendingPathComponent(
+            ConversationFileArchive.snapshotFilename(id: id, createdAt: createdAt)
+        )
     }
 
     // MARK: - Migration
 
     nonisolated private static func migrateLegacyFileIfNeededOffMain(
         legacyFileURL: URL,
-        conversationsDir: URL,
+        archive: ConversationFileArchive,
         encoder: JSONEncoder,
         decoder: JSONDecoder
     ) {
         let fm = FileManager.default
-        let migratedMarker = conversationsDir.appendingPathComponent(".migrated")
+        let migratedMarker = archive.directory.appendingPathComponent(".migrated")
         guard fm.fileExists(atPath: legacyFileURL.path),
               !fm.fileExists(atPath: migratedMarker.path) else {
             return
@@ -433,12 +328,13 @@ final class FileHistoryStore: HistoryStore {
             Self.logger.error("FileHistoryStore migration: legacy file present but not decodable")
             return
         }
-        ensureDirectoryExistsOffMain(conversationsDir)
+        archive.ensureDirectoryExists()
         for conv in legacyConversations {
-            let url = conversationsDir.appendingPathComponent(
-                "\(filenameTimestamp(conv.lastUpdated))_\(conv.id.uuidString).json"
+            archive.writeSnapshot(
+                conv,
+                named: ConversationFileArchive.snapshotFilename(id: conv.id, createdAt: conv.lastUpdated),
+                encoder: encoder
             )
-            writeSnapshotOffMain(conv, to: url, encoder: encoder)
         }
         let backup = legacyFileURL.deletingLastPathComponent()
             .appendingPathComponent("history.json.migrated-backup")
@@ -452,15 +348,6 @@ final class FileHistoryStore: HistoryStore {
     // Routes through the shared `history` channel so these lines land in the
     // persistent log buffer alongside everything else.
     nonisolated private static let logger = Logger.history
-
-    // MARK: - Filesystem
-
-    nonisolated private static func ensureDirectoryExistsOffMain(_ directory: URL) {
-        try? FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
-    }
 
     // MARK: - Storage roots
 

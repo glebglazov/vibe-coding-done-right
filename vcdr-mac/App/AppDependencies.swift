@@ -209,25 +209,30 @@ final class AppDependencies {
         }
     }
 
-    /// Deferred history bootstrap: resolves the iCloud ubiquity container and
-    /// loads the store snapshot off-main (can block for seconds on first
-    /// launch), then installs the real store on the main actor from that
-    /// Sendable snapshot. Writes that arrived before the store was ready are
-    /// queued in the proxy and flushed once the real store is set.
+    /// Deferred history bootstrap: opens the Local Store off-main, then
+    /// installs it on the main actor from that Sendable snapshot. Writes that
+    /// arrived before the store was ready are queued in the proxy and flushed
+    /// once the real store is set.
+    ///
+    /// Linking the record files comes after, on its own task: it resolves the
+    /// iCloud container, which blocks for seconds on a first launch, and
+    /// nothing that reads history waits for it.
     private func bootstrapHistory() async {
-        let defaults = UserDefaults.standard
-        let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        let snapshot: LocalHistoryStore.Snapshot
+        do {
+            snapshot = try await Task.detached(priority: .userInitiated) {
+                try LocalHistoryStore.loadSnapshot()
+            }.value
+        } catch {
+            Logger.app.error("History store unavailable: \(error)")
+            return
+        }
 
-        // Resolve, migrate, and load the snapshot off-main — iCloud container
-        // resolution and the directory scan can block for seconds.
-        let bootstrap = await Task.detached(priority: .userInitiated) {
-            let root = UbiquityHistoryStore.resolveStorageRoot()
-            HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled, ubiquityRoot: root)
-            return HistoryStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: root)
-        }.value
-
-        let store = HistoryStoreFactory.make(bootstrap)
+        let store = LocalHistoryStore(snapshot: snapshot)
         await transcriptionHistory.setRealStore(store)
+
+        let syncEnabled = HistorySync.effectiveSyncEnabled(defaults: UserDefaults.standard)
+        Task { await store.linkRecordFiles(syncEnabled: syncEnabled) }
     }
 
     /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves

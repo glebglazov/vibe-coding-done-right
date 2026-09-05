@@ -13,7 +13,7 @@ struct HomeTabView: View {
     let isInitialized: Bool
     @Bindable var diagnosticsUnlock: DiagnosticsUnlock
 
-    @AppStorage(HistoryStoreFactory.syncEnabledDefaultsKey) private var syncHistoryViaICloud: Bool = true
+    @AppStorage(HistorySync.syncEnabledDefaultsKey) private var syncHistoryViaICloud: Bool = true
     private var needsPermissionAttention: Bool {
         isInitialized && (!hasMicrophonePermission || !hasAccessibilityPermission)
     }

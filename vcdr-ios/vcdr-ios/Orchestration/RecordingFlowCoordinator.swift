@@ -231,20 +231,17 @@ final class RecordingFlowCoordinator {
         await hotMicSession.appLeftForeground()
     }
 
-    /// Resolves the iCloud container, reconciles local ↔︎ ubiquity storage, and
-    /// loads the history-store snapshot off the main actor, then installs the
-    /// `@Observable` store on the main actor (cheap: metadata query start +
-    /// applying the Sendable snapshot — no scan, decode, or token read).
+    /// Opens the Local Store off the main actor and installs the `@Observable`
+    /// store from its Sendable snapshot (cheap: no I/O on the main actor).
+    /// Nothing on this path asks iCloud anything — that is the whole point of
+    /// ADR-0010: the launch read is a local database open, and the iCloud
+    /// container is linked afterwards as a transport.
     ///
-    /// The iCloud resolve — `FileManager.url(forUbiquityContainerIdentifier:)`,
-    /// reached via `resolveStorageRoot()` — blocks for seconds while iCloud
-    /// provisions the container. Directory scan, first-page decode, and
-    /// `ubiquityIdentityToken` are likewise blocking. All of that runs on a
-    /// GCD thread via `withBlockingTask`, NOT on a `Task.detached` (cooperative
-    /// pool): a blocking syscall there pins one of the pool's few threads for
-    /// its whole duration and starves other launch work — notably model init,
-    /// which then can't even start until the resolve returns (see ADR-0002 /
-    /// ADR-0005 / `BlockingWork`).
+    /// Opening the database is still a blocking file operation, so it runs on
+    /// a GCD thread via `withThrowingBlockingTask`, NOT on a `Task.detached`
+    /// (cooperative pool): a blocking syscall there pins one of the pool's few
+    /// threads for its whole duration and starves other launch work — notably
+    /// model init (see ADR-0002 / ADR-0005 / `BlockingWork`).
     func bootstrapHistory() async {
         Logger.app.info("[LaunchProbe] bootstrapHistory entry main=\(Thread.isMainThread)")
         guard history == nil, !isHistoryBootstrapRunning else {
@@ -254,18 +251,26 @@ final class RecordingFlowCoordinator {
         isHistoryBootstrapRunning = true
         defer { isHistoryBootstrapRunning = false }
         let defaults = SharedConstants.sharedDefaults
-        let syncEnabled = HistoryStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        Logger.app.info("[LaunchProbe] bootstrapHistory before resolve+reconcile+snapshot (GCD)")
-        let bootstrap: HistoryStoreFactory.Bootstrap = await withBlockingTask(qos: .userInitiated) {
-            let root = UbiquityHistoryStore.resolveStorageRoot()
-            HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled, ubiquityRoot: root)
-            return HistoryStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: root)
+        Logger.app.info("[LaunchProbe] bootstrapHistory before database open (GCD)")
+        let snapshot: LocalHistoryStore.Snapshot
+        do {
+            snapshot = try await withThrowingBlockingTask(qos: .userInitiated) {
+                try LocalHistoryStore.loadSnapshot()
+            }
+        } catch {
+            Logger.app.error("[LaunchProbe] bootstrapHistory database unavailable: \(error)")
+            return
         }
-        Logger.app.info("[LaunchProbe] bootstrapHistory after resolve+reconcile+snapshot main=\(Thread.isMainThread)")
-        let history = HistoryStoreFactory.make(bootstrap)
+        Logger.app.info("[LaunchProbe] bootstrapHistory after database open main=\(Thread.isMainThread)")
+        let history = LocalHistoryStore(snapshot: snapshot)
         self.history = history
         historyCompletionAdapter.setHistory(history)
         LaunchTelemetry.mark(.historyReadable)
+        // The record files are the sync transport, not the read path: linking
+        // them resolves the iCloud container and imports it once, behind a
+        // history list that already answers.
+        let syncEnabled = HistorySync.effectiveSyncEnabled(defaults: defaults)
+        Task { await history.linkRecordFiles(syncEnabled: syncEnabled) }
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
 

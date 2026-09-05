@@ -132,7 +132,7 @@ The classification of one launch's transcription-model load cost: Cold Download 
 _Avoid_: cold start (ambiguous between download and specialization), first launch, slow launch
 
 **History Bootstrap**:
-The one-time launch step that reconciles local and iCloud conversation storage before the active history store is constructed. It runs before Conversations can be browsed when a reconcile migration may be needed; otherwise it completes quickly enough to be invisible. While History Bootstrap is pending, the history screen is reachable and shows a loading state rather than blocking navigation.
+The launch step that opens the Local Store and installs the active history store from it. It touches on-device storage only, so it completes quickly enough to be invisible. Linking the Record Files — resolving the iCloud container, importing it the first time, exporting whatever it still owes — runs behind it, and no read waits for that. While History Bootstrap is pending, the history screen is reachable and shows a loading state rather than blocking navigation.
 _Avoid_: iCloud init, bootstrapHistory, store factory
 
 ### History
