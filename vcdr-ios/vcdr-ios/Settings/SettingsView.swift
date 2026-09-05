@@ -129,7 +129,7 @@ struct SettingsView: View {
                 SubstitutionsSettings(store: substitutionStore)
             }
         } footer: {
-            Text("Swap a spoken Trigger Phrase for fixed Replacement text, applied before any other processing in every mode.")
+            Text("Swap a spoken Trigger for fixed Replacement text, applied before any other processing in every mode.")
         }
     }
 

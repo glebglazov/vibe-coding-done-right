@@ -1,24 +1,29 @@
 import SwiftUI
 
 /// iOS Substitutions screen. Part of the App Shell — reachable from Settings
-/// without Transcription Readiness. Lists, adds, edits, and deletes
-/// Substitutions, persisting every change through the `SubstitutionStore`
-/// (via the shared `SubstitutionsViewModel`). Shares the view model with the
-/// macOS tab; only the presentation is iOS-idiomatic (grouped list, swipe to
-/// delete).
+/// without Transcription Readiness. Two levels, like the macOS tab: a list of
+/// Substitutions led by their Replacement, with the Triggers that produce it as
+/// the description, and a screen behind each one where the Replacement is
+/// edited and Triggers are added, edited and deleted.
+///
+/// Shares the view model and its wording with the macOS tab; only the
+/// presentation is iOS-idiomatic (grouped list, swipe to delete).
 struct SubstitutionsSettings: View {
     @State private var viewModel: SubstitutionsViewModel
+    /// The Substitution "Add Substitution" just drafted, pushed so it opens
+    /// ready to type in rather than leaving a nameless row behind.
+    @State private var drafted: DraftedSubstitution?
 
     init(store: any SubstitutionStore) {
         _viewModel = State(initialValue: SubstitutionsViewModel(store: store))
     }
 
     var body: some View {
-        @Bindable var viewModel = viewModel
+        let clashes = viewModel.clashes
 
         Form {
             Section {
-                Text("Substitutions swap a spoken Trigger Phrase for fixed Replacement text in your dictation, before any other processing. They apply in every mode and sync across your devices.")
+                Text(SubstitutionCopy.overview)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -29,11 +34,15 @@ struct SubstitutionsSettings: View {
                         .foregroundStyle(.secondary)
                 }
 
-                ForEach($viewModel.drafts) { $substitution in
-                    SubstitutionRow(
-                        substitution: $substitution,
-                        onCommit: { viewModel.commit(substitution) }
-                    )
+                ForEach(viewModel.drafts) { substitution in
+                    NavigationLink {
+                        detail(for: substitution.id)
+                    } label: {
+                        SubstitutionRow(
+                            substitution: substitution,
+                            clashes: clashes.clashes(for: substitution)
+                        )
+                    }
                 }
                 .onDelete { offsets in
                     for index in offsets {
@@ -41,12 +50,12 @@ struct SubstitutionsSettings: View {
                     }
                 }
             } footer: {
-                Text("Matching is case-insensitive and whole-word. The longest Trigger Phrase wins when two overlap.")
+                Text("Matching is case-insensitive and whole-word. A Substitution fires on any of its Triggers, and the longest Trigger wins when two overlap.")
             }
 
             Section {
                 Button {
-                    viewModel.add()
+                    drafted = DraftedSubstitution(id: viewModel.add())
                 } label: {
                     Label("Add Substitution", systemImage: "plus")
                 }
@@ -54,6 +63,9 @@ struct SubstitutionsSettings: View {
         }
         .navigationTitle("Substitutions")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $drafted) { drafted in
+            detail(for: drafted.id)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 EditButton()
@@ -63,34 +75,165 @@ struct SubstitutionsSettings: View {
             viewModel.syncFromStore()
         }
     }
+
+    private func detail(for id: UUID) -> some View {
+        let substitution = binding(for: id)
+        return SubstitutionDetailView(
+            substitution: substitution,
+            clashes: viewModel.clashes.clashes(for: substitution.wrappedValue),
+            onCommit: { viewModel.commit(substitution.wrappedValue) }
+        )
+    }
+
+    /// Edits the list entry by identity rather than by index: a Replacement
+    /// emptied while the screen is open evaporates the entry from the list, and
+    /// typing into it again should bring it back the way a freshly drafted one
+    /// arrives — not write to whatever row slid into its place. The stand-in for
+    /// an absent entry is fixed rather than freshly stamped, so re-reading it
+    /// never looks like an edit.
+    private func binding(for id: UUID) -> Binding<Substitution> {
+        Binding(
+            get: { viewModel.drafts.first { $0.id == id } ?? Self.evaporated(id) },
+            set: { edited in
+                if let index = viewModel.drafts.firstIndex(where: { $0.id == id }) {
+                    viewModel.drafts[index] = edited
+                } else {
+                    viewModel.drafts.append(edited)
+                }
+            }
+        )
+    }
+
+    private static func evaporated(_ id: UUID) -> Substitution {
+        Substitution(id: id, triggerPhrases: [], replacement: "", lastUpdated: .distantPast)
+    }
+}
+
+/// Identity for the navigation push, which needs an `Identifiable` and a raw
+/// `UUID` is not one.
+private struct DraftedSubstitution: Identifiable, Hashable {
+    let id: UUID
 }
 
 // MARK: - Substitution Row
 
 private struct SubstitutionRow: View {
-    @Binding var substitution: Substitution
-    let onCommit: () -> Void
+    let substitution: Substitution
+    let clashes: [TriggerPhraseClash]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                TextField("Trigger Phrase", text: $substitution.triggerPhrase)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+        VStack(alignment: .leading, spacing: 2) {
+            Text(SubstitutionCopy.title(for: substitution))
+                .foregroundStyle(substitution.replacement.isEmpty ? .secondary : .primary)
+                .lineLimit(1)
 
-                Toggle("Enabled", isOn: $substitution.isEnabled)
-                    .labelsHidden()
+            if let summary = substitution.triggerSummary(losing: clashes) {
+                summary
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+        }
+        .opacity(substitution.isEnabled ? 1 : 0.5)
+    }
+}
+
+// MARK: - Substitution Detail
+
+/// The fields the detail view moves the caret between.
+private enum SubstitutionField: Hashable {
+    case replacement
+    case trigger(Int)
+}
+
+private struct SubstitutionDetailView: View {
+    @Binding var substitution: Substitution
+    let clashes: [TriggerPhraseClash]
+    let onCommit: () -> Void
+
+    @FocusState private var focus: SubstitutionField?
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Replacement", text: $substitution.replacement, axis: .vertical)
+                    .lineLimit(2...6)
+                    .focused($focus, equals: .replacement)
             }
 
-            TextField("Replacement", text: $substitution.replacement, axis: .vertical)
-                .lineLimit(2...6)
-                .foregroundStyle(.secondary)
+            Section("Triggers") {
+                ForEach(Array(substitution.triggerPhrases.enumerated()), id: \.offset) { index, phrase in
+                    TriggerRow(
+                        phrase: $substitution.triggerPhrases[index],
+                        clash: clash(for: phrase),
+                        focus: $focus,
+                        field: .trigger(index)
+                    )
+                }
+                .onDelete { offsets in
+                    substitution.triggerPhrases.remove(atOffsets: offsets)
+                }
+
+                Button(action: addTrigger) {
+                    Label("Add Trigger", systemImage: "plus")
+                }
+            }
+
+            Section {
+                Toggle("Enabled", isOn: $substitution.isEnabled)
+            }
         }
-        .padding(.vertical, 4)
-        // Persist on every committed field change; the store stamps lastUpdated
-        // and syncs across devices, while the view model keeps row order stable.
+        .navigationTitle(SubstitutionCopy.title(for: substitution))
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: substitution) {
             onCommit()
+        }
+        .onAppear {
+            if substitution.replacement.isEmpty {
+                focus = .replacement
+            }
+        }
+    }
+
+    /// Appends the row and puts the caret in it, so filing a newly discovered
+    /// mishearing costs one tap and the typing — less than the Replacement a
+    /// new Substitution would also need.
+    private func addTrigger() {
+        substitution.triggerPhrases.append("")
+        focus = .trigger(substitution.triggerPhrases.count - 1)
+    }
+
+    private func clash(for phrase: String) -> TriggerPhraseClash? {
+        clashes.first { $0.phrase.lowercased() == phrase.lowercased() }
+    }
+}
+
+// MARK: - Trigger Row
+
+private struct TriggerRow: View {
+    @Binding var phrase: String
+    let clash: TriggerPhraseClash?
+    @FocusState.Binding var focus: SubstitutionField?
+    let field: SubstitutionField
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // A mishearing is often not a word; autocorrect would happily repair
+            // it into something the engine never produces, so the Trigger would
+            // silently stop matching.
+            TextField("Trigger", text: $phrase)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($focus, equals: field)
+
+            if let clash {
+                Label {
+                    Text(SubstitutionCopy.clashExplanation(clash))
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
+                .font(.caption)
+                .foregroundStyle(.red)
+            }
         }
     }
 }

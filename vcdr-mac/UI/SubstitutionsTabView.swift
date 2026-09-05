@@ -17,7 +17,7 @@ struct SubstitutionsListView: View {
 
         List {
             Section {
-                Text("Substitutions swap a spoken Trigger for fixed Replacement text in your dictation, before any other processing. They apply in every mode and sync across your devices.")
+                Text(SubstitutionCopy.overview)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -67,12 +67,12 @@ private struct SubstitutionRowView: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(substitution.replacement.isEmpty ? "New Substitution" : substitution.replacement)
+                Text(SubstitutionCopy.title(for: substitution))
                     .foregroundStyle(substitution.replacement.isEmpty ? .secondary : .primary)
                     .lineLimit(1)
 
-                if let triggerSummary {
-                    triggerSummary
+                if let summary = substitution.triggerSummary(losing: clashes) {
+                    summary
                         .font(.caption)
                         .lineLimit(1)
                 }
@@ -87,27 +87,6 @@ private struct SubstitutionRowView: View {
             }
         }
         .opacity(substitution.isEnabled ? 1 : 0.5)
-    }
-
-    /// The Triggers as one truncating line, clashing ones first. Reordering is
-    /// free — Triggers have no precedence between them — and it buys the marking
-    /// survival: a clash pushed past the truncation is a clash the user never
-    /// sees.
-    private var triggerSummary: Text? {
-        let clashing = clashes.map(\.phrase)
-        let lost = Set(clashing.map { $0.lowercased() })
-        let winning = substitution.triggerPhrases.filter { !lost.contains($0.lowercased()) }
-
-        let segments = clashing.map(marked) + winning.map { Text($0).foregroundStyle(.secondary) }
-        guard let first = segments.first else { return nil }
-        return segments.dropFirst().reduce(first) { $0 + Text(", ").foregroundStyle(.secondary) + $1 }
-    }
-
-    /// Red carries the meaning and the warning glyph repeats it, so the mark
-    /// still reads where the colour does not.
-    private func marked(_ phrase: String) -> Text {
-        (Text(Image(systemName: "exclamationmark.triangle.fill")) + Text(" \(phrase)"))
-            .foregroundStyle(.red)
     }
 }
 
@@ -156,7 +135,7 @@ struct SubstitutionDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(substitution.replacement.isEmpty ? "New Substitution" : substitution.replacement)
+        .navigationTitle(SubstitutionCopy.title(for: substitution))
         .onChange(of: substitution) {
             onCommit()
         }
@@ -206,7 +185,7 @@ private struct TriggerRowView: View {
 
             if let clash {
                 Label {
-                    Text("Another Substitution also uses this Trigger, and wins it: your dictation gets \"\(clash.winningReplacement)\".")
+                    Text(SubstitutionCopy.clashExplanation(clash))
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
                 }
