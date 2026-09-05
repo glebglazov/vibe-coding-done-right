@@ -90,32 +90,22 @@ struct AIProviderFactoryTests {
     }
 }
 
+@MainActor
 private func withAPIKeys(
     anthropic: String,
     openAI: String,
     gemini: String,
     operation: () -> Void
 ) {
-    let defaults = UserDefaults.standard
-    let keysAndValues = [
-        AIProcessingSettings.anthropicApiKeyKey: anthropic,
-        AIProcessingSettings.openaiApiKeyKey: openAI,
-        AIProcessingSettings.geminiApiKeyKey: gemini
-    ]
-    let originals = keysAndValues.keys.map { key in
-        (key, defaults.object(forKey: key))
-    }
-    defer {
-        for (key, value) in originals {
-            if let value {
-                defaults.set(value, forKey: key)
-            } else {
-                defaults.removeObject(forKey: key)
-            }
-        }
-    }
-    for (key, value) in keysAndValues {
-        defaults.set(value, forKey: key)
-    }
+    let original = ProviderKeyStore.current
+    defer { ProviderKeyStore.current = original }
+    ProviderKeyStore.current = ProviderKeyStore(
+        secretStore: InMemorySecretStore(secrets: [
+            ProviderKeyStore.storageKey(for: .anthropic): anthropic,
+            ProviderKeyStore.storageKey(for: .openai): openAI,
+            ProviderKeyStore.storageKey(for: .gemini): gemini
+        ]),
+        userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
+    )
     operation()
 }

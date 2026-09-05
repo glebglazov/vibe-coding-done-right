@@ -134,16 +134,15 @@ enum AIProvider: RawRepresentable, Codable, Hashable, Sendable {
     }
 }
 
-/// Reads AI processing settings from UserDefaults.
-/// The settings view writes via @AppStorage; other code reads through these static properties.
+/// Reads AI processing settings from UserDefaults, and the Provider API keys from the
+/// Secret Store through `ProviderKeyStore`. The settings view writes the rest via
+/// @AppStorage and the keys through `setAPIKey(_:for:)`; other code reads through these
+/// static properties.
 enum AIProcessingSettings {
     static let enabledKey = "ai_processing_enabled"
     static let providerKey = "ai_processing_provider"
     static let dictationProviderKey = "ai_processing_dictation_provider"
     static let assistantProviderKey = "ai_processing_assistant_provider"
-    static let anthropicApiKeyKey = "ai_processing_anthropic_api_key"
-    static let openaiApiKeyKey = "ai_processing_openai_api_key"
-    static let geminiApiKeyKey = "ai_processing_gemini_api_key"
     static let afmFallbackEnabledKey = "ai_processing_afm_fallback_enabled"
     static let dictationAfmFallbackKey = "ai_processing_dictation_afm_fallback"
     static let assistantAfmFallbackKey = "ai_processing_assistant_afm_fallback"
@@ -183,18 +182,6 @@ enum AIProcessingSettings {
             ?? .anthropic
     }
 
-    static var anthropicApiKey: String {
-        UserDefaults.standard.string(forKey: anthropicApiKeyKey) ?? ""
-    }
-
-    static var openaiApiKey: String {
-        UserDefaults.standard.string(forKey: openaiApiKeyKey) ?? ""
-    }
-
-    static var geminiApiKey: String {
-        UserDefaults.standard.string(forKey: geminiApiKeyKey) ?? ""
-    }
-
     static var afmFallbackEnabled: Bool {
         UserDefaults.standard.bool(forKey: afmFallbackEnabledKey)
     }
@@ -218,17 +205,24 @@ enum AIProcessingSettings {
     }
 
     /// The API key for the currently selected provider.
+    @MainActor
     static var activeApiKey: String {
         apiKey(for: provider)
     }
 
+    /// The stored API key for a provider, read through the Secret Store seam.
+    @MainActor
     static func apiKey(for provider: AIProvider) -> String {
         switch provider {
-        case .cloud(.anthropic): anthropicApiKey
-        case .cloud(.openai): openaiApiKey
-        case .cloud(.gemini): geminiApiKey
+        case .cloud(let backend): ProviderKeyStore.current.key(for: backend)
         case .apple: ""
         }
+    }
+
+    /// Stores a cloud backend's API key — the one write path for keys the app holds.
+    @MainActor
+    static func setAPIKey(_ key: String, for backend: CloudAIBackend) {
+        ProviderKeyStore.current.setKey(key, for: backend)
     }
 
     /// Whether AI processing is fully configured: enabled + provider ready.

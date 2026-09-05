@@ -1,29 +1,23 @@
 import SwiftUI
 
 struct ProvidersView: View {
-    @AppStorage(AIProcessingSettings.anthropicApiKeyKey) private var anthropicApiKey = ""
-    @AppStorage(AIProcessingSettings.openaiApiKeyKey) private var openaiApiKey = ""
-    @AppStorage(AIProcessingSettings.geminiApiKeyKey) private var geminiApiKey = ""
-
     var body: some View {
         List {
-            providerRow(.anthropic, key: $anthropicApiKey)
-            providerRow(.openai, key: $openaiApiKey)
-            providerRow(.gemini, key: $geminiApiKey)
+            providerRow(.anthropic)
+            providerRow(.openai)
+            providerRow(.gemini)
             if AIProcessingSettings.isAFMAvailable {
                 appleRow
             }
         }
         .navigationTitle("Providers")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: anthropicApiKey) { _, _ in syncAIConfigured() }
-        .onChange(of: openaiApiKey) { _, _ in syncAIConfigured() }
-        .onChange(of: geminiApiKey) { _, _ in syncAIConfigured() }
     }
 
-    private func providerRow(_ provider: AIProvider, key: Binding<String>) -> some View {
-        NavigationLink {
-            ProviderDetailView(provider: provider, apiKey: key)
+    private func providerRow(_ backend: CloudAIBackend) -> some View {
+        let provider = AIProvider.cloud(backend)
+        return NavigationLink {
+            ProviderDetailView(provider: provider, apiKey: key(for: backend))
         } label: {
             HStack {
                 Text(provider.displayName)
@@ -39,6 +33,17 @@ struct ProvidersView: View {
                 }
             }
         }
+    }
+
+    /// The Secret Store seam every other reader goes through, as an editable field.
+    private func key(for backend: CloudAIBackend) -> Binding<String> {
+        Binding(
+            get: { AIProcessingSettings.apiKey(for: .cloud(backend)) },
+            set: { newKey in
+                AIProcessingSettings.setAPIKey(newKey, for: backend)
+                syncAIConfigured()
+            }
+        )
     }
 
     private func syncAIConfigured() {
