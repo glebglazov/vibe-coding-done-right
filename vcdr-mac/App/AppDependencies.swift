@@ -293,7 +293,7 @@ extension AppDependencies: ModeSwitcherCoordinatorDelegate {
     }
 
     func modeSwitcherWillShow() {
-        modeSwitcherSuspension = session.suspend()
+        modeSwitcherSuspension = session.suspendForModeSwitcher()
     }
 
     func modeSwitcherDidHide() {

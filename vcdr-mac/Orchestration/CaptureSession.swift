@@ -14,8 +14,8 @@ import OSLog
 /// Design invariants:
 ///
 /// - Callers observe exactly one property: `status: Status`. Everything else is private.
-/// - The only four entry points are `toggle()`, `cancel()`, `suspend()`, and the
-///   DEBUG-only `waitForNextIdle(timeout:)`.
+/// - The only four entry points are `toggle()`, `cancel()`,
+///   `suspendForModeSwitcher()`, and the DEBUG-only `waitForNextIdle(timeout:)`.
 /// - Both the initial AI call and the user-triggered retry route through `runProcessingPipeline`
 ///   and thence through `AIProcessingPort`. They cannot drift.
 /// - Preview skipping is expressed by one named predicate, `shouldSkipPreview(result:mode:)`,
@@ -319,10 +319,12 @@ final class CaptureSession {
         }
     }
 
-    /// Mode switcher asks us to step out of the way. Returns an RAII token; releasing
-    /// it restores the panel and recording hotkey state. Safe to call repeatedly —
-    /// nesting is not supported (prior tokens are independent).
-    func suspend() -> SuspensionToken {
+    /// Mode switcher asks us to step out of the way: the capture itself keeps
+    /// running, but the cancel combination goes back so the switcher's own Escape
+    /// reaches it, and a visible panel dims. Returns an RAII token; releasing it
+    /// restores both. Safe to call repeatedly — nesting is not supported (prior
+    /// tokens are independent).
+    func suspendForModeSwitcher() -> SuspensionToken {
         isSuspendedForModeSwitcher = true
         setupCancelHotkey()
         let wasVisible = panel.isVisible

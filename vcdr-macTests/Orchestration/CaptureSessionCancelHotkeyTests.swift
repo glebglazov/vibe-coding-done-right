@@ -97,7 +97,7 @@ struct CaptureSessionCancelHotkeyTests {
         #expect(await env.waitForPhase { $0 == .recording })
 
         let cancel = env.settings.cancelRecordingHotkey
-        let token = env.session.suspend()
+        let token = env.session.suspendForModeSwitcher()
         #expect(!env.hotkeyRegistry.press(cancel), "The switcher's own Escape must reach it")
 
         token.release()
