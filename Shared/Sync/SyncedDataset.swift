@@ -20,6 +20,10 @@ nonisolated struct SyncedDataset: Sendable {
     let syncEnabledDefaultsKey: String
     let syncEnabledDefault: Bool
 
+    /// Persisted key for this dataset's Last Sync Time. Each dataset keeps its
+    /// own, so a device can be current on Substitutions and behind on history.
+    let lastSyncTimeDefaultsKey: String
+
     /// Collapses the `NSFileVersion` siblings two devices produced for one
     /// record onto a single winner. The rule is the dataset's own — the
     /// records at these URLs are only decodable by whoever knows their shape.
@@ -29,5 +33,15 @@ nonisolated struct SyncedDataset: Sendable {
     /// `syncEnabledDefault` when the key is unset.
     func syncEnabled(defaults: UserDefaults) -> Bool {
         (defaults.object(forKey: syncEnabledDefaultsKey) as? Bool) ?? syncEnabledDefault
+    }
+
+    /// When this dataset last had a Settled Pass on this device, or nil if it
+    /// never has. Read at launch, before any pass has had a chance to run.
+    func lastSyncTime(defaults: UserDefaults) -> Date? {
+        defaults.object(forKey: lastSyncTimeDefaultsKey) as? Date
+    }
+
+    func recordLastSyncTime(_ time: Date, defaults: UserDefaults) {
+        defaults.set(time, forKey: lastSyncTimeDefaultsKey)
     }
 }

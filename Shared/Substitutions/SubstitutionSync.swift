@@ -11,6 +11,9 @@ nonisolated enum SubstitutionSync {
     /// Persisted defaults key for the "Sync Substitutions via iCloud" toggle.
     static let syncEnabledDefaultsKey = "substitutions.icloudSyncEnabled"
 
+    /// Persisted defaults key for the Substitutions' Last Sync Time.
+    static let lastSyncTimeDefaultsKey = "substitutions.lastSyncTime"
+
     /// Default when the user has not yet toggled the setting.
     static let syncEnabledDefault = true
 
@@ -37,6 +40,7 @@ nonisolated enum SubstitutionSync {
             localDirectory: localRecordFilesDirectory,
             syncEnabledDefaultsKey: syncEnabledDefaultsKey,
             syncEnabledDefault: syncEnabledDefault,
+            lastSyncTimeDefaultsKey: lastSyncTimeDefaultsKey,
             resolveConflicts: SubstitutionConflictResolver.resolve(urls:)
         )
     }

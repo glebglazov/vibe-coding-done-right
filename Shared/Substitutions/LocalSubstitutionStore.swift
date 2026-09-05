@@ -91,17 +91,21 @@ final class LocalSubstitutionStore: SubstitutionStore, RecordFileSyncedStore {
     /// that turn out to be one Substitution two devices made separately, writes
     /// out whatever the database then owes the directory, and republishes the
     /// list.
-    func syncRecordFiles(in directory: URL) async {
+    /// - Returns: the entries the directory would not take, which is the part
+    ///   of a pass's Outstanding Work only the database can see.
+    @discardableResult
+    func syncRecordFiles(in directory: URL) async -> OutstandingWork {
         let database = self.database
         let archive = SubstitutionFileArchive(directory: directory)
-        await withBlockingTask(qos: .utility) {
+        let stillOwing = await withBlockingTask(qos: .utility) { () -> Int in
             archive.ensureDirectoryExists()
             SubstitutionImporter.merge(from: archive, into: database)
             SubstitutionConvergence.converge(in: database)
-            SubstitutionExporter.drain(database, to: archive)
+            return SubstitutionExporter.drain(database, to: archive)
         }
         recordFiles = archive
         reload()
+        return OutstandingWork(rowsAwaitingExport: stillOwing)
     }
 
     private func exportPendingEntries() {

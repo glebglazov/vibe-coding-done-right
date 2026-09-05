@@ -12,6 +12,9 @@ nonisolated enum HistorySync {
     /// Persisted defaults key for the "Sync history via iCloud" toggle.
     static let syncEnabledDefaultsKey = "history.icloudSyncEnabled"
 
+    /// Persisted defaults key for history's Last Sync Time.
+    static let lastSyncTimeDefaultsKey = "history.lastSyncTime"
+
     /// Default when the user has not yet toggled the setting. Matches the
     /// `@AppStorage` default in the Settings UI so both agree on first launch.
     static let syncEnabledDefault = true
@@ -39,6 +42,7 @@ nonisolated enum HistorySync {
             localDirectory: localRecordFilesDirectory,
             syncEnabledDefaultsKey: syncEnabledDefaultsKey,
             syncEnabledDefault: syncEnabledDefault,
+            lastSyncTimeDefaultsKey: lastSyncTimeDefaultsKey,
             resolveConflicts: HistoryConflictResolver.resolve(urls:)
         )
     }

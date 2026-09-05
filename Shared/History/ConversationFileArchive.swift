@@ -116,23 +116,35 @@ nonisolated struct ConversationFileArchive: Sendable {
 
     // MARK: - Writing
 
-    func writeSnapshot(_ conversation: Conversation, named filename: String, encoder: JSONEncoder) {
+    /// - Returns: whether the file is now in the directory. A refused write —
+    ///   an unreachable container, a directory that is not there — leaves the
+    ///   record owing its file, which is what makes the next drain retry it
+    ///   instead of dropping the record.
+    @discardableResult
+    func writeSnapshot(_ conversation: Conversation, named filename: String, encoder: JSONEncoder) -> Bool {
         do {
             let data = try encoder.encode(conversation)
             try data.write(to: directory.appendingPathComponent(filename), options: .atomic)
+            return true
         } catch {
             Logger.history.error("Conversation snapshot write failed: \(error)")
+            return false
         }
     }
 
-    func writeTombstone(id: UUID, deletedAt: Date, encoder: JSONEncoder) {
+    /// - Returns: whether the tombstone is now in the directory, on the same
+    ///   terms as `writeSnapshot`.
+    @discardableResult
+    func writeTombstone(id: UUID, deletedAt: Date, encoder: JSONEncoder) -> Bool {
         let tombstone = ConversationTombstone(conversationID: id, deletedAt: deletedAt)
         let filename = Self.tombstoneFilename(id: id, deletedAt: deletedAt)
         do {
             let data = try encoder.encode(tombstone)
             try data.write(to: directory.appendingPathComponent(filename), options: .atomic)
+            return true
         } catch {
             Logger.history.error("Conversation tombstone write failed: \(error)")
+            return false
         }
     }
 

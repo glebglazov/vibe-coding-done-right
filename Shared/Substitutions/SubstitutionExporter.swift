@@ -13,20 +13,32 @@ import OSLog
 /// cooperative pool.
 nonisolated enum SubstitutionExporter {
 
-    static func drain(_ database: SubstitutionDatabase, to archive: SubstitutionFileArchive) {
+    /// - Returns: how many entries still owe their file, on the same terms as
+    ///   `HistoryExporter.drain`.
+    @discardableResult
+    static func drain(_ database: SubstitutionDatabase, to archive: SubstitutionFileArchive) -> Int {
         let pending = database.pendingExports()
-        guard !pending.isEmpty else { return }
+        guard !pending.isEmpty else { return 0 }
 
         let encoder = SubstitutionJSONCoders.makeEncoder()
+        var stillOwing = 0
         for export in pending {
+            let written: Bool
             switch export {
             case .entry(let substitution):
-                archive.writeSnapshot(substitution, encoder: encoder)
+                written = archive.writeSnapshot(substitution, encoder: encoder)
             case .tombstone(let id, let deletedAt):
-                archive.writeTombstone(id: id, deletedAt: deletedAt, encoder: encoder)
+                written = archive.writeTombstone(id: id, deletedAt: deletedAt, encoder: encoder)
             }
-            database.markExported(export)
+            if written {
+                database.markExported(export)
+            } else {
+                stillOwing += 1
+            }
         }
-        Logger.substitutions.info("Substitution export: \(pending.count) record files written")
+        Logger.substitutions.info(
+            "Substitution export: \(pending.count - stillOwing) record files written, \(stillOwing) still owed"
+        )
+        return stillOwing
     }
 }

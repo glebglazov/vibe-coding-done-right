@@ -13,5 +13,10 @@ protocol RecordFileSyncedStore: AnyObject {
     ///
     /// Called after the store is readable, never before: the merge reads every
     /// file in the directory.
-    func syncRecordFiles(in directory: URL) async
+    ///
+    /// - Returns: the part of the pass's Outstanding Work only the store can
+    ///   see — the rows whose Record File the directory refused. The
+    ///   reconciler fills in the rest and decides whether the pass settled.
+    @discardableResult
+    func syncRecordFiles(in directory: URL) async -> OutstandingWork
 }

@@ -4,13 +4,13 @@ import OSLog
 /// Brings the Record Files other devices wrote into a Local Store, in the
 /// background, after launch.
 ///
-/// Everything iCloud is here and nowhere else: resolving the ubiquity
-/// container, watching it with `NSMetadataQuery`, materializing the
-/// placeholders it hands back, resolving `NSFileVersion` siblings
-/// last-writer-wins, and noticing that the user signed out. The store this
-/// drives knows a database and a directory of files and nothing more, which is
-/// what lets a later transport replace this one without touching the read path
-/// (see `docs/adr/0010`).
+/// Everything iCloud is here and in the `ContainerWatcher` this drives, and
+/// nowhere else: resolving the ubiquity container, hearing it stir,
+/// materializing the placeholders it hands back, resolving `NSFileVersion`
+/// siblings last-writer-wins, and noticing that the user signed out. The store
+/// this drives knows a database and a directory of files and nothing more,
+/// which is what lets a later transport replace this one without touching the
+/// read path (see `docs/adr/0010`).
 ///
 /// One reconciler carries one dataset. Conversations and Substitutions differ
 /// only in the answers `SyncedDataset` gives — which folder, which toggle —
@@ -35,18 +35,40 @@ final class SyncReconciler {
 
     private(set) var syncState: SyncState = .idle
 
+    /// Whether a Sync Pass is running, and how the last one that finished
+    /// ended. Separate from `syncState` because the two are not exclusive: a
+    /// pass still runs against local files while iCloud is signed out.
+    enum PassState: Equatable {
+        case working
+        case settled
+        case outstanding
+    }
+
+    private(set) var passState: PassState = .settled
+
+    /// When this dataset last had a Settled Pass on this device. Restored from
+    /// defaults at construction, so a cold launch says how current the device
+    /// is before it has had a chance to check.
+    private(set) var lastSyncTime: Date?
+
     private static let signedOutReason = "iCloud signed out"
+
+    /// How long the working state stays visible once it appears. A cold launch
+    /// against a stirring container produces a burst of passes, which would
+    /// otherwise strobe the control instead of reading as one stretch of work.
+    private static let workingStateFloor: Duration = .seconds(1)
 
     // MARK: - State
 
     private let store: any RecordFileSyncedStore
     private let dataset: SyncedDataset
+    private let defaults: UserDefaults
 
     /// The directory of Record Files this device syncs through. Nil until
     /// `start` has resolved it — every pass is a no-op before that.
     private var directory: URL?
 
-    private let metadataQuery = NSMetadataQuery()
+    private let watcher = ContainerWatcher()
     private var observerTokens: [NSObjectProtocol] = []
 
     /// De-duplicates overlapping passes. A pull-to-refresh arriving while a
@@ -54,11 +76,18 @@ final class SyncReconciler {
     /// directory twice and publish the same list twice.
     private var passInFlight = false
 
+    /// An ask that arrived mid-pass. The running pass read the directory
+    /// before whatever prompted the ask, so it owes one more pass rather than
+    /// the ask being dropped.
+    private var passQueued = false
+
     // MARK: - Init
 
-    init(store: any RecordFileSyncedStore, dataset: SyncedDataset) {
+    init(store: any RecordFileSyncedStore, dataset: SyncedDataset, defaults: UserDefaults) {
         self.store = store
         self.dataset = dataset
+        self.defaults = defaults
+        self.lastSyncTime = dataset.lastSyncTime(defaults: defaults)
     }
 
     /// Starts syncing a dataset in the background when its toggle allows it,
@@ -76,15 +105,14 @@ final class SyncReconciler {
             Task { await store.syncRecordFiles(in: dataset.localDirectory) }
             return nil
         }
-        let reconciler = SyncReconciler(store: store, dataset: dataset)
+        let reconciler = SyncReconciler(store: store, dataset: dataset, defaults: defaults)
         Task { await reconciler.start() }
         return reconciler
     }
 
-    // NB: no deinit. NotificationCenter observer tokens are held in stored
-    // properties; they deallocate with `self`. Every closure captures
+    // NB: no deinit. NotificationCenter observer tokens are held in a stored
+    // property; they deallocate with `self`. Every closure captures
     // `[weak self]`, so any notification that fires after deallocation no-ops.
-    // The `NSMetadataQuery` instance is likewise only retained by this class.
 
     // MARK: - Lifecycle
 
@@ -100,22 +128,84 @@ final class SyncReconciler {
         directory = resolved.directory
         syncState = resolved.hasAccount ? .idle : .paused(reason: Self.signedOutReason)
         observeAccountStateChanges()
-        startWatchingContainer()
+        watcher.start { [weak self] in
+            Task { await self?.reconcile() }
+        }
         await reconcile()
+    }
+
+    /// Runs Sync Passes until nothing more is asked of it, then reports how
+    /// the last one ended. Idempotent, so the watcher runs one whenever the
+    /// container stirs and the user can ask for one at any time.
+    ///
+    /// An ask arriving mid-pass extends this stretch by one pass instead of
+    /// being dropped: the running pass read the directory before the change
+    /// that prompted the ask.
+    func reconcile() async {
+        guard let directory else { return }
+        guard !passInFlight else {
+            passQueued = true
+            return
+        }
+        passInFlight = true
+        passState = .working
+        let startedWorking = ContinuousClock.now
+        defer { passInFlight = false }
+
+        var outstanding: OutstandingWork
+        var finishedAt: Date
+        repeat {
+            passQueued = false
+            outstanding = await runPass(in: directory)
+            finishedAt = Date()
+            // Held inside the loop, so an ask arriving while the working state
+            // is still on its floor extends the stretch rather than being lost.
+            await holdWorkingState(since: startedWorking)
+        } while passQueued
+
+        if outstanding.isSettled {
+            recordSettledPass(at: finishedAt)
+        }
+        passState = outstanding.isSettled ? .settled : .outstanding
     }
 
     /// One pass: materialize whatever iCloud has not downloaded, resolve any
     /// conflict siblings, then let the store merge the directory in and export
-    /// what it still owes. Idempotent, so the watcher runs one whenever the
-    /// container stirs and the user can ask for one at any time.
-    func reconcile() async {
-        guard let directory, !passInFlight else { return }
-        passInFlight = true
-        defer { passInFlight = false }
+    /// what it still owes — and add up what it all left outstanding.
+    private func runPass(in directory: URL) async -> OutstandingWork {
+        let pending = watcher.pendingItems(
+            under: directory,
+            resolveConflicts: dataset.resolveConflicts
+        )
+        await withBlockingTask(qos: .utility) { ContainerWatcher.materialize(pending) }
+        var outstanding = await store.syncRecordFiles(in: directory)
+        // Counted as the pass found them, not as it leaves them:
+        // `startDownloadingUbiquitousItem` only asks, and the bytes arrive over
+        // the following minutes, each landing driving a further pass.
+        outstanding.undownloadedRecordFiles = pending.toDownload.count
+        outstanding.unresolvedConflicts = pending.conflicts.count
+        if !outstanding.isSettled {
+            Logger.sync.info("""
+                \(self.dataset.name) sync: pass unsettled — \
+                \(outstanding.undownloadedRecordFiles) undownloaded, \
+                \(outstanding.unresolvedConflicts) conflicted, \
+                \(outstanding.rowsAwaitingExport) awaiting export
+                """)
+        }
+        return outstanding
+    }
 
-        let pending = collectPendingItems(under: directory)
-        await withBlockingTask(qos: .utility) { Self.materialize(pending) }
-        await store.syncRecordFiles(in: directory)
+    /// Holds the working state for its floor, so a pass that returns in
+    /// milliseconds still reads as work having happened.
+    private func holdWorkingState(since startedWorking: ContinuousClock.Instant) async {
+        let elapsed = ContinuousClock.now - startedWorking
+        guard elapsed < Self.workingStateFloor else { return }
+        try? await Task.sleep(for: Self.workingStateFloor - elapsed)
+    }
+
+    private func recordSettledPass(at time: Date) {
+        lastSyncTime = time
+        dataset.recordLastSyncTime(time, defaults: defaults)
     }
 
     // MARK: - Container
@@ -160,86 +250,6 @@ final class SyncReconciler {
             directory: directory,
             hasAccount: FileManager.default.ubiquityIdentityToken != nil
         )
-    }
-
-    // MARK: - Watcher
-
-    private func startWatchingContainer() {
-        metadataQuery.searchScopes = [NSMetadataQueryUbiquitousDataScope]
-        // Everything under the dataset's folder, record or tombstone.
-        metadataQuery.predicate = NSPredicate(
-            format: "%K LIKE[c] %@",
-            NSMetadataItemFSNameKey,
-            "*.json"
-        )
-        metadataQuery.valueListAttributes = [
-            NSMetadataItemURLKey,
-            NSMetadataUbiquitousItemDownloadingStatusKey,
-            NSMetadataUbiquitousItemHasUnresolvedConflictsKey
-        ]
-
-        let center = NotificationCenter.default
-        for name in [Notification.Name.NSMetadataQueryDidFinishGathering, .NSMetadataQueryDidUpdate] {
-            observerTokens.append(center.addObserver(
-                forName: name,
-                object: metadataQuery, queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor [weak self] in await self?.reconcile() }
-            })
-        }
-
-        metadataQuery.enableUpdates()
-        metadataQuery.start()
-    }
-
-    /// What a pass has to ask the iCloud daemon for before the files can be
-    /// read: bytes that are not on this device yet, and records that came back
-    /// from two devices at once.
-    private struct PendingItems: Sendable {
-        let toDownload: [URL]
-        let conflicts: [URL]
-        let resolveConflicts: @Sendable ([URL]) -> Void
-    }
-
-    /// Reads the current `NSMetadataQuery` results on the main actor —
-    /// `NSMetadataItem` attribute access must happen on the query's queue —
-    /// and packages the work into a Sendable value a GCD thread can act on.
-    private func collectPendingItems(under directory: URL) -> PendingItems {
-        let items = (metadataQuery.results as? [NSMetadataItem]) ?? []
-        var toDownload: [URL] = []
-        var conflicts: [URL] = []
-
-        for item in items {
-            guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL,
-                  url.path.contains(directory.path) else { continue }
-
-            if let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String,
-               status == NSMetadataUbiquitousItemDownloadingStatusNotDownloaded {
-                toDownload.append(url)
-            }
-            if let hasConflict = item.value(forAttribute: NSMetadataUbiquitousItemHasUnresolvedConflictsKey) as? Bool,
-               hasConflict {
-                conflicts.append(url)
-            }
-        }
-
-        return PendingItems(
-            toDownload: toDownload,
-            conflicts: conflicts,
-            resolveConflicts: dataset.resolveConflicts
-        )
-    }
-
-    /// Asks iCloud for the bytes behind the placeholders and collapses the
-    /// conflict siblings onto one winner. Both operations block on iCloud
-    /// daemon IPC and must not run on the main actor.
-    nonisolated private static func materialize(_ pending: PendingItems) {
-        for url in pending.toDownload {
-            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-        }
-        if !pending.conflicts.isEmpty {
-            pending.resolveConflicts(pending.conflicts)
-        }
     }
 
     // MARK: - Account state

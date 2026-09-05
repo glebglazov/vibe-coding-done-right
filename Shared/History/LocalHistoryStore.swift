@@ -152,16 +152,21 @@ final class LocalHistoryStore: HistoryStore, RecordFileSyncedStore {
 
     /// Brings a directory of record files into the database, writes out
     /// whatever the database still owes it, and republishes the list.
-    func syncRecordFiles(in directory: URL) async {
+    ///
+    /// - Returns: the records the directory would not take, which is the part
+    ///   of a pass's Outstanding Work only the database can see.
+    @discardableResult
+    func syncRecordFiles(in directory: URL) async -> OutstandingWork {
         let database = self.database
         let archive = ConversationFileArchive(directory: directory)
-        await withBlockingTask(qos: .utility) {
+        let stillOwing = await withBlockingTask(qos: .utility) { () -> Int in
             archive.ensureDirectoryExists()
             HistoryImporter.merge(from: archive, into: database)
-            HistoryExporter.drain(database, to: archive)
+            return HistoryExporter.drain(database, to: archive)
         }
         recordFiles = archive
         reloadFirstPage()
+        return OutstandingWork(rowsAwaitingExport: stillOwing)
     }
 
     private func exportPendingRecords() {

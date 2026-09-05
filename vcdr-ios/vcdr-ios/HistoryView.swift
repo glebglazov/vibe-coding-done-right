@@ -120,6 +120,11 @@ struct HistoryView: View {
 
 /// Absent when sync is off: there is no reconciler to report on, and the
 /// history the list shows is complete without one.
+///
+/// Two separate things are shown side by side: whether iCloud is carrying the
+/// records at all, and how the last Sync Pass went. A pass runs against local
+/// files while the user is signed out, so paused and working are both possible
+/// at once.
 private struct SyncIndicator: View {
     let reconciler: SyncReconciler?
     let theme: Theme
@@ -129,10 +134,22 @@ private struct SyncIndicator: View {
             Button {
                 Task { await reconciler.reconcile() }
             } label: {
-                icon(for: reconciler.syncState)
+                HStack(spacing: 6) {
+                    icon(for: reconciler.syncState)
+                    SyncStatusLabel(
+                        passState: reconciler.passState,
+                        lastSyncTime: reconciler.lastSyncTime
+                    )
+                    .font(.caption)
+                    .foregroundStyle(color(for: reconciler.passState))
+                }
             }
             .buttonStyle(.plain)
         }
+    }
+
+    private func color(for state: SyncReconciler.PassState) -> Color {
+        state == .outstanding ? .orange : theme.onSurfaceVariant
     }
 
     @ViewBuilder

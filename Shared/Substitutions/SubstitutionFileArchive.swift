@@ -86,30 +86,37 @@ nonisolated struct SubstitutionFileArchive: Sendable {
 
     // MARK: - Writing
 
-    func writeSnapshot(_ substitution: Substitution, encoder: JSONEncoder) {
-        write(
+    /// - Returns: whether the file is now in the directory. A refused write
+    ///   leaves the entry owing its file, which is what makes the next drain
+    ///   retry it instead of dropping the Substitution.
+    func writeSnapshot(_ substitution: Substitution, encoder: JSONEncoder) -> Bool {
+        return write(
             try? encoder.encode(substitution),
             named: "\(substitution.id.uuidString)\(Self.snapshotSuffix)"
         )
     }
 
-    func writeTombstone(id: UUID, deletedAt: Date, encoder: JSONEncoder) {
+    /// - Returns: whether the tombstone is now in the directory, on the same
+    ///   terms as `writeSnapshot`.
+    func writeTombstone(id: UUID, deletedAt: Date, encoder: JSONEncoder) -> Bool {
         let tombstone = SubstitutionTombstone(substitutionID: id, deletedAt: deletedAt)
-        write(
+        return write(
             try? encoder.encode(tombstone),
             named: "\(id.uuidString)\(Self.tombstoneSuffix)"
         )
     }
 
-    private func write(_ data: Data?, named filename: String) {
+    private func write(_ data: Data?, named filename: String) -> Bool {
         guard let data else {
             Logger.substitutions.error("Substitution file \(filename) could not be encoded")
-            return
+            return false
         }
         do {
             try data.write(to: directory.appendingPathComponent(filename), options: .atomic)
+            return true
         } catch {
             Logger.substitutions.error("Substitution file write failed for \(filename): \(error)")
+            return false
         }
     }
 

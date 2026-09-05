@@ -287,6 +287,36 @@ struct LocalHistoryStoreTests {
         ])
     }
 
+    // MARK: - Outstanding work
+
+    @Test("A pass reports the records the directory would not take, and the next one settles")
+    func reportsWhatAPassLeftOutstanding() async throws {
+        let root = makeTempRoot()
+        let directory = recordFilesDirectory(in: root)
+        // A file where the directory of record files belongs: every write into
+        // it fails, the way one into an unreachable container would.
+        try Data().write(to: directory)
+
+        let store = try makeStore(root: root)
+        store.record(
+            conversationID: UUID(),
+            inputSegments: [InputSegment(text: "dictated before the container answered")],
+            output: nil,
+            label: nil
+        )
+
+        let blocked = await store.syncRecordFiles(in: directory)
+        #expect(blocked.rowsAwaitingExport == 1)
+        #expect(!blocked.isSettled, "a record still owing its file leaves the pass unsettled")
+
+        // With the directory writable the same record drains, and nothing is
+        // outstanding for the store to report.
+        try FileManager.default.removeItem(at: directory)
+        let drained = await store.syncRecordFiles(in: directory)
+        #expect(drained == .none)
+        #expect(filenames(in: directory).count == 1)
+    }
+
     // MARK: - Writes
 
     @Test("A recorded conversation lands in the database and in the record files")

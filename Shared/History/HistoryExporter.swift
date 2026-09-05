@@ -13,20 +13,33 @@ import OSLog
 /// cooperative pool.
 nonisolated enum HistoryExporter {
 
-    static func drain(_ database: ConversationDatabase, to archive: ConversationFileArchive) {
+    /// - Returns: how many records still owe their file. A row whose write the
+    ///   directory refused stays pending, so the next drain writes it and the
+    ///   pass that ran this one is not a Settled Pass.
+    @discardableResult
+    static func drain(_ database: ConversationDatabase, to archive: ConversationFileArchive) -> Int {
         let pending = database.pendingExports()
-        guard !pending.isEmpty else { return }
+        guard !pending.isEmpty else { return 0 }
 
         let encoder = HistoryJSONCoders.makeEncoder()
+        var stillOwing = 0
         for export in pending {
+            let written: Bool
             switch export {
             case .record(let conversation, let filename):
-                archive.writeSnapshot(conversation, named: filename, encoder: encoder)
+                written = archive.writeSnapshot(conversation, named: filename, encoder: encoder)
             case .tombstone(let id, let deletedAt):
-                archive.writeTombstone(id: id, deletedAt: deletedAt, encoder: encoder)
+                written = archive.writeTombstone(id: id, deletedAt: deletedAt, encoder: encoder)
             }
-            database.markExported(export)
+            if written {
+                database.markExported(export)
+            } else {
+                stillOwing += 1
+            }
         }
-        Logger.history.info("History export: \(pending.count) record files written")
+        Logger.history.info(
+            "History export: \(pending.count - stillOwing) record files written, \(stillOwing) still owed"
+        )
+        return stillOwing
     }
 }
