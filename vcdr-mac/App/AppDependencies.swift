@@ -137,7 +137,7 @@ final class AppDependencies {
     @MainActor
     func setHotkeySuppression(_ suppressed: Bool) {
         session.setToggleHotkeySuppressed(suppressed)
-        session.cancelHotkey.isSuppressed = suppressed
+        session.setCancelHotkeySuppressed(suppressed)
         session.destinationHotkey.isSuppressed = suppressed
         modeSwitcherCoordinator.setHotkeySuppressed(suppressed)
         copyLatestCaptureHandler.setHotkeySuppressed(suppressed)

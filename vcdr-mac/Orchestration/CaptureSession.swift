@@ -48,6 +48,15 @@ final class CaptureSession {
             case awaitingPreview
             case executing
             case error(String)
+
+            /// A capture is in flight, so `cancel()` has something to act on — and
+            /// the cancel hotkey has a reason to hold its combination.
+            var hasCaptureToCancel: Bool {
+                switch self {
+                case .preparingToRecord, .recording, .transcribing, .executing, .awaitingPreview: true
+                case .idle, .error: false
+                }
+            }
         }
         var phase: Phase
         var statusText: String
@@ -174,7 +183,20 @@ final class CaptureSession {
     /// recorder.
     @ObservationIgnored private(set) var isToggleHotkeySuppressed = false
 
-    @ObservationIgnored let cancelHotkey = GlobalHotkeyManager()
+    /// The session's claim on the cancel combination, derived from the phase in
+    /// `setupCancelHotkey` and nowhere else. Cancel is bound to an ordinary
+    /// combination — Shift+Escape by default — so a claim held while VCDR is idle
+    /// would swallow it system-wide.
+    @ObservationIgnored var cancelClaim: HotkeyClaim?
+
+    /// Set while the user is recording a new shortcut in the UI — see
+    /// `isToggleHotkeySuppressed` for why the claim is dropped rather than muted.
+    @ObservationIgnored private(set) var isCancelHotkeySuppressed = false
+
+    /// Set while the mode switcher is up. Its window reads Escape itself, which a
+    /// standing claim on the cancel combination would consume first.
+    @ObservationIgnored private(set) var isSuspendedForModeSwitcher = false
+
     @ObservationIgnored let destinationHotkey = DestinationHotkeyManager()
 
     // MARK: - Per-run state (cleared on terminal transitions)
@@ -306,7 +328,8 @@ final class CaptureSession {
     /// it restores the panel and recording hotkey state. Safe to call repeatedly —
     /// nesting is not supported (prior tokens are independent).
     func suspend() -> SuspensionToken {
-        cancelHotkey.isEnabled = false
+        isSuspendedForModeSwitcher = true
+        setupCancelHotkey()
         let wasVisible = panel.isVisible
         if wasVisible {
             panel.setSuspendedForModeSwitcher(true)
@@ -317,7 +340,8 @@ final class CaptureSession {
             if wasVisible {
                 self.panel.setSuspendedForModeSwitcher(false)
             }
-            self.updateCancelHotkey()
+            self.isSuspendedForModeSwitcher = false
+            self.setupCancelHotkey()
         }
     }
 
@@ -326,6 +350,14 @@ final class CaptureSession {
         guard suppressed != isToggleHotkeySuppressed else { return }
         isToggleHotkeySuppressed = suppressed
         setupToggleHotkey()
+    }
+
+    /// Drops or restores the cancel claim while the user records a new shortcut,
+    /// so a capture in flight does not eat the key press the recorder is waiting for.
+    func setCancelHotkeySuppressed(_ suppressed: Bool) {
+        guard suppressed != isCancelHotkeySuppressed else { return }
+        isCancelHotkeySuppressed = suppressed
+        setupCancelHotkey()
     }
 
     /// DEBUG / test-only: poll until the session reaches a resting phase
@@ -351,7 +383,6 @@ final class CaptureSession {
     /// Accessibility permission polling hook — the app delegate calls this when
     /// accessibility is granted so the session can (re-)register its hotkeys.
     func accessibilityGranted() {
-        setupCancelHotkey()
         setupDestinationHotkeys()
     }
 
@@ -365,10 +396,10 @@ final class CaptureSession {
             menuBarIcon: Self.menuBarIcon(for: phase),
             canToggle: Self.canToggle(for: phase)
         )
-        // Keep cancel hotkey in sync with every phase transition so no code
-        // path can accidentally leave it enabled (consuming key events) or
-        // disabled (ignoring cancel presses during processing).
-        updateCancelHotkey()
+        // The only place cancel availability is decided. Every phase change passes
+        // through here, so no exit path — including the error branches — can strand
+        // the claim or forget to make it.
+        setupCancelHotkey()
         if old != phase {
             Logger.consistency.info("Session phase: \(String(describing: old)) → \(String(describing: phase))")
         }

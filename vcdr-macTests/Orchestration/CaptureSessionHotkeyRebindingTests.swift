@@ -7,10 +7,10 @@ import Testing
 /// to ask for it. These tests drive the settings path a user drives and assert the
 /// armed set follows.
 ///
-/// The toggle goes through the injected `HotkeyRegistry`, so its tests assert the
-/// live claims and can deliver a real press. The hotkeys still on event taps cannot
-/// be installed without an Accessibility grant the test process does not have, so
-/// theirs assert what the tap targets rather than what it sees.
+/// The toggle and cancel go through the injected `HotkeyRegistry`, so their tests
+/// assert the live claims and can deliver a real press. The hotkeys still on event
+/// taps cannot be installed without an Accessibility grant the test process does
+/// not have, so theirs assert what the tap targets rather than what it sees.
 @Suite("CaptureSession — Hotkey re-binding")
 struct CaptureSessionHotkeyRebindingTests {
 
@@ -118,16 +118,17 @@ struct CaptureSessionHotkeyRebindingTests {
         env.session.toggle()
         #expect(await env.waitForPhase { $0 == .recording })
 
-        env.settings.hotkeySettings.cancelRecordingHotkey = HotkeyBinding(
+        let newBinding = HotkeyBinding(
             keyCode: KeyCodeMap.slashKeyCode,
             modifiers: UInt64(CGEventFlags.maskAlternate.rawValue)
         )
+        env.settings.hotkeySettings.cancelRecordingHotkey = newBinding
         #expect(
-            await waitFor { env.session.cancelHotkey.isEnabled },
-            "Cancel must stay armed for the capture in flight"
+            await waitFor { env.hotkeyRegistry.claimedBindings.contains(newBinding) },
+            "Cancel must stay claimed for the capture in flight"
         )
 
-        env.session.cancel()
+        #expect(env.hotkeyRegistry.press(newBinding))
         #expect(await env.waitForPhase { $0 == .idle })
     }
 }

@@ -1,5 +1,4 @@
 import Foundation
-import CoreGraphics
 
 extension CaptureSession {
 
@@ -20,30 +19,24 @@ extension CaptureSession {
         }
     }
 
+    /// Cancel is claimed iff there is a capture to cancel and nothing is holding
+    /// the claim back. Called from `setStatus`, so a re-bind mid-capture re-arms
+    /// for the run in flight and every terminal transition hands the combination
+    /// back. Releases first and claims after, for the same reason the toggle does.
     func setupCancelHotkey() {
+        cancelClaim?.release()
+        cancelClaim = nil
+
         let binding = settings.cancelRecordingHotkey
-        guard binding.isAssigned else {
-            cancelHotkey.isEnabled = false
-            cancelHotkey.unregister()
-            return
+        guard binding.isAssigned,
+              status.phase.hasCaptureToCancel,
+              !isCancelHotkeySuppressed,
+              !isSuspendedForModeSwitcher
+        else { return }
+
+        cancelClaim = hotkeyRegistry.claim(binding) { [weak self] in
+            self?.cancel()
         }
-        cancelHotkey.onKeyDown = { [weak self] in
-            guard let self else { return }
-            switch self.status.phase {
-            case .preparingToRecord, .recording, .transcribing, .executing, .awaitingPreview:
-                self.cancel()
-            default:
-                break
-            }
-        }
-        cancelHotkey.onKeyUp = nil
-        _ = cancelHotkey.register(
-            keyCode: CGKeyCode(binding.keyCode),
-            modifiers: CGEventFlags(rawValue: binding.modifiers)
-        )
-        // Enablement belongs to the phase, not to the registration. Re-binding
-        // mid-capture must not leave cancel dead for the rest of that run.
-        updateCancelHotkey()
     }
 
     func setupDestinationHotkeys() {
@@ -55,16 +48,6 @@ extension CaptureSession {
             self.stopRecordingAndTranscribe()
         }
         destinationHotkey.register(bindings: bindings)
-    }
-
-    /// Enables the cancel hotkey iff the session is in an active capture phase.
-    func updateCancelHotkey() {
-        switch status.phase {
-        case .preparingToRecord, .recording, .transcribing, .executing, .awaitingPreview:
-            cancelHotkey.isEnabled = true
-        default:
-            cancelHotkey.isEnabled = false
-        }
     }
 
     // MARK: - Settings tracking

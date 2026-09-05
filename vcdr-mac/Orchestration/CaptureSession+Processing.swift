@@ -81,7 +81,6 @@ extension CaptureSession {
             processingTask = nil
             Logger.app.info("Processing task cancelled")
         } catch {
-            cancelHotkey.isEnabled = false
             processingTask = nil
             run = nil
             setStatus(.error(error.localizedDescription))
@@ -116,7 +115,6 @@ extension CaptureSession {
 
             switch disposition {
             case .empty:
-                self.cancelHotkey.isEnabled = false
                 self.panel.setError("No speech detected")
                 self.scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
                 self.processingTask = nil
@@ -124,7 +122,6 @@ extension CaptureSession {
                 self.emit(.failed, finalText: nil, destinationID: nil, historyConversationID: nil)
 
             case .noInstruction:
-                self.cancelHotkey.isEnabled = false
                 self.panel.setError("No instruction detected")
                 self.scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
                 self.processingTask = nil

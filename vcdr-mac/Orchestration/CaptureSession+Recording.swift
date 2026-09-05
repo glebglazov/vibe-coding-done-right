@@ -7,7 +7,7 @@ extension CaptureSession {
     // MARK: - Recording Lifecycle
 
     /// Begins a new capture run: resets UI, captures the current selection, pauses media,
-    /// starts audio capture, enables the cancel + destination hotkeys. On any failure this
+    /// starts audio capture, arms the destination hotkeys. On any failure this
     /// rolls back to `.idle` or `.error` and fires an outcome.
     func startRecording() async {
         // Cancel any residual tasks from a previous run so they can't stomp on the new one.
@@ -79,7 +79,6 @@ extension CaptureSession {
         startPreparationNarration()
         recordingStartInstant = .now
         destinationHotkey.isEnabled = true
-        updateCancelHotkey()
 
         // Detached so blocking work inside the capturer (osascript Process.waitUntilExit,
         // AX round-trips) runs off MainActor — otherwise it queues ahead of UI updates
@@ -166,7 +165,6 @@ extension CaptureSession {
 
         guard let audioURL = audio.stopRecording() else {
             Task { await media.resumeIfNeeded() }
-            cancelHotkey.isEnabled = false
             setStatus(.error("No audio recorded"))
             panel.setError("No audio recorded")
             scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)
@@ -204,7 +202,6 @@ extension CaptureSession {
 
     /// Cancels an in-flight recording/transcription. Safe to call from any phase.
     func cancelRecording() {
-        cancelHotkey.isEnabled = false
         destinationHotkey.isEnabled = false
 
         let wasTranscribing = (status.phase == .transcribing)
@@ -293,8 +290,6 @@ extension CaptureSession {
 
     /// Explicit cancel from the capture UI — removes the preview's conversation from history.
     func cancelCapture() {
-        cancelHotkey.isEnabled = false
-
         if let pending = pendingPreview,
            let conversation = history.conversations.first(where: { $0.id == pending.input.conversationID }) {
             history.removeConversation(conversation)

@@ -64,7 +64,7 @@ vcdr/
 ├── Audio/AudioRecorder.swift             # AVFoundation 16kHz mono recording
 ├── Hotkeys/
 │   ├── CarbonHotkeyRegistry.swift        # Claims key combos; survives Secure Input
-│   └── GlobalHotkeyManager.swift         # CGEvent tap for the hotkeys not yet moved
+│   └── GlobalHotkeyManager.swift         # CGEvent tap; no hotkey uses it any more
 ├── Actions/
 │   ├── PostTranscriptionAction.swift     # Protocol
 │   ├── PasteAction.swift                 # Clipboard + focus restore + simulated Cmd+V

@@ -18,8 +18,9 @@
 1. Update `AppSettings` if new settings are needed
 2. Take `HotkeyRegistry` through the owner's init and claim the combination from it —
    the claim's lifetime is the hotkey's, so release the handle to give the
-   combination back. `GlobalHotkeyManager` is the older event-tap mechanism the
-   remaining hotkeys still use; don't add to it.
+   combination back. The destination hotkeys are the last ones still on an event
+   tap (`DestinationHotkeyManager`); `GlobalHotkeyManager` now has no users at
+   all. Don't add to either.
 3. Update `CaptureSession+Hotkeys.swift` for behavior changes to the session's own hotkeys
 
 ## Permissions Required
