@@ -21,7 +21,15 @@ struct LastSyncPhrase: Equatable {
     /// daily; only the first minute after a pass is watched closely.
     let staysTrueFor: TimeInterval
 
-    /// A week is where relative wording stops saying anything useful.
+    // MARK: - Constants
+
+    /// The two clock bands' boundaries, in seconds: under a minute reads "just
+    /// now", under an hour counts minutes, and past that it counts hours. The
+    /// same two also space out the refreshes inside those bands.
+    private static let minute: TimeInterval = 60
+    private static let hour: TimeInterval = 3600
+
+    /// A week is where relative wording stops saying anything useful, in days.
     private static let relativeWordingLimit = 7
 
     /// Reads a Last Sync Time as of a given moment. The moment is a parameter
@@ -56,19 +64,22 @@ struct LastSyncPhrase: Equatable {
         }
 
         switch (age, dayGap) {
-        case (..<60, _):
-            return LastSyncPhrase(words: "just now", staysTrueFor: 60 - age)
-        case (..<3600, _):
+        case (..<Self.minute, _):
+            return LastSyncPhrase(words: "just now", staysTrueFor: Self.minute - age)
+        case (..<Self.hour, _):
             return LastSyncPhrase(
                 words: relative(.minute),
-                staysTrueFor: 60 - age.truncatingRemainder(dividingBy: 60)
+                staysTrueFor: Self.minute - age.truncatingRemainder(dividingBy: Self.minute)
             )
         case (_, 0):
             return LastSyncPhrase(
                 words: relative(.hour),
-                staysTrueFor: min(3600 - age.truncatingRemainder(dividingBy: 3600), untilMidnight)
+                staysTrueFor: min(
+                    Self.hour - age.truncatingRemainder(dividingBy: Self.hour),
+                    untilMidnight
+                )
             )
-        case (_, 1...(relativeWordingLimit - 1)):
+        case (_, 1...(Self.relativeWordingLimit - 1)):
             return LastSyncPhrase(words: relative(.day), staysTrueFor: untilMidnight)
         default:
             var dateStyle = Date.FormatStyle.dateTime.month(.abbreviated).day().locale(locale)
@@ -83,10 +94,13 @@ struct LastSyncPhrase: Equatable {
 
     /// The day-based bands change when the calendar day does, not when the age
     /// crosses a multiple of 24 hours.
+    ///
+    /// A calendar with no next midnight is not a calendar; the fallback is there
+    /// so an unreachable answer re-reads within the hour rather than never.
     private static func untilNextMidnight(after now: Date, calendar: Calendar) -> TimeInterval {
         guard let midnight = calendar.date(
             byAdding: .day, value: 1, to: calendar.startOfDay(for: now)
-        ) else { return 3600 }
+        ) else { return Self.hour }
         return midnight.timeIntervalSince(now)
     }
 }

@@ -19,26 +19,25 @@ struct SyncReconcilerPassStateTests {
     /// Outstanding Work the pass should see it report.
     private final class StubStore: RecordFileSyncedStore {
         let outstanding: OutstandingWork
-        private(set) var passes = 0
 
         init(outstanding: OutstandingWork) {
             self.outstanding = outstanding
         }
 
         func syncRecordFiles(in directory: URL) async -> OutstandingWork {
-            passes += 1
-            return outstanding
+            outstanding
         }
     }
 
+    /// A dataset of this test's own. Its record-file directory is a name and
+    /// nothing more: the stub store answers every pass, and the migrator skips a
+    /// source that does not exist — so no test here puts one on disk.
     private func makeDataset() -> SyncedDataset {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("vcdr-sync-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return SyncedDataset(
+        SyncedDataset(
             name: "test",
             containerSubdirectory: "test",
-            localDirectory: directory,
+            localDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("vcdr-sync-\(UUID().uuidString)", isDirectory: true),
             syncEnabledDefaultsKey: "test.sync.enabled",
             syncEnabledDefault: true,
             lastSyncTimeDefaultsKey: "test.sync.lastSyncTime",
