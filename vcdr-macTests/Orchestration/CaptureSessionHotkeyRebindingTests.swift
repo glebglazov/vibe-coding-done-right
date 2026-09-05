@@ -3,10 +3,14 @@ import Foundation
 import Testing
 @testable import vcdr_mac
 
-/// The session re-arms its taps from `settings` rather than trusting each screen
+/// The session re-arms its hotkeys from `settings` rather than trusting each screen
 /// to ask for it. These tests drive the settings path a user drives and assert the
-/// armed set follows — installing a tap itself needs Accessibility, which a test
-/// process does not have, so they assert what the taps target, not what they see.
+/// armed set follows.
+///
+/// The toggle goes through the injected `HotkeyRegistry`, so its tests assert the
+/// live claims and can deliver a real press. The hotkeys still on event taps cannot
+/// be installed without an Accessibility grant the test process does not have, so
+/// theirs assert what the tap targets rather than what it sees.
 @Suite("CaptureSession — Hotkey re-binding")
 struct CaptureSessionHotkeyRebindingTests {
 
@@ -84,7 +88,7 @@ struct CaptureSessionHotkeyRebindingTests {
         #expect(await waitForArmed(env.session) { $0[newID] == newBinding })
     }
 
-    @Test("Re-binding the toggle hotkey arms the new combo without a relaunch")
+    @Test("Re-binding the toggle hotkey takes effect for the next key press, without a relaunch")
     @MainActor
     func togglePicksUpNewBinding() async {
         let env = CaptureSessionTestEnvironment()
@@ -95,8 +99,25 @@ struct CaptureSessionHotkeyRebindingTests {
             modifiers: UInt64(CGEventFlags.maskControl.rawValue)
         )
         env.settings.hotkeySettings.toggleRecordingHotkey = newBinding
+        #expect(await waitFor { env.hotkeyRegistry.claimedBindings == [newBinding] })
 
-        #expect(await waitFor { env.session.toggleHotkey.target == newBinding })
+        #expect(env.hotkeyRegistry.press(newBinding))
+        #expect(await env.waitForPhase { $0 == .recording })
+
+        env.session.cancel()
+        #expect(await env.waitForPhase { $0 == .idle })
+    }
+
+    @Test("Clearing the toggle shortcut hands the combination back")
+    @MainActor
+    func clearingToggleReleasesItsClaim() async {
+        let env = CaptureSessionTestEnvironment()
+        defer { env.cleanup() }
+
+        let cleared = env.settings.toggleRecordingHotkey
+        env.settings.hotkeySettings.toggleRecordingHotkey = .unassigned
+
+        #expect(await waitFor { !env.hotkeyRegistry.press(cleared) })
     }
 
     @Test("Re-binding the cancel hotkey mid-capture leaves cancel live for that run")

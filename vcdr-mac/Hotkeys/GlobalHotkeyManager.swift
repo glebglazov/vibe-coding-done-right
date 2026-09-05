@@ -62,8 +62,7 @@ final class GlobalHotkeyManager {
             return false
         }
 
-        let display = Self.shortcutDisplayString(keyCode: keyCode, modifiers: modifiers)
-        Logger.hotkeys.info("Hotkey registered: \(display)")
+        Logger.hotkeys.info("Hotkey registered: \(self.target.displayString)")
         return true
     }
 
@@ -137,20 +136,6 @@ final class GlobalHotkeyManager {
     private func requestAccessibilityPermissions() {
         let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
-    }
-
-    static func shortcutDisplayString(keyCode: CGKeyCode, modifiers: CGEventFlags) -> String {
-        var parts: [String] = []
-        if modifiers.contains(.maskControl) { parts.append("\u{2303}") }
-        if modifiers.contains(.maskAlternate) { parts.append("\u{2325}") }
-        if modifiers.contains(.maskShift) { parts.append("\u{21E7}") }
-        if modifiers.contains(.maskCommand) { parts.append("\u{2318}") }
-        parts.append(keyNameForCode(keyCode))
-        return parts.joined()
-    }
-
-    static func keyNameForCode(_ keyCode: CGKeyCode) -> String {
-        KeyCodeMap.name(for: keyCode)
     }
 
     var isRegistered: Bool { tap.isInstalled }

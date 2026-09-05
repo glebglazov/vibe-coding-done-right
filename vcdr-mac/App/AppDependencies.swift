@@ -20,6 +20,7 @@ final class AppDependencies {
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
     let secureInputMonitor = SecureInputMonitor()
+    let hotkeyRegistry = CarbonHotkeyRegistry()
 
     #if DEBUG
     let audioRecorder: AudioRecorder
@@ -102,6 +103,7 @@ final class AppDependencies {
             history: history,
             deps: .init(
                 transcription: provider,
+                hotkeyRegistry: hotkeyRegistry,
                 audio: audioRecorder,
                 media: mediaPlayback,
                 selectionCapturer: selectionCapturer,
@@ -126,13 +128,13 @@ final class AppDependencies {
         textProcessor.setStyleProvider(styleProviderClosure)
     }
 
-    /// Suppresses every app-owned hotkey (global CGEvent taps + destination bindings)
-    /// while the user is recording a new shortcut in the UI. Suppressed hotkeys
-    /// pass through unconsumed so the key press reaches the shortcut recorder
-    /// and nothing in the app reacts to it.
+    /// Suppresses every app-owned hotkey while the user is recording a new shortcut
+    /// in the UI, so the key press reaches the shortcut recorder and nothing in the
+    /// app reacts to it. The toggle's claim is released outright; the hotkeys still
+    /// on event taps pass their events through unconsumed.
     @MainActor
     func setHotkeySuppression(_ suppressed: Bool) {
-        session.toggleHotkey.isSuppressed = suppressed
+        session.setToggleHotkeySuppressed(suppressed)
         session.cancelHotkey.isSuppressed = suppressed
         session.destinationHotkey.isSuppressed = suppressed
         modeSwitcherCoordinator.setHotkeySuppressed(suppressed)

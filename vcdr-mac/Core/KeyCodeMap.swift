@@ -1,7 +1,7 @@
 import CoreGraphics
 
 /// Single source-of-truth for US ANSI virtual key code mappings.
-/// Used by GlobalHotkeyManager (display names), OutputDestination (legacy migration),
+/// Used by HotkeyBinding (display names), OutputDestination (legacy migration),
 /// and KeyboardSimulator (key constants).
 // TODO: This mapping assumes a US ANSI keyboard layout. Key codes are hardware
 // constants, so e.g. code 44 is "/" on US but a different character on other layouts.

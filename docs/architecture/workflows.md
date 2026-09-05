@@ -16,13 +16,16 @@
 
 ### Modifying the Global Hotkey
 1. Update `AppSettings` if new settings are needed
-2. Update `GlobalHotkeyManager` for registration changes
-3. Update `RecordingCoordinator.setupHotkey()` for behavior changes
+2. Take `HotkeyRegistry` through the owner's init and claim the combination from it —
+   the claim's lifetime is the hotkey's, so release the handle to give the
+   combination back. `GlobalHotkeyManager` is the older event-tap mechanism the
+   remaining hotkeys still use; don't add to it.
+3. Update `CaptureSession+Hotkeys.swift` for behavior changes to the session's own hotkeys
 
 ## Permissions Required
 
 1. **Microphone** — for audio recording (`NSMicrophoneUsageDescription` in Info.plist)
-2. **Accessibility** — for global hotkey event tap and simulated paste (Cmd+V via CGEvent)
+2. **Accessibility** — for the global hotkey event taps and simulated paste (Cmd+V via CGEvent). Carbon hotkey claims need no grant.
 3. **No App Sandbox** — required for CGEvent tap at `.cgSessionEventTap`
 
 ## Things to Watch Out For

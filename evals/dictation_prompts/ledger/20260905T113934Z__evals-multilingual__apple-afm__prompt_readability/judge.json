@@ -1,0 +1,117 @@
+{
+  "run_id": "20260905T113934Z__evals-multilingual__apple-afm__prompt_readability",
+  "judged_at": "2026-09-05T12:46:43Z",
+  "judge": {
+    "model": "claude-opus-5",
+    "mode": "anchored",
+    "endpoint": "/Users/glebglazov/.local/bin/claude",
+    "runtime": "claude-code-cli 2.1.261",
+    "rubric": "agents/assessor.md",
+    "rubric_sha256": "61752b7c0a4cc27f378fa529651461d9eb00892a91f2b5505293ae43e2da5056",
+    "sampling": {
+      "temperature": null
+    }
+  },
+  "weights": {
+    "punctuation": 0.2,
+    "voice": 0.2,
+    "captures": 0.15,
+    "content": 0.3,
+    "format": 0.15
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "eed1577e187191013b894950ab8560d15a3e5c983dac6f68e49a7e607eb5bd47"
+  },
+  "overall_mean": 0.497,
+  "dimension_means": {
+    "punctuation": 0.475,
+    "voice": 0.325,
+    "captures": 0.75,
+    "content": 0.375,
+    "format": 0.75
+  },
+  "cases": [
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "error": "no output recorded for this case"
+    },
+    {
+      "id": "russian_monolingual",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "error": "no output recorded for this case"
+    },
+    {
+      "id": "russian_with_english_terms",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "error": "no output recorded for this case"
+    },
+    {
+      "id": "russian_english_code_switch",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.5,
+      "dimensions": {
+        "punctuation": 0.7,
+        "voice": 0.0,
+        "captures": 1.0,
+        "content": 0.2,
+        "format": 1.0
+      },
+      "notes": "Translated the English clause into Russian, destroying the code-switch the case exists to preserve."
+    },
+    {
+      "id": "german_monolingual",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.49,
+      "dimensions": {
+        "punctuation": 0.2,
+        "voice": 0.3,
+        "captures": 1.0,
+        "content": 0.3,
+        "format": 1.0
+      },
+      "notes": "Wrong sentence boundary, missing exclamation mark, and reworded the German ('jemals', 'hätte', 'würden Köpfe rollen') which distorts the meaning and tone."
+    },
+    {
+      "id": "german_passthrough",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "russian_capture_tag",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.0,
+      "dimensions": {
+        "punctuation": 0.0,
+        "voice": 0.0,
+        "captures": 0.0,
+        "content": 0.0,
+        "format": 0.0
+      },
+      "notes": "Dropped the entire Russian prose, re-indented and wrapped the capture block in code fences and <dictation> tags, breaking byte-for-byte preservation and output format."
+    }
+  ]
+}

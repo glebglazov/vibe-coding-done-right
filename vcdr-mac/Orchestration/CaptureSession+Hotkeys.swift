@@ -5,20 +5,19 @@ extension CaptureSession {
 
     // MARK: - Registration
 
+    /// Releases first and claims after, unconditionally: the window server refuses
+    /// a second registration of a combination that is still claimed, so re-arming
+    /// the same shortcut only works in that order.
     func setupToggleHotkey() {
+        toggleClaim?.release()
+        toggleClaim = nil
+
         let binding = settings.toggleRecordingHotkey
-        guard binding.isAssigned else {
-            toggleHotkey.unregister()
-            return
-        }
-        toggleHotkey.onKeyDown = { [weak self] in
+        guard binding.isAssigned, !isToggleHotkeySuppressed else { return }
+
+        toggleClaim = hotkeyRegistry.claim(binding) { [weak self] in
             self?.toggle()
         }
-        toggleHotkey.onKeyUp = nil
-        _ = toggleHotkey.register(
-            keyCode: CGKeyCode(binding.keyCode),
-            modifiers: CGEventFlags(rawValue: binding.modifiers)
-        )
     }
 
     func setupCancelHotkey() {
@@ -70,7 +69,7 @@ extension CaptureSession {
 
     // MARK: - Settings tracking
 
-    /// Keeps every tap this session owns a projection of `settings`, so a
+    /// Keeps every hotkey this session owns a projection of `settings`, so a
     /// re-bound shortcut is armed the moment it is set — including mid-capture,
     /// where the old binding has already been released. The UI writes settings
     /// and nothing else; no screen has to remember to re-register.

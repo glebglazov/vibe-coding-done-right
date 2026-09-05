@@ -47,13 +47,21 @@ struct HotkeyBinding: Codable, Equatable {
         keyCode != 0 || modifiers != 0
     }
 
+    /// The modifier glyphs in the order macOS writes them in a menu.
+    private static let modifierGlyphs: [(flag: CGEventFlags, glyph: String)] = [
+        (.maskControl, "\u{2303}"),
+        (.maskAlternate, "\u{2325}"),
+        (.maskShift, "\u{21E7}"),
+        (.maskCommand, "\u{2318}")
+    ]
+
     /// Human-readable shortcut string (e.g., "⌘⌥Space").
     var displayString: String {
         guard isAssigned else { return "" }
-        return GlobalHotkeyManager.shortcutDisplayString(
-            keyCode: CGKeyCode(keyCode),
-            modifiers: CGEventFlags(rawValue: modifiers)
-        )
+        let flags = CGEventFlags(rawValue: modifiers)
+        var parts = Self.modifierGlyphs.compactMap { flags.contains($0.flag) ? $0.glyph : nil }
+        parts.append(KeyCodeMap.name(for: CGKeyCode(keyCode)))
+        return parts.joined()
     }
 }
 

@@ -102,6 +102,8 @@ final class CaptureSession {
 
     struct Dependencies {
         let transcription: any TranscriptionProvider
+        /// Hands out the claims this session holds on its key combinations.
+        let hotkeyRegistry: any HotkeyRegistry
         let audio: AudioRecorder
         let media: MediaPlaybackController
         let selectionCapturer: SelectionCapturer
@@ -139,6 +141,7 @@ final class CaptureSession {
     let settings: AppSettings
     let history: any HistoryStore
     let transcription: any TranscriptionProvider
+    let hotkeyRegistry: any HotkeyRegistry
     let audio: AudioRecorder
     let media: MediaPlaybackController
     let selectionCapturer: SelectionCapturer
@@ -159,9 +162,18 @@ final class CaptureSession {
         canToggle: true
     )
 
-    // MARK: - Hotkey managers (owned internally)
+    // MARK: - Hotkeys (owned internally)
 
-    @ObservationIgnored let toggleHotkey = GlobalHotkeyManager()
+    /// The session's claim on the toggle combination. Its lifetime *is* the
+    /// hotkey's: no claim held means the combination reaches the frontmost app.
+    @ObservationIgnored var toggleClaim: HotkeyClaim?
+
+    /// Set while the user is recording a new shortcut in the UI. The toggle claim
+    /// is dropped for the duration rather than muted — a claim has no
+    /// pass-through, so releasing it is the only way the key press can reach the
+    /// recorder.
+    @ObservationIgnored private(set) var isToggleHotkeySuppressed = false
+
     @ObservationIgnored let cancelHotkey = GlobalHotkeyManager()
     @ObservationIgnored let destinationHotkey = DestinationHotkeyManager()
 
@@ -220,6 +232,7 @@ final class CaptureSession {
         self.settings = settings
         self.history = history
         self.transcription = deps.transcription
+        self.hotkeyRegistry = deps.hotkeyRegistry
         self.audio = deps.audio
         self.media = deps.media
         self.selectionCapturer = deps.selectionCapturer
@@ -232,6 +245,9 @@ final class CaptureSession {
         self.styleProvider = deps.styleProvider
         wirePanelCallbacks()
         observeHotkeySettings()
+        // Claiming a combination needs no Accessibility grant, so the toggle is
+        // live from launch rather than from whenever the grant arrives.
+        setupToggleHotkey()
     }
 
     deinit {
@@ -305,6 +321,13 @@ final class CaptureSession {
         }
     }
 
+    /// Drops or restores the toggle claim while the user records a new shortcut.
+    func setToggleHotkeySuppressed(_ suppressed: Bool) {
+        guard suppressed != isToggleHotkeySuppressed else { return }
+        isToggleHotkeySuppressed = suppressed
+        setupToggleHotkey()
+    }
+
     /// DEBUG / test-only: poll until the session reaches a resting phase
     /// (`.idle`, `.error`, or `.awaitingPreview`) and return the last emitted
     /// outcome. Returns nil on timeout.
@@ -328,7 +351,6 @@ final class CaptureSession {
     /// Accessibility permission polling hook — the app delegate calls this when
     /// accessibility is granted so the session can (re-)register its hotkeys.
     func accessibilityGranted() {
-        setupToggleHotkey()
         setupCancelHotkey()
         setupDestinationHotkeys()
     }

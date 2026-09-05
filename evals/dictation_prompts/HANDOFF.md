@@ -513,6 +513,37 @@ so loses less content. Note the comparison's own warning on that table: these re
 toward `prompt_readability`, the prompt apple-afm ran, so the deterministic columns are not a neutral
 reading of model quality. The blind judge reading is the one that does not share that fit.
 
+**The non-English reading** — `ledger/20260905T113934Z__evals-multilingual__apple-afm__prompt_readability`,
+the 7 cases of the `multilingual` category. This is where the on-device model stops being usable, and
+it fails in two different ways.
+
+**Russian is refused, not answered.** Three of the seven cases came back
+`unsupportedLanguageOrLocale` — "Unsupported language" — in 33-107ms, before any token was generated.
+That is a clean refusal rather than a bad answer, and it is the useful half of this reading: the model
+says so itself, fast and for free, so a caller never has to detect the language to know it cannot
+serve one. The arm records these as `ERROR`, and the scorer marks them `ERROR` rather than scoring
+them.
+
+**Where it does not refuse, it is worse than refusing.** Four cases answered, and only one of them is
+right:
+
+| case | verdict | what happened |
+|---|---|---|
+| `german_passthrough` | EXACT | correct |
+| `german_monolingual` | DIFF (word 0.818) | rewrote a threat as a conditional past — "wenn einer von euch jemals wieder eine Frist versäumt **hätte**. **Dann würden** Köpfe rollen" — changing what the sentence says |
+| `russian_english_code_switch` | LANG (word 0.5) | translated the English half into Russian: "but now I'm not so sure" came back as "но теперь я не так уверен" |
+| `russian_capture_tag` | FAIL (word 0.538) | dropped the dictated Russian sentence entirely, echoed only the capture, leaked the `<dictation>` wrapper and fenced the lot in ```markdown |
+
+Judged: 0.497 anchored, 0.571 blind, over the four cases that answered. The two Russian cases that got
+past the language check are the dangerous ones — a refusal is visible, a silently translated or
+silently dropped sentence is not. Note that the refusal check is not a reliable language gate either:
+these two Russian inputs passed it.
+
+**What this settles about routing.** Detecting the prompt's language before the call is not needed to
+protect against the refusal — the model raises it in 33ms. It is needed to protect against the two
+silent failures, which the model does not raise at all. So a language check in front of an on-device
+fallback is worth building, and it has to gate on "is this English" rather than on "did AFM refuse".
+
 **The judge axis does not compare across these two runs**, and the tool says so: apple-afm was judged
 through the CLI, the S1-mini run through the API. Re-judging S1-mini with `--via cli` would make the
 columns comparable and cost no credits — it would overwrite that run's existing judge files, so it is

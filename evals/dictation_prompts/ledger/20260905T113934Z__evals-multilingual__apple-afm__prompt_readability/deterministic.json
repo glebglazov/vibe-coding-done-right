@@ -1,0 +1,89 @@
+{
+  "run_id": "20260905T113934Z__evals-multilingual__apple-afm__prompt_readability",
+  "metric": "token-edit-distance/2",
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "eed1577e187191013b894950ab8560d15a3e5c983dac6f68e49a7e607eb5bd47"
+  },
+  "verdicts": {
+    "EXACT": 1,
+    "DIFF": 1,
+    "FAIL": 1,
+    "LANG": 1,
+    "ERROR": 3
+  },
+  "word_score_mean": 0.714,
+  "punctuation_score_mean": 0.644,
+  "content_loss": 18,
+  "invented": 12,
+  "cases": [
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "verdict": "ERROR"
+    },
+    {
+      "id": "russian_monolingual",
+      "category": "multilingual",
+      "verdict": "ERROR"
+    },
+    {
+      "id": "russian_with_english_terms",
+      "category": "multilingual",
+      "verdict": "ERROR"
+    },
+    {
+      "id": "russian_english_code_switch",
+      "category": "multilingual",
+      "verdict": "LANG",
+      "word_score": 0.5,
+      "word_edits": 6,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 6,
+      "invented": 6,
+      "language_drift": {
+        "input": [
+          "en",
+          "ru"
+        ],
+        "output": [
+          "ru"
+        ]
+      }
+    },
+    {
+      "id": "german_monolingual",
+      "category": "multilingual",
+      "verdict": "DIFF",
+      "word_score": 0.818,
+      "word_edits": 4,
+      "punctuation_score": 0.0,
+      "punctuation_edits": 3,
+      "content_loss": 1,
+      "invented": 3
+    },
+    {
+      "id": "german_passthrough",
+      "category": "multilingual",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "russian_capture_tag",
+      "category": "multilingual",
+      "verdict": "FAIL",
+      "word_score": 0.538,
+      "word_edits": 12,
+      "punctuation_score": 0.577,
+      "punctuation_edits": 11,
+      "content_loss": 11,
+      "invented": 3
+    }
+  ]
+}

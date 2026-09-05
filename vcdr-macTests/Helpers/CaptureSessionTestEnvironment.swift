@@ -23,6 +23,7 @@ struct CaptureSessionTestEnvironment {
     let mockProvider: MockTranscriptionProvider
     let audioRecorder: AudioRecorder
     let textProcessor: TextProcessor
+    let hotkeyRegistry: FakeHotkeyRegistry
 
     private let userDefaultsSuiteName: String
 
@@ -100,11 +101,15 @@ struct CaptureSessionTestEnvironment {
         )
         self.textProcessor = textProcessor
 
+        let hotkeyRegistry = FakeHotkeyRegistry()
+        self.hotkeyRegistry = hotkeyRegistry
+
         self.session = CaptureSession(
             settings: settings,
             history: history,
             deps: .init(
                 transcription: mockProvider,
+                hotkeyRegistry: hotkeyRegistry,
                 audio: audioRecorder,
                 media: MediaPlaybackController(),
                 selectionCapturer: SelectionCapturer(),
