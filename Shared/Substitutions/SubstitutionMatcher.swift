@@ -8,7 +8,8 @@ import Foundation
 /// - Whole-word-boundary anchored, so a trigger "cat" never fires inside
 ///   "category".
 /// - Longest Trigger Phrase wins when candidate matches overlap; ties are
-///   resolved left-to-right.
+///   resolved left-to-right. Every phrase of every Substitution competes in the
+///   same pass, so a long phrase on one entry beats a short phrase on another.
 /// - Single pass: a Replacement that is injected is **not** re-scanned for
 ///   further Trigger Phrases (no recursion, no loops).
 /// - Disabled Substitutions (`isEnabled == false`) are skipped.
@@ -49,7 +50,8 @@ struct SubstitutionMatcher: Sendable {
         /// Exclusive Character index where the match ends.
         let end: Int
         /// Position of the owning Substitution in `substitutions`, used as a
-        /// final deterministic tie-breaker.
+        /// final deterministic tie-breaker. Phrases of one Substitution share
+        /// it: they carry no precedence between them.
         let order: Int
         /// The Replacement injected verbatim for this match.
         let replacement: String
@@ -59,31 +61,34 @@ struct SubstitutionMatcher: Sendable {
 
     // MARK: - Collection
 
-    /// Finds every whole-word, case-insensitive occurrence of every enabled
-    /// Trigger Phrase. Different triggers are scanned independently so all
-    /// cross-trigger overlaps are captured for the selection step.
+    /// Finds every whole-word, case-insensitive occurrence of every Trigger
+    /// Phrase on every enabled Substitution. Each phrase is scanned
+    /// independently — its own entry's other phrases included — so all overlaps
+    /// are captured for the selection step.
     private func collectCandidates(in characters: [Character]) -> [Candidate] {
         var candidates: [Candidate] = []
 
         for (order, substitution) in substitutions.enumerated() {
             guard substitution.isEnabled else { continue }
 
-            let trigger = Array(substitution.triggerPhrase)
-            guard !trigger.isEmpty else { continue }
-            guard trigger.count <= characters.count else { continue }
+            for phrase in substitution.triggerPhrases {
+                let trigger = Array(phrase)
+                guard !trigger.isEmpty else { continue }
+                guard trigger.count <= characters.count else { continue }
 
-            var index = 0
-            while index <= characters.count - trigger.count {
-                let end = index + trigger.count
-                if matches(trigger, in: characters, at: index),
-                   isWordBoundaryAnchored(matchStart: index, matchEnd: end, in: characters) {
-                    candidates.append(
-                        Candidate(start: index, end: end, order: order, replacement: substitution.replacement)
-                    )
-                    // Skip past this occurrence; a trigger never overlaps itself.
-                    index = end
-                } else {
-                    index += 1
+                var index = 0
+                while index <= characters.count - trigger.count {
+                    let end = index + trigger.count
+                    if matches(trigger, in: characters, at: index),
+                       isWordBoundaryAnchored(matchStart: index, matchEnd: end, in: characters) {
+                        candidates.append(
+                            Candidate(start: index, end: end, order: order, replacement: substitution.replacement)
+                        )
+                        // Skip past this occurrence; a trigger never overlaps itself.
+                        index = end
+                    } else {
+                        index += 1
+                    }
                 }
             }
         }
