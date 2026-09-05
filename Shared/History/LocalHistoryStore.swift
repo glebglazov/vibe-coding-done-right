@@ -7,9 +7,9 @@ import OSLog
 /// The record files stay the sync transport. A write lands in the database
 /// first and is exported to a file behind it, so a dictation is recorded at
 /// local-disk speed and the other devices converge as they always did. The
-/// directory those files live in is resolved *after* the store is readable —
-/// resolving the iCloud container takes seconds on a first launch, and no read
-/// waits for it (see `docs/adr/0010`).
+/// directory those files live in is handed over *after* the store is readable
+/// — resolving the iCloud container takes seconds on a first launch, and no
+/// read waits for it (see `docs/adr/0010`).
 @MainActor
 @Observable
 final class LocalHistoryStore: HistoryStore {
@@ -29,12 +29,14 @@ final class LocalHistoryStore: HistoryStore {
     var latestConversation: Conversation? { conversations.first }
     var hasMorePages: Bool { conversations.count < min(storedCount, Self.maxConversations) }
 
-    private let database: ConversationDatabase
+    /// Internal, not private: `HistorySyncReconciler` merges the record files
+    /// into these same rows, and the store publishes the result.
+    let database: ConversationDatabase
     /// How many conversations the database holds, loaded or not — what tells
     /// the list whether another page exists.
     private var storedCount: Int
-    /// The record files this store exports to. Nil until `linkRecordFiles`
-    /// resolves the directory; writes made before then are remembered by the
+    /// The record files this store exports to. Nil until `syncRecordFiles`
+    /// hands over the directory; writes made before then are remembered by the
     /// database and exported by the first drain.
     private var recordFiles: ConversationFileArchive?
 
@@ -158,23 +160,19 @@ final class LocalHistoryStore: HistoryStore {
 
     // MARK: - Record files
 
-    /// Links the directory of record files this device syncs through: imports
-    /// it into the database the first time, then exports anything the files
-    /// are missing. Called after the store is readable, never before — it
-    /// resolves the iCloud container, which blocks.
-    func linkRecordFiles(syncEnabled: Bool) async {
-        let directory = await withBlockingTask(qos: .utility) {
-            HistorySync.prepareRecordFilesDirectory(syncEnabled: syncEnabled)
-        }
-        await linkRecordFiles(in: directory)
-    }
-
-    func linkRecordFiles(in directory: URL) async {
+    /// Brings a directory of record files into the database, writes out
+    /// whatever the database still owes it, and republishes the list.
+    ///
+    /// A directory is all the store knows. Whether it is an iCloud container,
+    /// and when it has changed, is `HistorySyncReconciler`'s business — which
+    /// is what keeps every read here off any remote service. Called after the
+    /// store is readable, never before: the merge reads every record file.
+    func syncRecordFiles(in directory: URL) async {
         let database = self.database
         let archive = ConversationFileArchive(directory: directory)
         await withBlockingTask(qos: .utility) {
             archive.ensureDirectoryExists()
-            HistoryImporter.importOnce(from: archive, into: database)
+            HistoryImporter.merge(from: archive, into: database)
             HistoryExporter.drain(database, to: archive)
         }
         recordFiles = archive

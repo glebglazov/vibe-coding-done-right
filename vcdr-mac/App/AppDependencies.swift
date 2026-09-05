@@ -25,6 +25,10 @@ final class AppDependencies {
     let audioRecorder: AudioRecorder
     #endif
 
+    /// Owns the iCloud transport for history. Nil while history is still
+    /// bootstrapping, and for as long as the sync toggle is off.
+    private(set) var historySync: HistorySyncReconciler?
+
     private(set) var readiness: ModelReadiness =
         .preparing(label: ModelPreparationPhase.initialLabel)
     var isTranscriptionReady: Bool { readiness == .ready }
@@ -214,9 +218,9 @@ final class AppDependencies {
     /// arrived before the store was ready are queued in the proxy and flushed
     /// once the real store is set.
     ///
-    /// Linking the record files comes after, on its own task: it resolves the
-    /// iCloud container, which blocks for seconds on a first launch, and
-    /// nothing that reads history waits for it.
+    /// The reconciler comes after, on its own task: it resolves the iCloud
+    /// container, which blocks for seconds on a first launch, and nothing that
+    /// reads history waits for it.
     private func bootstrapHistory() async {
         let snapshot: LocalHistoryStore.Snapshot
         do {
@@ -231,8 +235,10 @@ final class AppDependencies {
         let store = LocalHistoryStore(snapshot: snapshot)
         await transcriptionHistory.setRealStore(store)
 
-        let syncEnabled = HistorySync.effectiveSyncEnabled(defaults: UserDefaults.standard)
-        Task { await store.linkRecordFiles(syncEnabled: syncEnabled) }
+        historySync = HistorySyncReconciler.startIfEnabled(
+            store: store,
+            defaults: UserDefaults.standard
+        )
     }
 
     /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves

@@ -1,42 +1,24 @@
 import Foundation
 import OSLog
 
-/// Reconciles the local and ubiquity `conversations/` directories at app
-/// launch based on whether sync is enabled. Runs before the active
-/// `HistoryStore` is constructed so whichever directory ends up in use is
-/// already populated with the user's expected data.
+/// Moves the record files the app kept in its own storage up into the iCloud
+/// container, the first time the device syncs through one.
 ///
-/// Only acts when the destination is empty AND the source has files — this
-/// guards against overwriting an authoritative copy when the user has
-/// toggled the setting multiple times.
+/// Only acts when the container is empty AND the local directory has files —
+/// which guards against a device that has already synced adopting a stale
+/// local copy over the one its peers agree on.
 ///
-/// Nonisolated on purpose: this runs during app launch and resolving the
-/// iCloud container (`UbiquityHistoryStore.resolveStorageRoot()`) synchronously
-/// provisions it, which can block for seconds on the first launch after
-/// install. Callers must keep that work off the cooperative pool — pass a
-/// `ubiquityRoot` pre-resolved on a GCD thread (`withBlockingTask`), or accept
-/// the blocking resolve below. The explicit `nonisolated` overrides the
-/// target-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` setting.
+/// Nonisolated on purpose: this runs behind launch on a GCD thread, because
+/// the container it writes into was itself resolved by a blocking call
+/// (`HistorySyncReconciler.resolveStorageRoot()`). The explicit `nonisolated`
+/// overrides the target-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
+/// setting.
 nonisolated enum HistoryMigrator {
 
-    /// - Parameter ubiquityRoot: the resolved `Documents/VCDR` root, or nil if
-    ///   iCloud is unavailable. When omitted, this resolves it itself — which
-    ///   blocks, so only the omitted form must run off the cooperative pool.
-    static func reconcileAtLaunch(syncEnabled: Bool, ubiquityRoot: URL? = nil) {
-        let localRoot = FileHistoryStore.localStorageRoot
-            .appendingPathComponent("conversations")
-        let storageRoot = ubiquityRoot ?? UbiquityHistoryStore.resolveStorageRoot()
-        guard let ubiquityConversations = storageRoot?
-            .appendingPathComponent("conversations") else {
-            // No iCloud — nothing to reconcile.
-            return
-        }
-
-        if syncEnabled, isEmpty(ubiquityConversations), !isEmpty(localRoot) {
-            migrate(from: localRoot, to: ubiquityConversations, makeUbiquitous: true)
-        } else if !syncEnabled, isEmpty(localRoot), !isEmpty(ubiquityConversations) {
-            migrate(from: ubiquityConversations, to: localRoot, makeUbiquitous: false)
-        }
+    static func adoptLocalRecordFiles(into ubiquityConversations: URL) {
+        let localRoot = HistorySync.localRecordFilesDirectory
+        guard isEmpty(ubiquityConversations), !isEmpty(localRoot) else { return }
+        migrate(from: localRoot, to: ubiquityConversations)
     }
 
     // MARK: - Helpers
@@ -50,7 +32,7 @@ nonisolated enum HistoryMigrator {
         return contents.allSatisfy { $0.hasPrefix(".") }
     }
 
-    private static func migrate(from source: URL, to destination: URL, makeUbiquitous: Bool) {
+    private static func migrate(from source: URL, to destination: URL) {
         let fm = FileManager.default
         do {
             try fm.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -73,10 +55,9 @@ nonisolated enum HistoryMigrator {
         for fileURL in entries {
             let destURL = destination.appendingPathComponent(fileURL.lastPathComponent)
             do {
-                // `setUbiquitous` atomically moves a file into/out of the
-                // iCloud container. On the reverse path, iCloud will remove
-                // the source replica once the move propagates.
-                try fm.setUbiquitous(makeUbiquitous, itemAt: fileURL, destinationURL: destURL)
+                // `setUbiquitous` atomically moves a file into the iCloud
+                // container, replica and all.
+                try fm.setUbiquitous(true, itemAt: fileURL, destinationURL: destURL)
                 moved += 1
             } catch {
                 failed += 1
@@ -84,7 +65,6 @@ nonisolated enum HistoryMigrator {
             }
         }
 
-        let direction = makeUbiquitous ? "local → iCloud" : "iCloud → local"
-        Logger.history.info("History migration \(direction): moved \(moved), failed \(failed)")
+        Logger.history.info("History migration local → iCloud: moved \(moved), failed \(failed)")
     }
 }

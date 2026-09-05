@@ -1,11 +1,13 @@
 import Foundation
 import OSLog
 
-/// Reads the record files into the Local Store, once ever.
+/// Reads the record files into the Local Store — this device's own history the
+/// first time, and every change another device makes after that.
 ///
-/// This is how history that predates the database becomes readable from it.
 /// Nothing is written back and nothing is deleted: every record file stays
-/// exactly where it is, which is what makes the old path a rollback path.
+/// exactly where it is, which is what makes the old path a rollback path. The
+/// merge is last-writer-wins and so idempotent, so a pass over a directory
+/// nothing has touched costs a read and changes nothing.
 ///
 /// Nonisolated and blocking: reading thousands of files in an iCloud container
 /// asks the iCloud daemon about each one, so callers must keep this off the
@@ -13,25 +15,24 @@ import OSLog
 nonisolated enum HistoryImporter {
 
     /// How many files are decoded before a batch is handed to the database.
-    /// Batching keeps the import from holding the connection for its whole
+    /// Batching keeps the merge from holding the connection for its whole
     /// run, so a page read from the list still gets between two batches.
     private static let batchSize = 200
 
-    static func importOnce(
+    static func merge(
         from archive: ConversationFileArchive,
         into database: ConversationDatabase
     ) {
-        guard !database.hasImportedRecordFiles else { return }
-
+        let cutoff = HistorySync.replicationWindow.map { Date(timeIntervalSinceNow: -$0) }
+        let scan = archive.scan(modifiedAfter: cutoff)
         let decoder = HistoryJSONCoders.makeDecoder()
-        let entries = archive.liveEntries()
-        var imported = 0
+        var merged = 0
         var unreadable = 0
 
-        for batch in stride(from: 0, to: entries.count, by: batchSize) {
-            let upper = min(batch + batchSize, entries.count)
+        for batch in stride(from: 0, to: scan.entries.count, by: batchSize) {
+            let upper = min(batch + batchSize, scan.entries.count)
             var records: [ConversationDatabase.Stored] = []
-            for entry in entries[batch..<upper] {
+            for entry in scan.entries[batch..<upper] {
                 guard let conversation = ConversationFileArchive.readConversation(
                     at: entry.url,
                     decoder: decoder
@@ -46,13 +47,13 @@ nonisolated enum HistoryImporter {
                     )
                 )
             }
-            database.saveImported(records)
-            imported += records.count
+            database.merge(records)
+            merged += records.count
         }
 
-        database.markRecordFilesImported()
+        database.applyTombstones(scan.tombstones)
         Logger.history.info(
-            "History import: \(imported) records from \(archive.directory.lastPathComponent), \(unreadable) unreadable"
+            "History merge: \(merged) records and \(scan.tombstones.count) deletes from \(archive.directory.lastPathComponent), \(unreadable) unreadable"
         )
     }
 }

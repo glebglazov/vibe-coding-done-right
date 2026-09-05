@@ -16,11 +16,24 @@ import OSLog
 /// another device (snapshot mtime > `deletedAt`) resurrects the record.
 nonisolated struct ConversationFileArchive: Sendable {
 
-    /// A live snapshot file, as `liveEntries()` found it.
+    /// A live snapshot file, as a scan found it.
     struct Entry: Equatable, Sendable {
         let url: URL
         let id: UUID
         let modifiedAt: Date
+    }
+
+    /// A delete some device made, as the tombstone file that records it.
+    struct Tombstone: Equatable, Sendable {
+        let id: UUID
+        let deletedAt: Date
+    }
+
+    /// What one read of the directory found: the records that are still live,
+    /// and the deletes that decided which ones are not.
+    struct Scan: Sendable {
+        let entries: [Entry]
+        let tombstones: [Tombstone]
     }
 
     let directory: URL
@@ -40,13 +53,21 @@ nonisolated struct ConversationFileArchive: Sendable {
 
     /// Every snapshot no tombstone suppresses, newest first.
     func liveEntries() -> [Entry] {
+        scan().entries
+    }
+
+    /// Reads the directory once.
+    ///
+    /// - Parameter modifiedAfter: the replication window's cutoff — files
+    ///   older than it are not read at all. Nil reads everything.
+    func scan(modifiedAfter cutoff: Date? = nil) -> Scan {
         let fileManager = FileManager.default
         guard let urls = try? fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
-            return []
+            return Scan(entries: [], tombstones: [])
         }
 
         var tombstones: [UUID: Date] = [:]
@@ -55,6 +76,7 @@ nonisolated struct ConversationFileArchive: Sendable {
         for url in urls {
             let name = url.lastPathComponent
             guard let modifiedAt = Self.modificationDate(of: url) else { continue }
+            if let cutoff, modifiedAt < cutoff { continue }
             if name.hasSuffix(Self.tombstoneSuffix) {
                 let base = String(name.dropLast(Self.tombstoneSuffix.count))
                 if let id = Self.recordID(fromFilenameBase: base) {
@@ -70,12 +92,17 @@ nonisolated struct ConversationFileArchive: Sendable {
             }
         }
 
-        return snapshots
+        let live = snapshots
             .filter { snapshot in
                 guard let deletedAt = tombstones[snapshot.id] else { return true }
                 return snapshot.modifiedAt > deletedAt
             }
             .sorted { $0.modifiedAt > $1.modifiedAt }
+
+        return Scan(
+            entries: live,
+            tombstones: tombstones.map { Tombstone(id: $0.key, deletedAt: $0.value) }
+        )
     }
 
     static func readConversation(at url: URL, decoder: JSONDecoder) -> Conversation? {

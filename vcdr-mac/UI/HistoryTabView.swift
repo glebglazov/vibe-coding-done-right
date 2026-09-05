@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HistoryTabView: View {
     let history: any HistoryStore
+    let historySync: HistorySyncReconciler?
     let settings: AppSettings
     @State private var showClearAllConfirmation = false
 
@@ -31,7 +32,7 @@ struct HistoryTabView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            SyncIndicator(history: history)
+            SyncIndicator(reconciler: historySync)
                 .padding(.trailing, 16)
                 .padding(.top, 8)
         }
@@ -62,32 +63,30 @@ struct HistoryTabView: View {
     }
 }
 
+/// Absent when sync is off: there is no reconciler to report on, and the
+/// history the list shows is complete without one.
 private struct SyncIndicator: View {
-    let history: any HistoryStore
+    let reconciler: HistorySyncReconciler?
 
     var body: some View {
-        if let sync = history as? UbiquityHistoryStore {
+        if let reconciler {
             Button {
-                Task { await sync.refresh() }
+                Task { await reconciler.reconcile() }
             } label: {
-                icon(for: sync.syncState)
+                icon(for: reconciler.syncState)
             }
             .buttonStyle(.plain)
-            .help(tooltip(for: sync.syncState))
+            .help(tooltip(for: reconciler.syncState))
         }
     }
 
     @ViewBuilder
-    private func icon(for state: UbiquityHistoryStore.SyncState) -> some View {
+    private func icon(for state: HistorySyncReconciler.SyncState) -> some View {
         Group {
             switch state {
             case .idle:
                 Image(systemName: "checkmark.icloud.fill")
                     .foregroundStyle(.secondary)
-            case .pendingUpdates:
-                Image(systemName: "icloud.and.arrow.down.fill")
-                    .foregroundStyle(.tint)
-                    .symbolEffect(.bounce, options: .nonRepeating)
             case .paused:
                 Image(systemName: "exclamationmark.icloud.fill")
                     .foregroundStyle(.orange)
@@ -96,10 +95,9 @@ private struct SyncIndicator: View {
         .symbolRenderingMode(.monochrome)
     }
 
-    private func tooltip(for state: UbiquityHistoryStore.SyncState) -> String {
+    private func tooltip(for state: HistorySyncReconciler.SyncState) -> String {
         switch state {
-        case .idle: "Synced"
-        case .pendingUpdates: "New entries available — click to load"
+        case .idle: "Synced — click to check now"
         case .paused(let reason): reason
         }
     }

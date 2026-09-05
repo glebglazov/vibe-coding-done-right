@@ -203,55 +203,6 @@ final class FileHistoryStore: HistoryStore {
         cursor = upper
     }
 
-    /// Async counterpart to `loadNextPage` that moves the synchronous
-    /// `Data(contentsOf:)` + JSON decode work onto a utility-priority
-    /// detached task. Safe to call from MainActor without stalling the UI,
-    /// especially when snapshot files live in an iCloud ubiquity container
-    /// where a read can block on placeholder materialization.
-    func loadNextPageAsync() async {
-        guard hasMorePages else { return }
-        let displayCapSlack = Self.maxConversations - conversations.count
-        let upper = min(cursor + Self.pageSize, cursor + displayCapSlack, index.count)
-        guard cursor < upper else { return }
-        let slice = Array(index[cursor..<upper])
-        let existingIDs = Set(conversations.map { $0.id })
-        let decoder = self.decoder
-        let loaded = await Task.detached(priority: .utility) {
-            slice.compactMap { entry -> Conversation? in
-                guard !existingIDs.contains(entry.id) else { return nil }
-                return ConversationFileArchive.readConversation(at: entry.url, decoder: decoder)
-            }
-        }.value
-        conversations.append(contentsOf: loaded)
-        cursor = upper
-    }
-
-    /// Rescans the on-disk index and reloads the first page of conversations.
-    /// Called by `UbiquityHistoryStore` when `NSMetadataQuery` signals remote
-    /// changes so the UI picks up newly synced records without a restart.
-    ///
-    /// The directory scan, per-file mtime lookups, and first-page decodes
-    /// all run on a detached utility task so the MainActor stays free while
-    /// iCloud resolves placeholders. MainActor state is mutated only on the
-    /// hop back at the end.
-    func rebuildIndexAndReloadFirstPageAsync() async {
-        let archive = self.archive
-        let newIndex = await Task.detached(priority: .utility) {
-            archive.liveEntries()
-        }.value
-        self.index = newIndex
-        self.cursor = 0
-        self.conversations.removeAll()
-        await loadNextPageAsync()
-    }
-
-    /// Filenames currently tracked by the index. Used by `UbiquityHistoryStore`
-    /// to distinguish "new on disk but not yet applied" files from already-
-    /// known ones when probing for pending remote updates.
-    var indexedFilenames: Set<String> {
-        Set(index.map { $0.url.lastPathComponent })
-    }
-
     // MARK: - Disk I/O
 
     private func readConversation(at url: URL) -> Conversation? {
@@ -355,9 +306,8 @@ final class FileHistoryStore: HistoryStore {
     /// unavailable. On macOS: Application Support. On iOS: the App Group
     /// container (falling back to Application Support if the group is missing).
     ///
-    /// `UbiquityHistoryStore` uses a different root — the iCloud ubiquity
-    /// container — so `localStorageRoot` and `defaultStorageRoot` intentionally
-    /// coincide for now. If a separate app-private mirror is ever introduced,
+    /// `localStorageRoot` and `defaultStorageRoot` intentionally coincide for
+    /// now. If a separate app-private mirror is ever introduced,
     /// `localStorageRoot` is the extension point.
     nonisolated static var localStorageRoot: URL {
         #if os(macOS)

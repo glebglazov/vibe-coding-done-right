@@ -108,8 +108,8 @@ struct LocalHistoryStoreTests {
 
     // MARK: - Import
 
-    @Test("Imports the record files once, suppressing tombstoned records and keeping unknown keys")
-    func importsRecordFilesOnce() async throws {
+    @Test("Reads the record files in, suppressing tombstoned records and keeping unknown keys")
+    func readsRecordFilesIn() async throws {
         let root = makeTempRoot()
         let directory = recordFilesDirectory(in: root)
         let kept = UUID()
@@ -133,14 +133,14 @@ struct LocalHistoryStoreTests {
         let store = try makeStore(root: root)
         #expect(store.conversations.isEmpty, "the database is empty until the record files are linked")
 
-        await store.linkRecordFiles(in: directory)
+        await store.syncRecordFiles(in: directory)
 
         #expect(Set(store.conversations.map(\.id)) == [kept, withFutureField])
         let imported = try #require(store.conversations.first { $0.id == withFutureField })
         #expect(imported.extras["futureField"] == .string("keep me"))
         #expect(imported.inputText == "newer schema")
 
-        // The record files are the rollback path: the import only reads them.
+        // The record files are the rollback path: the merge only reads them.
         let after = inventory(of: directory)
         #expect(after.count == before.count)
         for (name, snapshot) in before {
@@ -149,13 +149,77 @@ struct LocalHistoryStoreTests {
             #expect(current?.1 == snapshot.1, "\(name) was touched")
         }
 
-        // Relaunch: the list answers from the database alone, and linking the
-        // same directory again neither re-imports nor duplicates.
+        // Relaunch: the list answers from the database alone, and a second
+        // pass over the same directory changes nothing.
         let relaunched = try makeStore(root: root)
         #expect(Set(relaunched.conversations.map(\.id)) == [kept, withFutureField])
-        await relaunched.linkRecordFiles(in: directory)
+        await relaunched.syncRecordFiles(in: directory)
         #expect(relaunched.conversations.count == 2)
         #expect(filenames(in: directory) == Set(before.keys))
+    }
+
+    // MARK: - Another device
+
+    @Test("A record another device wrote arrives here, and a delete on either removes it on both")
+    func recordsTravelBetweenDevices() async throws {
+        let directory = recordFilesDirectory(in: makeTempRoot())
+        let thisDevice = try makeStore(root: makeTempRoot())
+        let otherDevice = try makeStore(root: makeTempRoot())
+        await thisDevice.syncRecordFiles(in: directory)
+        await otherDevice.syncRecordFiles(in: directory)
+
+        let fromOther = UUID()
+        otherDevice.record(
+            conversationID: fromOther,
+            inputSegments: [InputSegment(text: "dictated over there")],
+            output: nil,
+            label: nil
+        )
+        await otherDevice.syncRecordFiles(in: directory)
+
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.conversations.map(\.id) == [fromOther])
+        #expect(thisDevice.latestConversation?.inputText == "dictated over there")
+
+        // An edit there reaches here too, over the record it already holds.
+        otherDevice.record(
+            conversationID: fromOther,
+            inputSegments: [InputSegment(text: "dictated over there")],
+            output: "and processed there",
+            label: nil
+        )
+        await otherDevice.syncRecordFiles(in: directory)
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.conversations.map(\.output) == ["and processed there"])
+
+        // The other device deletes it; this one stops showing it, and keeps it
+        // gone however many passes follow.
+        let arrived = try #require(otherDevice.conversations.first { $0.id == fromOther })
+        otherDevice.removeConversation(arrived)
+        await otherDevice.syncRecordFiles(in: directory)
+
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.conversations.isEmpty)
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.conversations.isEmpty, "a later pass resurrected the deleted record")
+
+        // A delete made here reaches the other device the same way.
+        let fromHere = UUID()
+        thisDevice.record(
+            conversationID: fromHere,
+            inputSegments: [InputSegment(text: "dictated over here")],
+            output: nil,
+            label: nil
+        )
+        await thisDevice.syncRecordFiles(in: directory)
+        await otherDevice.syncRecordFiles(in: directory)
+        #expect(otherDevice.conversations.map(\.id) == [fromHere])
+
+        thisDevice.removeConversation(try #require(thisDevice.latestConversation))
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.conversations.isEmpty, "the pass that exported the delete undid it")
+        await otherDevice.syncRecordFiles(in: directory)
+        #expect(otherDevice.conversations.isEmpty)
     }
 
     // MARK: - Writes
@@ -165,7 +229,7 @@ struct LocalHistoryStoreTests {
         let root = makeTempRoot()
         let directory = recordFilesDirectory(in: root)
         let store = try makeStore(root: root)
-        await store.linkRecordFiles(in: directory)
+        await store.syncRecordFiles(in: directory)
 
         let id = UUID()
         store.record(
@@ -205,7 +269,7 @@ struct LocalHistoryStoreTests {
         let root = makeTempRoot()
         let directory = recordFilesDirectory(in: root)
         let store = try makeStore(root: root)
-        await store.linkRecordFiles(in: directory)
+        await store.syncRecordFiles(in: directory)
 
         let id = UUID()
         store.record(

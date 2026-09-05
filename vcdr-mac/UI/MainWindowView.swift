@@ -145,6 +145,7 @@ struct MainWindowView: View {
                     case .history:
                         HistoryTabView(
                             history: dependencies.transcriptionHistory,
+                            historySync: dependencies.historySync,
                             settings: dependencies.settings
                         )
                     case .diagnostics:

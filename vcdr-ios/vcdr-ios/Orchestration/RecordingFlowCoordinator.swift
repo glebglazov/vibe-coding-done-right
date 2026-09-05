@@ -146,6 +146,9 @@ final class RecordingFlowCoordinator {
     /// can take seconds on first launch after install. `nil` until the
     /// bootstrap task completes; callers must tolerate the transient gap.
     private(set) var history: (any HistoryStore)?
+    /// Owns the iCloud transport for history. Nil while history is still
+    /// bootstrapping, and for as long as the sync toggle is off.
+    private(set) var historySync: HistorySyncReconciler?
     private var isHistoryBootstrapRunning = false
     /// Stable Substitution store reference handed out at launch. Backed by a
     /// proxy so the Settings screen and the recording pipeline can read it
@@ -266,11 +269,10 @@ final class RecordingFlowCoordinator {
         self.history = history
         historyCompletionAdapter.setHistory(history)
         LaunchTelemetry.mark(.historyReadable)
-        // The record files are the sync transport, not the read path: linking
-        // them resolves the iCloud container and imports it once, behind a
+        // The record files are the sync transport, not the read path: the
+        // reconciler resolves the iCloud container and merges it in behind a
         // history list that already answers.
-        let syncEnabled = HistorySync.effectiveSyncEnabled(defaults: defaults)
-        Task { await history.linkRecordFiles(syncEnabled: syncEnabled) }
+        historySync = HistorySyncReconciler.startIfEnabled(store: history, defaults: defaults)
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
 

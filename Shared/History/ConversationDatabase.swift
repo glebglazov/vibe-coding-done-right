@@ -15,12 +15,6 @@ import OSLog
 /// record files remain the durable copy. Only opening the database throws.
 nonisolated final class ConversationDatabase: Sendable {
 
-    // MARK: - Constants
-
-    /// Marks that the record files have been read into the database. Its value
-    /// is the timestamp of that one-time import.
-    private static let importedAtKey = "record_files_imported_at"
-
     // MARK: - Stored shapes
 
     /// A conversation as the database holds it: the record, plus the name of
@@ -68,10 +62,6 @@ nonisolated final class ConversationDatabase: Sendable {
             id TEXT PRIMARY KEY NOT NULL,
             deleted_at REAL NOT NULL,
             exported INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS meta (
-            key TEXT PRIMARY KEY NOT NULL,
-            value TEXT NOT NULL
         );
         """
 
@@ -132,31 +122,84 @@ nonisolated final class ConversationDatabase: Sendable {
         )
     }
 
-    /// Stores conversations read out of the record files. They are already
-    /// exported by definition — the file they came from is left untouched —
-    /// and a record the device has since edited keeps its own version.
-    func saveImported(_ records: [Stored]) {
-        let statement = """
-            INSERT INTO conversations (id, last_updated, payload, record_filename, exported)
-            VALUES (?, ?, ?, ?, 1)
-            ON CONFLICT(id) DO NOTHING
-            """
+    /// Takes in conversations read out of the record files — this device's own
+    /// history the first time, another device's edits every time after.
+    ///
+    /// Last-writer-wins on `lastUpdated`, so a record the user has since
+    /// edited here is never clobbered by the older copy a peer still holds,
+    /// and a pass over a directory that has not moved changes nothing. Merged
+    /// records are exported by definition: the file they arrived in is the
+    /// file they owe. A record this device has deleted stays deleted — its
+    /// tombstone outranks any snapshot written before it.
+    func merge(_ records: [Stored]) {
         do {
             try database.transaction {
                 for record in records {
                     let payload = try encoder.encode(record.conversation)
-                    try database.run(statement, [
-                        .text(record.conversation.id.uuidString),
-                        .double(record.conversation.lastUpdated.timeIntervalSinceReferenceDate),
+                    let id = record.conversation.id.uuidString
+                    let lastUpdated = record.conversation.lastUpdated.timeIntervalSinceReferenceDate
+                    try database.run(Self.mergeRecord, [
+                        .text(id),
+                        .double(lastUpdated),
                         .blob(payload),
                         .text(record.filename),
+                        .text(id),
+                        .double(lastUpdated),
                     ])
                 }
             }
         } catch {
-            Logger.history.error("ConversationDatabase import batch failed: \(error)")
+            Logger.history.error("ConversationDatabase merge batch failed: \(error)")
         }
     }
+
+    private static let mergeRecord = """
+        INSERT INTO conversations (id, last_updated, payload, record_filename, exported)
+        SELECT ?, ?, ?, ?, 1
+        WHERE NOT EXISTS (
+            SELECT 1 FROM conversation_tombstones WHERE id = ? AND deleted_at >= ?
+        )
+        ON CONFLICT(id) DO UPDATE SET
+            last_updated = excluded.last_updated,
+            payload = excluded.payload,
+            record_filename = excluded.record_filename,
+            exported = 1
+        WHERE excluded.last_updated > conversations.last_updated
+        """
+
+    /// Takes in the deletes the record files record. A delete removes the
+    /// conversation unless it has been edited since — an edit newer than the
+    /// tombstone is a resurrection, and the same rule decides it in the files.
+    func applyTombstones(_ tombstones: [ConversationFileArchive.Tombstone]) {
+        guard !tombstones.isEmpty else { return }
+        do {
+            try database.transaction {
+                for tombstone in tombstones {
+                    let id = tombstone.id.uuidString
+                    let deletedAt = tombstone.deletedAt.timeIntervalSinceReferenceDate
+                    try database.run(
+                        "DELETE FROM conversations WHERE id = ? AND last_updated <= ?",
+                        [.text(id), .double(deletedAt)]
+                    )
+                    try database.run(Self.mergeTombstone, [.text(id), .double(deletedAt)])
+                }
+            }
+        } catch {
+            Logger.history.error("ConversationDatabase tombstone merge failed: \(error)")
+        }
+    }
+
+    /// A tombstone that already has a file needs no second one, so it lands
+    /// exported — but a delete this device made more recently keeps its place
+    /// in the export queue.
+    private static let mergeTombstone = """
+        INSERT INTO conversation_tombstones (id, deleted_at, exported)
+        VALUES (?, ?, 1)
+        ON CONFLICT(id) DO UPDATE SET
+            deleted_at = excluded.deleted_at,
+            exported = 1
+        WHERE excluded.deleted_at > conversation_tombstones.deleted_at
+        """
 
     func delete(id: UUID, deletedAt: Date) {
         do {
@@ -244,29 +287,6 @@ nonisolated final class ConversationDatabase: Sendable {
                 [.text(id.uuidString)]
             )
         }
-    }
-
-    // MARK: - Import bookkeeping
-
-    /// Whether the record files have already been read in. Guards the import so
-    /// a relaunch neither re-reads the container nor duplicates a record.
-    var hasImportedRecordFiles: Bool {
-        read("SELECT value FROM meta WHERE key = ?", [.text(Self.importedAtKey)]) {
-            $0.text(0)
-        }.first.flatMap { $0 } != nil
-    }
-
-    func markRecordFilesImported(at date: Date = Date()) {
-        write(
-            """
-            INSERT INTO meta (key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-            """,
-            [
-                .text(Self.importedAtKey),
-                .text(String(date.timeIntervalSinceReferenceDate)),
-            ]
-        )
     }
 
     // MARK: - Statement plumbing

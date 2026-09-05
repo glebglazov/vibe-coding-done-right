@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HistoryView: View {
     let history: any HistoryStore
+    let historySync: HistorySyncReconciler?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var copiedConversationID: UUID?
@@ -29,7 +30,7 @@ struct HistoryView: View {
                         .foregroundStyle(theme.onSurface)
                 }
                 ToolbarItem(placement: .principal) {
-                    SyncIndicator(history: history, theme: theme)
+                    SyncIndicator(reconciler: historySync, theme: theme)
                 }
                 if !history.conversations.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -98,7 +99,7 @@ struct HistoryView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .refreshable {
-            await (history as? UbiquityHistoryStore)?.refresh()
+            await historySync?.reconcile()
         }
     }
 
@@ -117,31 +118,29 @@ struct HistoryView: View {
     }
 }
 
+/// Absent when sync is off: there is no reconciler to report on, and the
+/// history the list shows is complete without one.
 private struct SyncIndicator: View {
-    let history: any HistoryStore
+    let reconciler: HistorySyncReconciler?
     let theme: Theme
 
     var body: some View {
-        if let sync = history as? UbiquityHistoryStore {
+        if let reconciler {
             Button {
-                Task { await sync.refresh() }
+                Task { await reconciler.reconcile() }
             } label: {
-                icon(for: sync.syncState)
+                icon(for: reconciler.syncState)
             }
             .buttonStyle(.plain)
         }
     }
 
     @ViewBuilder
-    private func icon(for state: UbiquityHistoryStore.SyncState) -> some View {
+    private func icon(for state: HistorySyncReconciler.SyncState) -> some View {
         switch state {
         case .idle:
             Image(systemName: "checkmark.icloud")
                 .foregroundStyle(theme.onSurfaceVariant)
-        case .pendingUpdates:
-            Image(systemName: "icloud.and.arrow.down")
-                .foregroundStyle(theme.primary)
-                .symbolEffect(.bounce, options: .nonRepeating)
         case .paused:
             Image(systemName: "exclamationmark.icloud")
                 .foregroundStyle(.orange)

@@ -52,6 +52,14 @@ _Avoid_: cache, local mirror, offline copy
 One conversation, or one delete of it, as a single JSON file in the directory the devices sync through. Record Files are the transport, not the store: a write lands in the Local Store first and is exported to its Record File behind that, and the Local Store remembers what still owes a file so an export deferred by an unreachable container still happens later.
 _Avoid_: snapshot file, iCloud store, history file
 
+**Sync Reconciler**:
+The background worker that makes the Local Store and the Record Files agree, after launch and never on a read path. It owns everything about the transport — resolving the iCloud container, watching it, materializing what is not downloaded yet, resolving conflicts last-writer-wins, and noticing that the user signed out. The Local Store it drives knows a database and a directory and nothing else, which is what lets a later transport replace this one. The sync toggle chooses whether a Sync Reconciler runs at all, not which store the app uses.
+_Avoid_: sync engine, iCloud store, background refresh
+
+**Replication Window**:
+How far back one reconcile pass reaches for changes. Unbounded today and stated in one place, because the container is the OS's to replicate and cannot be asked for less than all of it; it becomes a real bound when the transport is ours.
+_Avoid_: sync horizon, page size, retention period
+
 ## Initialization
 
 **Shell-first Initialization**:

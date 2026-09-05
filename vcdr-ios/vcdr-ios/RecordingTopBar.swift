@@ -5,6 +5,7 @@ import OSLog
 /// Readiness progress updates cannot interrupt sheet presentation.
 struct RecordingTopBar: View {
     let history: (any HistoryStore)?
+    let historySync: HistorySyncReconciler?
     let substitutionStore: any SubstitutionStore
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("appearance") private var appearance: Appearance = .system
@@ -58,7 +59,7 @@ struct RecordingTopBar: View {
             topBarIcon("clock.arrow.circlepath")
         }
         .sheet(isPresented: $showHistory) {
-            HistorySheet(history: history)
+            HistorySheet(history: history, historySync: historySync)
                 .preferredColorScheme(appearance.colorScheme)
         }
     }
@@ -93,6 +94,7 @@ struct RecordingTopBar: View {
 
 private struct HistorySheet: View {
     let history: (any HistoryStore)?
+    let historySync: HistorySyncReconciler?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
@@ -100,7 +102,7 @@ private struct HistorySheet: View {
 
     var body: some View {
         if let history {
-            HistoryView(history: history)
+            HistoryView(history: history, historySync: historySync)
         } else {
             NavigationStack {
                 ProgressView()

@@ -17,7 +17,7 @@ import OSLog
 /// the ubiquity container is unavailable, callers fall back to a local-only
 /// `FileSubstitutionStore` before ever reaching this type.
 ///
-/// Unlike `UbiquityHistoryStore`, the Substitutions list is small, so remote
+/// Unlike history, the Substitutions list is small, so remote
 /// changes are applied immediately on every update rather than gated behind a
 /// "pending updates" prompt.
 @MainActor

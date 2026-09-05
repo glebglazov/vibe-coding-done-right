@@ -1,17 +1,12 @@
 import Foundation
 
-/// Whether history syncs across devices, and which directory of record files
-/// it syncs through.
+/// Whether history syncs across devices, and how much of it a pass carries.
 ///
 /// The user toggle defaults to ON and no longer chooses a store — the Local
-/// Store answers every read either way. It chooses whether the records the
-/// device writes travel: on, they land in the iCloud container the OS
-/// replicates; off, they stay in the app's own storage.
-///
-/// When iCloud is not available to the process (entitlement missing, signed
-/// out, not yet provisioned) the app's own storage stands in, so the same
-/// binary runs in either mode without surfacing an error. The toggle stays
-/// cosmetically "on" and syncing resumes when iCloud comes back.
+/// Store answers every read either way. It chooses whether
+/// `HistorySyncReconciler` runs: on, the device's records travel through the
+/// iCloud container the OS replicates; off, they stay as files in the app's
+/// own storage and nothing ever resolves the container.
 nonisolated enum HistorySync {
 
     /// Persisted defaults key for the "Sync history via iCloud" toggle.
@@ -27,17 +22,18 @@ nonisolated enum HistorySync {
         (defaults.object(forKey: syncEnabledDefaultsKey) as? Bool) ?? syncEnabledDefault
     }
 
-    /// The directory of per-record JSON files this device syncs through, with
-    /// the toggle's own move (`HistoryMigrator`) already settled — flipping the
-    /// setting relocates the files between iCloud and local storage.
+    /// How far back a reconcile pass reaches for changes.
     ///
-    /// Blocking: resolving the ubiquity container provisions it, which takes
-    /// seconds on the first launch after install. Callers must keep this off
-    /// the cooperative pool and off any read path.
-    static func prepareRecordFilesDirectory(syncEnabled: Bool) -> URL {
-        let ubiquityRoot = syncEnabled ? UbiquityHistoryStore.resolveStorageRoot() : nil
-        HistoryMigrator.reconcileAtLaunch(syncEnabled: syncEnabled, ubiquityRoot: ubiquityRoot)
-        return (ubiquityRoot ?? FileHistoryStore.localStorageRoot)
-            .appendingPathComponent("conversations")
+    /// Unbounded, and one value so there is somewhere for a bound to go: the
+    /// container is the OS's to replicate and it cannot be asked for less than
+    /// all of it, so bounding the read here would only hide records the other
+    /// device still shows. This becomes a real bound when the transport is
+    /// ours to bound (see `docs/adr/0010`).
+    static let replicationWindow: TimeInterval? = nil
+
+    /// Where the device keeps its record files when it is not syncing through
+    /// a container: the app's own storage, alongside the Local Store.
+    static var localRecordFilesDirectory: URL {
+        FileHistoryStore.localStorageRoot.appendingPathComponent("conversations")
     }
 }
