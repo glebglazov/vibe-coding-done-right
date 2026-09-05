@@ -3,9 +3,12 @@
 
 Usage:
   export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
+  export GEMINI_API_KEY=$(op-cache read "op://Private/Gemini API Key/password")
   ./record_run.py --model claude-haiku-4-5-20251001 --prompt prompts/prompt_lean.txt
   ./record_run.py --provider openai-chat --model qwen3.5:2b --prompt prompts/prompt_lean.txt \\
                   --disable-thinking
+  ./record_run.py --provider gemini --model gemini-3.8-flash \\
+                  --prompt prompts/prompt_readability.txt --disable-thinking
   ./record_run.py --provider s1-mini --model hf.co/superwhisper/s1-mini-GGUF:Q4_K_M \\
                   --prompt prompts/s1_mini.txt --subset english
 
@@ -35,6 +38,7 @@ from ledger import (
 )
 
 ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
+GEMINI_MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENAI_CHAT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions"
 S1_MINI_ENDPOINT = "http://127.0.0.1:11434/api/generate"
 
@@ -43,6 +47,11 @@ S1_MINI_ENDPOINT = "http://127.0.0.1:11434/api/generate"
 # answers nothing at all, which is a reading of a sampling config rather than of
 # the model.
 NO_THINKING = {"reasoning_effort": "none"}
+
+# The same setting on the Gemini API, which spends thinking tokens by default and
+# names its own budget rather than an effort level. Zero is the only value that
+# reports no thinking at all; the levels this API accepts all still think.
+GEMINI_NO_THINKING = {"thinkingConfig": {"thinkingBudget": 0}}
 
 MAX_TOKENS = 2048
 # A local runtime defaults to temperature 1, so a reproducible run has to pin
@@ -211,6 +220,68 @@ class OpenAIChatArm:
         return payload["choices"][0]["message"]["content"]
 
 
+class GeminiArm:
+    """The other cloud backend: Google's generative-language API.
+
+    The model id rides in the path rather than the body, so this arm resolves its
+    own URL and records that, keeping `arm.endpoint` the address the run actually
+    called.
+    """
+
+    def __init__(self, model, endpoint, disable_thinking=False):
+        self.model = model
+        self.endpoint = f"{endpoint.rstrip('/')}/{model}:generateContent"
+        self.sampling = {
+            "temperature": TEMPERATURE,
+            "seed": SEED,
+            "maxOutputTokens": MAX_TOKENS,
+        }
+        self.thinking_disabled = (
+            dict(GEMINI_NO_THINKING) if disable_thinking else None
+        )
+        self.api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not self.api_key:
+            raise SystemExit(
+                'GEMINI_API_KEY not set. Run: export GEMINI_API_KEY=$(op-cache read "op://Private/Gemini API Key/password")'
+            )
+
+    def runtime(self):
+        return "google-generative-language-api v1beta"
+
+    def request_settings(self):
+        return {"thinking_disabled": self.thinking_disabled}
+
+    def user_message(self, case_input):
+        return dictation_message(case_input)
+
+    def complete(self, system_prompt, user_message):
+        payload = post_json(
+            self.endpoint,
+            {"x-goog-api-key": self.api_key},
+            {
+                "systemInstruction": {"parts": [{"text": system_prompt}]},
+                "contents": [{"role": "user", "parts": [{"text": user_message}]}],
+                "generationConfig": {
+                    **self.sampling,
+                    **(self.thinking_disabled or {}),
+                },
+            },
+        )
+        return self.answer(payload["candidates"][0])
+
+    @staticmethod
+    def answer(candidate):
+        """The text the model wrote, and the empty string where it wrote none.
+
+        A model that spends its whole budget thinking, or that declines the turn,
+        answers with no parts at all. That is a reading of the arm rather than a
+        transport failure, so it is recorded as the empty output it was — the way
+        the local reasoning model's empty answers already are.
+        """
+        parts = candidate.get("content", {}).get("parts", [])
+        return "".join(part.get("text", "") for part in parts if "text" in part)
+
+
 class S1MiniArm:
     """S1-mini, served locally through the raw completion endpoint.
 
@@ -292,11 +363,13 @@ class S1MiniArm:
 
 ARMS = {
     "anthropic": AnthropicArm,
+    "gemini": GeminiArm,
     "openai-chat": OpenAIChatArm,
     "s1-mini": S1MiniArm,
 }
 DEFAULT_ENDPOINTS = {
     "anthropic": ANTHROPIC_ENDPOINT,
+    "gemini": GEMINI_MODELS_ENDPOINT,
     "openai-chat": OPENAI_CHAT_ENDPOINT,
     "s1-mini": S1_MINI_ENDPOINT,
 }
@@ -475,7 +548,7 @@ def main():
     parser.add_argument(
         "--disable-thinking",
         action="store_true",
-        help="send the setting that turns the local model's thinking mode off",
+        help="send the setting that turns the arm's thinking mode off",
     )
     parser.add_argument(
         "--tone",
