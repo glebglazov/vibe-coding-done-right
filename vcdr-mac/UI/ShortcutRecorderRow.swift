@@ -1,17 +1,17 @@
 import SwiftUI
 import Carbon
 
-/// Environment handler that disables every app-owned hotkey while the user
-/// is recording a new shortcut. Installed by `MainWindowView`; consumed by
-/// `ShortcutRecorderRow`. Called with `true` on start and `false` on stop/cancel.
-private struct HotkeySuppressionKey: EnvironmentKey {
-    static let defaultValue: ((Bool) -> Void)? = nil
+/// Suspends every app-owned hotkey for as long as the returned token is held,
+/// so a combination VCDR has bound reaches the shortcut recorder instead.
+/// Installed by `MainWindowView`; consumed by `ShortcutRecorderRow`.
+private struct SuspendHotkeysKey: EnvironmentKey {
+    static let defaultValue: (() -> HotkeySuspension)? = nil
 }
 
 extension EnvironmentValues {
-    var hotkeySuppressionHandler: ((Bool) -> Void)? {
-        get { self[HotkeySuppressionKey.self] }
-        set { self[HotkeySuppressionKey.self] = newValue }
+    var suspendHotkeys: (() -> HotkeySuspension)? {
+        get { self[SuspendHotkeysKey.self] }
+        set { self[SuspendHotkeysKey.self] = newValue }
     }
 }
 
@@ -58,7 +58,11 @@ struct ShortcutRecorderRow: View {
     @Binding var hotkey: HotkeyBinding
     @State private var isRecording = false
     @State private var eventMonitor = ShortcutEventMonitor()
-    @Environment(\.hotkeySuppressionHandler) private var hotkeySuppressionHandler
+    @Environment(\.suspendHotkeys) private var suspendHotkeys
+    /// Held for exactly as long as this row is recording. Dropping it is what
+    /// gives the app its hotkeys back — including when the row itself goes away
+    /// mid-recording, which `onDisappear` is not guaranteed to catch.
+    @State private var suspension: HotkeySuspension?
 
     var body: some View {
         LabeledContent(label) {
@@ -119,7 +123,7 @@ struct ShortcutRecorderRow: View {
     private func startRecording() {
         guard !isRecording else { return }
         isRecording = true
-        hotkeySuppressionHandler?(true)
+        suspension = suspendHotkeys?()
         eventMonitor.start { [self] capturedKeyCode, capturedModifiers in
             hotkey = HotkeyBinding(keyCode: capturedKeyCode, modifiers: capturedModifiers)
             stopRecording()
@@ -130,6 +134,6 @@ struct ShortcutRecorderRow: View {
         guard isRecording else { return }
         isRecording = false
         eventMonitor.stop()
-        hotkeySuppressionHandler?(false)
+        suspension = nil
     }
 }

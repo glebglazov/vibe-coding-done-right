@@ -9,7 +9,6 @@ final class CopyLatestCaptureHandler {
     private let hotkeyRegistry: any HotkeyRegistry
 
     private var hotkeyClaim: HotkeyClaim?
-    private var isHotkeySuppressed = false
 
     init(
         settings: AppSettings,
@@ -35,7 +34,7 @@ final class CopyLatestCaptureHandler {
         hotkeyClaim = nil
 
         let binding = settings.copyLatestCaptureHotkey
-        guard binding.isAssigned, !isHotkeySuppressed else { return }
+        guard binding.isAssigned else { return }
 
         hotkeyClaim = hotkeyRegistry.claim(binding) { [weak self] in
             self?.copyLatestCapture()
@@ -70,13 +69,5 @@ final class CopyLatestCaptureHandler {
                 self.observeHotkeySettings()
             }
         }
-    }
-
-    /// Drops or restores this claim while the user records a new shortcut in the
-    /// UI, so the key press reaches the shortcut recorder.
-    func setHotkeySuppressed(_ suppressed: Bool) {
-        guard suppressed != isHotkeySuppressed else { return }
-        isHotkeySuppressed = suppressed
-        setupHotkey()
     }
 }

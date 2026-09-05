@@ -12,7 +12,6 @@ final class ModeSwitcherCoordinator {
     private let styleResolution: StyleResolutionPipeline
 
     @ObservationIgnored private var hotkeyClaim: HotkeyClaim?
-    @ObservationIgnored private var isHotkeySuppressed = false
 
     @ObservationIgnored weak var delegate: ModeSwitcherCoordinatorDelegate?
 
@@ -40,7 +39,7 @@ final class ModeSwitcherCoordinator {
         hotkeyClaim = nil
 
         let binding = settings.modeSwitcherHotkey
-        guard binding.isAssigned, !isHotkeySuppressed else { return }
+        guard binding.isAssigned else { return }
 
         hotkeyClaim = hotkeyRegistry.claim(binding) { [weak self] in
             self?.toggleSwitcher()
@@ -163,12 +162,5 @@ final class ModeSwitcherCoordinator {
                 self.observeHotkeySettings()
             }
         }
-    }
-
-    /// Drops or restores the switcher claim while the user records a new shortcut.
-    func setHotkeySuppressed(_ suppressed: Bool) {
-        guard suppressed != isHotkeySuppressed else { return }
-        isHotkeySuppressed = suppressed
-        setupHotkey()
     }
 }

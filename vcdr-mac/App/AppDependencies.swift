@@ -20,7 +20,7 @@ final class AppDependencies {
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
     let secureInputMonitor = SecureInputMonitor()
-    let hotkeyRegistry = CarbonHotkeyRegistry()
+    let hotkeyRegistry = SuspendableHotkeyRegistry(wrapping: CarbonHotkeyRegistry())
 
     #if DEBUG
     let audioRecorder: AudioRecorder
@@ -130,15 +130,13 @@ final class AppDependencies {
         textProcessor.setStyleProvider(styleProviderClosure)
     }
 
-    /// Suppresses every app-owned hotkey while the user is recording a new shortcut
-    /// in the UI, so the key press reaches the shortcut recorder and nothing in the
-    /// app reacts to it. Every claim is released outright — a claim has no
-    /// pass-through.
+    /// Hands every app-owned combination back to the system while the user is
+    /// recording a new shortcut, so the key press reaches the shortcut recorder
+    /// and nothing in the app reacts to it. Whoever opened the recorder holds the
+    /// token; the claims come back when it goes away, not when someone remembers.
     @MainActor
-    func setHotkeySuppression(_ suppressed: Bool) {
-        session.setHotkeysSuppressed(suppressed)
-        modeSwitcherCoordinator.setHotkeySuppressed(suppressed)
-        copyLatestCaptureHandler.setHotkeySuppressed(suppressed)
+    func suspendHotkeys() -> HotkeySuspension {
+        hotkeyRegistry.suspend()
     }
 
     func initialize() async {

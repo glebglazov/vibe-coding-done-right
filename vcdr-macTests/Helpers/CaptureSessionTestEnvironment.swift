@@ -24,6 +24,9 @@ struct CaptureSessionTestEnvironment {
     let audioRecorder: AudioRecorder
     let textProcessor: TextProcessor
     let hotkeyRegistry: FakeHotkeyRegistry
+    /// What the session actually claims through, so a test can suspend every
+    /// claim the way the shortcut recorder does.
+    let suspendableRegistry: SuspendableHotkeyRegistry
 
     private let userDefaultsSuiteName: String
 
@@ -103,13 +106,15 @@ struct CaptureSessionTestEnvironment {
 
         let hotkeyRegistry = FakeHotkeyRegistry()
         self.hotkeyRegistry = hotkeyRegistry
+        let suspendableRegistry = SuspendableHotkeyRegistry(wrapping: hotkeyRegistry)
+        self.suspendableRegistry = suspendableRegistry
 
         self.session = CaptureSession(
             settings: settings,
             history: history,
             deps: .init(
                 transcription: mockProvider,
-                hotkeyRegistry: hotkeyRegistry,
+                hotkeyRegistry: suspendableRegistry,
                 audio: audioRecorder,
                 media: MediaPlaybackController(),
                 selectionCapturer: SelectionCapturer(),

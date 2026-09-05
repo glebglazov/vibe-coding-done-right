@@ -21,6 +21,11 @@
    combination back. No hotkey is on an event tap any more, and
    `GlobalHotkeyManager` has no users at all. Don't add to it.
 3. Update `CaptureSession+Hotkeys.swift` for behavior changes to the session's own hotkeys
+4. Don't give the owner a "suppressed" flag. The registry it claims through is a
+   `SuspendableHotkeyRegistry`, and `AppDependencies.suspendHotkeys()` hands every
+   claim back for as long as the returned `HotkeySuspension` is held — which is how
+   the shortcut recorder reads a bound combination. An owner claims and releases on
+   its own state only, and gets its claim back when the Suspension ends.
 
 ## Permissions Required
 

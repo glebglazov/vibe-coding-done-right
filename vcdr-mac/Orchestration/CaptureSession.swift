@@ -184,12 +184,6 @@ final class CaptureSession {
     /// would swallow it system-wide.
     @ObservationIgnored var cancelClaim: HotkeyClaim?
 
-    /// Set while the user is recording a new shortcut in the UI. Every claim the
-    /// session holds is dropped for the duration rather than muted — a claim has
-    /// no pass-through, so releasing it is the only way the key press can reach
-    /// the recorder.
-    @ObservationIgnored private(set) var isHotkeySuppressed = false
-
     /// Set while the mode switcher is up. Its window reads Escape itself, which a
     /// standing claim on the cancel combination would consume first.
     @ObservationIgnored private(set) var isSuspendedForModeSwitcher = false
@@ -344,17 +338,6 @@ final class CaptureSession {
             self.isSuspendedForModeSwitcher = false
             self.setupCancelHotkey()
         }
-    }
-
-    /// Drops or restores every claim the session holds while the user records a
-    /// new shortcut, so neither the toggle nor a capture in flight eats the key
-    /// press the recorder is waiting for.
-    func setHotkeysSuppressed(_ suppressed: Bool) {
-        guard suppressed != isHotkeySuppressed else { return }
-        isHotkeySuppressed = suppressed
-        setupToggleHotkey()
-        setupCancelHotkey()
-        setupDestinationHotkeys()
     }
 
     /// DEBUG / test-only: poll until the session reaches a resting phase

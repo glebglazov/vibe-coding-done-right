@@ -64,6 +64,7 @@ vcdr/
 ├── Audio/AudioRecorder.swift             # AVFoundation 16kHz mono recording
 ├── Hotkeys/
 │   ├── CarbonHotkeyRegistry.swift        # Claims key combos; survives Secure Input
+│   ├── SuspendableHotkeyRegistry.swift   # The registry every owner claims through; drops and restores every claim at once
 │   └── GlobalHotkeyManager.swift         # CGEvent tap; no hotkey uses it any more
 ├── Actions/
 │   ├── PostTranscriptionAction.swift     # Protocol

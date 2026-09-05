@@ -12,7 +12,7 @@ extension CaptureSession {
         toggleClaim = nil
 
         let binding = settings.toggleRecordingHotkey
-        guard binding.isAssigned, !isHotkeySuppressed else { return }
+        guard binding.isAssigned else { return }
 
         toggleClaim = hotkeyRegistry.claim(binding) { [weak self] in
             self?.toggle()
@@ -30,7 +30,6 @@ extension CaptureSession {
         let binding = settings.cancelRecordingHotkey
         guard binding.isAssigned,
               status.phase.hasCaptureToCancel,
-              !isHotkeySuppressed,
               !isSuspendedForModeSwitcher
         else { return }
 
@@ -45,7 +44,7 @@ extension CaptureSession {
     /// swallow ordinary shortcuts system-wide. Called from `setStatus` alongside
     /// cancel, so no exit path can leave them claimed.
     func setupDestinationHotkeys() {
-        guard case .recording = status.phase, !isHotkeySuppressed else {
+        guard case .recording = status.phase else {
             destinationHotkey.disarm()
             return
         }
