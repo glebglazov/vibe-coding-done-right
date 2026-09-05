@@ -5,6 +5,12 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
     var inputSegments: [InputSegment]
     var output: String?
     var label: String?
+    /// When the user dictated this — fixed at creation, and what the history
+    /// list shows and sorts by.
+    let capturedAt: Date
+    /// The clock a merge settles two copies of this record against. Deliberately
+    /// nudged forward when a delete has to beat the edit it buries, so it is a
+    /// sync mechanism and never a date to show anyone.
     var lastUpdated: Date
     var schemaVersion: Int
     /// Top-level JSON keys written by a newer schema that this binary doesn't
@@ -32,11 +38,29 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
         output ?? inputText
     }
 
-    init(
+    /// The same conversation carrying the capture time its record file's name
+    /// spells out. A record written before `capturedAt` existed has that name
+    /// as the only surviving trace of when it was dictated, and the name is
+    /// written once at creation — an edit rewrites the file, never renames it.
+    nonisolated func stamped(capturedAt: Date) -> Conversation {
+        Conversation(
+            id: id,
+            inputSegments: inputSegments,
+            output: output,
+            label: label,
+            capturedAt: capturedAt,
+            lastUpdated: lastUpdated,
+            schemaVersion: schemaVersion,
+            extras: extras
+        )
+    }
+
+    nonisolated init(
         id: UUID,
         inputSegments: [InputSegment],
         output: String?,
         label: String?,
+        capturedAt: Date? = nil,
         lastUpdated: Date,
         schemaVersion: Int = Conversation.currentSchemaVersion,
         extras: [String: AnyJSON] = [:]
@@ -45,6 +69,9 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
         self.inputSegments = inputSegments
         self.output = output
         self.label = label
+        // A conversation being created now was captured now; the fallback also
+        // covers records written before capture time was stored separately.
+        self.capturedAt = capturedAt ?? lastUpdated
         self.lastUpdated = lastUpdated
         self.schemaVersion = schemaVersion
         self.extras = extras
@@ -56,7 +83,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
 
     /// Known top-level keys this binary recognizes. Anything else lands in `extras`.
     private static let knownKeys: Set<String> = [
-        "id", "segments", "output", "label", "lastUpdated", "schemaVersion",
+        "id", "segments", "output", "label", "capturedAt", "lastUpdated", "schemaVersion",
         // Legacy / backward-compat keys:
         "modeID", "modeName", "turns",
     ]
@@ -66,6 +93,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
 
         let id = try container.decode(UUID.self, forKey: AnyCodingKey("id"))
         let lastUpdated = try container.decode(Date.self, forKey: AnyCodingKey("lastUpdated"))
+        let capturedAt = try container.decodeIfPresent(Date.self, forKey: AnyCodingKey("capturedAt"))
         let schemaVersion = try container.decodeIfPresent(Int.self, forKey: AnyCodingKey("schemaVersion"))
             ?? Conversation.currentSchemaVersion
 
@@ -108,6 +136,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
             inputSegments: inputSegments,
             output: output,
             label: label,
+            capturedAt: capturedAt,
             lastUpdated: lastUpdated,
             schemaVersion: schemaVersion,
             extras: extras
@@ -120,6 +149,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
         try container.encode(inputSegments, forKey: AnyCodingKey("segments"))
         try container.encodeIfPresent(output, forKey: AnyCodingKey("output"))
         try container.encodeIfPresent(label, forKey: AnyCodingKey("label"))
+        try container.encode(capturedAt, forKey: AnyCodingKey("capturedAt"))
         try container.encode(lastUpdated, forKey: AnyCodingKey("lastUpdated"))
         try container.encode(schemaVersion, forKey: AnyCodingKey("schemaVersion"))
 

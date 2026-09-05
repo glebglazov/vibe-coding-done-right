@@ -40,10 +40,16 @@ nonisolated enum HistoryImporter {
                     unreadable += 1
                     continue
                 }
+                let filename = entry.url.lastPathComponent
+                // The name carries the capture time even for records written
+                // before the field existed, and it is written once, at
+                // creation — so it outranks whatever the payload says.
+                let capturedAt = ConversationFileArchive.captureTime(fromFilename: filename)
+                    ?? conversation.capturedAt
                 records.append(
                     ConversationDatabase.Stored(
-                        conversation: conversation,
-                        filename: entry.url.lastPathComponent
+                        conversation: conversation.stamped(capturedAt: capturedAt),
+                        filename: filename
                     )
                 )
             }

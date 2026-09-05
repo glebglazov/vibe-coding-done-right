@@ -45,19 +45,23 @@ nonisolated final class ConversationDatabase: Sendable {
         self.encoder = HistoryJSONCoders.makeEncoder()
         self.decoder = HistoryJSONCoders.makeDecoder()
         try database.execute(Self.schema)
+        // Between the two: a database written before capture time existed has
+        // the table but not the column, so the index over it cannot be created
+        // until the migration has added it.
+        try adoptCaptureTimes()
+        try database.execute(Self.captureTimeIndex)
     }
 
     private static let schema = """
         PRAGMA journal_mode = WAL;
         CREATE TABLE IF NOT EXISTS conversations (
             id TEXT PRIMARY KEY NOT NULL,
+            captured_at REAL NOT NULL,
             last_updated REAL NOT NULL,
             payload BLOB NOT NULL,
             record_filename TEXT NOT NULL,
             exported INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS conversations_by_recency
-            ON conversations (last_updated DESC);
         CREATE TABLE IF NOT EXISTS conversation_tombstones (
             id TEXT PRIMARY KEY NOT NULL,
             deleted_at REAL NOT NULL,
@@ -65,17 +69,54 @@ nonisolated final class ConversationDatabase: Sendable {
         );
         """
 
+    /// Recency by merge stamp is nobody's ordering any more.
+    private static let captureTimeIndex = """
+        DROP INDEX IF EXISTS conversations_by_recency;
+        CREATE INDEX IF NOT EXISTS conversations_by_capture
+            ON conversations (captured_at DESC);
+        """
+
+    /// Gives a database written before capture time was stored the column it
+    /// now sorts by, filled the same way an import fills it: from the record
+    /// filename, which has carried the capture time all along.
+    private func adoptCaptureTimes() throws {
+        let present = try database.query(
+            "SELECT COUNT(*) FROM pragma_table_info('conversations') WHERE name = 'captured_at'",
+            []
+        ) { $0.int(0) }.first ?? 0
+        guard present == 0 else { return }
+
+        try database.execute(
+            "ALTER TABLE conversations ADD COLUMN captured_at REAL NOT NULL DEFAULT 0"
+        )
+        let rows = try database.query(
+            "SELECT id, record_filename, last_updated FROM conversations",
+            []
+        ) { row -> (String, Date)? in
+            guard let id = row.text(0), let filename = row.text(1) else { return nil }
+            let capturedAt = ConversationFileArchive.captureTime(fromFilename: filename)
+                ?? Date(timeIntervalSinceReferenceDate: row.double(2))
+            return (id, capturedAt)
+        }
+        try database.transaction {
+            for (id, capturedAt) in rows.compactMap({ $0 }) {
+                try database.run(
+                    "UPDATE conversations SET captured_at = ? WHERE id = ?",
+                    [.double(capturedAt.timeIntervalSinceReferenceDate), .text(id)]
+                )
+            }
+        }
+        Logger.history.info("Local store adopted capture times for \(rows.count) conversations")
+    }
+
     // MARK: - Reading
 
     /// Conversations newest first, as the history list shows them.
     func page(offset: Int, limit: Int) -> [Conversation] {
-        let payloads = read(
-            "SELECT payload FROM conversations ORDER BY last_updated DESC, id ASC LIMIT ? OFFSET ?",
+        read(
+            "SELECT payload, captured_at FROM conversations ORDER BY captured_at DESC, id ASC LIMIT ? OFFSET ?",
             [.int(Int64(limit)), .int(Int64(offset))]
-        ) { $0.blob(0) }
-        return payloads.compactMap { payload in
-            payload.flatMap { try? decoder.decode(Conversation.self, from: $0) }
-        }
+        ) { decodeStamped($0) }.compactMap { $0 }
     }
 
     func conversationCount() -> Int {
@@ -84,13 +125,10 @@ nonisolated final class ConversationDatabase: Sendable {
 
     func stored(id: UUID) -> Stored? {
         read(
-            "SELECT payload, record_filename FROM conversations WHERE id = ?",
+            "SELECT payload, captured_at, record_filename FROM conversations WHERE id = ?",
             [.text(id.uuidString)]
         ) { row -> Stored? in
-            guard let payload = row.blob(0),
-                  let filename = row.text(1),
-                  let conversation = try? decoder.decode(Conversation.self, from: payload)
-            else { return nil }
+            guard let conversation = decodeStamped(row), let filename = row.text(2) else { return nil }
             return Stored(conversation: conversation, filename: filename)
         }.first ?? nil
     }
@@ -106,8 +144,8 @@ nonisolated final class ConversationDatabase: Sendable {
         }
         write(
             """
-            INSERT INTO conversations (id, last_updated, payload, record_filename, exported)
-            VALUES (?, ?, ?, ?, 0)
+            INSERT INTO conversations (id, captured_at, last_updated, payload, record_filename, exported)
+            VALUES (?, ?, ?, ?, ?, 0)
             ON CONFLICT(id) DO UPDATE SET
                 last_updated = excluded.last_updated,
                 payload = excluded.payload,
@@ -115,6 +153,7 @@ nonisolated final class ConversationDatabase: Sendable {
             """,
             [
                 .text(conversation.id.uuidString),
+                .double(conversation.capturedAt.timeIntervalSinceReferenceDate),
                 .double(conversation.lastUpdated.timeIntervalSinceReferenceDate),
                 .blob(payload),
                 .text(filename),
@@ -140,6 +179,7 @@ nonisolated final class ConversationDatabase: Sendable {
                     let lastUpdated = record.conversation.lastUpdated.timeIntervalSinceReferenceDate
                     try database.run(Self.mergeRecord, [
                         .text(id),
+                        .double(record.conversation.capturedAt.timeIntervalSinceReferenceDate),
                         .double(lastUpdated),
                         .blob(payload),
                         .text(record.filename),
@@ -154,8 +194,8 @@ nonisolated final class ConversationDatabase: Sendable {
     }
 
     private static let mergeRecord = """
-        INSERT INTO conversations (id, last_updated, payload, record_filename, exported)
-        SELECT ?, ?, ?, ?, 1
+        INSERT INTO conversations (id, captured_at, last_updated, payload, record_filename, exported)
+        SELECT ?, ?, ?, ?, ?, 1
         WHERE NOT EXISTS (
             SELECT 1 FROM conversation_tombstones WHERE id = ? AND deleted_at >= ?
         )
@@ -252,13 +292,10 @@ nonisolated final class ConversationDatabase: Sendable {
 
     func pendingExports() -> [PendingExport] {
         let records = read(
-            "SELECT payload, record_filename FROM conversations WHERE exported = 0",
+            "SELECT payload, captured_at, record_filename FROM conversations WHERE exported = 0",
             []
         ) { row -> PendingExport? in
-            guard let payload = row.blob(0),
-                  let filename = row.text(1),
-                  let conversation = try? decoder.decode(Conversation.self, from: payload)
-            else { return nil }
+            guard let conversation = decodeStamped(row), let filename = row.text(2) else { return nil }
             return .record(conversation, filename: filename)
         }
         let tombstones = read(
@@ -290,6 +327,19 @@ nonisolated final class ConversationDatabase: Sendable {
     }
 
     // MARK: - Statement plumbing
+
+    /// Decodes the payload in column 0 and gives it the capture time in column
+    /// 1. The column is the authority: a record stored before capture time was
+    /// a field of its own has none in its payload, and the migration read it
+    /// off the record filename into the column alone.
+    private func decodeStamped(_ row: SQLiteDatabase.Row) -> Conversation? {
+        guard let payload = row.blob(0),
+              let conversation = try? decoder.decode(Conversation.self, from: payload)
+        else { return nil }
+        return conversation.stamped(
+            capturedAt: Date(timeIntervalSinceReferenceDate: row.double(1))
+        )
+    }
 
     private func read<T>(
         _ sql: String,

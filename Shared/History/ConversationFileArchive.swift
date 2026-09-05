@@ -149,6 +149,18 @@ nonisolated struct ConversationFileArchive: Sendable {
         "\(filenameTimestamp(deletedAt))_\(id.uuidString)\(tombstoneSuffix)"
     }
 
+    /// The capture time the leading stamp of a snapshot filename carries.
+    ///
+    /// Records predating the `capturedAt` field carry it nowhere else, and the
+    /// name never changes once written, so this is what tells the Local Store
+    /// when an imported conversation was dictated.
+    static func captureTime(fromFilename name: String) -> Date? {
+        guard name.hasSuffix(snapshotSuffix) else { return nil }
+        let base = name.dropLast(snapshotSuffix.count)
+        guard let underscore = base.range(of: "_", options: .backwards) else { return nil }
+        return date(fromFilenameTimestamp: String(base[..<underscore.lowerBound]))
+    }
+
     private static func recordID(fromFilenameBase base: String) -> UUID? {
         guard let underscore = base.range(of: "_", options: .backwards) else { return nil }
         return UUID(uuidString: String(base[underscore.upperBound...]))
@@ -163,5 +175,25 @@ nonisolated struct ConversationFileArchive: Sendable {
         return formatter.string(from: date)
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: ".", with: "-")
+    }
+
+    /// Undoes `filenameTimestamp`. The dashes standing in for the time's colons
+    /// and dot are the only ones after the `T`, so putting them back is a
+    /// matter of counting fields — three for a whole-second stamp, which older
+    /// versions wrote, four once fractional seconds arrived.
+    private static func date(fromFilenameTimestamp stamp: String) -> Date? {
+        let halves = stamp.split(separator: "T", maxSplits: 1)
+        guard halves.count == 2 else { return nil }
+        let fields = halves[1].split(separator: "-")
+        let time: String
+        switch fields.count {
+        case 3: time = "\(fields[0]):\(fields[1]):\(fields[2])"
+        case 4: time = "\(fields[0]):\(fields[1]):\(fields[2]).\(fields[3])"
+        default: return nil
+        }
+        let iso = "\(halves[0])T\(time)"
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
     }
 }

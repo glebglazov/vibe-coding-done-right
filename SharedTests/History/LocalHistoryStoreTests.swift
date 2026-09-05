@@ -39,12 +39,13 @@ struct LocalHistoryStoreTests {
     private func writeRecordFile(
         id: UUID,
         createdAt: Date,
+        lastUpdated: Date? = nil,
         text: String,
         futureField: String? = nil,
         into directory: URL
     ) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let stamp = ISO8601DateFormatter().string(from: createdAt)
+        let stamp = ISO8601DateFormatter().string(from: lastUpdated ?? createdAt)
         let future = futureField.map { ",\"futureField\":\"\($0)\"" } ?? ""
         let json = """
             {"id":"\(id.uuidString)",\
@@ -220,6 +221,70 @@ struct LocalHistoryStoreTests {
         #expect(thisDevice.conversations.isEmpty, "the pass that exported the delete undid it")
         await otherDevice.syncRecordFiles(in: directory)
         #expect(otherDevice.conversations.isEmpty)
+    }
+
+    // MARK: - Capture time
+
+    @Test("A conversation shows when it was dictated, whatever the merge stamp does")
+    func captureTimeIsFixedAtCreation() async throws {
+        let root = makeTempRoot()
+        let directory = recordFilesDirectory(in: root)
+        let base = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let older = UUID()
+        let newer = UUID()
+
+        // Dictated first, but merged most recently — the two orderings disagree.
+        try writeRecordFile(
+            id: older,
+            createdAt: base,
+            lastUpdated: base.addingTimeInterval(1000),
+            text: "dictated first",
+            into: directory
+        )
+        try writeRecordFile(
+            id: newer,
+            createdAt: base.addingTimeInterval(500),
+            lastUpdated: base.addingTimeInterval(10),
+            text: "dictated second",
+            into: directory
+        )
+
+        let store = try makeStore(root: root)
+        await store.syncRecordFiles(in: directory)
+
+        #expect(store.conversations.map(\.id) == [newer, older], "the list is not ordered by capture time")
+        #expect(store.conversations.map(\.capturedAt) == [base.addingTimeInterval(500), base])
+
+        // A local dictation, then the AI output landing on it: an edit moves
+        // the merge stamp and leaves capture time and list position alone.
+        let dictated = UUID()
+        store.record(
+            conversationID: dictated,
+            inputSegments: [InputSegment(text: "dictated here")],
+            output: nil,
+            label: nil
+        )
+        let atCapture = try #require(store.latestConversation)
+        try await Task.sleep(for: .milliseconds(20))
+        store.record(
+            conversationID: dictated,
+            inputSegments: [InputSegment(text: "dictated here")],
+            output: "processed here",
+            label: nil
+        )
+        let afterEdit = try #require(store.conversations.first { $0.id == dictated })
+        #expect(afterEdit.capturedAt == atCapture.capturedAt, "the edit moved capture time")
+        #expect(afterEdit.lastUpdated > atCapture.lastUpdated, "the edit left the merge stamp behind")
+        #expect(store.conversations.map(\.id) == [dictated, newer, older])
+
+        // All of it survives a relaunch, and a second pass over the record
+        // files does not restamp anything from the merge stamp.
+        let relaunched = try makeStore(root: root)
+        await relaunched.syncRecordFiles(in: directory)
+        #expect(relaunched.conversations.map(\.id) == [dictated, newer, older])
+        #expect(relaunched.conversations.map(\.capturedAt) == [
+            atCapture.capturedAt, base.addingTimeInterval(500), base,
+        ])
     }
 
     // MARK: - Writes

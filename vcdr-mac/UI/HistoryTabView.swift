@@ -125,7 +125,7 @@ private struct ConversationRowView: View {
             )
 
             // Timestamp
-            Text(conversation.lastUpdated.formatted(
+            Text(conversation.capturedAt.formatted(
                 .dateTime.month(.abbreviated).day().hour().minute()
             ))
             .font(.caption)

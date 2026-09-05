@@ -52,6 +52,14 @@ _Avoid_: cache, local mirror, offline copy
 One conversation or one Substitution, or one delete of it, as a single JSON file in the directory the devices sync through. Record Files are the transport, not the store: a write lands in the Local Store first and is exported to its Record File behind that, and the Local Store remembers what still owes a file so an export deferred by an unreachable container still happens later.
 _Avoid_: snapshot file, iCloud store, history file
 
+**Capture Time**:
+When the user dictated a conversation. Fixed when the record is created and never moved by anything afterwards — an edit, a merge from another device, or a delete all leave it alone. It is what the history list shows and what it sorts by, and the Record File's name has carried it since before it was a field, which is where an imported record gets it from.
+_Avoid_: created date, timestamp, date
+
+**Merge Stamp**:
+The clock two copies of one record are settled against, and nothing else. A merge takes the copy whose Merge Stamp is later, and a delete carries one deliberately pushed past the edit it buries — so it routinely names a moment nothing happened to the record, and is never shown to anyone.
+_Avoid_: last updated, modified date, timestamp
+
 **Sync Reconciler**:
 The background worker that makes the Local Store and the Record Files agree, after launch and never on a read path. It owns everything about the transport — resolving the iCloud container, watching it, materializing what is not downloaded yet, resolving conflicts last-writer-wins, and noticing that the user signed out. The Local Store it drives knows a database and a directory and nothing else, which is what lets a later transport replace this one. The sync toggle chooses whether a Sync Reconciler runs at all, not which store the app uses.
 _Avoid_: sync engine, iCloud store, background refresh

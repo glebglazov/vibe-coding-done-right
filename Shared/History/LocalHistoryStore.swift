@@ -115,9 +115,14 @@ final class LocalHistoryStore: HistoryStore, RecordFileSyncedStore {
             ?? ConversationFileArchive.snapshotFilename(id: conversationID, createdAt: now)
         database.save(conversation, filename: filename)
 
+        // The list is ordered by capture time, which an edit does not move, so
+        // an edited conversation stays where it is instead of jumping to the top.
+        if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
+            conversations[index] = conversation
+        } else if stored == nil {
+            conversations.insert(conversation, at: 0)
+        }
         if stored == nil { storedCount += 1 }
-        conversations.removeAll { $0.id == conversationID }
-        conversations.insert(conversation, at: 0)
         exportPendingRecords()
     }
 

@@ -283,7 +283,7 @@ final class FileHistoryStore: HistoryStore {
         for conv in legacyConversations {
             archive.writeSnapshot(
                 conv,
-                named: ConversationFileArchive.snapshotFilename(id: conv.id, createdAt: conv.lastUpdated),
+                named: ConversationFileArchive.snapshotFilename(id: conv.id, createdAt: conv.capturedAt),
                 encoder: encoder
             )
         }

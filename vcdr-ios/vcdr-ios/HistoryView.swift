@@ -181,7 +181,7 @@ private struct HistoryRow: View {
                     .foregroundStyle(theme.onSurfaceVariant)
                     .lineLimit(3)
             }
-            Text(conversation.lastUpdated.formatted(
+            Text(conversation.capturedAt.formatted(
                 .dateTime.month(.abbreviated).day().hour().minute()
             ))
             .font(.system(size: 11, weight: .medium))
