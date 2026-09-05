@@ -114,14 +114,14 @@ struct SubstitutionDetailView: View {
             }
 
             Section("Triggers") {
-                ForEach(Array(substitution.triggerPhrases.enumerated()), id: \.offset) { index, phrase in
+                ForEach(Array(substitution.livePhrases.enumerated()), id: \.element.id) { index, phrase in
                     TriggerRowView(
-                        phrase: $substitution.triggerPhrases[index],
-                        clash: clash(for: phrase),
+                        phrase: $substitution[phrase: phrase.id],
+                        clash: clash(for: phrase.text),
                         focus: $focus,
                         field: .trigger(index),
                         onDelete: {
-                            substitution.triggerPhrases.remove(at: index)
+                            substitution.removePhrase(phrase.id)
                         }
                     )
                 }
@@ -150,8 +150,8 @@ struct SubstitutionDetailView: View {
     /// mishearing costs one click and the typing — less than the Replacement a
     /// new Substitution would also need.
     private func addTrigger() {
-        substitution.triggerPhrases.append("")
-        focus = .trigger(substitution.triggerPhrases.count - 1)
+        substitution.addPhrase()
+        focus = .trigger(substitution.livePhrases.count - 1)
     }
 
     private func clash(for phrase: String) -> TriggerPhraseClash? {

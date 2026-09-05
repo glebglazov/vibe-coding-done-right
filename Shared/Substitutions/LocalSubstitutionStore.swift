@@ -78,7 +78,7 @@ final class LocalSubstitutionStore: SubstitutionStore, RecordFileSyncedStore {
 
     func delete(_ substitution: Substitution) {
         let known = substitutions.first { $0.id == substitution.id } ?? substitution
-        database.delete(id: known.id, deletedAt: Self.tombstoneStamp(after: known.lastUpdated))
+        database.delete(id: known.id, deletedAt: MergeStamp.deleting(after: known.lastUpdated))
         substitutions.removeAll { $0.id == known.id }
         exportPendingEntries()
     }
@@ -89,14 +89,17 @@ final class LocalSubstitutionStore: SubstitutionStore, RecordFileSyncedStore {
 
     // MARK: - Record files
 
-    /// Brings a directory of record files into the database, writes out
-    /// whatever the database still owes it, and republishes the list.
+    /// Brings a directory of record files into the database, merges the entries
+    /// that turn out to be one Substitution two devices made separately, writes
+    /// out whatever the database then owes the directory, and republishes the
+    /// list.
     func syncRecordFiles(in directory: URL) async {
         let database = self.database
         let archive = SubstitutionFileArchive(directory: directory)
         await withBlockingTask(qos: .utility) {
             archive.ensureDirectoryExists()
             SubstitutionImporter.merge(from: archive, into: database)
+            SubstitutionConvergence.converge(in: database)
             SubstitutionExporter.drain(database, to: archive)
         }
         recordFiles = archive
@@ -109,21 +112,5 @@ final class LocalSubstitutionStore: SubstitutionStore, RecordFileSyncedStore {
         Task.detached(priority: .utility) {
             SubstitutionExporter.drain(database, to: recordFiles)
         }
-    }
-
-    // MARK: - Tombstone stamping
-
-    /// One millisecond: what `SubstitutionJSONCoders` keeps of a `Date`.
-    private static let storageTimestampResolution: TimeInterval = 0.001
-
-    /// Stamps a tombstone so it dominates the edit it deletes. Stamps
-    /// round-trip through the record files at millisecond resolution, so a
-    /// delete issued in the same millisecond as the edit before it reads back
-    /// as a tie — and a tie leaves the entry live, which would let a cleared
-    /// Substitution return on the next merge. Deleting an entry is always
-    /// causally after the edit it saw, so the stamp is carried forward one
-    /// storage tick when the clock has not moved.
-    private static func tombstoneStamp(after lastUpdated: Date, now: Date = Date()) -> Date {
-        max(now, lastUpdated + storageTimestampResolution)
     }
 }

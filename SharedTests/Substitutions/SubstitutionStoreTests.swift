@@ -187,6 +187,148 @@ struct SubstitutionStoreTests {
         #expect(otherDevice.substitutions.isEmpty)
     }
 
+    // MARK: - Convergence
+
+    @Test("Two entries with one Replacement become one, the older surviving, and a removed phrase stays removed")
+    func entriesWithOneReplacementConverge() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
+        let phone = try makeStore(root: makeTempRoot())
+        let mac = try makeStore(root: makeTempRoot())
+
+        // Both offline: the phone files the address first, the Mac files it
+        // again later under a phrase of its own — and drops the phrase the
+        // phone is still showing.
+        let filedFirst = Substitution(
+            triggerPhrases: ["gleb at gmail"],
+            replacement: "gleb@example.com",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            lastUpdated: Date(timeIntervalSince1970: 1_000)
+        )
+        phone.upsert(filedFirst)
+
+        var filedSecond = Substitution(
+            triggerPhrases: ["glep at gmail", "gleb at gmail"],
+            replacement: "gleb@example.com",
+            createdAt: Date(timeIntervalSince1970: 2_000),
+            lastUpdated: Date(timeIntervalSince1970: 2_000)
+        )
+        let dropped = try #require(filedSecond.livePhrases.first { $0.text == "gleb at gmail" })
+        filedSecond.removePhrase(dropped.id, at: Date(timeIntervalSince1970: 3_000))
+        mac.upsert(filedSecond)
+
+        await phone.syncRecordFiles(in: directory)
+        await mac.syncRecordFiles(in: directory)
+        await phone.syncRecordFiles(in: directory)
+
+        for device in [phone, mac] {
+            #expect(device.substitutions.map(\.id) == [filedFirst.id], "the older entry did not survive")
+            #expect(device.substitutions.first?.triggerPhrases == ["glep at gmail"])
+        }
+        #expect(filenames(in: directory).contains("\(filedSecond.id.uuidString).deleted.json"))
+
+        // Settled: another pass on either device finds nothing left to merge.
+        await mac.syncRecordFiles(in: directory)
+        await phone.syncRecordFiles(in: directory)
+        #expect(mac.substitutions.map(\.id) == [filedFirst.id])
+        #expect(phone.substitutions.first?.triggerPhrases == ["glep at gmail"])
+    }
+
+    @Test("Both devices pick the same survivor without seeing each other's answer")
+    func bothDevicesPickTheSameSurvivor() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let filedFirst = Substitution(
+            triggerPhrases: ["gleb at gmail"],
+            replacement: "gleb@example.com",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            lastUpdated: Date(timeIntervalSince1970: 1_000)
+        )
+        let filedSecond = Substitution(
+            phrases: [TriggerPhrase(text: "glep at gmail", addedAt: Date(timeIntervalSince1970: 2_000))],
+            replacement: "gleb@example.com",
+            createdAt: Date(timeIntervalSince1970: 2_000),
+            lastUpdated: Date(timeIntervalSince1970: 2_000)
+        )
+
+        // One directory each, holding the same two entries: neither device can
+        // see what the other decides, so only the entries themselves can say.
+        var answers: [(id: UUID, phrases: [String])] = []
+        for _ in 0..<2 {
+            let deviceRoot = makeTempRoot()
+            let directory = recordFilesDirectory(in: deviceRoot)
+            try writeRecordFile(filedFirst, into: directory)
+            try writeRecordFile(filedSecond, into: directory)
+
+            let store = try makeStore(root: deviceRoot)
+            await store.syncRecordFiles(in: directory)
+
+            let survivor = try #require(store.substitutions.first)
+            #expect(store.substitutions.count == 1)
+            answers.append((survivor.id, survivor.triggerPhrases))
+        }
+
+        #expect(answers[0].id == answers[1].id)
+        #expect(answers[0].phrases == answers[1].phrases)
+        #expect(answers[0].id == filedFirst.id)
+        #expect(Set(answers[0].phrases) == ["gleb at gmail", "glep at gmail"])
+    }
+
+    @Test("Fixing a typo in a Replacement keeps the entry it was fixed on")
+    func editingAReplacementKeepsTheEntry() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
+        let phone = try makeStore(root: makeTempRoot())
+        let mac = try makeStore(root: makeTempRoot())
+
+        let entry = Substitution(triggerPhrase: "gleb at gmail", replacement: "gleb@example.co")
+        phone.upsert(entry)
+        await phone.syncRecordFiles(in: directory)
+        await mac.syncRecordFiles(in: directory)
+
+        var fixed = try #require(mac.substitutions.first)
+        fixed.replacement = "gleb@example.com"
+        mac.upsert(fixed)
+        await mac.syncRecordFiles(in: directory)
+        await phone.syncRecordFiles(in: directory)
+
+        for device in [phone, mac] {
+            #expect(device.substitutions.map(\.id) == [entry.id], "the edit split the entry in two")
+            #expect(device.substitutions.first?.replacement == "gleb@example.com")
+        }
+    }
+
+    @Test("Two Replacements claiming one phrase stay two entries, and clash")
+    func differingReplacementsStillClash() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
+
+        let work = Substitution(
+            triggerPhrase: "my email",
+            replacement: "gleb@work.example.com",
+            lastUpdated: Date(timeIntervalSince1970: 1_000)
+        )
+        let personal = Substitution(
+            triggerPhrase: "my email",
+            replacement: "gleb@example.com",
+            lastUpdated: Date(timeIntervalSince1970: 2_000)
+        )
+        try writeRecordFile(work, into: directory)
+        try writeRecordFile(personal, into: directory)
+
+        let store = try makeStore(root: root)
+        await store.syncRecordFiles(in: directory)
+
+        #expect(Set(store.substitutions.map(\.id)) == [work.id, personal.id], "a real ambiguity was merged away")
+        let clashes = TriggerPhraseClashes(among: store.substitutions)
+        #expect(clashes.clashes(for: work).map(\.winningReplacement) == ["gleb@example.com"])
+        #expect(clashes.clashes(for: personal).isEmpty)
+    }
+
     // MARK: - Writes
 
     @Test("An edit lands in the database and in the record files, and survives a relaunch")

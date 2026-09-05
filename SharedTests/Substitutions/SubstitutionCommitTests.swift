@@ -129,7 +129,8 @@ struct SubstitutionCommitTests {
 
         let id = viewModel.add()
         var draft = try #require(viewModel.drafts.first { $0.id == id })
-        draft.triggerPhrases = ["oh my zsh"]
+        draft.addPhrase()
+        draft[phrase: try #require(draft.livePhrases.first).id] = "oh my zsh"
 
         #expect(viewModel.commit(draft) == .discarded)
         // Nothing typed into the Replacement yet, so nothing to sync anywhere —

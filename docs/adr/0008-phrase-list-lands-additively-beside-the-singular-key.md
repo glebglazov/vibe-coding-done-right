@@ -1,5 +1,11 @@
 # A Substitution's phrase list lands beside the singular key, not in place of it
 
+> **Amended by [ADR-0011](0011-substitutions-converge-on-their-replacement.md):**
+> the array is a landing pad in its turn. A Trigger Phrase now carries an
+> added-at and a removed-at, so the phrases live under `phrases` and
+> `triggerPhrases` is written from the live ones — by the same reasoning as
+> below, one key down.
+
 Substitutions sync as one JSON file per entry through iCloud, decoded with synthesized `Codable` over four non-optional fields. Builds on different devices therefore read each other's files, and the decoder has two failure shapes that decide this migration. A build that meets a field it does not know **drops it on the next write** — the file is rewritten atomically with only the keys that build knows, and iCloud carries the erasure back. A build that meets a **missing** required field throws, and `FileSubstitutionStore`'s scan swallows the error with `try?`: the entry vanishes from that device with no log and nothing shown.
 
 So new builds write `triggerPhrases` (the array) **and** keep writing `triggerPhrase`, set to the first phrase, purely as a landing pad for older readers. They decode `triggerPhrases` when present and fall back to `[triggerPhrase]` when it is absent. The worst mixed-version outcome becomes an old device truncating an entry to one phrase — visible, recoverable, and repaired the next time a new build writes the file — instead of the entry disappearing.

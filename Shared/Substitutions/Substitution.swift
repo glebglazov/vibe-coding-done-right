@@ -1,24 +1,28 @@
 import Foundation
 
-/// One entry in the iCloud-synced shared list that swaps spoken text for fixed
-/// text in the raw transcript. A Substitution holds one Replacement
-/// (`replacement`) and any number of Trigger Phrases (`triggerPhrases`) that
-/// produce it, and applies on both macOS and iOS before any other text
-/// processing. See the Shared glossary (CONTEXT) for the Substitution /
-/// Trigger Phrase / Replacement language.
+/// One entry in the shared list that swaps spoken text for fixed text in the
+/// raw transcript. A Substitution holds one Replacement (`replacement`) and any
+/// number of Trigger Phrases (`phrases`) that produce it, and applies on both
+/// macOS and iOS before any other text processing. See the Shared glossary
+/// (CONTEXT) for the Substitution / Trigger Phrase / Replacement language.
 struct Substitution: Identifiable, Codable, Equatable, Sendable {
-    /// Stable identity used for per-entry iCloud storage and SwiftUI updates.
+    /// Stable identity used for per-entry Record Files and SwiftUI updates.
     let id: UUID
-    /// Spoken texts that activate this Substitution when any one of them appears
-    /// in the transcript — each matched case-insensitively, on whole-word
-    /// boundaries. An unordered set: no phrase takes precedence over another,
-    /// and it is an array only because JSON has no set.
-    var triggerPhrases: [String]
+    /// Every Trigger Phrase this entry has carried, the removed ones included:
+    /// a removal is kept so it can beat a peer's stale addition when two
+    /// entries converge. `livePhrases` is the set the app acts on.
+    var phrases: [TriggerPhrase]
     /// Fixed text swapped in for any matched Trigger Phrase. Injected verbatim;
     /// never re-scanned for further Trigger Phrases.
     var replacement: String
-    /// Last edit timestamp, used by the store for last-writer-wins conflict
-    /// resolution across devices.
+    /// When this entry was first made, on whichever device made it. It never
+    /// moves, which is what lets two devices agree on the older of two entries
+    /// holding one Replacement without asking each other (ADR-0011). An entry
+    /// from a build that wrote no such field takes its Merge Stamp — when that
+    /// build last wrote it, and the closest that file comes to saying.
+    let createdAt: Date
+    /// Merge Stamp: the clock two copies of this entry are settled against,
+    /// used by the store for last-writer-wins resolution across devices.
     var lastUpdated: Date
     /// When `false` the matcher skips this entry entirely.
     var isEnabled: Bool
@@ -30,42 +34,99 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
     /// clobbering unknown fields.
     var extras: [String: AnyJSON]
 
+    /// The Trigger Phrases still on the entry — the rows the editors show and
+    /// the phrases the matcher scans.
+    var livePhrases: [TriggerPhrase] {
+        phrases.filter(\.isLive)
+    }
+
+    /// The live Trigger Phrases as plain text. Also the `triggerPhrases` key of
+    /// the encoded form, kept for builds that read the array but not the stamps
+    /// (ADR-0008).
+    var triggerPhrases: [String] {
+        livePhrases.map(\.text)
+    }
+
     /// The phrase that goes in the singular `triggerPhrase` key for builds that
     /// predate the array (see ADR-0008). A landing pad written on encode, not a
-    /// field an editor works through: both editors edit `triggerPhrases`.
+    /// field an editor works through.
     var triggerPhrase: String {
-        get { triggerPhrases.first ?? "" }
+        triggerPhrases.first ?? ""
+    }
+
+    // MARK: - Editing phrases
+
+    /// One phrase's text, addressed by its identity so a row keeps its stamps
+    /// while it is retyped. What both editors bind a Trigger field to.
+    subscript(phrase id: UUID) -> String {
+        get { phrases.first { $0.id == id }?.text ?? "" }
         set {
-            if triggerPhrases.isEmpty {
-                triggerPhrases = [newValue]
-            } else {
-                triggerPhrases[0] = newValue
-            }
+            guard let index = phrases.firstIndex(where: { $0.id == id }) else { return }
+            phrases[index].text = newValue
         }
     }
 
+    /// Adds an empty phrase for the user to type into. It reaches no peer until
+    /// a commit carries text, because a commit drops blank phrases.
+    mutating func addPhrase() {
+        phrases.append(TriggerPhrase(text: "", addedAt: Date()))
+    }
+
+    /// Takes a phrase off the entry, keeping the record so the removal travels
+    /// to the devices that still show it.
+    mutating func removePhrase(_ id: UUID, at now: Date = Date()) {
+        guard let index = phrases.firstIndex(where: { $0.id == id }) else { return }
+        phrases[index].remove(at: now)
+    }
+
+    // MARK: - Init
+
     init(
         id: UUID = UUID(),
-        triggerPhrases: [String],
+        phrases: [TriggerPhrase],
         replacement: String,
+        createdAt: Date? = nil,
         lastUpdated: Date = Date(),
         isEnabled: Bool = true,
         schemaVersion: Int = Substitution.currentSchemaVersion,
         extras: [String: AnyJSON] = [:]
     ) {
         self.id = id
-        self.triggerPhrases = triggerPhrases
+        self.phrases = phrases
         self.replacement = replacement
+        self.createdAt = createdAt ?? lastUpdated
         self.lastUpdated = lastUpdated
         self.isEnabled = isEnabled
         self.schemaVersion = schemaVersion
         self.extras = extras
     }
 
+    /// A Substitution from plain phrases, each stamped as added when the entry
+    /// was — how an entry arrives from a build that wrote no stamps, and the
+    /// shape the editors and tests build one in.
+    init(
+        id: UUID = UUID(),
+        triggerPhrases: [String],
+        replacement: String,
+        createdAt: Date? = nil,
+        lastUpdated: Date = Date(),
+        isEnabled: Bool = true
+    ) {
+        self.init(
+            id: id,
+            phrases: triggerPhrases.map { TriggerPhrase(text: $0, addedAt: lastUpdated) },
+            replacement: replacement,
+            createdAt: createdAt,
+            lastUpdated: lastUpdated,
+            isEnabled: isEnabled
+        )
+    }
+
     init(
         id: UUID = UUID(),
         triggerPhrase: String,
         replacement: String,
+        createdAt: Date? = nil,
         lastUpdated: Date = Date(),
         isEnabled: Bool = true
     ) {
@@ -73,6 +134,7 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
             id: id,
             triggerPhrases: [triggerPhrase],
             replacement: replacement,
+            createdAt: createdAt,
             lastUpdated: lastUpdated,
             isEnabled: isEnabled
         )
@@ -84,22 +146,27 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
 
     /// Known top-level keys this binary recognizes. Anything else lands in `extras`.
     private static let knownKeys: Set<String> = [
-        "id", "triggerPhrases", "replacement", "lastUpdated", "isEnabled", "schemaVersion",
-        // The pre-array key, still written for older readers:
-        "triggerPhrase",
+        "id", "phrases", "replacement", "createdAt", "lastUpdated", "isEnabled", "schemaVersion",
+        // The pre-stamp keys, still written for older readers:
+        "triggerPhrases", "triggerPhrase",
     ]
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: AnyCodingKey.self)
+        let lastUpdated = try container.decode(Date.self, forKey: AnyCodingKey("lastUpdated"))
 
-        // The array when the writer knew about it, otherwise the one phrase the
-        // older writer left in the singular key. Only the second path can throw,
-        // which is the pre-array file shape and always has the key.
-        let triggerPhrases: [String]
-        if let phrases = try container.decodeIfPresent([String].self, forKey: AnyCodingKey("triggerPhrases")) {
-            triggerPhrases = phrases
+        // The stamped phrases when the writer knew about them; otherwise the
+        // plain ones, added as far as this device can tell when the entry was
+        // last written. Only the last path can throw, which is the pre-array
+        // file shape and always has the singular key.
+        let phrases: [TriggerPhrase]
+        if let stamped = try container.decodeIfPresent([TriggerPhrase].self, forKey: AnyCodingKey("phrases")) {
+            phrases = stamped
+        } else if let texts = try container.decodeIfPresent([String].self, forKey: AnyCodingKey("triggerPhrases")) {
+            phrases = texts.map { TriggerPhrase(text: $0, addedAt: lastUpdated) }
         } else {
-            triggerPhrases = [try container.decode(String.self, forKey: AnyCodingKey("triggerPhrase"))]
+            let text = try container.decode(String.self, forKey: AnyCodingKey("triggerPhrase"))
+            phrases = [TriggerPhrase(text: text, addedAt: lastUpdated)]
         }
 
         var extras: [String: AnyJSON] = [:]
@@ -111,9 +178,10 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
 
         self.init(
             id: try container.decode(UUID.self, forKey: AnyCodingKey("id")),
-            triggerPhrases: triggerPhrases,
+            phrases: phrases,
             replacement: try container.decode(String.self, forKey: AnyCodingKey("replacement")),
-            lastUpdated: try container.decode(Date.self, forKey: AnyCodingKey("lastUpdated")),
+            createdAt: try container.decodeIfPresent(Date.self, forKey: AnyCodingKey("createdAt")),
+            lastUpdated: lastUpdated,
             isEnabled: try container.decode(Bool.self, forKey: AnyCodingKey("isEnabled")),
             schemaVersion: try container.decodeIfPresent(Int.self, forKey: AnyCodingKey("schemaVersion"))
                 ?? Substitution.currentSchemaVersion,
@@ -124,11 +192,14 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: AnyCodingKey.self)
         try container.encode(id, forKey: AnyCodingKey("id"))
+        try container.encode(phrases, forKey: AnyCodingKey("phrases"))
+        // Landing pads, not fields: a build that predates the stamps reads the
+        // array, one that predates the array requires the singular key, and
+        // either would otherwise drop the whole entry (ADR-0008).
         try container.encode(triggerPhrases, forKey: AnyCodingKey("triggerPhrases"))
-        // A landing pad, not a field: a build that predates the array requires
-        // this key and would otherwise drop the whole entry (ADR-0008).
         try container.encode(triggerPhrase, forKey: AnyCodingKey("triggerPhrase"))
         try container.encode(replacement, forKey: AnyCodingKey("replacement"))
+        try container.encode(createdAt, forKey: AnyCodingKey("createdAt"))
         try container.encode(lastUpdated, forKey: AnyCodingKey("lastUpdated"))
         try container.encode(isEnabled, forKey: AnyCodingKey("isEnabled"))
         try container.encode(schemaVersion, forKey: AnyCodingKey("schemaVersion"))

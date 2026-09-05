@@ -68,6 +68,10 @@ _Avoid_: sync engine, iCloud store, background refresh
 What one Sync Reconciler carries: a folder of Record Files, the toggle that turns its sync on, where its files sit when there is no container, and how two devices' versions of one record are collapsed. Conversations and Substitutions differ only in those answers, which is why one reconciler serves either.
 _Avoid_: sync config, store descriptor, entity type
 
+**Substitution Convergence**:
+Two Substitutions holding an identical Replacement are one Substitution that two devices made separately, and a sync pass merges them into it: the entry made first survives, the Trigger Phrases combine, and the other is deleted as any Substitution is. It is not a Trigger Phrase Clash — a clash is two different Replacements competing for one phrase, which the user has to see and settle. Each Trigger Phrase carries when it was added and when it was removed, so combining two devices' phrases never brings back one that someone took off.
+_Avoid_: dedupe, merge conflict, collision, duplicate entry
+
 **Replication Window**:
 How far back one reconcile pass reaches for changes. History's is unbounded today and stated in one place, because the container is the OS's to replicate and cannot be asked for less than all of it; it becomes a real bound when the transport is ours. Substitutions have none at all: a Substitution that arrives late puts visibly wrong text in the next transcript, where a history entry that arrives late costs nothing.
 _Avoid_: sync horizon, page size, retention period

@@ -106,12 +106,29 @@ struct SubstitutionTriggerPhrasesTests {
             into: root
         )
 
+        let arrayID = UUID()
+        _ = try writeRawSnapshot(
+            """
+            {"id":"\(arrayID.uuidString)","isEnabled":true,\
+            "lastUpdated":"2026-01-01T09:30:00.000Z",\
+            "replacement":"Powierża","triggerPhrase":"power zha",\
+            "triggerPhrases":["power zha","powerja"]}
+            """,
+            id: arrayID,
+            into: root
+        )
+
         let store = try await makeStore(root: root)
 
-        let loaded = try #require(store.substitutions.first)
-        #expect(store.substitutions.count == 1)
-        #expect(loaded.triggerPhrases == ["oh my zsh"])
-        #expect(loaded.replacement == "Oh My Zsh")
+        #expect(store.substitutions.count == 2)
+        let singular = try #require(store.substitutions.first { $0.id == id })
+        #expect(singular.triggerPhrases == ["oh my zsh"])
+        #expect(singular.replacement == "Oh My Zsh")
+        // The phrases a build wrote before they carried stamps count as added
+        // when it last wrote them, which is all that file can say.
+        let plural = try #require(store.substitutions.first { $0.id == arrayID })
+        #expect(plural.triggerPhrases == ["power zha", "powerja"])
+        #expect(plural.livePhrases.map(\.addedAt) == [plural.lastUpdated, plural.lastUpdated])
     }
 
     @Test("a file written by this build still carries the singular key, set to the first phrase")
@@ -130,6 +147,39 @@ struct SubstitutionTriggerPhrasesTests {
         let written = try jsonObject(at: url)
         #expect(written["triggerPhrase"] as? String == "power zha")
         #expect(written["triggerPhrases"] as? [String] == ["power zha", "powerja"])
+
+        // The phrases this build works through carry their own stamps beside
+        // the two landing pads.
+        let stamped = try #require(written["phrases"] as? [[String: Any]])
+        #expect(stamped.compactMap { $0["text"] as? String } == ["power zha", "powerja"])
+        #expect(stamped.allSatisfy { $0["addedAt"] is String && $0["removedAt"] == nil })
+    }
+
+    @Test("a phrase taken off the entry leaves the older builds' keys and stays off")
+    func removedPhrasesLeaveTheLandingPads() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = try await makeStore(root: root)
+        var entry = Substitution(triggerPhrases: ["power zha", "powerja"], replacement: "Powierża")
+        entry.removePhrase(try #require(entry.livePhrases.first).id)
+        store.upsert(entry)
+
+        let url = root.appendingPathComponent("Substitutions", isDirectory: true)
+            .appendingPathComponent("\(entry.id.uuidString).json")
+        #expect(await eventually { FileManager.default.fileExists(atPath: url.path) })
+
+        let written = try jsonObject(at: url)
+        #expect(written["triggerPhrase"] as? String == "powerja")
+        #expect(written["triggerPhrases"] as? [String] == ["powerja"])
+        #expect((written["phrases"] as? [[String: Any]])?.count == 2, "the removal is what keeps it removed")
+
+        let relaunched = LocalSubstitutionStore(
+            snapshot: try LocalSubstitutionStore.loadSnapshot(
+                fileURL: root.appendingPathComponent("substitutions.sqlite3")
+            )
+        )
+        #expect(relaunched.substitutions.first?.triggerPhrases == ["powerja"])
     }
 
     @Test("keys this build does not recognise survive a load and a re-save")

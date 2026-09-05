@@ -25,22 +25,28 @@ extension Substitution {
     func tidiedForCommit() -> Substitution {
         var tidied = self
         tidied.replacement = replacement.trimmingCharacters(in: .whitespacesAndNewlines)
-        tidied.triggerPhrases = triggerPhrases.tidiedTriggerPhrases()
+        tidied.phrases = phrases.tidiedForCommit()
         return tidied
     }
 }
 
-private extension Array where Element == String {
+private extension Array where Element == TriggerPhrase {
 
     /// Trimmed, blanks dropped, and case-insensitive repeats collapsed keeping the
     /// first spelling typed. A repeat produces identical matches with the same
-    /// Replacement, so refusing it would be noise.
-    func tidiedTriggerPhrases() -> [String] {
+    /// Replacement, so refusing it would be noise. A dropped phrase leaves no
+    /// removal behind, because neither a blank nor a repeat of a phrase that
+    /// stays live is a Trigger any device is showing.
+    func tidiedForCommit() -> [TriggerPhrase] {
         var claimed: Set<String> = []
         return compactMap { phrase in
-            let trimmed = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, claimed.insert(trimmed.lowercased()).inserted else { return nil }
-            return trimmed
+            let trimmed = phrase.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            var tidied = phrase
+            tidied.text = trimmed
+            guard tidied.isLive else { return tidied }
+            guard claimed.insert(trimmed.lowercased()).inserted else { return nil }
+            return tidied
         }
     }
 }
