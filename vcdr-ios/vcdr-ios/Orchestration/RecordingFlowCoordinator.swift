@@ -265,6 +265,7 @@ final class RecordingFlowCoordinator {
         let history = HistoryStoreFactory.make(bootstrap)
         self.history = history
         historyCompletionAdapter.setHistory(history)
+        LaunchTelemetry.mark(.historyReadable)
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
 
@@ -370,6 +371,7 @@ final class RecordingFlowCoordinator {
             // `engine.start()` — no microphone indicator.
             let prewarmTask = Task { [hotMicSession] in
                 await hotMicSession.prewarmIfPermitted()
+                LaunchTelemetry.mark(.recordPathArmed)
             }
             Logger.app.info("[LaunchProbe] before transcriptionProvider.loadCoreModels await main=\(Thread.isMainThread)")
             try await transcriptionProvider.loadCoreModels(

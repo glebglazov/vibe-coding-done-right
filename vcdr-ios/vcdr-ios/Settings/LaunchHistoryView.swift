@@ -44,6 +44,11 @@ private struct LaunchHistoryRow: View {
                 Text("ready in \(formatMs(msToReady))")
                     .font(.system(size: 12, design: .monospaced))
             }
+            if let bootstrapLine {
+                Text(bootstrapLine)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
             Text(timingsLine)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -72,6 +77,20 @@ private struct LaunchHistoryRow: View {
         case .backgroundWarm:
             "BACKGROUND_WARM"
         }
+    }
+
+    /// The launch costs that are not the model's: history readable and the
+    /// record path armed, kept on their own line so they are not read as part
+    /// of the model timings below.
+    private var bootstrapLine: String? {
+        var parts: [String] = []
+        if let milliseconds = record.msToHistoryReadable {
+            parts.append("history \(formatMs(milliseconds))")
+        }
+        if let milliseconds = record.msToRecordPathArmed {
+            parts.append("record path \(formatMs(milliseconds))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var timingsLine: String {

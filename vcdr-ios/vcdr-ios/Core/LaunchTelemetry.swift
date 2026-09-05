@@ -19,6 +19,15 @@ enum LaunchTelemetryRecordKind: String, Codable, Sendable {
     case backgroundWarm = "BACKGROUND_WARM"
 }
 
+/// A launch cost the app pays outside the transcription model: the wait before
+/// history can be read, and the wait before a record tap starts Capturing
+/// without warming audio first. Held apart from `msToReady`, which spans
+/// bootstrap and model load together and so attributes neither.
+enum LaunchMilestone: String, Sendable {
+    case historyReadable
+    case recordPathArmed
+}
+
 /// What `ParakeetProvider` learned about model loading on one launch, handed
 /// to `LaunchTelemetry` once Transcription Readiness is reached.
 struct LaunchLoadOutcome: Sendable {
@@ -41,6 +50,12 @@ struct LaunchTelemetryRecord: Codable, Sendable, Identifiable {
     /// Process start → Transcription Readiness, wall clock. `nil` when the
     /// process start time could not be read.
     let msToReady: Double?
+    /// Process start → the history store answering reads, wall clock. `nil`
+    /// when the launch ended before history bootstrap finished.
+    let msToHistoryReadable: Double?
+    /// Process start → audio prepared for a record tap, wall clock. `nil` when
+    /// the launch ended before prewarm finished.
+    let msToRecordPathArmed: Double?
     let lowPowerMode: Bool
     /// `ProcessInfo.ThermalState` raw value at record time.
     let thermalState: Int
@@ -61,6 +76,8 @@ struct LaunchTelemetryRecord: Codable, Sendable, Identifiable {
         decoderMs: Double,
         jointMs: Double,
         msToReady: Double?,
+        msToHistoryReadable: Double? = nil,
+        msToRecordPathArmed: Double? = nil,
         lowPowerMode: Bool,
         thermalState: Int,
         rebootedSinceLastLaunch: Bool
@@ -74,6 +91,8 @@ struct LaunchTelemetryRecord: Codable, Sendable, Identifiable {
         self.decoderMs = decoderMs
         self.jointMs = jointMs
         self.msToReady = msToReady
+        self.msToHistoryReadable = msToHistoryReadable
+        self.msToRecordPathArmed = msToRecordPathArmed
         self.lowPowerMode = lowPowerMode
         self.thermalState = thermalState
         self.rebootedSinceLastLaunch = rebootedSinceLastLaunch
@@ -90,6 +109,8 @@ struct LaunchTelemetryRecord: Codable, Sendable, Identifiable {
         decoderMs = try container.decode(Double.self, forKey: .decoderMs)
         jointMs = try container.decode(Double.self, forKey: .jointMs)
         msToReady = try container.decodeIfPresent(Double.self, forKey: .msToReady)
+        msToHistoryReadable = try container.decodeIfPresent(Double.self, forKey: .msToHistoryReadable)
+        msToRecordPathArmed = try container.decodeIfPresent(Double.self, forKey: .msToRecordPathArmed)
         lowPowerMode = try container.decode(Bool.self, forKey: .lowPowerMode)
         thermalState = try container.decode(Int.self, forKey: .thermalState)
         rebootedSinceLastLaunch = try container.decode(Bool.self, forKey: .rebootedSinceLastLaunch)
@@ -120,6 +141,10 @@ enum LaunchTelemetry {
     private static let microsecondsPerSecond: Double = 1_000_000
 
     private static var recordedThisLaunch = false
+    /// Milestones reached so far this launch, in milliseconds since process
+    /// start. The first mark wins: a later re-bootstrap is not this launch's
+    /// wait.
+    private static var launchMarks: [LaunchMilestone: Double] = [:]
     private static var cachedPredictedVerdict: LaunchVerdict?
 
     // MARK: - Predicted Launch Verdict
@@ -168,15 +193,25 @@ enum LaunchTelemetry {
         return abs(bootTime.timeIntervalSince1970 - previous) > bootTimeToleranceSeconds
     }
 
+    /// Times one launch milestone against process start and logs it as it
+    /// happens, so the number is readable off a device — the in-app log viewer
+    /// and Console both take the line — before the launch record is written.
+    static func mark(_ milestone: LaunchMilestone) {
+        guard launchMarks[milestone] == nil,
+              let milliseconds = millisecondsSinceProcessStart() else { return }
+        launchMarks[milestone] = milliseconds
+        Logger.app.info(
+            "[InitTiming] \(milestone.rawValue)Ms=\(String(format: "%.0f", milliseconds))"
+        )
+    }
+
     /// Appends one record for this launch. Later calls in the same process are
     /// no-ops; defaults I/O runs off the cooperative pool (ADR-0003).
     static func recordOnce(outcome: LaunchLoadOutcome) async {
         guard !recordedThisLaunch else { return }
         recordedThisLaunch = true
 
-        let msToReady = processStartDate().map {
-            Date().timeIntervalSince($0) * Self.millisecondsPerSecond
-        }
+        let msToReady = millisecondsSinceProcessStart()
         let rebooted = detectRebootAndRememberBootTime()
         let record = LaunchTelemetryRecord(
             timestamp: Date(),
@@ -187,6 +222,8 @@ enum LaunchTelemetry {
             decoderMs: outcome.timings.decoderMs,
             jointMs: outcome.timings.jointMs,
             msToReady: msToReady,
+            msToHistoryReadable: launchMarks[.historyReadable],
+            msToRecordPathArmed: launchMarks[.recordPathArmed],
             lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
             thermalState: ProcessInfo.processInfo.thermalState.rawValue,
             rebootedSinceLastLaunch: rebooted
@@ -197,6 +234,8 @@ enum LaunchTelemetry {
         Logger.app.info(
             "[InitTiming] telemetry recorded verdict=\(record.verdict.rawValue) "
                 + "msToReady=\(record.msToReady.map { String(format: "%.0f", $0) } ?? "n/a") "
+                + "historyReadableMs=\(record.msToHistoryReadable.map { String(format: "%.0f", $0) } ?? "n/a") "
+                + "recordPathArmedMs=\(record.msToRecordPathArmed.map { String(format: "%.0f", $0) } ?? "n/a") "
                 + "lpm=\(record.lowPowerMode) thermal=\(record.thermalStateLabel) "
                 + "rebooted=\(record.rebootedSinceLastLaunch)"
         )
@@ -279,6 +318,10 @@ enum LaunchTelemetry {
             timeIntervalSince1970: TimeInterval(bootTime.tv_sec)
                 + TimeInterval(bootTime.tv_usec) / Self.microsecondsPerSecond
         )
+    }
+
+    nonisolated private static func millisecondsSinceProcessStart() -> Double? {
+        processStartDate().map { Date().timeIntervalSince($0) * Self.millisecondsPerSecond }
     }
 
     nonisolated private static func processStartDate() -> Date? {
