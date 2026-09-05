@@ -16,7 +16,8 @@ struct AIProviderKeyTests {
     @Test("Setting and reading a provider key round-trips and persists")
     func keyPersists() {
         let defaults = makeDefaults()
-        let settings = AppSettings(userDefaults: defaults)
+        let store = InMemorySecretStore()
+        let settings = AppSettings(userDefaults: defaults, secretStore: store)
         #expect(settings.apiKey(for: .anthropic).isEmpty)
         #expect(!settings.isProviderConfigured(.anthropic))
 
@@ -25,14 +26,14 @@ struct AIProviderKeyTests {
         #expect(settings.isProviderConfigured(.anthropic))
 
         // Reload from the same defaults — value survives.
-        let reloaded = AppSettings(userDefaults: defaults)
+        let reloaded = AppSettings(userDefaults: defaults, secretStore: store)
         #expect(reloaded.apiKey(for: .anthropic) == "sk-123")
     }
 
     @Test("isModeConfigured reads the provider key, not a Variable")
     func modeConfiguredFromProvider() {
         let defaults = makeDefaults()
-        let settings = AppSettings(userDefaults: defaults)
+        let settings = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
         let mode = Mode(
             id: UUID(), name: "AI", processingType: .cloudAI,
             aiProvider: .openai, promptType: .dictation
@@ -51,7 +52,7 @@ struct AIProviderKeyTests {
 
     @Test("configuredProviders lists only providers with a key, in allCases order")
     func configuredProvidersFiltersByKey() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         #expect(settings.configuredProviders.isEmpty)
 
         settings.setAPIKey("sk-gemini", for: .gemini)
@@ -62,7 +63,7 @@ struct AIProviderKeyTests {
 
     @Test("Mode picker options keep a now-unconfigured selected provider visible")
     func pickerOptionsKeepUnconfiguredSelection() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         settings.setAPIKey("sk-openai", for: .openai)
 
         // Selected provider is unconfigured → still present (appended), no blank.
@@ -79,14 +80,14 @@ struct AIProviderKeyTests {
 
     @Test("Bash env falls back to the provider key under the Reserved name")
     func bashFallbackUsesProviderKey() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         settings.setAPIKey("sk-anthropic", for: .anthropic)
         #expect(settings.variableEnvironment["ANTHROPIC_API_KEY"] == "sk-anthropic")
     }
 
     @Test("Non-empty Reserved Variable overrides only the bash value, never the AI key")
     func reservedOverrideIsBashOnly() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         settings.setAPIKey("sk-provider", for: .anthropic)
         settings.variables = [Variable(name: "ANTHROPIC_API_KEY", value: "sk-bash-override")]
 
@@ -98,7 +99,7 @@ struct AIProviderKeyTests {
 
     @Test("Empty Reserved Variable falls back to the provider key for bash")
     func emptyReservedFallsBack() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         settings.setAPIKey("sk-provider", for: .anthropic)
         settings.variables = [Variable(name: "ANTHROPIC_API_KEY", value: "")]
         #expect(settings.variableEnvironment["ANTHROPIC_API_KEY"] == "sk-provider")
@@ -108,7 +109,7 @@ struct AIProviderKeyTests {
 
     @Test("Reserved Variable rows are no longer auto-created")
     func noAutoCreatedReservedRows() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         #expect(settings.variables.isEmpty)
     }
 
@@ -122,14 +123,15 @@ struct AIProviderKeyTests {
         ]
         defaults.set(try JSONEncoder().encode(legacy), forKey: "variables")
 
-        let settings = AppSettings(userDefaults: defaults)
+        let store = InMemorySecretStore()
+        let settings = AppSettings(userDefaults: defaults, secretStore: store)
         // Legacy key folded into the provider key.
         #expect(settings.apiKey(for: .anthropic) == "sk-legacy")
         // Reserved rows removed (incl. the empty one); user var kept.
         #expect(settings.variables.map(\.name) == ["MY_VAR"])
 
         // Migration persisted and does not re-run on reload.
-        let reloaded = AppSettings(userDefaults: defaults)
+        let reloaded = AppSettings(userDefaults: defaults, secretStore: store)
         #expect(reloaded.apiKey(for: .anthropic) == "sk-legacy")
         #expect(reloaded.variables.map(\.name) == ["MY_VAR"])
     }
@@ -141,7 +143,7 @@ struct AIProviderKeyTests {
         let legacy = [Variable(name: "ANTHROPIC_API_KEY", value: "sk-variable")]
         defaults.set(try JSONEncoder().encode(legacy), forKey: "variables")
 
-        let settings = AppSettings(userDefaults: defaults)
+        let settings = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
         #expect(settings.apiKey(for: .anthropic) == "sk-provider")
         #expect(settings.variables.contains { $0.name == "ANTHROPIC_API_KEY" && $0.value == "sk-variable" })
     }
@@ -152,13 +154,14 @@ struct AIProviderKeyTests {
         let legacy = [Variable(name: "GOOGLE_API_KEY", value: "sk-gemini")]
         defaults.set(try JSONEncoder().encode(legacy), forKey: "variables")
 
-        let settings = AppSettings(userDefaults: defaults)
+        let store = InMemorySecretStore()
+        let settings = AppSettings(userDefaults: defaults, secretStore: store)
         #expect(settings.apiKey(for: .gemini) == "sk-gemini")
         #expect(!settings.variables.contains { $0.name == "GOOGLE_API_KEY" })
 
         // User adds an explicit Reserved override later; the flag is set, so no re-migration.
         settings.variables.append(Variable(name: "GOOGLE_API_KEY", value: "later-override"))
-        let reloaded = AppSettings(userDefaults: defaults)
+        let reloaded = AppSettings(userDefaults: defaults, secretStore: store)
         #expect(reloaded.variables.contains { $0.name == "GOOGLE_API_KEY" && $0.value == "later-override" })
         // The provider key is unchanged by the new variable (AI key stays authoritative).
         #expect(reloaded.apiKey(for: .gemini) == "sk-gemini")

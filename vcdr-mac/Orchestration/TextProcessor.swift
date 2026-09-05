@@ -16,8 +16,9 @@ struct TranscriptionInput: Sendable {
     let cursorContext: CursorContext?
     let parameterValues: [String: String]
     let variableEnvironment: [String: String]
-    /// The AI Provider's stored API key for `mode` — the source of truth for AI calls.
-    let aiAPIKey: String
+    /// The AI Provider's key for `mode` as the Secret Store answered — the source of
+    /// truth for AI calls, and the reason an unreadable Store never reads as unset.
+    let aiAPIKey: ProviderAPIKey
     let inputSegments: [InputSegment]
     let hadDestinationOverride: Bool
     let removeFillerWords: Bool
@@ -37,7 +38,7 @@ struct TranscriptionInput: Sendable {
         cursorContext: CursorContext?,
         parameterValues: [String: String],
         variableEnvironment: [String: String],
-        aiAPIKey: String = "",
+        aiAPIKey: ProviderAPIKey = .stored(""),
         inputSegments: [InputSegment],
         hadDestinationOverride: Bool,
         removeFillerWords: Bool,
@@ -251,7 +252,7 @@ final class TextProcessor {
             var processedText = try await ai.process(
                 structuredText: structured,
                 mode: handle.input.mode,
-                apiKey: handle.input.aiAPIKey,
+                apiKey: try handle.input.aiAPIKey.resolved(for: handle.input.mode.aiProvider),
                 parameterValues: handle.input.parameterValues
             )
 

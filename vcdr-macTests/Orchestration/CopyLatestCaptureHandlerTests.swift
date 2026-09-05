@@ -24,7 +24,7 @@ struct CopyLatestCaptureHandlerTests {
     )
 
     private func makeEnvironment(latestCapture: String?) -> Environment {
-        let settings = AppSettings(userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!)
+        let settings = AppSettings(userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!, secretStore: InMemorySecretStore())
         settings.hotkeySettings.copyLatestCaptureHotkey = Self.binding
 
         let storageRoot = FileManager.default.temporaryDirectory

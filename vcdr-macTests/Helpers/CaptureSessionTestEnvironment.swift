@@ -45,7 +45,7 @@ struct CaptureSessionTestEnvironment {
         let suiteName = "vcdr.test.\(UUID().uuidString)"
         self.userDefaultsSuiteName = suiteName
         let defaults = UserDefaults(suiteName: suiteName)!
-        let settings = AppSettings(userDefaults: defaults)
+        let settings = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
         // Disable media pause to avoid hanging on MediaRemoteClient resolution in tests.
         settings.audioSettings = AudioSettings(preferredInputDeviceID: nil, pauseMediaDuringRecording: false)
         // Disable filler word removal so raw mock text comes through unchanged.

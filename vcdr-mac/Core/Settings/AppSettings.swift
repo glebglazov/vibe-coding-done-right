@@ -92,11 +92,20 @@ final class AppSettings {
     }
 
     /// API keys per cloud AI Provider — the single source of truth for AI calls.
-    /// Stored in plain `UserDefaults` under their own keys (not in `variables`),
-    /// mirroring iOS. See `docs/adr/0001-ai-provider-key-source-of-truth.md`.
-    private var providerAPIKeys: [AIProvider: String] {
-        didSet { save() }
-    }
+    /// The Secret Store owns them; this mirrors what it held at launch so reads stay
+    /// synchronous and observable, and every write goes through to the Store. See
+    /// `docs/adr/0001-ai-provider-key-source-of-truth.md` and
+    /// `docs/adr/0009-secrets-live-in-a-synced-keychain-not-userdefaults.md`.
+    private var providerAPIKeys: [AIProvider: String]
+
+    /// Providers whose key the Secret Store refused to answer for at launch. Their
+    /// mirrored value is empty, which is why it may never be mistaken for an unset key.
+    private var unreadableProviders: Set<AIProvider>
+
+    /// Providers whose local key the migration found already superseded by a differing
+    /// one synced from another device. The synced key won; the Providers screen names
+    /// them so a working key is never lost silently.
+    private(set) var providersWithSupersededKeys: [AIProvider]
 
     // MARK: - AI Provider Keys
 
@@ -108,11 +117,32 @@ final class AppSettings {
     /// Stores an AI Provider's API key — the single source of truth AI calls read.
     func setAPIKey(_ key: String, for provider: AIProvider) {
         providerAPIKeys[provider] = key
+        writeKeyToStore(key, for: provider)
     }
 
-    /// Whether an AI Provider has a non-empty stored API key.
+    /// The key an AI call carries for `provider` — the stored one, or the fact that the
+    /// Secret Store could not be read, which `apiKey(for:)` alone cannot express.
+    func storedAPIKey(for provider: AIProvider) -> ProviderAPIKey {
+        unreadableProviders.contains(provider) ? .unreadable : .stored(apiKey(for: provider))
+    }
+
+    /// Writes one provider's key through to the Secret Store. A refused write leaves the
+    /// mirrored key in place, so the session the user pasted it in keeps working.
+    private func writeKeyToStore(_ key: String, for provider: AIProvider) {
+        do {
+            try secretStore.setSecret(key, forKey: Self.apiKeyStorageKey(for: provider))
+            unreadableProviders.remove(provider)
+        } catch {
+            Logger.settings.error("Secret Store write failed for \(provider.displayName): \(error)")
+        }
+    }
+
+    /// Whether an AI Provider has a non-empty stored API key. A provider whose key the
+    /// Secret Store refused counts as configured: an unreadable key cannot be told apart
+    /// from an absent one, and dropping the provider out of the pickers would present the
+    /// failure as an unset key instead of letting the run say the Store could not be read.
     func isProviderConfigured(_ provider: AIProvider) -> Bool {
-        !apiKey(for: provider).isEmpty
+        unreadableProviders.contains(provider) || !apiKey(for: provider).isEmpty
     }
 
     /// AI Providers with a non-empty stored API key, in `allCases` order.
@@ -172,6 +202,7 @@ final class AppSettings {
     }
 
     private let userDefaults: UserDefaults
+    private let secretStore: any SecretStore
 
     // MARK: - UserDefaults Keys
 
@@ -192,6 +223,10 @@ final class AppSettings {
         static let geminiAPIKey = "ai_processing_gemini_api_key"
         /// Persisted flag gating the one-shot Reserved Variable → Provider key migration.
         static let didMigrateProviderKeys = "didMigrateProviderKeys"
+        /// Persisted flag gating the one-shot Provider key → Secret Store migration.
+        static let didMigrateProviderKeysToSecretStore = "didMigrateProviderKeysToSecretStore"
+        /// Providers the Secret Store migration found already holding a differing key.
+        static let providersWithSupersededKeys = "providersWithSupersededKeys"
         static let removeFillerWords = "removeFillerWords"
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         static let legacyPushToTalkHotkey = "pushToTalkHotkey"
@@ -199,8 +234,9 @@ final class AppSettings {
         static let legacyModifiers = "hotkeyModifiers"
     }
 
-    /// The UserDefaults key holding a given AI Provider's API key.
-    private static func apiKeyDefaultsKey(for provider: AIProvider) -> String {
+    /// The name an AI Provider's API key is stored under: its Secret Store item, and
+    /// the UserDefaults entry the one-shot migration drains into that item.
+    private static func apiKeyStorageKey(for provider: AIProvider) -> String {
         switch provider {
         case .anthropic: Keys.anthropicAPIKey
         case .openai: Keys.openaiAPIKey
@@ -230,8 +266,9 @@ final class AppSettings {
         }
     }
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(userDefaults: UserDefaults = .standard, secretStore: any SecretStore) {
         self.userDefaults = userDefaults
+        self.secretStore = secretStore
 
         // Load hotkey settings from individual keys (supports legacy migration)
         var hotkeys = HotkeySettings.default
@@ -322,12 +359,24 @@ final class AppSettings {
         // Load variables
         self.variables = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
 
-        // Load AI Provider API keys — the single source of truth for AI calls.
+        // Load AI Provider API keys from the Secret Store — the single source of truth
+        // for AI calls. A provider the Store refused is remembered as unreadable, never
+        // folded into the empty-key case.
         var loadedKeys: [AIProvider: String] = [:]
+        var unreadable: Set<AIProvider> = []
         for provider in AIProvider.allCases {
-            loadedKeys[provider] = userDefaults.string(forKey: Self.apiKeyDefaultsKey(for: provider)) ?? ""
+            do {
+                loadedKeys[provider] = try secretStore.secret(forKey: Self.apiKeyStorageKey(for: provider)) ?? ""
+            } catch {
+                loadedKeys[provider] = ""
+                unreadable.insert(provider)
+                Logger.settings.error("Secret Store read failed for \(provider.displayName): \(error)")
+            }
         }
         self.providerAPIKeys = loadedKeys
+        self.unreadableProviders = unreadable
+        self.providersWithSupersededKeys = (userDefaults.stringArray(forKey: Keys.providersWithSupersededKeys) ?? [])
+            .compactMap(AIProvider.init(rawValue:))
 
         // Ensure built-in destinations exist (migration for existing installs)
         if !outputDestinations.contains(where: { $0.id == OutputDestination.builtInCopyID }) {
@@ -348,8 +397,53 @@ final class AppSettings {
             modeConfig.modes[i].defaultOutputDestinationID = OutputDestination.builtInPasteID
         }
 
+        // One-shot: move Provider keys out of UserDefaults into the Secret Store. Runs
+        // first so the Reserved Variable migration below sees the keys it carried over.
+        migrateProviderKeysToSecretStoreIfNeeded()
+
         // One-shot: fold legacy Reserved-named Variable rows into Provider keys.
         migrateReservedVariablesIfNeeded()
+    }
+
+    /// One-shot migration of each Provider key out of `UserDefaults` and into the Secret
+    /// Store, gated by a persisted flag. A key is copied only where the Store holds nothing
+    /// for that provider; where the Store already holds a differing key — one synced from
+    /// another device — the stored key wins and the provider is recorded so the Providers
+    /// screen can say so. The `UserDefaults` entry goes either way: nothing secret stays
+    /// there. See `docs/adr/0009-secrets-live-in-a-synced-keychain-not-userdefaults.md`.
+    private func migrateProviderKeysToSecretStoreIfNeeded() {
+        guard !userDefaults.bool(forKey: Keys.didMigrateProviderKeysToSecretStore) else { return }
+        // A Store that would not answer is indistinguishable from an empty one, and acting
+        // on that guess would overwrite a synced key. Leave everything and retry next launch.
+        guard unreadableProviders.isEmpty else { return }
+
+        var superseded: [AIProvider] = []
+        for provider in AIProvider.allCases {
+            let storageKey = Self.apiKeyStorageKey(for: provider)
+            let carried = userDefaults.string(forKey: storageKey) ?? ""
+            if !carried.isEmpty {
+                let stored = apiKey(for: provider)
+                if stored.isEmpty {
+                    do {
+                        try secretStore.setSecret(carried, forKey: storageKey)
+                    } catch {
+                        // Dropping the entry now would lose the key. Abandon the run with
+                        // the flag unset; the providers already migrated stay migrated.
+                        Logger.settings.error("Secret Store migration failed for \(provider.displayName): \(error)")
+                        return
+                    }
+                    providerAPIKeys[provider] = carried
+                } else if stored != carried {
+                    superseded.append(provider)
+                }
+            }
+            userDefaults.removeObject(forKey: storageKey)
+        }
+
+        providersWithSupersededKeys = superseded
+        userDefaults.set(superseded.map(\.rawValue), forKey: Keys.providersWithSupersededKeys)
+        userDefaults.set(true, forKey: Keys.didMigrateProviderKeysToSecretStore)
+        Logger.settings.info("Provider keys migrated to the Secret Store; superseded: \(superseded.count)")
     }
 
     /// One-shot migration of legacy Reserved-named Variable rows (`ANTHROPIC_API_KEY`,
@@ -376,7 +470,7 @@ final class AppSettings {
             }
             if apiKey(for: provider).isEmpty {
                 // Seed the still-empty Provider key, then drop the row.
-                providerAPIKeys[provider] = variable.value
+                setAPIKey(variable.value, for: provider)
                 continue
             }
             // Both a Provider key and a non-empty Reserved Variable exist — leave both.
@@ -397,9 +491,6 @@ final class AppSettings {
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
         encode(variables, forKey: Keys.variables)
-        for provider in AIProvider.allCases {
-            userDefaults.set(apiKey(for: provider), forKey: Self.apiKeyDefaultsKey(for: provider))
-        }
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
         Logger.settings.info("Settings saved")
     }

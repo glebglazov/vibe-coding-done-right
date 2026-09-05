@@ -43,7 +43,7 @@ final class AppDependencies {
     @ObservationIgnored fileprivate var modeSwitcherSuspension: CaptureSession.SuspensionToken?
 
     init() {
-        let settings = AppSettings()
+        let settings = AppSettings(secretStore: KeychainSecretStore())
         let provider = ParakeetProvider()
         self.settings = settings
         self.transcriptionProvider = provider

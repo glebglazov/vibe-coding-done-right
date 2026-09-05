@@ -11,6 +11,10 @@ import Foundation
 /// platform copies are removed and selection rewired in slice 2.
 enum CloudAIClientError: LocalizedError {
     case missingAPIKey(provider: CloudAIBackend)
+    /// The Secret Store refused to hand over the key. Distinct from `missingAPIKey`
+    /// on purpose: the key may well be set, so telling the user to add one would
+    /// send them after a key they already have.
+    case secretStoreUnreadable(provider: CloudAIBackend)
     case apiError(provider: CloudAIBackend, statusCode: Int, message: String)
     case invalidResponse(provider: CloudAIBackend)
 
@@ -18,6 +22,8 @@ enum CloudAIClientError: LocalizedError {
         switch self {
         case .missingAPIKey(let provider):
             "\(provider.displayName) API key is not set. Add \(provider.apiKeyVariableName)."
+        case .secretStoreUnreadable(let provider):
+            "\(provider.displayName) API key could not be read from the keychain."
         case .apiError(let provider, let statusCode, let message):
             "\(provider.displayName) API error (\(statusCode)): \(message)"
         case .invalidResponse(let provider):

@@ -73,7 +73,7 @@ struct AIProviderFactoryTests {
             mode: mode,
             text: "Hello world",
             captures: [],
-            aiAPIKey: "secret-key",
+            aiAPIKey: .stored("secret-key"),
             aiPort: TimedOutAIProcessing(),
             style: .casual
         )
@@ -98,7 +98,7 @@ struct AIProviderFactoryTests {
             captures: [],
             // A bash-only Variable value must never reach the AI call.
             variableEnvironment: ["ANTHROPIC_API_KEY": "bash-only"],
-            aiAPIKey: "provider-key",
+            aiAPIKey: .stored("provider-key"),
             aiPort: capturing,
             style: .casual
         )

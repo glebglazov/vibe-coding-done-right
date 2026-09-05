@@ -13,7 +13,7 @@ struct ReservedVariableNoticeTests {
 
     @Test("Reserved Variable equal to the provider key is flagged as a safe-to-delete duplicate")
     func duplicateOfProviderKey() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         settings.setAPIKey("sk-provider", for: .anthropic)
 
         let variable = Variable(name: "ANTHROPIC_API_KEY", value: "sk-provider")
@@ -23,7 +23,7 @@ struct ReservedVariableNoticeTests {
 
     @Test("Reserved Variable differing from the provider key warns it is bash-only")
     func divergentOverride() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         settings.setAPIKey("sk-provider", for: .anthropic)
 
         let variable = Variable(name: "ANTHROPIC_API_KEY", value: "sk-bash-override")
@@ -35,7 +35,7 @@ struct ReservedVariableNoticeTests {
 
     @Test("Empty Reserved Variable produces a no-effect fallback notice, not a warning")
     func emptyOverride() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         settings.setAPIKey("sk-provider", for: .openai)
 
         let variable = Variable(name: "OPENAI_API_KEY", value: "")
@@ -46,7 +46,7 @@ struct ReservedVariableNoticeTests {
 
     @Test("Non-reserved Variable has no notice")
     func nonReservedHasNoNotice() {
-        let settings = AppSettings(userDefaults: makeDefaults())
+        let settings = AppSettings(userDefaults: makeDefaults(), secretStore: InMemorySecretStore())
         settings.setAPIKey("sk-provider", for: .anthropic)
 
         #expect(settings.reservedVariableNotice(for: Variable(name: "MY_VAR", value: "x")) == nil)

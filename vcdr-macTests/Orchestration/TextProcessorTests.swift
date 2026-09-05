@@ -10,7 +10,7 @@ private func makeProcessor(
     settings: AppSettings? = nil
 ) -> (TextProcessor, FileHistoryStore, ScriptedAIProcessing, AppSettings) {
     let defaults = UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
-    let s = settings ?? AppSettings(userDefaults: defaults)
+    let s = settings ?? AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
     s.removeFillerWords = false
     let historyDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("vcdr-test-\(UUID().uuidString)")

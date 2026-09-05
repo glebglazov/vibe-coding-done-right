@@ -34,7 +34,7 @@ struct ModeSwitcherCoordinatorHotkeyTests {
     )
 
     private func makeEnvironment(modeCount: Int = 1) -> Environment {
-        let settings = AppSettings(userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!)
+        let settings = AppSettings(userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!, secretStore: InMemorySecretStore())
         settings.hotkeySettings.modeSwitcherHotkey = Self.binding
         // The switcher refuses to open with nothing to switch between, and a fresh
         // settings store has no template modes available.

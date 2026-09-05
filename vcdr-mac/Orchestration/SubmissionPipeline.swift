@@ -16,7 +16,7 @@ enum SubmissionPipeline {
         let parameterValues: [String: String]
         let variableEnvironment: [String: String]
         /// The AI Provider's stored API key for `mode` — the source of truth for AI calls.
-        let aiAPIKey: String
+        let aiAPIKey: ProviderAPIKey
         let destination: OutputDestination
         let targetAppPID: pid_t?
         let saveResultToClipboard: Bool
@@ -35,7 +35,7 @@ enum SubmissionPipeline {
             conversationID: UUID,
             parameterValues: [String: String],
             variableEnvironment: [String: String],
-            aiAPIKey: String = "",
+            aiAPIKey: ProviderAPIKey = .stored(""),
             destination: OutputDestination,
             targetAppPID: pid_t?,
             saveResultToClipboard: Bool,

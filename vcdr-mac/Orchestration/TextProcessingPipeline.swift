@@ -41,7 +41,7 @@ enum TextProcessingPipeline {
         substitutions: [Substitution] = [],
         parameterValues: [String: String] = [:],
         variableEnvironment: [String: String] = [:],
-        aiAPIKey: String = "",
+        aiAPIKey: ProviderAPIKey = .stored(""),
         removeFillerWords: Bool = false,
         aiPort: any AIProcessingPort = AIProcessingAdapter(),
         style: Style = .casual,
@@ -90,7 +90,7 @@ enum TextProcessingPipeline {
                 let processedText = try await aiPort.process(
                     structuredText: structured,
                     mode: mode,
-                    apiKey: aiAPIKey,
+                    apiKey: try aiAPIKey.resolved(for: mode.aiProvider),
                     parameterValues: parameterValues
                 )
                 Logger.textTransform.info("AI output: \"\(processedText)\"")
