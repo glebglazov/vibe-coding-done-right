@@ -21,14 +21,16 @@ struct RecordReachabilityGlow: ViewModifier {
     /// than as a border, which the pill already has. Wider than an even spread
     /// would need, and at full opacity, because roughly the top half of the
     /// halo is masked away and the rest has to carry the same brightness.
-    private static let haloRadius: CGFloat = 8.5
+    private static let haloRadius: CGFloat = 9
     private static let haloOpacity: Double = 1
     /// How far the light source sits below the pill, which is what tips the
     /// remaining halo downward rather than leaving it centred and cropped.
-    private static let haloOffset: CGFloat = 3
+    private static let haloOffset: CGFloat = 4
     /// Room around the pill for the blur to spread into. A mask only draws
-    /// within its own bounds, so without this the mask would crop the halo at
-    /// the pill's edges — undoing the blur it is there to shape.
+    /// within its own bounds, so the halo is laid out in a frame this much
+    /// larger than the pill on every side and then centred back over it —
+    /// without that, the mask would crop the halo at the pill's edges,
+    /// undoing the blur it is there to shape.
     private static let haloSpill: CGFloat = haloRadius * 3 + haloOffset
     /// How far the unlit pill drops back. It stays a tappable control — the
     /// tap still works, it just leaves the keyboard — so it dims rather than
@@ -50,12 +52,18 @@ struct RecordReachabilityGlow: ViewModifier {
 
     private var halo: some View {
         GeometryReader { geometry in
+            let pill = geometry.size
             Capsule()
                 .fill(color)
+                .frame(width: pill.width, height: pill.height)
                 .offset(y: Self.haloOffset)
                 .blur(radius: Self.haloRadius)
-                .padding(-Self.haloSpill)
-                .mask(downwardMask(pillHeight: geometry.size.height))
+                .frame(
+                    width: pill.width + Self.haloSpill * 2,
+                    height: pill.height + Self.haloSpill * 2
+                )
+                .mask(downwardMask(pillHeight: pill.height))
+                .frame(width: pill.width, height: pill.height)
         }
         .opacity(isLit ? Self.haloOpacity : 0)
         .allowsHitTesting(false)
