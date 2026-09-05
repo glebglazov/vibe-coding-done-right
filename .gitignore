@@ -11,6 +11,9 @@
 .cache/
 tmp/
 
+# Compiled server binary, produced by `go build` in its own directory
+vcdr-server/vcdr-server
+
 # Python bytecode
 __pycache__/
 

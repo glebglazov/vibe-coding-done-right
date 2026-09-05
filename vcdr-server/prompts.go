@@ -1,8 +1,43 @@
 package main
 
-// promptsTimestamp is updated manually when prompts change. Unix timestamp.
-// Clients send ?since=<timestamp> and receive 304 if nothing changed.
-var promptsTimestamp int64 = 1777015728 // 2026-04-24
+import (
+	"crypto/sha256"
+	"encoding/binary"
+	"sort"
+)
+
+// promptsVersion identifies the prompts this build serves. Clients send it back
+// as ?since=<version> and receive 304 while it matches.
+//
+// It is a fingerprint of the prompt text rather than a date, because the date it
+// replaced was maintained by hand in this file: editing a prompt and forgetting
+// to bump it left every client that had already cached asking about a version it
+// already had, receiving 304, and never seeing the new text again. A value
+// computed from the prompts cannot disagree with the prompts.
+var promptsVersion = fingerprint(integrationModePrompts)
+
+// fingerprint reduces the prompt map to one positive integer, stable across
+// restarts and across the map's own iteration order.
+//
+// It is kept under 2^48 so that it survives every JSON reader as an exact
+// integer — the clients decode this field as a number, and a value past 2^53
+// would come back rounded and stop matching itself.
+func fingerprint(prompts map[string]string) int64 {
+	modes := make([]string, 0, len(prompts))
+	for mode := range prompts {
+		modes = append(modes, mode)
+	}
+	sort.Strings(modes)
+
+	digest := sha256.New()
+	for _, mode := range modes {
+		digest.Write([]byte(mode))
+		digest.Write([]byte{0})
+		digest.Write([]byte(prompts[mode]))
+		digest.Write([]byte{0})
+	}
+	return int64(binary.BigEndian.Uint64(digest.Sum(nil)) & (1<<48 - 1))
+}
 
 // integrationModePrompts maps integration_mode values to their system prompts.
 // The server controls these prompts — clients just send the mode name and raw text.

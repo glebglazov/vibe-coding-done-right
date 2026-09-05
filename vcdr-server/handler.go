@@ -84,8 +84,10 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type promptsResponse struct {
-	Prompts   map[string]string `json:"prompts"`
-	Timestamp int64             `json:"timestamp"`
+	Prompts map[string]string `json:"prompts"`
+	// The wire name stays "timestamp": shipped clients read that key, and they
+	// only ever store this value and send it back. See promptsVersion.
+	Version int64 `json:"timestamp"`
 }
 
 func promptsHandler(w http.ResponseWriter, r *http.Request) {
@@ -94,18 +96,18 @@ func promptsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sinceStr := r.URL.Query().Get("since")
-	if sinceStr != "" {
-		since, err := strconv.ParseInt(sinceStr, 10, 64)
-		if err == nil && since >= promptsTimestamp {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
+	// Matched, not compared: the version is a fingerprint, so "different" is the
+	// whole question and "older" has no meaning. This is also what makes a
+	// rollback reach the clients — restored prompts fingerprint to their old
+	// value, which no longer matches what a client cached.
+	if r.URL.Query().Get("since") == strconv.FormatInt(promptsVersion, 10) {
+		w.WriteHeader(http.StatusNotModified)
+		return
 	}
 
 	writeJSON(w, http.StatusOK, promptsResponse{
-		Prompts:   integrationModePrompts,
-		Timestamp: promptsTimestamp,
+		Prompts: integrationModePrompts,
+		Version: promptsVersion,
 	})
 }
 
