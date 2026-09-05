@@ -11,6 +11,8 @@ Usage:
                   --prompt prompts/prompt_readability.txt --disable-thinking
   ./record_run.py --provider s1-mini --model hf.co/superwhisper/s1-mini-GGUF:Q4_K_M \\
                   --prompt prompts/s1_mini.txt --subset english
+  ./record_run.py --provider apple --model apple-afm \\
+                  --prompt prompts/prompt_readability.txt --subset english
 
 Every run lands in ledger/<run-id>/ as a manifest plus one file per case holding
 the model's output byte-for-byte, so the run can be rescored forever without
@@ -41,6 +43,10 @@ ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
 GEMINI_MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENAI_CHAT_ENDPOINT = "http://127.0.0.1:11434/v1/chat/completions"
 S1_MINI_ENDPOINT = "http://127.0.0.1:11434/api/generate"
+# Apple's model serves no endpoint, so what stands in for one is a command: a
+# Swift shim built from the source beside it, one call per case.
+AFM_SHIM_SOURCE = HERE / "afm" / "AFMShim.swift"
+AFM_SHIM = HERE / "afm" / ".build" / "afm-shim"
 
 # What turns a Qwen3 chat template's thinking branch off on the local runtime.
 # Without it qwen3.5:2b spends its whole token budget on a reasoning field and
@@ -102,6 +108,37 @@ def ollama_version(origin):
         return f"ollama {get_json(f'{origin}/api/version')['version']}"
     except (urllib.error.URLError, KeyError, ValueError, OSError):
         return None
+
+
+def macos_build():
+    """The OS naming itself. Apple ships no id for the on-device model, so the
+    build it came with is the closest thing to a version this run can record."""
+    reported = subprocess.run(
+        ["sw_vers", "-productVersion"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    build = subprocess.run(
+        ["sw_vers", "-buildVersion"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    return f"macOS {reported} ({build})"
+
+
+def built_afm_shim():
+    """The shim binary, compiled when the source is newer than it.
+
+    Rebuilding here rather than in a build step keeps the recorded run honest:
+    the binary that answered the cases was built from the source in the commit
+    the manifest names.
+    """
+    if not AFM_SHIM.exists() or AFM_SHIM.stat().st_mtime < AFM_SHIM_SOURCE.stat().st_mtime:
+        AFM_SHIM.parent.mkdir(parents=True, exist_ok=True)
+        built = subprocess.run(
+            ["swiftc", "-O", "-parse-as-library", str(AFM_SHIM_SOURCE), "-o", str(AFM_SHIM)],
+            capture_output=True,
+            text=True,
+        )
+        if built.returncode != 0:
+            raise SystemExit(f"could not build the AFM shim:\n{built.stderr.strip()}")
+    return AFM_SHIM
 
 
 def dictation_message(case_input):
@@ -361,14 +398,94 @@ class S1MiniArm:
         )
 
 
+class AppleAFMArm:
+    """Apple's on-device model, reached through a command rather than an endpoint.
+
+    FoundationModels serves no HTTP, so the arm shells out to a shim that opens
+    the same `LanguageModelSession` the app's `AFMClient` opens, with the system
+    prompt as its instructions and the dictation message as its prompt. What this
+    measures is therefore the provider the app would fall back to, not an
+    approximation of it.
+    """
+
+    MODEL = "apple-afm"
+
+    def __init__(self, model, endpoint, disable_thinking=False):
+        if disable_thinking:
+            raise SystemExit(
+                "--disable-thinking is a local-runtime setting; this model has no thinking to turn off"
+            )
+        if model != self.MODEL:
+            raise SystemExit(
+                f"the on-device model has no id of its own: pass --model {self.MODEL}. "
+                "The OS build is the version, and the run records it as the runtime."
+            )
+        self.model = model
+        self.endpoint = endpoint
+        self.sampling = {"sampling": "greedy", "maximum_response_tokens": MAX_TOKENS}
+        self.availability = self.probe()
+        if self.availability != "available":
+            raise SystemExit(
+                f"the on-device model is {self.availability}. Turn Apple Intelligence on in "
+                "System Settings > Apple Intelligence & Siri, wait for the model to download, "
+                "and record again."
+            )
+
+    def probe(self):
+        """What the device says about the model, asked before any case is spent.
+
+        A switch that is off answers every case with the same error, and a run of
+        thirteen identical failures is a worse report than refusing to start.
+        """
+        asked = subprocess.run(
+            [str(self.endpoint), "--probe"], capture_output=True, text=True
+        )
+        try:
+            return json.loads(asked.stdout)["availability"]
+        except (json.JSONDecodeError, KeyError):
+            raise SystemExit(f"the AFM shim did not report its availability: {asked.stderr.strip()[:200]}")
+
+    def runtime(self):
+        return f"apple-foundation-models on {macos_build()}"
+
+    def request_settings(self):
+        return {"availability": self.availability}
+
+    def user_message(self, case_input):
+        return dictation_message(case_input)
+
+    def complete(self, system_prompt, user_message):
+        asked = subprocess.run(
+            [str(self.endpoint)],
+            input=json.dumps(
+                {
+                    "system": system_prompt,
+                    "user": user_message,
+                    "maximumResponseTokens": self.sampling["maximum_response_tokens"],
+                }
+            ),
+            capture_output=True,
+            text=True,
+            timeout=REQUEST_TIMEOUT_S,
+        )
+        answered = json.loads(asked.stdout) if asked.stdout else {}
+        if "error" in answered:
+            raise OSError(answered["error"][:300])
+        if "text" not in answered:
+            raise OSError(f"the AFM shim exited {asked.returncode}: {asked.stderr.strip()[:200]}")
+        return answered["text"]
+
+
 ARMS = {
     "anthropic": AnthropicArm,
+    "apple": AppleAFMArm,
     "gemini": GeminiArm,
     "openai-chat": OpenAIChatArm,
     "s1-mini": S1MiniArm,
 }
 DEFAULT_ENDPOINTS = {
     "anthropic": ANTHROPIC_ENDPOINT,
+    "apple": AFM_SHIM,
     "gemini": GEMINI_MODELS_ENDPOINT,
     "openai-chat": OPENAI_CHAT_ENDPOINT,
     "s1-mini": S1_MINI_ENDPOINT,
@@ -378,6 +495,8 @@ DEFAULT_ENDPOINTS = {
 def build_arm(arguments):
     """The arm the command line names, with the settings only its provider takes."""
     endpoint = arguments.endpoint or DEFAULT_ENDPOINTS[arguments.provider]
+    if arguments.provider == "apple" and not arguments.endpoint:
+        endpoint = built_afm_shim()
     if arguments.provider == "s1-mini":
         return S1MiniArm(arguments.model, endpoint, arguments.tone)
     return ARMS[arguments.provider](

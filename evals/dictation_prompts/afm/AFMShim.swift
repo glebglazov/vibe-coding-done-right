@@ -10,17 +10,14 @@ import FoundationModels
 /// manifest records as the runtime.
 @main
 struct AFMShim {
+    /// The caller sends the sampling too, so the settings the run manifest
+    /// records are the settings the model was given rather than a second copy of
+    /// them that can drift.
     struct Request: Decodable {
         let system: String
         let user: String
+        let maximumResponseTokens: Int
     }
-
-    /// Greedy sampling, because a recorded run has to be re-recordable: the
-    /// temperature knob alone still leaves this model free to vary.
-    static let options = GenerationOptions(
-        sampling: .greedy,
-        maximumResponseTokens: 2048
-    )
 
     static func main() async {
         if CommandLine.arguments.contains("--probe") {
@@ -32,6 +29,12 @@ struct AFMShim {
                 Request.self, from: FileHandle.standardInput.readDataToEndOfFile()
             )
             let session = LanguageModelSession { request.system }
+            // Greedy, because a recorded run has to be re-recordable: the
+            // temperature knob alone still leaves this model free to vary.
+            let options = GenerationOptions(
+                sampling: .greedy,
+                maximumResponseTokens: request.maximumResponseTokens
+            )
             let response = try await session.respond(to: request.user, options: options)
             emit(["text": response.content, "availability": availability()])
         } catch {

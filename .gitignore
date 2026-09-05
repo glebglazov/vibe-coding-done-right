@@ -21,6 +21,9 @@ xcuserdata/
 build/
 DerivedData/
 
+# Compiled AFM eval shim, rebuilt from its source on demand
+evals/dictation_prompts/afm/.build/
+
 # IDEs
 .vscode/
 .vs/

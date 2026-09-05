@@ -194,6 +194,7 @@ struct MainWindowView: View {
                                 get: { substitutionsViewModel.drafts[index] },
                                 set: { substitutionsViewModel.drafts[index] = $0 }
                             ),
+                            clashes: substitutionsViewModel.clashes.clashes(for: substitutionsViewModel.drafts[index]),
                             onCommit: {
                                 substitutionsViewModel.commit(substitutionsViewModel.drafts[index])
                             }

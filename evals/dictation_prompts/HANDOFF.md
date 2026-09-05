@@ -22,6 +22,8 @@ export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
                 --prompt prompts/s1_mini.txt --subset english   # only the cases the arm admits
 ./record_run.py --provider s1-mini --model hf.co/superwhisper/s1-mini-GGUF:Q4_K_M \
                 --prompt prompts/s1_mini.txt --subset multilingual   # the non-English category alone
+./record_run.py --provider apple --model apple-afm \
+                --prompt prompts/prompt_readability.txt --subset english   # the on-device model
 ./score_run.py ledger/<run-id>   # per-case table, and ledger/<run-id>/deterministic.json
 ./judge_run.py ledger/<run-id>                    # blind: no reference shown -> judge_blind.json
 ./judge_run.py --mode anchored ledger/<run-id>    # the reference too -> judge.json
@@ -438,6 +440,45 @@ Reproduce the three-way model comparison from the ledger (no model call, no re-r
   ledger/20260904T115807Z__evals__gemma4-e2b__prompt_readability
 ```
 
+## Apple's on-device model, as an arm (2026-09-05)
+
+`--provider apple --model apple-afm` records Apple Foundation Models — the model behind Apple
+Intelligence, already shipping in the iOS app as `AppleAFMProvider` and as the cascade fallback.
+This is the arm that answers whether the app can fall back to the device when no cloud provider is
+configured, instead of falling back to the raw transcript.
+
+**It is reached by a command, not an endpoint.** FoundationModels serves no HTTP, so `afm/AFMShim.swift`
+stands in for one: it reads `{"system", "user", "maximumResponseTokens"}` on stdin and writes
+`{"text"}` on stdout. `record_run.py` builds it with `swiftc` when the source is newer than the
+binary, so the run's outputs came from the source in the commit its manifest names. The shim opens
+the same `LanguageModelSession` the app's `AFMClient` opens, with the system prompt as its
+instructions and `<dictation>…</dictation>` as its prompt — what this measures is the provider that
+would ship, not an approximation of it.
+
+**Greedy, because there is nothing else to pin.** This API offers no seed. Temperature alone leaves
+the model free to vary between runs, so the arm asks for `.greedy` sampling and records that as its
+`sampling`.
+
+**The version is the OS build.** Apple ships no id for this model, so `apple-afm` is the only name
+the arm accepts — a second spelling would read as a second model in the ledger — and the runtime
+records `apple-foundation-models on macOS <version> (<build>)`. Two runs a system update apart are
+told apart by that line and nothing else.
+
+**A device without the model refuses the run.** The arm probes `SystemLanguageModel.default.availability`
+before the first case and records it in the manifest. Where Apple Intelligence is off it exits with
+the reason rather than writing a ledger run of identical failures:
+
+```
+the on-device model is unavailable: appleIntelligenceNotEnabled. Turn Apple Intelligence on in
+System Settings > Apple Intelligence & Siri, wait for the model to download, and record again.
+```
+
+**Not yet measured.** As of this writing Apple Intelligence is off on the recording machine, so no
+`apple-afm` run is in the ledger. The arm, its shim and its tests are in place; recording is the
+one command above once the switch is on. Record it over `--subset english` first: the on-device
+model's non-English behaviour is a separate question, and the English subset is where the s1-mini
+and gemma rows already sit for comparison.
+
 ## The multilingual reading (2026-09-04)
 
 **Every judge number in this section is an anchored reading** — the judge was shown the
@@ -668,6 +709,7 @@ Include:
 - `prompts/prompt_lean.txt` — B (candidate).
 - `prompts/prompt_current.txt` — legacy strict prompt, retained as historical baseline.
 - `prompts/s1_mini.txt` — S1-mini's required system prompt, verbatim; not a candidate prompt.
+- `afm/AFMShim.swift` — one call to Apple's on-device model, as a command; the arm's stand-in for an endpoint.
 - `record_run.py` — records one arm over one eval set into the ledger.
 - `ledger.py` — the ledger itself: fingerprints, reference provenance, and reopening an archived run.
 - `score_run.py` — the deterministic scorer.
@@ -677,8 +719,9 @@ Include:
 - `agents/assessor.md` — the rubric the judge scores against.
 - `test_score_run.py` — the metric's own cases.
 - `test_judge_run.py` — the judge's rubric arithmetic and its contestant refusal.
+- `test_record_run.py` — the on-device arm: the message it sends, the version it records, and what it refuses.
 - `test_compare_runs.py` — what a comparison may and may not compare.
-- `test_runner.py` — the runner the three test files share.
+- `test_runner.py` — the runner the test files share.
 - `ledger/<run-id>/manifest.json` — what produced the run.
 - `ledger/<run-id>/outputs/<case>.txt` — the arm's raw output, byte-for-byte.
 - `ledger/<run-id>/deterministic.json` — the deterministic scores.
