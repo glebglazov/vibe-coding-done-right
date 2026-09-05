@@ -58,7 +58,7 @@ final class ProviderKeyStore {
     /// The name a backend's key is stored under: its Secret Store item, and the
     /// `UserDefaults` entry the one-shot migration drains into that item. The strings are
     /// the macOS app's too — a synced item only matches a query with the same account.
-    static func storageKey(for backend: CloudAIBackend) -> String {
+    private static func storageKey(for backend: CloudAIBackend) -> String {
         switch backend {
         case .anthropic: "ai_processing_anthropic_api_key"
         case .openai: "ai_processing_openai_api_key"

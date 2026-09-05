@@ -90,6 +90,9 @@ struct AIProviderFactoryTests {
     }
 }
 
+/// Points the key seam at an in-memory Store holding these keys for the call. The account
+/// names are spelled out rather than asked of `ProviderKeyStore`, so a change to the names
+/// the two apps share shows up here as a failure instead of following along silently.
 @MainActor
 private func withAPIKeys(
     anthropic: String,
@@ -101,9 +104,9 @@ private func withAPIKeys(
     defer { ProviderKeyStore.current = original }
     ProviderKeyStore.current = ProviderKeyStore(
         secretStore: InMemorySecretStore(secrets: [
-            ProviderKeyStore.storageKey(for: .anthropic): anthropic,
-            ProviderKeyStore.storageKey(for: .openai): openAI,
-            ProviderKeyStore.storageKey(for: .gemini): gemini
+            "ai_processing_anthropic_api_key": anthropic,
+            "ai_processing_openai_api_key": openAI,
+            "ai_processing_gemini_api_key": gemini
         ]),
         userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
     )

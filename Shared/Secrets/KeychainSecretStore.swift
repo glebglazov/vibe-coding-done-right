@@ -29,7 +29,9 @@ struct KeychainSecretStore: SecretStore {
         switch status {
         case errSecSuccess:
             guard let data = item as? Data, let secret = String(data: data, encoding: .utf8) else {
-                throw SecretStoreError.readFailed(key: key, status: status)
+                // The item came back, but not as the UTF-8 text it was written as. `status`
+                // is `errSecSuccess` here, and would read in the log as no failure at all.
+                throw SecretStoreError.readFailed(key: key, status: errSecDecode)
             }
             return secret
         case errSecItemNotFound:

@@ -257,7 +257,9 @@ final class AppSettings {
         /// Names the Variables list's Secret Store item, and the UserDefaults entry the
         /// one-shot migration drains into it.
         static let variables = "variables"
-        // AI Provider API keys — own dedicated UserDefaults fields (mirrors iOS).
+        // Names each AI Provider key's Secret Store item, and the UserDefaults entry the
+        // one-shot migration drains into it. iOS files its keys under the same names, so a
+        // key pasted there matches the query made here.
         static let anthropicAPIKey = "ai_processing_anthropic_api_key"
         static let openaiAPIKey = "ai_processing_openai_api_key"
         static let geminiAPIKey = "ai_processing_gemini_api_key"

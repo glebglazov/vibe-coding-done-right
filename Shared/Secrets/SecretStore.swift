@@ -17,9 +17,10 @@ protocol SecretStore: Sendable {
     nonisolated func setSecret(_ secret: String?, forKey key: String) throws
 }
 
-/// A Secret Store operation the underlying storage refused. The `status` is the
-/// raw `SecItem*` result, kept for the log where the numeric code is what maps
-/// to Apple's documentation.
+/// A Secret Store operation the underlying storage refused. The `status` is a Security
+/// framework status — the one `SecItem*` returned, or `errSecDecode` for an item that
+/// came back unreadable — kept for the log where the numeric code is what maps to
+/// Apple's documentation.
 enum SecretStoreError: Error {
     case readFailed(key: String, status: OSStatus)
     case writeFailed(key: String, status: OSStatus)
