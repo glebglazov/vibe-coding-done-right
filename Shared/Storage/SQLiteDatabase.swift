@@ -15,8 +15,9 @@ nonisolated final class SQLiteDatabase: @unchecked Sendable {
     // MARK: - Constants
 
     /// How long a statement waits for another connection's write lock before
-    /// giving up. Only reached when two processes share the file — the app and
-    /// its keyboard extension both open the app-group database.
+    /// giving up. Reached because conversations and Substitutions open the one
+    /// Local Store file as two connections, and their launch bootstraps run at
+    /// the same time.
     private static let busyTimeoutMilliseconds: Int32 = 5_000
 
     /// Tells SQLite to copy a bound value, so Swift's buffer does not have to

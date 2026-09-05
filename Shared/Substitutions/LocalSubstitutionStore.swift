@@ -18,9 +18,7 @@ final class LocalSubstitutionStore: SubstitutionStore, RecordFileSyncedStore {
 
     private(set) var substitutions: [Substitution] = []
 
-    /// Internal, not private: the reconciler merges the record files into
-    /// these same rows, and the store publishes the result.
-    let database: SubstitutionDatabase
+    private let database: SubstitutionDatabase
 
     /// The record files this store exports to. Nil until `syncRecordFiles`
     /// hands over the directory; edits made before then are remembered by the
@@ -109,8 +107,12 @@ final class LocalSubstitutionStore: SubstitutionStore, RecordFileSyncedStore {
     private func exportPendingEntries() {
         guard let recordFiles else { return }
         let database = self.database
-        Task.detached(priority: .utility) {
-            SubstitutionExporter.drain(database, to: recordFiles)
+        // The drain blocks on the iCloud daemon, so it takes a GCD thread
+        // rather than one of the cooperative pool's few (ADR-0003).
+        Task {
+            await withBlockingTask(qos: .utility) {
+                SubstitutionExporter.drain(database, to: recordFiles)
+            }
         }
     }
 }

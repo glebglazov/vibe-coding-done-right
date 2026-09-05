@@ -29,9 +29,7 @@ final class LocalHistoryStore: HistoryStore, RecordFileSyncedStore {
     var latestConversation: Conversation? { conversations.first }
     var hasMorePages: Bool { conversations.count < min(storedCount, Self.maxConversations) }
 
-    /// Internal, not private: `SyncReconciler` merges the record files
-    /// into these same rows, and the store publishes the result.
-    let database: ConversationDatabase
+    private let database: ConversationDatabase
     /// How many conversations the database holds, loaded or not — what tells
     /// the list whether another page exists.
     private var storedCount: Int
@@ -169,8 +167,12 @@ final class LocalHistoryStore: HistoryStore, RecordFileSyncedStore {
     private func exportPendingRecords() {
         guard let recordFiles else { return }
         let database = self.database
-        Task.detached(priority: .utility) {
-            HistoryExporter.drain(database, to: recordFiles)
+        // The drain blocks on the iCloud daemon, so it takes a GCD thread
+        // rather than one of the cooperative pool's few (ADR-0003).
+        Task {
+            await withBlockingTask(qos: .utility) {
+                HistoryExporter.drain(database, to: recordFiles)
+            }
         }
     }
 
