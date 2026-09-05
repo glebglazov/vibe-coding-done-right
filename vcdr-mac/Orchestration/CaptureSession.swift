@@ -20,7 +20,8 @@ import OSLog
 ///   and thence through `AIProcessingPort`. They cannot drift.
 /// - Preview skipping is expressed by one named predicate, `shouldSkipPreview(result:mode:)`,
 ///   whose test name IS the rule.
-/// - Hotkey registration is owned internally and is re-entrant against accessibility grants.
+/// - Hotkey claims are owned internally and derived from `settings` and the phase;
+///   claiming needs no accessibility grant.
 
 // MARK: - CaptureSessionDelegate
 
@@ -177,27 +178,25 @@ final class CaptureSession {
     /// hotkey's: no claim held means the combination reaches the frontmost app.
     @ObservationIgnored var toggleClaim: HotkeyClaim?
 
-    /// Set while the user is recording a new shortcut in the UI. The toggle claim
-    /// is dropped for the duration rather than muted — a claim has no
-    /// pass-through, so releasing it is the only way the key press can reach the
-    /// recorder.
-    @ObservationIgnored private(set) var isToggleHotkeySuppressed = false
-
     /// The session's claim on the cancel combination, derived from the phase in
     /// `setupCancelHotkey` and nowhere else. Cancel is bound to an ordinary
     /// combination — Shift+Escape by default — so a claim held while VCDR is idle
     /// would swallow it system-wide.
     @ObservationIgnored var cancelClaim: HotkeyClaim?
 
-    /// Set while the user is recording a new shortcut in the UI — see
-    /// `isToggleHotkeySuppressed` for why the claim is dropped rather than muted.
-    @ObservationIgnored private(set) var isCancelHotkeySuppressed = false
+    /// Set while the user is recording a new shortcut in the UI. Every claim the
+    /// session holds is dropped for the duration rather than muted — a claim has
+    /// no pass-through, so releasing it is the only way the key press can reach
+    /// the recorder.
+    @ObservationIgnored private(set) var isHotkeySuppressed = false
 
     /// Set while the mode switcher is up. Its window reads Escape itself, which a
     /// standing claim on the cancel combination would consume first.
     @ObservationIgnored private(set) var isSuspendedForModeSwitcher = false
 
-    @ObservationIgnored let destinationHotkey = DestinationHotkeyManager()
+    /// The claims behind the Output Destinations' Activation Hotkeys, derived
+    /// from the phase in `setupDestinationHotkeys` and nowhere else.
+    @ObservationIgnored let destinationHotkey: DestinationHotkeyManager
 
     // MARK: - Per-run state (cleared on terminal transitions)
 
@@ -265,7 +264,9 @@ final class CaptureSession {
         self.substitutionStore = deps.substitutionStore
         self.overrides = deps.overrides
         self.styleProvider = deps.styleProvider
+        self.destinationHotkey = DestinationHotkeyManager(registry: deps.hotkeyRegistry)
         wirePanelCallbacks()
+        wireDestinationHotkeys()
         observeHotkeySettings()
         // Claiming a combination needs no Accessibility grant, so the toggle is
         // live from launch rather than from whenever the grant arrives.
@@ -345,19 +346,15 @@ final class CaptureSession {
         }
     }
 
-    /// Drops or restores the toggle claim while the user records a new shortcut.
-    func setToggleHotkeySuppressed(_ suppressed: Bool) {
-        guard suppressed != isToggleHotkeySuppressed else { return }
-        isToggleHotkeySuppressed = suppressed
+    /// Drops or restores every claim the session holds while the user records a
+    /// new shortcut, so neither the toggle nor a capture in flight eats the key
+    /// press the recorder is waiting for.
+    func setHotkeysSuppressed(_ suppressed: Bool) {
+        guard suppressed != isHotkeySuppressed else { return }
+        isHotkeySuppressed = suppressed
         setupToggleHotkey()
-    }
-
-    /// Drops or restores the cancel claim while the user records a new shortcut,
-    /// so a capture in flight does not eat the key press the recorder is waiting for.
-    func setCancelHotkeySuppressed(_ suppressed: Bool) {
-        guard suppressed != isCancelHotkeySuppressed else { return }
-        isCancelHotkeySuppressed = suppressed
         setupCancelHotkey()
+        setupDestinationHotkeys()
     }
 
     /// DEBUG / test-only: poll until the session reaches a resting phase
@@ -380,12 +377,6 @@ final class CaptureSession {
         return nil
     }
 
-    /// Accessibility permission polling hook — the app delegate calls this when
-    /// accessibility is granted so the session can (re-)register its hotkeys.
-    func accessibilityGranted() {
-        setupDestinationHotkeys()
-    }
-
     // MARK: - Internal helpers
 
     func setStatus(_ phase: Status.Phase) {
@@ -396,10 +387,11 @@ final class CaptureSession {
             menuBarIcon: Self.menuBarIcon(for: phase),
             canToggle: Self.canToggle(for: phase)
         )
-        // The only place cancel availability is decided. Every phase change passes
-        // through here, so no exit path — including the error branches — can strand
-        // the claim or forget to make it.
+        // The only place the phase-derived claims are decided. Every phase change
+        // passes through here, so no exit path — including the error branches —
+        // can strand a claim or forget to make it.
         setupCancelHotkey()
+        setupDestinationHotkeys()
         if old != phase {
             Logger.consistency.info("Session phase: \(String(describing: old)) → \(String(describing: phase))")
         }
@@ -431,6 +423,15 @@ final class CaptureSession {
         }
         panel.onRetryAIProcessing = { [weak self] in
             self?.retryAIProcessing()
+        }
+    }
+
+    private func wireDestinationHotkeys() {
+        destinationHotkey.onDestinationMatched = { [weak self] destinationID in
+            guard let self else { return }
+            // Smuggle the override into the current run so it's consumed when transcription finishes.
+            self.run?.destinationOverrideID = destinationID
+            self.stopRecordingAndTranscribe()
         }
     }
 

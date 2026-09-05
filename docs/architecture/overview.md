@@ -2,7 +2,7 @@
 
 VCDR is a minimal macOS menu bar voice transcription app. Toggle a global hotkey to record, toggle again to transcribe (via Parakeet/FluidAudio), then execute an action (paste or run a bash command).
 
-**Tech stack:** Swift 6 (strict concurrency), SwiftUI, AVFoundation, Carbon `RegisterEventHotKey` and CGEvent taps for global hotkeys, FluidAudio (Parakeet v3 CoreML) for transcription.
+**Tech stack:** Swift 6 (strict concurrency), SwiftUI, AVFoundation, Carbon `RegisterEventHotKey` for global hotkeys, FluidAudio (Parakeet v3 CoreML) for transcription.
 
 **Target:** macOS 15.0+ (Sequoia), no App Sandbox.
 

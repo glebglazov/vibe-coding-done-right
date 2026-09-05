@@ -18,15 +18,14 @@
 1. Update `AppSettings` if new settings are needed
 2. Take `HotkeyRegistry` through the owner's init and claim the combination from it —
    the claim's lifetime is the hotkey's, so release the handle to give the
-   combination back. The destination hotkeys are the last ones still on an event
-   tap (`DestinationHotkeyManager`); `GlobalHotkeyManager` now has no users at
-   all. Don't add to either.
+   combination back. No hotkey is on an event tap any more, and
+   `GlobalHotkeyManager` has no users at all. Don't add to it.
 3. Update `CaptureSession+Hotkeys.swift` for behavior changes to the session's own hotkeys
 
 ## Permissions Required
 
 1. **Microphone** — for audio recording (`NSMicrophoneUsageDescription` in Info.plist)
-2. **Accessibility** — for the global hotkey event taps and simulated paste (Cmd+V via CGEvent). Carbon hotkey claims need no grant.
+2. **Accessibility** — for simulated paste (Cmd+V via CGEvent) and selection capture. Carbon hotkey claims need no grant, so every hotkey works without it.
 3. **No App Sandbox** — required for CGEvent tap at `.cgSessionEventTap`
 
 ## Things to Watch Out For
@@ -34,7 +33,7 @@
 - **Clipboard operations may not be instant.** After `NSPasteboard.setString`, add a small delay before simulating Cmd+V. Document the delay with a comment.
 - **Focus restoration timing.** After `NSRunningApplication.activate()`, a small delay is needed before sending keyboard events to that app.
 - **Parakeet model is large (~1.2GB).** First launch downloads it. Don't assume the model is ready — always check initialization state.
-- **CGEvent tap requires accessibility.** The hotkey won't work until the user grants accessibility permissions. Handle this gracefully with polling.
+- **CGEvent requires accessibility.** Simulated paste won't work until the user grants accessibility permissions. Handle this gracefully with polling.
 - **Audio recording at 16kHz mono.** This is Parakeet's native format. Don't change the sample rate — it avoids resampling overhead.
 
 ## iOS Testing Policy

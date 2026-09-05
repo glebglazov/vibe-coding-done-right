@@ -1,91 +1,81 @@
+import CoreGraphics
 import Foundation
-import ApplicationServices
 import OSLog
 
-/// Manages a single CGEvent tap that watches for multiple destination hotkey bindings.
-/// Uses **superset modifier matching**: if a destination is Ctrl+C and the user presses
-/// Ctrl+Cmd+Option+C (because push-to-talk modifiers are held), it still matches.
-/// This naturally handles push-to-talk (extra modifiers) and toggle mode (no extra modifiers).
+/// Holds the claims behind every Output Destination's Activation Hotkey.
+///
+/// An Activation Hotkey matches any combination that *includes* its modifiers:
+/// that is what lets Option+P fire while push-to-talk holds Control and Command
+/// down, and what makes Shift+Option+P beat Option+P on the same key. Carbon
+/// matches a combination exactly and knows neither rule, so the answer is
+/// precomputed instead of compared — each Activation Hotkey claims its whole
+/// Modifier Expansion, and a press is then a lookup.
+@MainActor
 final class DestinationHotkeyManager {
-    private let tap = EventTapManager()
 
-    /// One Output Destination's Activation Hotkey, in the shape the tap matches against.
-    /// Only assigned hotkeys become armed, so the tap is installed only when at least
-    /// one destination can actually be triggered.
+    /// One Output Destination's Activation Hotkey, as armed. Only assigned
+    /// hotkeys are kept, so an unbound destination claims nothing.
     private struct ArmedBinding: Equatable {
         let id: UUID
-        let keyCode: UInt16
-        let modifiers: UInt64
+        let hotkey: HotkeyBinding
     }
 
+    private let registry: any HotkeyRegistry
     private var armed: [ArmedBinding] = []
+    private var claims: [HotkeyClaim] = []
 
-    /// When false, matched key events pass through unconsumed.
-    var isEnabled: Bool = false
-
-    /// Orthogonal to `isEnabled`. Set while the user is recording a new shortcut
-    /// in the UI so the hotkey passes through unconsumed without disturbing the
-    /// managed `isEnabled` state.
-    var isSuppressed: Bool = false
-
-    /// Called when a destination hotkey is matched. Receives the destination UUID.
+    /// Called with the Output Destination whose Activation Hotkey was pressed.
     var onDestinationMatched: ((UUID) -> Void)?
 
-    /// The Activation Hotkeys the tap currently matches against, keyed by Output
-    /// Destination. Lets a caller confirm the tap tracks settings without owning
-    /// an event tap of its own.
-    var armedActivationHotkeys: [UUID: HotkeyBinding] {
-        Dictionary(uniqueKeysWithValues: armed.map {
-            ($0.id, HotkeyBinding(keyCode: $0.keyCode, modifiers: $0.modifiers))
-        })
+    init(registry: any HotkeyRegistry) {
+        self.registry = registry
     }
 
-    // MARK: - Registration
+    // MARK: - Arming
 
-    func register(bindings: [(UUID, HotkeyBinding)]) {
-        let incoming = bindings.compactMap { id, hotkey -> ArmedBinding? in
-            guard hotkey.isAssigned else { return nil }
-            return ArmedBinding(id: id, keyCode: hotkey.keyCode, modifiers: hotkey.modifiers)
+    /// Claims the Modifier Expansion of every assigned Activation Hotkey in
+    /// `bindings`, dropping whatever was claimed before.
+    ///
+    /// Releases first and claims after, unconditionally: the window server
+    /// refuses a second registration of a combination that is still claimed, so
+    /// re-arming the same shortcut only works in that order.
+    func arm(bindings: [(id: UUID, hotkey: HotkeyBinding)]) {
+        let incoming = bindings.compactMap { binding -> ArmedBinding? in
+            guard binding.hotkey.isAssigned else { return nil }
+            return ArmedBinding(id: binding.id, hotkey: binding.hotkey)
         }
 
-        // Every change to the destination list re-registers, and most of those
-        // changes — a rename, a script edit, a reorder — leave the Activation
-        // Hotkeys alone. Rebuilding a live tap for them would drop key events
-        // during the teardown for no gain.
-        let tapMatchesArmed = tap.isInstalled == !incoming.isEmpty
-        guard incoming != armed || !tapMatchesArmed else { return }
+        // Every change to the destination list re-arms, and most of those changes
+        // — a rename, a script edit, a reorder — leave the Activation Hotkeys
+        // alone. Releasing and re-claiming for those would open a window
+        // mid-recording where the key press reaches the frontmost app, for no gain.
+        guard incoming != armed else { return }
 
-        unregister()
+        disarm()
         armed = incoming
 
-        guard !armed.isEmpty else { return }
-        guard AXIsProcessTrusted() else {
-            Logger.hotkeys.warning("DestinationHotkeyManager: accessibility not granted")
-            return
+        for binding in incoming where binding.hotkey.modifiers == 0 {
+            Logger.hotkeys.warning(
+                """
+                Activation Hotkey \(binding.hotkey.displayString) requires no modifiers, \
+                so while recording it claims every combination of that key, ⌘ included
+                """
+            )
         }
 
-        let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
-
-        let installed = tap.install(
-            eventMask: eventMask,
-            callback: { _, type, event, refcon -> Unmanaged<CGEvent>? in
-                guard let refcon else { return Unmanaged.passUnretained(event) }
-                let manager = Unmanaged<DestinationHotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
-                return manager.handleEvent(type: type, event: event)
-            },
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        )
-
-        if !installed {
-            Logger.hotkeys.error("DestinationHotkeyManager: failed to create event tap")
-            return
+        let flattened = incoming.map { (id: $0.id, keyCode: $0.hotkey.keyCode, modifiers: $0.hotkey.modifiers) }
+        claims = Self.modifierExpansion(of: flattened).compactMap { claimed in
+            registry.claim(claimed.combination) { [weak self] in
+                self?.onDestinationMatched?(claimed.destinationID)
+            }
         }
-
-        Logger.hotkeys.info("DestinationHotkeyManager: registered \(self.armed.count) bindings")
+        Logger.hotkeys.info("Activation Hotkeys: claimed \(self.claims.count) combinations")
     }
 
-    func unregister() {
-        tap.uninstall()
+    /// Hands every claimed combination back to the frontmost app.
+    func disarm() {
+        for claim in claims { claim.release() }
+        claims = []
         armed = []
     }
 
@@ -95,7 +85,7 @@ final class DestinationHotkeyManager {
     /// Extra modifiers on the event are allowed. When multiple bindings share the same
     /// keyCode, the most specific match (most required modifier bits) wins.
     /// Returns the UUID of the best match, or nil if none matched.
-    static func matchBinding(
+    nonisolated static func matchBinding(
         keyCode: UInt16,
         modifierBits: UInt64,
         bindings: [(id: UUID, keyCode: UInt16, modifiers: UInt64)]
@@ -113,36 +103,44 @@ final class DestinationHotkeyManager {
         return bestMatch?.id
     }
 
-    // MARK: - Event Handling
+    // MARK: - Modifier Expansion
 
-    private func handleEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        // Re-enable tap if macOS disabled it
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            Logger.hotkeys.warning("DestinationHotkeyManager: tap disabled, re-enabling")
-            tap.reEnableTap()
-            return Unmanaged.passUnretained(event)
+    /// Every combination the given Activation Hotkeys answer to, paired with the
+    /// Output Destination each one fires.
+    ///
+    /// This is `matchBinding` run forwards: for each key involved, all 16 modifier
+    /// combinations are asked who would win them, so the superset match and the
+    /// specificity tie-break are literally the same rule an event tap applied. A
+    /// combination therefore appears at most once — Carbon refuses a duplicate
+    /// registration from the same process, and a duplicate would mean this had a bug.
+    nonisolated static func modifierExpansion(
+        of bindings: [(id: UUID, keyCode: UInt16, modifiers: UInt64)]
+    ) -> [(combination: HotkeyBinding, destinationID: UUID)] {
+        let combinations = matchableModifierCombinations()
+        let keyCodes = bindings.map(\.keyCode).reduce(into: [UInt16]()) { unique, keyCode in
+            if !unique.contains(keyCode) { unique.append(keyCode) }
         }
 
-        guard isEnabled && !isSuppressed, type == .keyDown else {
-            return Unmanaged.passUnretained(event)
+        return keyCodes.flatMap { keyCode in
+            combinations.compactMap { modifiers -> (combination: HotkeyBinding, destinationID: UUID)? in
+                guard let destinationID = matchBinding(
+                    keyCode: keyCode,
+                    modifierBits: modifiers,
+                    bindings: bindings
+                ) else { return nil }
+                return (HotkeyBinding(keyCode: keyCode, modifiers: modifiers), destinationID)
+            }
         }
-
-        // Skip auto-repeat events
-        let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-        guard !isRepeat else { return Unmanaged.passUnretained(event) }
-
-        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-        let flags = event.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
-        let flatBindings = armed.map { ($0.id, $0.keyCode, $0.modifiers) }
-
-        if let matchedID = Self.matchBinding(keyCode: keyCode, modifierBits: flags.rawValue, bindings: flatBindings) {
-            Logger.hotkeys.debug("DestinationHotkeyManager: matched destination \(matchedID)")
-            onDestinationMatched?(matchedID)
-            return nil // Consume the event
-        }
-
-        return Unmanaged.passUnretained(event)
     }
 
-    deinit { unregister() }
+    /// The 16 subsets of the four modifiers an Activation Hotkey can require —
+    /// every modifier state a key press can arrive in, as far as matching cares.
+    private nonisolated static func matchableModifierCombinations() -> [UInt64] {
+        let modifiers: [CGEventFlags] = [.maskControl, .maskAlternate, .maskShift, .maskCommand]
+        return (0..<(1 << modifiers.count)).map { subset in
+            modifiers.enumerated().reduce(into: UInt64(0)) { bits, modifier in
+                if subset & (1 << modifier.offset) != 0 { bits |= modifier.element.rawValue }
+            }
+        }
+    }
 }

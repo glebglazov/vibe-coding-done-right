@@ -78,7 +78,6 @@ extension CaptureSession {
         setStatus(.recording)
         startPreparationNarration()
         recordingStartInstant = .now
-        destinationHotkey.isEnabled = true
 
         // Detached so blocking work inside the capturer (osascript Process.waitUntilExit,
         // AX round-trips) runs off MainActor — otherwise it queues ahead of UI updates
@@ -151,8 +150,6 @@ extension CaptureSession {
 
     /// Stops the active recording and kicks off transcription.
     func stopRecordingAndTranscribe() {
-        destinationHotkey.isEnabled = false
-
         guard case .recording = status.phase else {
             Task { await media.resumeIfNeeded() }
             if !isTransientRecordingPhase() {
@@ -202,8 +199,6 @@ extension CaptureSession {
 
     /// Cancels an in-flight recording/transcription. Safe to call from any phase.
     func cancelRecording() {
-        destinationHotkey.isEnabled = false
-
         let wasTranscribing = (status.phase == .transcribing)
         let wasPreparing = (status.phase == .preparingToRecord)
         let wasRecording = (status.phase == .recording)

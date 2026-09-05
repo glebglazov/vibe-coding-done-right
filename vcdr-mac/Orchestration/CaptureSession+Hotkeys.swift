@@ -12,7 +12,7 @@ extension CaptureSession {
         toggleClaim = nil
 
         let binding = settings.toggleRecordingHotkey
-        guard binding.isAssigned, !isToggleHotkeySuppressed else { return }
+        guard binding.isAssigned, !isHotkeySuppressed else { return }
 
         toggleClaim = hotkeyRegistry.claim(binding) { [weak self] in
             self?.toggle()
@@ -30,7 +30,7 @@ extension CaptureSession {
         let binding = settings.cancelRecordingHotkey
         guard binding.isAssigned,
               status.phase.hasCaptureToCancel,
-              !isCancelHotkeySuppressed,
+              !isHotkeySuppressed,
               !isSuspendedForModeSwitcher
         else { return }
 
@@ -39,15 +39,20 @@ extension CaptureSession {
         }
     }
 
+    /// The Activation Hotkeys are claimed iff a recording is running. Their
+    /// Modifier Expansion covers whole modifier combinations of a key — a
+    /// modifier-less binding covers Command-C — so holding them any longer would
+    /// swallow ordinary shortcuts system-wide. Called from `setStatus` alongside
+    /// cancel, so no exit path can leave them claimed.
     func setupDestinationHotkeys() {
-        let bindings = settings.outputDestinations.map { ($0.id, $0.activationHotkey) }
-        destinationHotkey.onDestinationMatched = { [weak self] destinationID in
-            guard let self else { return }
-            // Smuggle the override into the current run so it's consumed when transcription finishes.
-            self.run?.destinationOverrideID = destinationID
-            self.stopRecordingAndTranscribe()
+        guard case .recording = status.phase, !isHotkeySuppressed else {
+            destinationHotkey.disarm()
+            return
         }
-        destinationHotkey.register(bindings: bindings)
+
+        destinationHotkey.arm(
+            bindings: settings.outputDestinations.map { (id: $0.id, hotkey: $0.activationHotkey) }
+        )
     }
 
     // MARK: - Settings tracking

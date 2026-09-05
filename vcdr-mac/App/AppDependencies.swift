@@ -132,13 +132,11 @@ final class AppDependencies {
 
     /// Suppresses every app-owned hotkey while the user is recording a new shortcut
     /// in the UI, so the key press reaches the shortcut recorder and nothing in the
-    /// app reacts to it. Claims are released outright; the hotkeys still on event
-    /// taps pass their events through unconsumed.
+    /// app reacts to it. Every claim is released outright — a claim has no
+    /// pass-through.
     @MainActor
     func setHotkeySuppression(_ suppressed: Bool) {
-        session.setToggleHotkeySuppressed(suppressed)
-        session.setCancelHotkeySuppressed(suppressed)
-        session.destinationHotkey.isSuppressed = suppressed
+        session.setHotkeysSuppressed(suppressed)
         modeSwitcherCoordinator.setHotkeySuppressed(suppressed)
         copyLatestCaptureHandler.setHotkeySuppressed(suppressed)
     }
@@ -163,10 +161,6 @@ final class AppDependencies {
         isInitialized = true
         startPermissionPolling()
         secureInputMonitor.start()
-
-        if hasAccessibilityPermission {
-            session.accessibilityGranted()
-        }
 
         await styleResolution.start()
 
@@ -278,8 +272,7 @@ final class AppDependencies {
             self.checkPermissions()
 
             if !wasAccessible && self.hasAccessibilityPermission {
-                self.session.accessibilityGranted()
-                Logger.app.info("Accessibility granted, hotkeys registered")
+                Logger.app.info("Accessibility granted; simulated paste is available")
             }
 
             if self.hasMicrophonePermission && self.hasAccessibilityPermission {

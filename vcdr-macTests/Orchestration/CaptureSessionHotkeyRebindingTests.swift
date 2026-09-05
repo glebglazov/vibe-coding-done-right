@@ -5,74 +5,110 @@ import Testing
 
 /// The session re-arms its hotkeys from `settings` rather than trusting each screen
 /// to ask for it. These tests drive the settings path a user drives and assert the
-/// armed set follows.
+/// live claims follow.
 ///
-/// The toggle and cancel go through the injected `HotkeyRegistry`, so their tests
-/// assert the live claims and can deliver a real press. The hotkeys still on event
-/// taps cannot be installed without an Accessibility grant the test process does
-/// not have, so theirs assert what the tap targets rather than what it sees.
+/// The Activation Hotkeys are only claimed while recording, so their tests re-bind
+/// mid-capture — which is also the case that matters, since a user changing a
+/// shortcut expects the next key press to obey it without a relaunch.
 @Suite("CaptureSession — Hotkey re-binding")
 struct CaptureSessionHotkeyRebindingTests {
 
+    /// P, the key the two built-in paste destinations share by default.
+    private static let pKeyCode: UInt16 = 35
+
     @MainActor
-    private func waitForArmed(
-        _ session: CaptureSession,
-        _ condition: @escaping ([UUID: HotkeyBinding]) -> Bool
-    ) async -> Bool {
-        await waitFor { condition(session.destinationHotkey.armedActivationHotkeys) }
+    private func recordingEnvironment() async -> CaptureSessionTestEnvironment {
+        let env = CaptureSessionTestEnvironment(
+            mockProvider: MockTranscriptionProvider(result: "Hello destination")
+        )
+        env.session.toggle()
+        #expect(await env.waitForPhase { $0 == .recording })
+        return env
     }
 
-    @Test("Re-binding a destination's Activation Hotkey arms the new combo without a relaunch")
+    @Test("Re-binding a destination's Activation Hotkey claims the new combo without a relaunch")
     @MainActor
-    func rebindingArmsNewCombo() async {
-        let env = CaptureSessionTestEnvironment()
+    func rebindingClaimsNewCombo() async {
+        let env = await recordingEnvironment()
         defer { env.cleanup() }
 
-        let newBinding = HotkeyBinding(keyCode: KeyCodeMap.slashKeyCode, modifiers: 0x40000)
         let copyID = OutputDestination.builtInCopyID
-        guard let index = env.settings.outputDestinations.firstIndex(where: { $0.id == copyID }) else {
+        guard let index = env.settings.outputDestinations.firstIndex(where: { $0.id == copyID }),
+              let oldBinding = env.settings.outputDestinations.first(where: { $0.id == copyID })?.activationHotkey
+        else {
             Issue.record("Built-in Copy destination missing from settings")
             return
         }
+        // Shift+C rather than a superset of Option+C: a combination the old binding
+        // already expanded to would be claimed either way and prove nothing.
+        let newBinding = HotkeyBinding(
+            keyCode: KeyCodeMap.cKeyCode,
+            modifiers: UInt64(CGEventFlags.maskShift.rawValue)
+        )
         env.settings.outputDestinations[index].activationHotkey = newBinding
 
-        #expect(await waitForArmed(env.session) { $0[copyID] == newBinding })
+        #expect(await waitFor { env.hotkeyRegistry.claimedBindings.contains(newBinding) })
+        #expect(
+            !env.hotkeyRegistry.claimedBindings.contains(oldBinding),
+            "The combination the destination no longer answers to must reach the frontmost app"
+        )
+
+        env.session.cancel()
+        #expect(await env.waitForPhase { $0 == .idle })
     }
 
-    @Test("Clearing one Activation Hotkey disarms it and leaves the others armed")
+    @Test("Clearing one Activation Hotkey releases its combinations and leaves the others claimed")
     @MainActor
-    func clearingDisarmsOnlyThatDestination() async {
-        let env = CaptureSessionTestEnvironment()
+    func clearingReleasesOnlyThatDestination() async {
+        let env = await recordingEnvironment()
         defer { env.cleanup() }
 
         let pasteID = OutputDestination.builtInPasteID
-        let copyID = OutputDestination.builtInCopyID
         guard let pasteIndex = env.settings.outputDestinations.firstIndex(where: { $0.id == pasteID }),
-              let copyBinding = env.settings.outputDestinations.first(where: { $0.id == copyID })?.activationHotkey
+              let copyBinding = env.settings.outputDestinations
+                  .first(where: { $0.id == OutputDestination.builtInCopyID })?.activationHotkey
         else {
             Issue.record("Built-in Paste or Copy destination missing from settings")
             return
         }
+        let pasteBinding = env.settings.outputDestinations[pasteIndex].activationHotkey
         env.settings.outputDestinations[pasteIndex].activationHotkey = .unassigned
 
-        #expect(await waitForArmed(env.session) { $0[pasteID] == nil && $0[copyID] == copyBinding })
+        #expect(await waitFor { !env.hotkeyRegistry.claimedBindings.contains(pasteBinding) })
+        #expect(
+            env.hotkeyRegistry.claimedBindings.contains(copyBinding),
+            "Paste to Initial App still shares the key, and Copy is untouched"
+        )
+        #expect(
+            env.hotkeyRegistry.claimedBindings.contains { $0.keyCode == Self.pKeyCode },
+            "Shift+Option+P belongs to another destination and stays claimed"
+        )
+
+        env.session.cancel()
+        #expect(await env.waitForPhase { $0 == .idle })
     }
 
-    @Test("A new destination's Activation Hotkey is armed as soon as it is bound")
+    @Test("A new destination's Activation Hotkey is claimed as soon as it is bound")
     @MainActor
-    func addedDestinationIsArmed() async {
-        let env = CaptureSessionTestEnvironment()
+    func addedDestinationIsClaimed() async {
+        let env = await recordingEnvironment()
         defer { env.cleanup() }
 
         let newID = env.settings.addDestination()
-        let newBinding = HotkeyBinding(keyCode: KeyCodeMap.slashKeyCode, modifiers: 0x20000)
+        let newBinding = HotkeyBinding(
+            keyCode: KeyCodeMap.hKeyCode,
+            modifiers: UInt64(CGEventFlags.maskAlternate.rawValue)
+        )
         guard let index = env.settings.outputDestinations.firstIndex(where: { $0.id == newID }) else {
             Issue.record("Added destination missing from settings")
             return
         }
         env.settings.outputDestinations[index].activationHotkey = newBinding
 
-        #expect(await waitForArmed(env.session) { $0[newID] == newBinding })
+        #expect(await waitFor { env.hotkeyRegistry.claimedBindings.contains(newBinding) })
+
+        env.session.cancel()
+        #expect(await env.waitForPhase { $0 == .idle })
     }
 
     @Test("Re-binding the toggle hotkey takes effect for the next key press, without a relaunch")

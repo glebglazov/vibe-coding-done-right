@@ -11,7 +11,7 @@ These rules exist to prevent specific problems encountered in a previous version
 - `AudioRecorder` — recording only
 - `ParakeetProvider` — transcription only
 - `PasteAction`/`BashAction` — post-transcription actions only
-- `GlobalHotkeyManager` — hotkey registration only
+- `CarbonHotkeyRegistry` — hotkey registration only
 
 **Limit:** No class should exceed 300 lines. If it does, it's doing too much — split it.
 

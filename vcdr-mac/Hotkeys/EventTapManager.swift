@@ -3,7 +3,7 @@ import ApplicationServices
 import OSLog
 
 /// Manages a CGEvent tap lifecycle: creation, run loop source, enable/disable, and cleanup.
-/// Used by GlobalHotkeyManager and DestinationHotkeyManager to avoid duplicating tap boilerplate.
+/// Used by ModeSwitcherPanel to avoid duplicating tap boilerplate.
 final class EventTapManager {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
