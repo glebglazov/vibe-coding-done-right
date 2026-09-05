@@ -26,6 +26,11 @@ judge columns are Judge Score overall means, one per reading: `blind` never saw
 the case's reference, `anchored` scored deductions away from it. Each holds only
 within the judge named beside it, so no judge column is ever read against another
 judge's column, against the other mode, or against `word`.
+
+A mean that names a case count — `0.986 (claude-opus-5, 21/28 cases)` — was taken
+over that many of the run's cases and not the rest, so it is not a reading of the
+whole run and does not compare with one. A run the axis read none of holds no mean
+and prints `—`.
 """
 
 COLUMNS = [
@@ -47,15 +52,33 @@ COLUMNS = [
 MISSING = "—"
 
 
+def mean_cell(value, scores, note=None):
+    """One mean, and what has to be read with it.
+
+    A run with no mean on the axis reads as unscored: an axis that read none of
+    the run's cases holds no number, and printing the absence as a value would put
+    a run nobody scored in the same column as the runs somebody did. A mean over
+    part of a run carries the part, because a mean over 21 of 28 cases answers a
+    different question from a mean over all 28 and would otherwise print as though
+    it were the same reading.
+    """
+    if value is None:
+        return MISSING
+    marks = [note] if note else []
+    if scores.partial:
+        marks.append("{scored}/{of} cases".format(**scores.coverage))
+    return f"{value} ({', '.join(marks)})" if marks else str(value)
+
+
 def deterministic_columns(run):
     if run.deterministic is None:
         return [MISSING] * 4
-    scores = run.deterministic.summary
+    scores = run.deterministic
     return [
-        scores["word_score_mean"],
-        scores["punctuation_score_mean"],
-        scores["content_loss"],
-        scores["invented"],
+        mean_cell(scores.summary["word_score_mean"], scores),
+        mean_cell(scores.summary["punctuation_score_mean"], scores),
+        scores.summary["content_loss"],
+        scores.summary["invented"],
     ]
 
 
@@ -67,7 +90,9 @@ def judge_columns(run):
         scores = run.judges.get(mode)
         columns.append(
             MISSING if scores is None
-            else f"{scores.summary['overall_mean']} ({scores.summary['judge']['model']})"
+            else mean_cell(
+                scores.summary["overall_mean"], scores, scores.summary["judge"]["model"]
+            )
         )
     return columns
 

@@ -10,11 +10,12 @@ Run: ./test_judge_run.py
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
 import judge_run
-from judge_run import MODES, Judge, judge_run as judge_archived_run
+from judge_run import MODES, ClaudeCliBackend, Judge, judge_run as judge_archived_run
 from ledger import LEDGER, ArchivedRun
 from test_runner import run_tests
 
@@ -145,6 +146,76 @@ def test_every_judged_case_carries_the_judge_that_produced_it():
     # The judge axis reports only itself: no deterministic number is read in, and
     # nothing here blends the two.
     assert "word_score_mean" not in scores and "metric" not in scores, sorted(scores)
+
+
+def test_the_cli_judge_is_given_no_tool_that_could_reach_the_eval_set():
+    """The CLI judge is an agent, and an agent that can open evals.json has seen
+    the reference — which would make a blind reading an anchored one without
+    anything in the file saying so. The ban belongs in the command, not in the
+    caller who remembers to pass it."""
+    backend = ClaudeCliBackend("claude-opus-5")
+    argv = backend.argv("the rubric")
+    assert argv[argv.index("--tools") + 1] == "", argv
+    # And nothing of this project's own configuration reaches the judge either:
+    # the rubric is the whole of what it was told.
+    assert "--safe-mode" in argv and "--strict-mcp-config" in argv, argv
+    assert argv[argv.index("--system-prompt") + 1] == "the rubric", argv
+    # The rubric replaces the CLI's own prompt rather than riding on top of it.
+    assert "--append-system-prompt" not in argv, argv
+
+
+def test_the_cli_judge_does_not_carry_the_api_key_into_the_subscription():
+    """Judging through the CLI is a decision to spend the subscription. The eval
+    commands export a key into the shell for the arms, and the CLI would spend it
+    where it found one, so it does not travel into the judge."""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    os.environ["ANTHROPIC_API_KEY"] = "sk-should-not-travel"
+    try:
+        environment = ClaudeCliBackend("claude-opus-5").environment()
+    finally:
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        if key is not None:
+            os.environ["ANTHROPIC_API_KEY"] = key
+    assert "ANTHROPIC_API_KEY" not in environment, sorted(environment)
+    assert "ANTHROPIC_AUTH_TOKEN" not in environment, sorted(environment)
+    # The rest of the environment is left alone: PATH is how the CLI is found.
+    assert environment.get("PATH") == os.environ.get("PATH"), environment.get("PATH")
+
+
+def test_a_cli_reading_says_which_transport_took_it():
+    """Only the API transport can pin sampling, so the same judge model read
+    through the two is two measurements. The runtime is what tells them apart in
+    the record, and no temperature is claimed that was never set."""
+    backend = ClaudeCliBackend("claude-opus-5")
+    assert backend.runtime().startswith("claude-code-cli "), backend.runtime()
+    assert backend.sampling == {"temperature": None}, backend.sampling
+    assert Judge(backend).identity()["runtime"] == backend.runtime()
+
+
+def test_the_cli_judge_refuses_a_reply_from_a_model_it_did_not_ask_for():
+    """A pinned judge that silently resolved elsewhere would break both things the
+    pinning buys: that no model grades its own arm, and that two runs' scores mean
+    the same thing."""
+    backend = ClaudeCliBackend("claude-opus-5")
+    answered = json.dumps({
+        "subtype": "success",
+        "is_error": False,
+        "result": "{}",
+        # A turn may touch a model of its own beside the one that answered.
+        "modelUsage": {"claude-opus-5": {}, "claude-haiku-4-5-20251001": {}},
+    })
+    assert backend.reply(answered) == "{}", answered
+
+    elsewhere = json.dumps({
+        "subtype": "success", "is_error": False, "result": "{}",
+        "modelUsage": {"claude-sonnet-5": {}},
+    })
+    try:
+        backend.reply(elsewhere)
+    except OSError as refusal:
+        assert "claude-opus-5" in str(refusal), refusal
+    else:
+        raise AssertionError("a reply from an unasked model was accepted")
 
 
 def test_a_model_may_not_grade_its_own_arm():

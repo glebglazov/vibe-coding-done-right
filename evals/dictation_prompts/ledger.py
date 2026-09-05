@@ -138,13 +138,44 @@ class ArchivedRun:
 JUDGE_FILES = {"blind": "judge_blind.json", "anchored": "judge.json"}
 DEFAULT_JUDGE_MODE = "anchored"
 
+# What a case carries on each axis when that axis read it. The deterministic file
+# scores a case on two numbers and the judge file on five, but each has one the
+# case cannot be read without, and that is the one that says the case was read.
+DETERMINISTIC_READING = "word_score"
+JUDGE_READING = "overall"
+
 
 class AxisScores:
-    """One axis' score file: its run-level reading, and its reading per case."""
+    """One axis' score file: its run-level reading, and its reading per case.
 
-    def __init__(self, scores):
+    A case the axis could not read — a call that failed, a judge that stopped
+    partway through the run — stays in the file with its error and no reading, so
+    the run's case list is whole and the mean is over fewer cases than that list
+    holds. Which cases those were is asked here, because a mean over part of a run
+    answers a different question from a mean over all of it and nothing else in the
+    file says so.
+    """
+
+    def __init__(self, scores, reading):
         self.summary = scores
+        # The key a case carries when this axis read it. Each score file names its
+        # reading differently, and it is the presence of that key, not a count in
+        # the summary, that says which cases the file's mean was taken over.
+        self.reading = reading
         self.cases = {case["id"]: case for case in scores["cases"]}
+
+    @property
+    def scored(self):
+        return [case for case in self.cases.values() if self.reading in case]
+
+    @property
+    def partial(self):
+        """Whether this axis read some of the run's cases but not all of them."""
+        return 0 < len(self.scored) < len(self.cases)
+
+    @property
+    def coverage(self):
+        return {"scored": len(self.scored), "of": len(self.cases)}
 
 
 class ScoredRun:
@@ -161,13 +192,13 @@ class ScoredRun:
         self.directory = Path(directory).resolve()
         self.manifest = read_json(self.directory / "manifest.json")
         self.recorded = {entry["id"]: entry for entry in self.manifest["cases"]}
-        self.deterministic = self.axis("deterministic.json")
+        self.deterministic = self.axis("deterministic.json", DETERMINISTIC_READING)
         self.judges = self.judge_readings()
 
-    def axis(self, filename):
+    def axis(self, filename, reading):
         """One axis' scores, or None where this run has not been scored on it."""
         path = self.directory / filename
-        return AxisScores(read_json(path)) if path.exists() else None
+        return AxisScores(read_json(path), reading) if path.exists() else None
 
     def judge_readings(self):
         """Every judge reading this run carries, keyed by the mode that produced it.
@@ -179,7 +210,7 @@ class ScoredRun:
         """
         readings = {}
         for mode, filename in JUDGE_FILES.items():
-            scores = self.axis(filename)
+            scores = self.axis(filename, JUDGE_READING)
             if scores is None:
                 continue
             recorded = scores.summary["judge"].get("mode", DEFAULT_JUDGE_MODE)

@@ -29,6 +29,8 @@ export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
 ./index_ledger.py                # regenerate ledger/index.md
 ```
 
+The key is for the arms. `judge_run.py` reaches its judge through the local Claude Code CLI by default and spends that subscription instead, so a judge pass runs whether or not the key has a balance; `--via api` calls the Anthropic API with the key as it did before. The two are not interchangeable readings — see "One judge, one transport, one mode" below.
+
 If `op-cache` isn't installed, any other way to populate `ANTHROPIC_API_KEY` works — the script just needs it exported.
 
 Recording costs one API call per case; deterministic scoring costs nothing and calls no model. Judging costs one judge call per case. Both read the ledger only, so any archived run can be rescored and re-judged at any time and never has to be re-run to be compared.
@@ -106,9 +108,26 @@ A blind rubric that named a reference would be an anchored rubric under another
 name, so `judge_run.py` refuses to judge blind if the rubric sections it applies
 mention an expected or reference output at all.
 
-A Judge Score is reproducible only within one judge model and one mode. Every case
-carries both, and the two axes are read side by side. Nothing averages them
-together, and Judge Scores from different judges are not comparable.
+### One judge, one transport, one mode
+
+A Judge Score is reproducible only within one judge model, one transport and one
+mode. Every case carries the model and the mode; the run's judge record carries
+the transport as its `runtime`. Nothing averages them together, and Judge Scores
+from different judges are not comparable.
+
+The transport is part of the identity because only the API backend can pin
+sampling: `--via api` sends `temperature: 0`, and the CLI exposes no such setting,
+so a reading taken through it records `temperature: null` — not zero, but *not
+claimed*. The same judge model over two samplings is two measurements, and
+`compare_runs.py` marks a judge column whose arms were not all read through the
+same one.
+
+The CLI judge is an agent, which the API judge is not, so two things are fixed in
+the backend rather than left to whoever runs it: it is given no tools at all, and
+the project's own configuration is kept out of its context. An agent holding a
+file tool could open `evals.json` and find the reference, and a blind reading
+taken by a judge that has seen the reference is an anchored reading with extra
+steps.
 
 
 ## What a comparison produces
@@ -130,9 +149,11 @@ Per case and per category it prints two tables:
   other mode is unscored here and wins nothing here.
 
 The two axes are separate readings and never combine. Nothing averages them, and
-arms judged by different judges — or by different modes, or one judged and one
-not — are labelled as not comparable on the judge axis, because a Judge Score
-holds only within one judge model and one mode. A winner is named only where at
+arms judged by different judges — or through different transports, or by different
+modes, or one judged and one not — are labelled as not comparable on the judge
+axis, because a Judge Score holds only within one judge model, one transport and
+one mode. An arm whose judge only got partway through it carries the case count it
+was read over, since a mean over part of a run is not the run's score. A winner is named only where at
 least two arms carry a score in the same mode.
 
 Two arms are compared on a case only where their **Case Fingerprints** agree.
@@ -591,11 +612,13 @@ Two more things the blind reading shows:
 Reproduce (no re-recording; the outputs are archived):
 
 ```bash
+# --via api: these readings were taken through the API, and the transport is part
+# of what makes them reproducible.
 export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
 for run in ledger/20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability \
            ledger/20260904T115807Z__evals__gemma4-e2b__prompt_readability \
            ledger/20260904T142156Z__evals-english__hf.co-superwhisper-s1-mini-GGUF-Q4_K_M__s1_mini; do
-  ./judge_run.py --mode blind "$run"
+  ./judge_run.py --mode blind --via api "$run"
 done
 ./compare_runs.py ledger/20260904T114458Z__evals__claude-haiku-4-5-20251001__prompt_readability \
                   ledger/20260904T115807Z__evals__gemma4-e2b__prompt_readability \

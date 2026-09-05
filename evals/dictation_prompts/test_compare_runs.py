@@ -18,6 +18,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from statistics import mean
 
 from compare_runs import (
     AXIS_SEPARATION,
@@ -187,30 +188,41 @@ def record(
     (directory / "deterministic.json").write_text(json.dumps(scores))
     if judged_by:
         (directory / JUDGE_FILES[judge_mode]).write_text(
-            json.dumps(
-                {
-                    "run_id": directory.name,
-                    "judge": {
-                        "model": judged_by,
-                        "mode": judge_mode,
-                        "rubric": "agents/assessor.md",
-                    },
-                    "overall_mean": 0.9,
-                    "dimension_means": {},
-                    "cases": [
-                        {
-                            "id": case["id"],
-                            "category": case["category"],
-                            "judge_model": judged_by,
-                            "judge_mode": judge_mode,
-                            "overall": judge_overall[case["id"]],
-                        }
-                        for case in cases
-                    ],
-                }
-            )
+            json.dumps(judge_file(directory, cases, judged_by, judge_mode, judge_overall))
         )
     return ScoredRun(directory)
+
+
+def judge_file(directory, cases, judged_by, judge_mode, judge_overall):
+    """A judge file as judge_run.py leaves one.
+
+    A case the judge did not get through is written the way that command writes
+    it — in the file, with its error and no score — and the mean is over the rest,
+    which is what makes a partial reading look like a whole one to anybody reading
+    only the mean.
+    """
+    scores = [
+        {
+            "id": case["id"],
+            "category": case["category"],
+            "judge_model": judged_by,
+            "judge_mode": judge_mode,
+            **(
+                {"overall": judge_overall[case["id"]]}
+                if judge_overall[case["id"]] is not None
+                else {"error": "judge did not read this case"}
+            ),
+        }
+        for case in cases
+    ]
+    judged = [score["overall"] for score in scores if "overall" in score]
+    return {
+        "run_id": directory.name,
+        "judge": {"model": judged_by, "mode": judge_mode, "rubric": "agents/assessor.md"},
+        "overall_mean": round(mean(judged), 3) if judged else None,
+        "dimension_means": {},
+        "cases": scores,
+    }
 
 
 class Ledger:
@@ -389,6 +401,47 @@ def test_an_arm_that_scored_zero_reads_as_zero_and_not_as_unscored():
         # One row per axis, and neither may spend the unscored sentinel on a zero.
         assert len(rows) == 2, rows
         assert all(row.rstrip().endswith("0.0") for row in rows), rows
+
+    with_ledger(body)
+
+
+def test_an_arm_the_judge_only_partly_read_says_so():
+    """A judge that stopped partway — an exhausted API balance, mid-run — leaves an
+    arm scored on some of its cases and not the rest. The mean over those cases is
+    not the arm's score, so the count travels with it; without that, a reading of
+    two cases sits in the same column as a reading of three."""
+
+    def body(ledger):
+        partial = record(
+            ledger.a.directory.parent / "run-partial",
+            ledger.eval_set,
+            "model-partial",
+            OUTPUTS_B,
+            "judge-x",
+            {**JUDGE_OVERALL, "voice_kept": None},
+        )
+        runs = [ledger.c, partial]
+        comparison = compare(runs)
+        arm = next(a for a in comparison["arms"] if a["label"] == "B")
+        assert arm["judge_coverage"]["anchored"] == {"scored": 2, "of": 3}, arm
+        # The case the judge never reached holds its error and no score, so it is
+        # unscored rather than zero, and one arm's score alone ranks nothing.
+        case = cells(comparison, "voice_kept")
+        assert "overall" not in case[ANCHORED]["B"], case
+        assert case["winner"][ANCHORED] is None, case
+
+        printed = report(comparison, runs)
+        row = next(
+            line
+            for line in printed.split("JUDGE AXIS (anchored)")[1].splitlines()
+            if line.startswith("voice_kept")
+        )
+        assert row.split()[2:] == ["0.8", UNSCORED, UNSCORED], row
+        assert "B: judged by judge-x (2/3 cases)" in printed, printed
+        assert "smaller case set" in printed, printed
+        # The arm the judge read whole is not marked, so the mark means only what
+        # it says.
+        assert "A: judged by judge-x |" in printed, printed
 
     with_ledger(body)
 

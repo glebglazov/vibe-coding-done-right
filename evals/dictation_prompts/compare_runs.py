@@ -217,6 +217,25 @@ def compare(runs):
                     mode: run.judges[mode].summary["judge"]["model"] if mode in run.judges else None
                     for mode in modes
                 },
+                # Which transport took each reading. Only an HTTP backend can pin
+                # sampling, so the same judge model read through the CLI and
+                # through the API is two measurements, and neither column may hold
+                # both without saying so.
+                "judged_via": {
+                    mode: run.judges[mode].summary["judge"].get("runtime")
+                    if mode in run.judges
+                    else None
+                    for mode in modes
+                },
+                # How much of the run each mode actually read. A judge that stopped
+                # partway leaves cells missing rather than a file missing, and this
+                # comparison averages an arm over the cells it has — so the count
+                # has to be printed beside the mean or two arms read over different
+                # case sets rank against each other with nothing saying so.
+                "judge_coverage": {
+                    mode: run.judges[mode].coverage if mode in run.judges else None
+                    for mode in modes
+                },
                 **run.arm,
             }
             for index, run in enumerate(runs)
@@ -428,29 +447,66 @@ def run_metric(comparison, label):
     return arm.get("metric") or "not scored"
 
 
+def partial_coverage(arm, mode):
+    """The cases one mode read of this arm, where that is not all of them."""
+    coverage = arm.get("judge_coverage", {}).get(mode)
+    if not coverage or coverage["scored"] == coverage["of"]:
+        return None
+    return coverage
+
+
+def judge_identity(arm, mode):
+    """Who took this arm's reading in this mode, and through what: a Judge Score
+    holds within one judge model and one transport, so the pair is the identity
+    and neither half of it stands alone."""
+    return arm["judged_by"][mode], arm.get("judged_via", {}).get(mode)
+
+
+def judged_by_text(arm, mode, name_transport=False):
+    """Which judge read this arm in this mode, through what where the arms differ
+    on it, and how much of the arm that judge got through.
+
+    All three belong in the header, because it is where a reader meets the column
+    before any number in it: a mean over part of an arm is not the arm's score,
+    and a mean taken through another transport is not the same measurement.
+    """
+    judge, transport = judge_identity(arm, mode)
+    if not judge:
+        return f"not judged {mode}"
+    text = f"judged by {judge}"
+    if name_transport and transport:
+        text += f" via {transport}"
+    coverage = partial_coverage(arm, mode)
+    return f"{text} ({coverage['scored']}/{coverage['of']} cases)" if coverage else text
+
+
 def judge_section(comparison, mode, fitted_note=None):
     """One judge mode's table. An arm read in another mode is not scored here and
     wins nothing here: a blind reading and an anchored one measure different things,
     and putting them in one column would rank one against the other."""
     axis = judge_axis(mode)
     labels = [arm["label"] for arm in comparison["arms"]]
+    identities = {judge_identity(arm, mode) for arm in comparison["arms"]}
+    mixed = len(identities) > 1
     judges = {
-        arm["label"]: (
-            f"judged by {arm['judged_by'][mode]}"
-            if arm["judged_by"][mode]
-            else f"not judged {mode}"
-        )
+        arm["label"]: judged_by_text(arm, mode, name_transport=mixed)
         for arm in comparison["arms"]
     }
     lines = [
         f"JUDGE AXIS ({mode}) — "
         + " | ".join(f"{label}: {judge}" for label, judge in judges.items())
     ]
-    if len({arm["judged_by"][mode] for arm in comparison["arms"]}) > 1:
+    if mixed:
         lines.append(
-            f"These arms were judged by different judges, or one was not judged {mode}: a "
-            "Judge Score holds only within one judge model and one mode, so these columns "
-            "do not compare."
+            "These arms were judged by different judges or through different transports, "
+            f"or one was not judged {mode}: a Judge Score holds only within one judge "
+            "model, one transport and one mode, so these columns do not compare."
+        )
+    if any(partial_coverage(arm, mode) for arm in comparison["arms"]):
+        lines.append(
+            f"An arm above is marked with a case count: the {mode} judge read that many "
+            "of the cases it answered and not the rest, so its means below are over a "
+            "smaller case set than the arms beside it and do not rank against them."
         )
     if fitted_note:
         lines.append(fitted_note)

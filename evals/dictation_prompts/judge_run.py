@@ -2,8 +2,18 @@
 """Score an archived Eval Run on the judge axis.
 
 Usage:
-  export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
   ./judge_run.py ledger/20260904T101031Z__evals__claude-haiku-4-5-20251001__prompt_lean
+
+The judge is reached through the local Claude Code CLI by default, which spends
+its subscription rather than an API key. `--via api` calls the Anthropic API
+instead and needs a key:
+
+  export ANTHROPIC_API_KEY=$(op-cache read "op://Private/Anthropic/api_key")
+  ./judge_run.py <run> --via api
+
+The two are not interchangeable readings: only the API transport can pin
+sampling, so the runtime is recorded beside the judge model and a score holds
+within one transport as it holds within one model and one mode.
 
 A Judge Score measures what no Deterministic Score reaches: whether the
 speaker's voice survived, and whether the model over-edited. It reads each
@@ -30,7 +40,10 @@ re-judged, without being re-run.
 
 import argparse
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +55,11 @@ from record_run import ANTHROPIC_ENDPOINT, AnthropicArm
 # under measurement never grades its own run. Haiku is a contestant in the matrix
 # this ledger exists to run, so it cannot sit here.
 DEFAULT_JUDGE_MODEL = "claude-opus-5"
+
+# How the judge is reached unless told otherwise: the local CLI, on a subscription.
+# An API key belongs to the arms, and a judge that spends one is a judge nobody
+# runs when the balance is out.
+DEFAULT_VIA = "cli"
 
 RUBRIC = HERE / "agents" / "assessor.md"
 
@@ -177,6 +195,125 @@ def rubric_weights(rubric):
     if round(sum(weights.values()), 6) != 1.0:
         raise SystemExit(f"{RUBRIC.name} weights do not sum to 1: {weights}")
     return weights
+
+
+
+CLI_BINARY = "claude"
+CLI_TIMEOUT_SECONDS = 180
+
+
+class ClaudeCliBackend:
+    """The judge reached through the local Claude Code CLI, on its own subscription
+    rather than on an API key.
+
+    It answers the same four calls the Judge asks of a backend. What it has to
+    arrange that an HTTP backend does not is that the thing on the other end is an
+    agent: an agent holding tools is free to go and open the eval set, and a blind
+    reading taken by a judge that can read evals.json is an anchored reading with
+    extra steps. So the tools are banned here rather than through a flag a caller
+    could drop, and the project's own configuration — its CLAUDE.md, its skills,
+    its MCP servers — is kept out of the judge's context for the same reason.
+
+    Nothing here pins sampling, because the CLI exposes none. That is why the
+    runtime is part of the judge's identity: a reading taken through this backend
+    and one taken through the API are the same model over different sampling, and
+    a Judge Score holds only within one of them.
+    """
+
+    def __init__(self, model, binary=CLI_BINARY):
+        self.model = model
+        self.endpoint = shutil.which(binary) or binary
+        if not shutil.which(binary):
+            raise SystemExit(f"{binary} is not on PATH; judging --via cli needs the Claude Code CLI.")
+        self.sampling = {"temperature": None}
+        self.version = self.cli_version()
+
+    def cli_version(self):
+        reported = subprocess.run(
+            [self.endpoint, "--version"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        return reported.split()[0] if reported else "unknown"
+
+    def runtime(self):
+        return f"claude-code-cli {self.version}"
+
+    def argv(self, system_prompt):
+        """The whole command, so a test can read what the judge was and was not given."""
+        return [
+            self.endpoint,
+            "--print",
+            "--model", self.model,
+            "--system-prompt", system_prompt,
+            # No tool may reach the eval set, and none is needed: the judge is
+            # shown everything it scores.
+            "--tools", "",
+            # No CLAUDE.md, skills, hooks, plugins or MCP servers: the rubric is
+            # the whole of what this judge was told.
+            "--safe-mode",
+            "--strict-mcp-config",
+            "--no-session-persistence",
+            "--output-format", "json",
+        ]
+
+    def environment(self):
+        """This process' environment with the Anthropic credentials taken out.
+
+        The eval commands export an API key into the shell for the arms, and the
+        CLI would spend it where it finds one. Judging here is a decision to spend
+        the subscription instead, so the key does not travel into the judge.
+        """
+        environment = dict(os.environ)
+        for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+            environment.pop(name, None)
+        return environment
+
+    def complete(self, system_prompt, user_message):
+        try:
+            finished = subprocess.run(
+                self.argv(system_prompt),
+                input=user_message,
+                env=self.environment(),
+                capture_output=True,
+                text=True,
+                timeout=CLI_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            raise OSError(f"the CLI did not answer within {CLI_TIMEOUT_SECONDS}s")
+        if finished.returncode != 0:
+            raise OSError(f"claude exited {finished.returncode}: {finished.stderr.strip()[:200]}")
+        return self.reply(finished.stdout)
+
+    def reply(self, stdout):
+        payload = json.loads(stdout)
+        if payload.get("is_error") or payload.get("subtype") != "success":
+            raise OSError(f"the CLI reported {payload.get('subtype')}: {str(payload.get('result'))[:200]}")
+        self.confirm_model(payload)
+        return payload["result"]
+
+    def confirm_model(self, payload):
+        """That the model asked for is a model that answered.
+
+        The judge is pinned so that no model grades its own arm and so that two
+        runs' scores mean the same thing; a name quietly resolving to something
+        else would break both. The CLI reports every model a turn touched, and a
+        turn may touch one of its own beside the one that answered, so what is
+        checked is that the pinned model is among them.
+        """
+        used = payload.get("modelUsage") or {}
+        if self.model not in used:
+            raise OSError(f"asked {self.model}; the CLI answered with {sorted(used) or 'no model'}")
+
+
+def backend_for(via, model, endpoint):
+    """The transport the judge reads through.
+
+    The CLI spends a subscription and the API spends a key, and they are not two
+    ways of taking one reading: only the API backend can pin sampling. Which one
+    it was is recorded on every case, in the runtime.
+    """
+    if via == "cli":
+        return ClaudeCliBackend(model)
+    return AnthropicArm(model, endpoint)
 
 
 class Judge:
@@ -358,7 +495,18 @@ def main():
             f"reference too, scored as deductions from it (default: {DEFAULT_MODE})"
         ),
     )
-    parser.add_argument("--endpoint", default=ANTHROPIC_ENDPOINT, help="judge endpoint URL")
+    parser.add_argument(
+        "--via",
+        choices=("cli", "api"),
+        default=DEFAULT_VIA,
+        help=(
+            "cli: the local Claude Code CLI, on its subscription. api: the "
+            f"Anthropic API, needing ANTHROPIC_API_KEY (default: {DEFAULT_VIA})"
+        ),
+    )
+    parser.add_argument(
+        "--endpoint", default=ANTHROPIC_ENDPOINT, help="judge endpoint URL, with --via api"
+    )
     arguments = parser.parse_args()
 
     run = ArchivedRun(arguments.run)
@@ -368,7 +516,10 @@ def main():
             "a model must not grade its own arm. Pass --judge-model."
         )
 
-    judge = Judge(AnthropicArm(arguments.judge_model, arguments.endpoint), MODES[arguments.mode])
+    judge = Judge(
+        backend_for(arguments.via, arguments.judge_model, arguments.endpoint),
+        MODES[arguments.mode],
+    )
     scores = judge_run(run, judge)
     # One file per mode: a blind reading never overwrites the anchored record of
     # what that mode read, and neither is ever read as the other.
