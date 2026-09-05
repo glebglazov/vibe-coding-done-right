@@ -43,7 +43,7 @@ simulates Cmd+V through a CGEvent) never runs. Do the same in any new test —
 assert against Copy, a bash destination, or the recorded history, never against
 a real paste.
 
-Tests run as a hosted unit test bundle inside the app process (`BUNDLE_LOADER`). The app detects `XCTestBundlePath` and skips heavy initialization (CoreML model loading, audio device enumeration, CGEvent taps) so the test host launches fast.
+Tests run as a hosted unit test bundle inside the app process (`BUNDLE_LOADER`). The app detects `XCTestBundlePath` and skips heavy initialization (CoreML model loading, audio device enumeration) so the test host launches fast.
 
 Parallel testing is disabled in the scheme — tests share `UserDefaults` state via `StyleRegistry` and other components.
 
@@ -64,10 +64,10 @@ vcdr/
 ├── Audio/AudioRecorder.swift             # AVFoundation 16kHz mono recording
 ├── Hotkeys/
 │   ├── CarbonHotkeyRegistry.swift        # Claims key combos; survives Secure Input
-│   ├── SuspendableHotkeyRegistry.swift   # The registry every owner claims through; drops and restores every claim at once
-│   └── GlobalHotkeyManager.swift         # CGEvent tap; no hotkey uses it any more
+│   └── SuspendableHotkeyRegistry.swift   # The registry every owner claims through; drops and restores every claim at once
 ├── Actions/
 │   ├── PostTranscriptionAction.swift     # Protocol
+│   ├── AccessibilityGrant.swift          # Has the grant? Plus the app's one request for it
 │   ├── PasteAction.swift                 # Clipboard + focus restore + simulated Cmd+V
 │   └── BashAction.swift                  # Shell command + clipboard copy + optional paste
 ├── Orchestration/

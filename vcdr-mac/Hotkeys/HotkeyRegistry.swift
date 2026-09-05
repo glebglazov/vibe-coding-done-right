@@ -4,9 +4,8 @@ import Foundation
 /// combinations from the system.
 ///
 /// `CarbonHotkeyRegistry` is production. Substituting a double is the only way a
-/// test can drive a key press at all: the event tap mechanism the rest of the app
-/// still uses cannot be installed without an Accessibility grant, which the test
-/// host does not have and must not be given.
+/// test can drive a key press at all: the real mechanism registers with the window
+/// server, and no test can press a key there.
 @MainActor
 protocol HotkeyRegistry: AnyObject {
     /// Claims `binding` for as long as the returned handle is held.

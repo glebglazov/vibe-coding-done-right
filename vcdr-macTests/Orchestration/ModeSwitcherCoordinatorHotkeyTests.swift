@@ -33,7 +33,7 @@ struct ModeSwitcherCoordinatorHotkeyTests {
         modifiers: UInt64(CGEventFlags.maskControl.rawValue)
     )
 
-    private func makeEnvironment() -> Environment {
+    private func makeEnvironment(modeCount: Int = 1) -> Environment {
         let settings = AppSettings(userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!)
         settings.hotkeySettings.modeSwitcherHotkey = Self.binding
         // The switcher refuses to open with nothing to switch between, and a fresh
@@ -41,7 +41,7 @@ struct ModeSwitcherCoordinatorHotkeyTests {
         var mode = settings.activeMode
         mode.templateID = nil
         mode.processingType = .none
-        settings.modes = [mode]
+        settings.modes = [mode] + (1..<modeCount).map { Mode(id: UUID(), name: "Mode \($0 + 1)") }
         settings.activeModeID = mode.id
 
         let registry = FakeHotkeyRegistry()
@@ -85,6 +85,38 @@ struct ModeSwitcherCoordinatorHotkeyTests {
 
         #expect(await waitFor { env.registry.press(newBinding) })
         #expect(env.delegate.showCount == 1)
+    }
+
+    @Test("A digit picks a mode while the switcher is open, with push-to-talk modifiers still held")
+    func aDigitPicksAModeUnderHeldModifiers() async {
+        let env = makeEnvironment(modeCount: 2)
+        defer { env.coordinator.hideSwitcher() }
+
+        #expect(await waitFor { env.registry.claimedBindings == [Self.binding] })
+        #expect(env.registry.press(Self.binding))
+
+        let secondMode = env.settings.modes[1].id
+        let digitTwo = HotkeyBinding(
+            keyCode: KeyCodeMap.digitKeyCodes[1],
+            modifiers: UInt64(CGEventFlags.maskControl.rawValue | CGEventFlags.maskCommand.rawValue)
+        )
+        #expect(env.registry.press(digitTwo))
+
+        #expect(env.settings.activeModeID == secondMode)
+        #expect(env.delegate.hideCount == 1)
+    }
+
+    @Test("Closing the switcher hands every navigation key back to the frontmost app")
+    func closingReleasesTheNavigationKeys() async {
+        let env = makeEnvironment(modeCount: 2)
+
+        #expect(await waitFor { env.registry.claimedBindings == [Self.binding] })
+        #expect(env.registry.press(Self.binding))
+        #expect(env.registry.claimedBindings.count > 1)
+
+        env.coordinator.hideSwitcher()
+
+        #expect(env.registry.claimedBindings == [Self.binding])
     }
 
     @Test("Clearing the switcher shortcut hands the combination back")

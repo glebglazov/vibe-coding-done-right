@@ -32,6 +32,10 @@ enum KeyCodeMap {
     static let kKeyCode: UInt16 = 40
     static let lKeyCode: UInt16 = 37
 
+    /// The digit keys 1–9, in order. The mode switcher selects by position with
+    /// them, so their order is the meaning.
+    static let digitKeyCodes: [UInt16] = (1...9).compactMap { keyCode(for: Character("\($0)")) }
+
     // MARK: - Code → Name
 
     static let codeToName: [CGKeyCode: String] = [
@@ -58,6 +62,12 @@ enum KeyCodeMap {
     /// Returns the display name for a key code, or "Key<N>" for unknown codes.
     static func name(for keyCode: CGKeyCode) -> String {
         codeToName[keyCode] ?? "Key\(keyCode)"
+    }
+
+    /// The digit this key code types, or nil for any key that types something else.
+    static func digit(for keyCode: UInt16) -> Int? {
+        guard let name = codeToName[CGKeyCode(keyCode)], name.count == 1 else { return nil }
+        return name.first?.wholeNumberValue
     }
 
     // MARK: - Character → Code

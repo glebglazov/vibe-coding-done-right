@@ -7,7 +7,7 @@ import OSLog
 final class ModeSwitcherCoordinator {
     private let settings: AppSettings
     private let hotkeyRegistry: any HotkeyRegistry
-    private let panel = ModeSwitcherPanel()
+    private let panel: ModeSwitcherPanel
     private let overrides: SessionOverrides
     private let styleResolution: StyleResolutionPipeline
 
@@ -23,6 +23,7 @@ final class ModeSwitcherCoordinator {
     ) {
         self.settings = settings
         self.hotkeyRegistry = hotkeyRegistry
+        self.panel = ModeSwitcherPanel(hotkeyRegistry: hotkeyRegistry)
         self.overrides = overrides
         self.styleResolution = styleResolution
         observeHotkeySettings()

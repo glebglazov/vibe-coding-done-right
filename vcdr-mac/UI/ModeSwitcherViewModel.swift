@@ -116,11 +116,27 @@ final class ModeSwitcherViewModel {
         }.joined(separator: ", ")
     }
 
-    /// Returns true if the event was handled
-    func handleKeyEvent(_ event: NSEvent) -> Bool {
-        let keyCode = event.keyCode
-        let charsIgnoringModifiers = event.charactersIgnoringModifiers ?? ""
+    /// Every key the switcher answers to.
+    ///
+    /// The panel claims exactly these while it is open, so this list is not a
+    /// description of `handleKey(keyCode:)` — it is what makes the keys arrive at
+    /// all. A key added below without being added here is never pressed.
+    static let handledKeyCodes: [UInt16] = [
+        KeyCodeMap.escapeKeyCode,
+        KeyCodeMap.tabKeyCode,
+        KeyCodeMap.returnKeyCode,
+        KeyCodeMap.upArrowKeyCode,
+        KeyCodeMap.downArrowKeyCode,
+        KeyCodeMap.leftArrowKeyCode,
+        KeyCodeMap.rightArrowKeyCode,
+        KeyCodeMap.hKeyCode,
+        KeyCodeMap.jKeyCode,
+        KeyCodeMap.kKeyCode,
+        KeyCodeMap.lKeyCode
+    ] + KeyCodeMap.digitKeyCodes
 
+    /// Returns true if the key was handled
+    func handleKey(keyCode: UInt16) -> Bool {
         if keyCode == KeyCodeMap.escapeKeyCode {
             onDismiss()
             return true
@@ -139,15 +155,15 @@ final class ModeSwitcherViewModel {
 
         switch navigation.level {
         case .modes:
-            return handleModesKeyEvent(keyCode: keyCode, charsIgnoringModifiers: charsIgnoringModifiers)
+            return handleModesKeyEvent(keyCode: keyCode)
         case .parameters(let modeIndex):
             return handleParametersKeyEvent(keyCode: keyCode, modeIndex: modeIndex)
         case .options(let modeIndex, let parameterIndex):
-            return handleOptionsKeyEvent(keyCode: keyCode, charsIgnoringModifiers: charsIgnoringModifiers, modeIndex: modeIndex, parameterIndex: parameterIndex)
+            return handleOptionsKeyEvent(keyCode: keyCode, modeIndex: modeIndex, parameterIndex: parameterIndex)
         }
     }
 
-    private func handleModesKeyEvent(keyCode: UInt16, charsIgnoringModifiers: String) -> Bool {
+    private func handleModesKeyEvent(keyCode: UInt16) -> Bool {
         switch keyCode {
         case KeyCodeMap.downArrowKeyCode, KeyCodeMap.jKeyCode:
             highlightedIndex = min(highlightedIndex + 1, modes.count - 1)
@@ -177,7 +193,7 @@ final class ModeSwitcherViewModel {
             return true
         default:
             // Number keys 1-9 for modes
-            if let number = charsIgnoringModifiers.first?.wholeNumberValue,
+            if let number = KeyCodeMap.digit(for: keyCode),
                number >= 1, number <= modes.count {
                 confirmMode(modes[number - 1].id)
                 return true
@@ -215,7 +231,7 @@ final class ModeSwitcherViewModel {
         }
     }
 
-    private func handleOptionsKeyEvent(keyCode: UInt16, charsIgnoringModifiers: String, modeIndex: Int, parameterIndex: Int) -> Bool {
+    private func handleOptionsKeyEvent(keyCode: UInt16, modeIndex: Int, parameterIndex: Int) -> Bool {
         let mode = modes[modeIndex]
         let parameter = mode.parameters[parameterIndex]
         let optionCount = parameter.options.count
@@ -247,7 +263,7 @@ final class ModeSwitcherViewModel {
             return true
         default:
             // Number keys 1-9 for direct option selection
-            if let number = charsIgnoringModifiers.first?.wholeNumberValue,
+            if let number = KeyCodeMap.digit(for: keyCode),
                number >= 1, number <= optionCount {
                 let option = parameter.options[number - 1]
                 parameterOverrides[parameter.id] = option.value

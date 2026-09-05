@@ -4,10 +4,8 @@ import Foundation
 /// Test double for `HotkeyRegistry`. Records what is claimed and delivers a press
 /// to the claim holding a combination.
 ///
-/// This is what lets a test drive a hotkey at all: the event tap the rest of the
-/// app's hotkeys use cannot be installed without an Accessibility grant, so before
-/// this seam existed the nearest a test could get was asserting what a tap
-/// *targeted*.
+/// This is what lets a test drive a hotkey at all: the mechanism it stands in for
+/// registers with the window server, which a test host cannot press.
 @MainActor
 final class FakeHotkeyRegistry: HotkeyRegistry {
 

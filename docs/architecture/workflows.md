@@ -18,8 +18,8 @@
 1. Update `AppSettings` if new settings are needed
 2. Take `HotkeyRegistry` through the owner's init and claim the combination from it —
    the claim's lifetime is the hotkey's, so release the handle to give the
-   combination back. No hotkey is on an event tap any more, and
-   `GlobalHotkeyManager` has no users at all. Don't add to it.
+   combination back. This is the app's only key-press mechanism; there is no event
+   tap left to fall back on.
 3. Update `CaptureSession+Hotkeys.swift` for behavior changes to the session's own hotkeys
 4. Don't give the owner a "suppressed" flag. The registry it claims through is a
    `SuspendableHotkeyRegistry`, and `AppDependencies.suspendHotkeys()` hands every
@@ -30,8 +30,8 @@
 ## Permissions Required
 
 1. **Microphone** — for audio recording (`NSMicrophoneUsageDescription` in Info.plist)
-2. **Accessibility** — for simulated paste (Cmd+V via CGEvent) and selection capture. Carbon hotkey claims need no grant, so every hotkey works without it.
-3. **No App Sandbox** — required for CGEvent tap at `.cgSessionEventTap`
+2. **Accessibility** — for simulated paste (Cmd+V via CGEvent) and selection capture. Carbon hotkey claims need no grant, so every hotkey works without it. Nothing asks for the grant at launch: the first paste that finds the process untrusted shows the system dialog once (`AccessibilityGrant`), and the Home tab carries the standing notice.
+3. **No App Sandbox** — required for the Accessibility APIs and for posting the simulated Cmd+V
 
 ## Things to Watch Out For
 

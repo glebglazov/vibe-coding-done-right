@@ -1,11 +1,17 @@
 import AppKit
+import OSLog
 import SwiftUI
 
 final class ModeSwitcherPanel {
     private var panel: NSPanel?
     private var eventMonitor: Any?
-    private let keyboardTap = EventTapManager()
+    private let hotkeyRegistry: any HotkeyRegistry
+    private var navigationKeyClaims: [HotkeyClaim] = []
     private var _viewModel: ModeSwitcherViewModel?
+
+    init(hotkeyRegistry: any HotkeyRegistry) {
+        self.hotkeyRegistry = hotkeyRegistry
+    }
 
     /// The current view model, exposed for external updates (e.g., style cycling).
     var viewModel: ModeSwitcherViewModel? { _viewModel }
@@ -23,6 +29,7 @@ final class ModeSwitcherPanel {
     private var screenFrame: NSRect = .zero
     private var menuBarHeight: CGFloat = 0
 
+    @MainActor
     func show(viewModel: ModeSwitcherViewModel) {
         hide()
 
@@ -54,7 +61,7 @@ final class ModeSwitcherPanel {
         }
 
         // Don't call makeKey() — that would steal focus from the foreground app during recording.
-        // Keyboard events are captured via a CGEvent tap instead of a local event monitor.
+        // Navigation keys are claimed from the system instead of received as a key window's events.
         panel.orderFrontRegardless()
         self.panel = panel
         self._viewModel = viewModel
@@ -72,35 +79,41 @@ final class ModeSwitcherPanel {
             panel.animateResize(to: newFrame)
         }
 
-        // Intercept keyboard events via CGEvent tap — avoids stealing focus from foreground app.
-        // The tap runs on the main thread's run loop, so MainActor.assumeIsolated is safe.
-        let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
-        _ = keyboardTap.install(
-            eventMask: eventMask,
-            callback: { _, type, event, refcon -> Unmanaged<CGEvent>? in
-                guard let refcon else { return Unmanaged.passUnretained(event) }
-                let panel = Unmanaged<ModeSwitcherPanel>.fromOpaque(refcon).takeUnretainedValue()
-                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                    panel.keyboardTap.reEnableTap()
-                    return Unmanaged.passUnretained(event)
-                }
-                return MainActor.assumeIsolated {
-                    guard let viewModel = panel._viewModel else { return Unmanaged.passUnretained(event) }
-                    guard let nsEvent = NSEvent(cgEvent: event) else { return Unmanaged.passUnretained(event) }
-                    if viewModel.handleKeyEvent(nsEvent) {
-                        return nil // consumed
-                    }
-                    return Unmanaged.passUnretained(event)
-                }
-            },
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        )
+        claimNavigationKeys()
 
         // Dismiss if the user clicks outside the panel — go through onDismiss
         // so the coordinator delegate lifecycle (modeSwitcherDidHide) is invoked.
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak viewModel] _ in
             viewModel?.onDismiss()
         }
+    }
+
+    // MARK: - Navigation Keys
+
+    /// Claims every key the switcher navigates by, for as long as it is open.
+    ///
+    /// The panel never becomes key — that would pull focus off the app the user is
+    /// dictating into — so its keys have to be taken from the system rather than
+    /// delivered to a key window. Each one is claimed under every modifier state
+    /// because the switcher is routinely opened mid-recording, with the
+    /// push-to-talk modifiers still held down.
+    @MainActor
+    private func claimNavigationKeys() {
+        navigationKeyClaims = ModeSwitcherViewModel.handledKeyCodes.flatMap { keyCode in
+            HotkeyBinding.everyCombination(of: keyCode).compactMap { combination in
+                hotkeyRegistry.claim(combination) { [weak self] in
+                    _ = self?._viewModel?.handleKey(keyCode: keyCode)
+                }
+            }
+        }
+        Logger.hotkeys.info("Mode switcher: claimed \(self.navigationKeyClaims.count) navigation combinations")
+    }
+
+    /// Hands every navigation key back to the frontmost app.
+    @MainActor
+    private func releaseNavigationKeys() {
+        for claim in navigationKeyClaims { claim.release() }
+        navigationKeyClaims = []
     }
 
     // MARK: - Height Calculation
@@ -124,6 +137,7 @@ final class ModeSwitcherPanel {
 
     /// Confirms the currently highlighted mode and hides.
     /// If browsing parameters/options, applies the highlighted option first.
+    @MainActor
     func confirmAndHide() {
         if let viewModel = _viewModel {
             // Apply the highlighted option if drilling into parameters
@@ -147,9 +161,10 @@ final class ModeSwitcherPanel {
         }
     }
 
+    @MainActor
     func hide() {
         removeEventMonitor(&eventMonitor)
-        keyboardTap.uninstall()
+        releaseNavigationKeys()
         panel?.close()
         panel = nil
         _viewModel = nil
@@ -159,6 +174,5 @@ final class ModeSwitcherPanel {
 
     deinit {
         removeEventMonitor(&eventMonitor)
-        keyboardTap.uninstall()
     }
 }

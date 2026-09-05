@@ -8,8 +8,8 @@ import OSLog
 /// session-level CGEvent tap on the machine for as long as any process holds it.
 ///
 /// This exists because the failure is otherwise invisible. Secure Input does not
-/// disable a tap — `EventTapManager` keeps reporting `isInstalled`, and no
-/// `tapDisabledByTimeout` callback ever reaches `GlobalHotkeyManager` — macOS simply
+/// disable a tap — the tap keeps reporting itself installed, and no
+/// `tapDisabledByTimeout` callback ever arrives — macOS simply
 /// stops delivering key events to it. Every VCDR hotkey goes dead with nothing written
 /// to the log and nothing changed in the UI. Password managers are the usual holder,
 /// and 1Password has a known defect where it keeps the flag after it is backgrounded.

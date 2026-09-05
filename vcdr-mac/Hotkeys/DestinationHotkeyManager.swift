@@ -1,4 +1,3 @@
-import CoreGraphics
 import Foundation
 import OSLog
 
@@ -116,7 +115,7 @@ final class DestinationHotkeyManager {
     nonisolated static func modifierExpansion(
         of bindings: [(id: UUID, keyCode: UInt16, modifiers: UInt64)]
     ) -> [(combination: HotkeyBinding, destinationID: UUID)] {
-        let combinations = matchableModifierCombinations()
+        let combinations = HotkeyBinding.modifierCombinations
         let keyCodes = bindings.map(\.keyCode).reduce(into: [UInt16]()) { unique, keyCode in
             if !unique.contains(keyCode) { unique.append(keyCode) }
         }
@@ -129,17 +128,6 @@ final class DestinationHotkeyManager {
                     bindings: bindings
                 ) else { return nil }
                 return (HotkeyBinding(keyCode: keyCode, modifiers: modifiers), destinationID)
-            }
-        }
-    }
-
-    /// The 16 subsets of the four modifiers an Activation Hotkey can require —
-    /// every modifier state a key press can arrive in, as far as matching cares.
-    private nonisolated static func matchableModifierCombinations() -> [UInt64] {
-        let modifiers: [CGEventFlags] = [.maskControl, .maskAlternate, .maskShift, .maskCommand]
-        return (0..<(1 << modifiers.count)).map { subset in
-            modifiers.enumerated().reduce(into: UInt64(0)) { bits, modifier in
-                if subset & (1 << modifier.offset) != 0 { bits |= modifier.element.rawValue }
             }
         }
     }

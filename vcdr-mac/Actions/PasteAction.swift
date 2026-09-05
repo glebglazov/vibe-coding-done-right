@@ -9,6 +9,7 @@ struct PasteAction: PostTranscriptionAction {
     /// Using pid_t instead of NSRunningApplication to keep the action Sendable.
     private let targetAppPID: pid_t?
     private let saveResultToClipboard: Bool
+    private let accessibilityGrant: AccessibilityGrant
 
     // MARK: - Constants
 
@@ -18,13 +19,21 @@ struct PasteAction: PostTranscriptionAction {
     /// Polling interval when waiting for the target app to become active
     private static let focusPollingInterval: Duration = .milliseconds(20)
 
-    init(targetAppPID: pid_t? = nil, saveResultToClipboard: Bool = false) {
+    init(
+        targetAppPID: pid_t? = nil,
+        saveResultToClipboard: Bool = false,
+        accessibilityGrant: AccessibilityGrant = .system
+    ) {
         self.targetAppPID = targetAppPID
         self.saveResultToClipboard = saveResultToClipboard
+        self.accessibilityGrant = accessibilityGrant
     }
 
     func execute(text: String) async throws -> String? {
-        guard AXIsProcessTrusted() else {
+        guard accessibilityGrant.isGranted else {
+            // Pasting is the first thing that cannot work without the grant, so it
+            // is where the app asks for it.
+            accessibilityGrant.requestOnce()
             throw ActionError.accessibilityRequired
         }
 
