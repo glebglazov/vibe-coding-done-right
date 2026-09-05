@@ -12,7 +12,7 @@ import OSLog
 /// read waits for it (see `docs/adr/0010`).
 @MainActor
 @Observable
-final class LocalHistoryStore: HistoryStore {
+final class LocalHistoryStore: HistoryStore, RecordFileSyncedStore {
 
     // MARK: - Constants
 
@@ -29,7 +29,7 @@ final class LocalHistoryStore: HistoryStore {
     var latestConversation: Conversation? { conversations.first }
     var hasMorePages: Bool { conversations.count < min(storedCount, Self.maxConversations) }
 
-    /// Internal, not private: `HistorySyncReconciler` merges the record files
+    /// Internal, not private: `SyncReconciler` merges the record files
     /// into these same rows, and the store publishes the result.
     let database: ConversationDatabase
     /// How many conversations the database holds, loaded or not — what tells
@@ -60,17 +60,8 @@ final class LocalHistoryStore: HistoryStore {
     /// Opens the database and reads the first page. Local disk only — nothing
     /// here can block on iCloud — but blocking all the same, so callers run it
     /// off the cooperative pool and pair it with `init(snapshot:)`.
-    /// Where the database lives — never in the iCloud container. SQLite with a
-    /// WAL is several files mutating constantly, and iCloud file coordination
-    /// resolves a conflict between them as a corrupted database rather than a
-    /// merge. `FileHistoryStore.localStorageRoot` is the app's own storage: the
-    /// app group on iOS, Application Support on macOS.
-    nonisolated static var defaultDatabaseURL: URL {
-        FileHistoryStore.localStorageRoot.appendingPathComponent("history.sqlite3")
-    }
-
     nonisolated static func loadSnapshot(
-        fileURL: URL = LocalHistoryStore.defaultDatabaseURL
+        fileURL: URL = LocalStoreFile.url
     ) throws -> Snapshot {
         let database = try openDatabase(at: fileURL)
         return Snapshot(
@@ -83,15 +74,11 @@ final class LocalHistoryStore: HistoryStore {
     nonisolated private static func openDatabase(at fileURL: URL) throws -> ConversationDatabase {
         do {
             return try ConversationDatabase(fileURL: fileURL)
-        } catch {
-            // A database SQLite refuses to open is a corrupt one. The record
-            // files still hold every record, so discarding it costs one
-            // re-import rather than the history itself.
-            Logger.history.error("Local history database unusable, rebuilding: \(error)")
-            let fileManager = FileManager.default
-            for sibling in ["", "-wal", "-shm"] {
-                try? fileManager.removeItem(at: URL(fileURLWithPath: fileURL.path + sibling))
-            }
+        } catch let error as SQLiteError where error.isCorruption {
+            // The record files still hold every record, so discarding a corrupt
+            // database costs one re-import rather than the history itself.
+            Logger.history.error("Local store corrupt, rebuilding: \(error)")
+            LocalStoreFile.discardCorruptDatabase(at: fileURL)
             return try ConversationDatabase(fileURL: fileURL)
         }
     }
@@ -162,11 +149,6 @@ final class LocalHistoryStore: HistoryStore {
 
     /// Brings a directory of record files into the database, writes out
     /// whatever the database still owes it, and republishes the list.
-    ///
-    /// A directory is all the store knows. Whether it is an iCloud container,
-    /// and when it has changed, is `HistorySyncReconciler`'s business — which
-    /// is what keeps every read here off any remote service. Called after the
-    /// store is readable, never before: the merge reads every record file.
     func syncRecordFiles(in directory: URL) async {
         let database = self.database
         let archive = ConversationFileArchive(directory: directory)

@@ -27,7 +27,11 @@ final class AppDependencies {
 
     /// Owns the iCloud transport for history. Nil while history is still
     /// bootstrapping, and for as long as the sync toggle is off.
-    private(set) var historySync: HistorySyncReconciler?
+    private(set) var historySync: SyncReconciler?
+    /// Owns the iCloud transport for Substitutions, and keeps it alive: nothing
+    /// else holds the reconciler, and no screen reads its state — Substitutions
+    /// converge without announcing it.
+    private(set) var substitutionSync: SyncReconciler?
 
     private(set) var readiness: ModelReadiness =
         .preparing(label: ModelPreparationPhase.initialLabel)
@@ -235,28 +239,37 @@ final class AppDependencies {
         let store = LocalHistoryStore(snapshot: snapshot)
         await transcriptionHistory.setRealStore(store)
 
-        historySync = HistorySyncReconciler.startIfEnabled(
+        historySync = SyncReconciler.startIfEnabled(
             store: store,
+            dataset: HistorySync.dataset,
             defaults: UserDefaults.standard
         )
     }
 
-    /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves
-    /// the iCloud ubiquity container and loads the store snapshot off-main
-    /// (can block for seconds on first launch), then installs the real store
-    /// on the main actor from that Sendable snapshot — flushing any edits the
-    /// user made before the store was ready.
+    /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: opens the
+    /// Local Store off-main, then installs the real store on the main actor
+    /// from that Sendable snapshot — flushing any edits the user made before
+    /// the store was ready. Nothing on this path asks iCloud anything; the
+    /// reconciler links the record files behind a list that already answers.
     private func bootstrapSubstitutions() async {
-        let defaults = UserDefaults.standard
-        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
+        let snapshot: LocalSubstitutionStore.Snapshot
+        do {
+            snapshot = try await Task.detached(priority: .userInitiated) {
+                try LocalSubstitutionStore.loadSnapshot()
+            }.value
+        } catch {
+            Logger.app.error("Substitution store unavailable: \(error)")
+            return
+        }
 
-        let bootstrap = await Task.detached(priority: .userInitiated) {
-            let root = UbiquitySubstitutionStore.resolveStorageRoot()
-            return SubstitutionStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: root)
-        }.value
-
-        let store = SubstitutionStoreFactory.make(bootstrap)
+        let store = LocalSubstitutionStore(snapshot: snapshot)
         substitutionStore.setRealStore(store)
+
+        substitutionSync = SyncReconciler.startIfEnabled(
+            store: store,
+            dataset: SubstitutionSync.dataset,
+            defaults: UserDefaults.standard
+        )
     }
 
     private func checkPermissions() {

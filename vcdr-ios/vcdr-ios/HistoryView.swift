@@ -2,7 +2,7 @@ import SwiftUI
 
 struct HistoryView: View {
     let history: any HistoryStore
-    let historySync: HistorySyncReconciler?
+    let historySync: SyncReconciler?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var copiedConversationID: UUID?
@@ -121,7 +121,7 @@ struct HistoryView: View {
 /// Absent when sync is off: there is no reconciler to report on, and the
 /// history the list shows is complete without one.
 private struct SyncIndicator: View {
-    let reconciler: HistorySyncReconciler?
+    let reconciler: SyncReconciler?
     let theme: Theme
 
     var body: some View {
@@ -136,7 +136,7 @@ private struct SyncIndicator: View {
     }
 
     @ViewBuilder
-    private func icon(for state: HistorySyncReconciler.SyncState) -> some View {
+    private func icon(for state: SyncReconciler.SyncState) -> some View {
         switch state {
         case .idle:
             Image(systemName: "checkmark.icloud")

@@ -202,4 +202,10 @@ nonisolated struct SQLiteError: Error, CustomStringConvertible {
     let message: String
 
     var description: String { "SQLite error \(code): \(message)" }
+
+    /// Whether the file itself is unusable, rather than another connection
+    /// holding it for a moment. Conversations and Substitutions open the one
+    /// Local Store file independently, so a store that discarded the file on a
+    /// busy code would throw away a live database.
+    var isCorruption: Bool { code == SQLITE_CORRUPT || code == SQLITE_NOTADB }
 }

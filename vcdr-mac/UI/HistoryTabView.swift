@@ -2,7 +2,7 @@ import SwiftUI
 
 struct HistoryTabView: View {
     let history: any HistoryStore
-    let historySync: HistorySyncReconciler?
+    let historySync: SyncReconciler?
     let settings: AppSettings
     @State private var showClearAllConfirmation = false
 
@@ -66,7 +66,7 @@ struct HistoryTabView: View {
 /// Absent when sync is off: there is no reconciler to report on, and the
 /// history the list shows is complete without one.
 private struct SyncIndicator: View {
-    let reconciler: HistorySyncReconciler?
+    let reconciler: SyncReconciler?
 
     var body: some View {
         if let reconciler {
@@ -81,7 +81,7 @@ private struct SyncIndicator: View {
     }
 
     @ViewBuilder
-    private func icon(for state: HistorySyncReconciler.SyncState) -> some View {
+    private func icon(for state: SyncReconciler.SyncState) -> some View {
         Group {
             switch state {
             case .idle:
@@ -95,7 +95,7 @@ private struct SyncIndicator: View {
         .symbolRenderingMode(.monochrome)
     }
 
-    private func tooltip(for state: HistorySyncReconciler.SyncState) -> String {
+    private func tooltip(for state: SyncReconciler.SyncState) -> String {
         switch state {
         case .idle: "Synced — click to check now"
         case .paused(let reason): reason

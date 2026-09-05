@@ -1,24 +1,23 @@
 import Foundation
 import OSLog
 
-/// Moves the record files the app kept in its own storage up into the iCloud
-/// container, the first time the device syncs through one.
+/// Moves the Record Files the app kept in its own storage up into the iCloud
+/// container, the first time the device syncs a dataset through one.
 ///
-/// Only acts when the container is empty AND the local directory has files —
+/// Only acts when the container folder is empty AND the local one has files —
 /// which guards against a device that has already synced adopting a stale
 /// local copy over the one its peers agree on.
 ///
 /// Nonisolated on purpose: this runs behind launch on a GCD thread, because
 /// the container it writes into was itself resolved by a blocking call
-/// (`HistorySyncReconciler.resolveStorageRoot()`). The explicit `nonisolated`
+/// (`SyncReconciler.resolveStorageRoot()`). The explicit `nonisolated`
 /// overrides the target-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
 /// setting.
-nonisolated enum HistoryMigrator {
+nonisolated enum RecordFileMigrator {
 
-    static func adoptLocalRecordFiles(into ubiquityConversations: URL) {
-        let localRoot = HistorySync.localRecordFilesDirectory
-        guard isEmpty(ubiquityConversations), !isEmpty(localRoot) else { return }
-        migrate(from: localRoot, to: ubiquityConversations)
+    static func adoptLocalRecordFiles(from localDirectory: URL, into containerDirectory: URL) {
+        guard isEmpty(containerDirectory), !isEmpty(localDirectory) else { return }
+        migrate(from: localDirectory, to: containerDirectory)
     }
 
     // MARK: - Helpers
@@ -37,7 +36,7 @@ nonisolated enum HistoryMigrator {
         do {
             try fm.createDirectory(at: destination, withIntermediateDirectories: true)
         } catch {
-            Logger.history.error("Could not create migration destination \(destination.path): \(error)")
+            Logger.sync.error("Could not create migration destination \(destination.path): \(error)")
             return
         }
 
@@ -46,7 +45,7 @@ nonisolated enum HistoryMigrator {
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         ) else {
-            Logger.history.error("Could not enumerate migration source \(source.path)")
+            Logger.sync.error("Could not enumerate migration source \(source.path)")
             return
         }
 
@@ -61,10 +60,10 @@ nonisolated enum HistoryMigrator {
                 moved += 1
             } catch {
                 failed += 1
-                Logger.history.error("Migration failed for \(fileURL.lastPathComponent): \(error)")
+                Logger.sync.error("Migration failed for \(fileURL.lastPathComponent): \(error)")
             }
         }
 
-        Logger.history.info("History migration local → iCloud: moved \(moved), failed \(failed)")
+        Logger.sync.info("Record file migration local → iCloud: moved \(moved), failed \(failed)")
     }
 }

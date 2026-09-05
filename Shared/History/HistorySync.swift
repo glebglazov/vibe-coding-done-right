@@ -3,10 +3,10 @@ import Foundation
 /// Whether history syncs across devices, and how much of it a pass carries.
 ///
 /// The user toggle defaults to ON and no longer chooses a store — the Local
-/// Store answers every read either way. It chooses whether
-/// `HistorySyncReconciler` runs: on, the device's records travel through the
-/// iCloud container the OS replicates; off, they stay as files in the app's
-/// own storage and nothing ever resolves the container.
+/// Store answers every read either way. It chooses whether a
+/// `SyncReconciler` runs for history: on, the device's records travel through
+/// the iCloud container the OS replicates; off, they stay as files in the
+/// app's own storage and nothing ever resolves the container.
 nonisolated enum HistorySync {
 
     /// Persisted defaults key for the "Sync history via iCloud" toggle.
@@ -15,12 +15,6 @@ nonisolated enum HistorySync {
     /// Default when the user has not yet toggled the setting. Matches the
     /// `@AppStorage` default in the Settings UI so both agree on first launch.
     static let syncEnabledDefault = true
-
-    /// Whether sync should be on given the current defaults. Returns
-    /// `syncEnabledDefault` when the key is unset.
-    static func effectiveSyncEnabled(defaults: UserDefaults) -> Bool {
-        (defaults.object(forKey: syncEnabledDefaultsKey) as? Bool) ?? syncEnabledDefault
-    }
 
     /// How far back a reconcile pass reaches for changes.
     ///
@@ -35,5 +29,17 @@ nonisolated enum HistorySync {
     /// a container: the app's own storage, alongside the Local Store.
     static var localRecordFilesDirectory: URL {
         FileHistoryStore.localStorageRoot.appendingPathComponent("conversations")
+    }
+
+    /// History as the reconciler carries it.
+    static var dataset: SyncedDataset {
+        SyncedDataset(
+            name: "History",
+            containerSubdirectory: "conversations",
+            localDirectory: localRecordFilesDirectory,
+            syncEnabledDefaultsKey: syncEnabledDefaultsKey,
+            syncEnabledDefault: syncEnabledDefault,
+            resolveConflicts: HistoryConflictResolver.resolve(urls:)
+        )
     }
 }

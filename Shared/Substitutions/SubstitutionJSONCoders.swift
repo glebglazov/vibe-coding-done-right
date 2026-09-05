@@ -1,8 +1,9 @@
 import Foundation
 
 /// Shared JSON coder configuration for Substitution persistence. Used by
-/// `FileSubstitutionStore` (snapshot/tombstone I/O) and
-/// `SubstitutionConflictResolver` (decoding `NSFileVersion` siblings).
+/// `SubstitutionDatabase` (stored payloads), `SubstitutionFileArchive`
+/// (record-file I/O) and `SubstitutionConflictResolver` (decoding
+/// `NSFileVersion` siblings).
 ///
 /// Dates round-trip as ISO 8601 **with fractional seconds**: delete-vs-edit and
 /// LWW precedence compare `deletedAt`/`lastUpdated` directly, so whole-second

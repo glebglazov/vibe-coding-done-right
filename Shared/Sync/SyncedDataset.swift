@@ -1,0 +1,33 @@
+import Foundation
+
+/// What the `SyncReconciler` has to know about one dataset: which toggle turns
+/// its sync on, which folder of the container its Record Files occupy, and
+/// where those files live when the device syncs through no container at all.
+///
+/// Conversations and Substitutions travel between devices the same way and
+/// differ only in these answers, so one reconciler carries either.
+nonisolated struct SyncedDataset: Sendable {
+
+    /// Names the dataset in the reconciler's log lines.
+    let name: String
+
+    /// The folder under the container's `Documents/VCDR` holding its files.
+    let containerSubdirectory: String
+
+    /// Where its Record Files live when sync is off, or iCloud is unreachable.
+    let localDirectory: URL
+
+    let syncEnabledDefaultsKey: String
+    let syncEnabledDefault: Bool
+
+    /// Collapses the `NSFileVersion` siblings two devices produced for one
+    /// record onto a single winner. The rule is the dataset's own — the
+    /// records at these URLs are only decodable by whoever knows their shape.
+    let resolveConflicts: @Sendable ([URL]) -> Void
+
+    /// Whether sync should be on given the current defaults. Returns
+    /// `syncEnabledDefault` when the key is unset.
+    func syncEnabled(defaults: UserDefaults) -> Bool {
+        (defaults.object(forKey: syncEnabledDefaultsKey) as? Bool) ?? syncEnabledDefault
+    }
+}

@@ -6,18 +6,18 @@ import Testing
 @testable import vcdr_ios
 #endif
 
-/// Exercises the per-entry Substitution storage layer against the local
-/// `FileSubstitutionStore`: round-trip load/save/update/delete, last-writer-wins
-/// conflict resolution on `lastUpdated`, and delete-vs-edit tombstone
-/// precedence. One source tree compiled into both `vcdr-macTests` and
-/// `vcdr-iosTests`.
+/// Drives the Substitution Local Store through the path the app uses: a
+/// database opened from disk, the record files linked behind it, then reads and
+/// writes going through the `SubstitutionStore` protocol. One source tree
+/// compiled into both `vcdr-macTests` and `vcdr-iosTests`.
 @MainActor
 @Suite("SubstitutionStore")
 struct SubstitutionStoreTests {
 
     // MARK: - Fixtures
 
-    /// A fresh, isolated storage root per call so tests never share on-disk state.
+    /// A fresh, isolated storage root per call so tests never share on-disk
+    /// state — neither the database file nor the record files.
     private func makeTempRoot() -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("vcdr-subs-tests-\(UUID().uuidString)", isDirectory: true)
@@ -25,27 +25,57 @@ struct SubstitutionStoreTests {
         return root
     }
 
-    private func substitutionsDir(in root: URL) -> URL {
+    private func recordFilesDirectory(in root: URL) -> URL {
         root.appendingPathComponent("Substitutions", isDirectory: true)
     }
 
-    /// Writes a snapshot fixture directly to disk (bypassing the async write
-    /// path) so scan/suppression behavior can be asserted deterministically.
-    private func writeSnapshot(_ substitution: Substitution, into dir: URL) throws {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let data = try SubstitutionJSONCoders.makeEncoder().encode(substitution)
-        try data.write(to: dir.appendingPathComponent("\(substitution.id.uuidString).json"))
+    /// A store over its own database. Two devices are two of these over one
+    /// directory of record files.
+    private func makeStore(root: URL) throws -> LocalSubstitutionStore {
+        LocalSubstitutionStore(
+            snapshot: try LocalSubstitutionStore.loadSnapshot(
+                fileURL: root.appendingPathComponent("substitutions.sqlite3")
+            )
+        )
     }
 
-    private func writeTombstone(id: UUID, deletedAt: Date, into dir: URL) throws {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    /// Writes a snapshot the way a peer device would have left it.
+    private func writeRecordFile(_ substitution: Substitution, into directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let data = try SubstitutionJSONCoders.makeEncoder().encode(substitution)
+        try data.write(to: directory.appendingPathComponent("\(substitution.id.uuidString).json"))
+    }
+
+    private func writeTombstoneFile(id: UUID, deletedAt: Date, into directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let tombstone = SubstitutionTombstone(substitutionID: id, deletedAt: deletedAt)
         let data = try SubstitutionJSONCoders.makeEncoder().encode(tombstone)
-        try data.write(to: dir.appendingPathComponent("\(id.uuidString).deleted.json"))
+        try data.write(to: directory.appendingPathComponent("\(id.uuidString).deleted.json"))
     }
 
-    /// Polls a condition off the async write path with a generous timeout.
-    @discardableResult
+    /// Every file in a directory with its bytes and mtime — what proves the
+    /// merge left the record files exactly as it found them.
+    private func inventory(of directory: URL) -> [String: (Data, Date)] {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        var inventory: [String: (Data, Date)] = [:]
+        for url in urls {
+            guard let data = try? Data(contentsOf: url),
+                  let modifiedAt = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                      .contentModificationDate else { continue }
+            inventory[url.lastPathComponent] = (data, modifiedAt)
+        }
+        return inventory
+    }
+
+    private func filenames(in directory: URL) -> Set<String> {
+        Set(inventory(of: directory).keys)
+    }
+
+    /// Polls off the detached export path with a generous timeout.
     private func eventually(
         timeoutMS: Int = 3000,
         stepMS: Int = 10,
@@ -59,128 +89,195 @@ struct SubstitutionStoreTests {
         return condition()
     }
 
-    private func fileExists(_ url: URL) -> Bool {
-        FileManager.default.fileExists(atPath: url.path)
-    }
+    // MARK: - Import
 
-    // MARK: - Save + load
-
-    @Test("save then load: a fresh store reads the persisted entry")
-    func saveAndLoad() async throws {
+    @Test("Reads the record files in, suppressing tombstoned entries and leaving every file untouched")
+    func readsRecordFilesIn() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
 
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        let id = UUID()
-        store.upsert(Substitution(id: id, triggerPhrase: "oh my zsh", replacement: "Oh My Zsh"))
+        let kept = Substitution(triggerPhrase: "oh my zsh", replacement: "Oh My Zsh")
+        let deleted = Substitution(
+            triggerPhrase: "secret",
+            replacement: "REDACTED",
+            lastUpdated: Date(timeIntervalSince1970: 100)
+        )
+        try writeRecordFile(kept, into: directory)
+        try writeRecordFile(deleted, into: directory)
+        try writeTombstoneFile(id: deleted.id, deletedAt: Date(timeIntervalSince1970: 200), into: directory)
 
-        // In-memory state updates synchronously.
+        let before = inventory(of: directory)
+
+        let store = try makeStore(root: root)
+        #expect(store.substitutions.isEmpty, "the database is empty until the record files are linked")
+
+        await store.syncRecordFiles(in: directory)
+
+        #expect(store.substitutions.map(\.id) == [kept.id])
+        #expect(store.substitutions.first?.replacement == "Oh My Zsh")
+
+        // The record files are the rollback path: the merge only reads them.
+        let after = inventory(of: directory)
+        #expect(after.count == before.count)
+        for (name, snapshot) in before {
+            let current = after[name]
+            #expect(current?.0 == snapshot.0, "\(name) was rewritten")
+            #expect(current?.1 == snapshot.1, "\(name) was touched")
+        }
+
+        // Relaunch: matching and the screen answer from the database alone,
+        // with no directory linked at all, and a second pass over the same
+        // directory changes nothing.
+        let relaunched = try makeStore(root: root)
+        #expect(relaunched.substitutions.map(\.id) == [kept.id])
+        await relaunched.syncRecordFiles(in: directory)
+        #expect(relaunched.substitutions.count == 1)
+        #expect(filenames(in: directory) == Set(before.keys))
+    }
+
+    // MARK: - Another device
+
+    @Test("An entry another device wrote arrives here, and a delete on either removes it on both")
+    func entriesTravelBetweenDevices() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
+        let thisDevice = try makeStore(root: makeTempRoot())
+        let otherDevice = try makeStore(root: makeTempRoot())
+        await thisDevice.syncRecordFiles(in: directory)
+        await otherDevice.syncRecordFiles(in: directory)
+
+        let fromOther = Substitution(triggerPhrase: "ip", replacement: "IP address")
+        otherDevice.upsert(fromOther)
+        await otherDevice.syncRecordFiles(in: directory)
+
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.substitutions.map(\.id) == [fromOther.id])
+
+        // An edit there reaches here too, over the entry it already holds.
+        var edited = try #require(otherDevice.substitutions.first)
+        edited.replacement = "Internet Protocol"
+        otherDevice.upsert(edited)
+        await otherDevice.syncRecordFiles(in: directory)
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.substitutions.map(\.replacement) == ["Internet Protocol"])
+
+        // The other device deletes it; this one stops showing it, and keeps it
+        // gone however many passes follow.
+        otherDevice.delete(try #require(otherDevice.substitutions.first))
+        await otherDevice.syncRecordFiles(in: directory)
+
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.substitutions.isEmpty)
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.substitutions.isEmpty, "a later pass resurrected the deleted entry")
+
+        // A delete made here reaches the other device the same way.
+        let fromHere = Substitution(triggerPhrase: "vcdr", replacement: "VCDR")
+        thisDevice.upsert(fromHere)
+        await thisDevice.syncRecordFiles(in: directory)
+        await otherDevice.syncRecordFiles(in: directory)
+        #expect(otherDevice.substitutions.map(\.id) == [fromHere.id])
+
+        thisDevice.delete(try #require(thisDevice.substitutions.first))
+        await thisDevice.syncRecordFiles(in: directory)
+        #expect(thisDevice.substitutions.isEmpty, "the pass that exported the delete undid it")
+        await otherDevice.syncRecordFiles(in: directory)
+        #expect(otherDevice.substitutions.isEmpty)
+    }
+
+    // MARK: - Writes
+
+    @Test("An edit lands in the database and in the record files, and survives a relaunch")
+    func editsReachTheRecordFiles() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
+        let store = try makeStore(root: root)
+        await store.syncRecordFiles(in: directory)
+
+        let entry = Substitution(triggerPhrase: "ip", replacement: "IP address")
+        store.upsert(entry)
         #expect(store.substitutions.count == 1)
-        #expect(store.substitutions.first?.triggerPhrase == "oh my zsh")
 
-        let snapshot = substitutionsDir(in: root).appendingPathComponent("\(id.uuidString).json")
-        #expect(await eventually { self.fileExists(snapshot) })
+        let file = "\(entry.id.uuidString).json"
+        #expect(await eventually { self.filenames(in: directory).contains(file) })
 
-        // A brand-new store at the same root loads the persisted entry from disk.
-        let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        #expect(reloaded.substitutions.count == 1)
-        let loaded = try #require(reloaded.substitutions.first)
-        #expect(loaded.id == id)
-        #expect(loaded.triggerPhrase == "oh my zsh")
-        #expect(loaded.replacement == "Oh My Zsh")
-        #expect(loaded.isEnabled)
+        var edited = try #require(store.substitutions.first)
+        edited.replacement = "Internet Protocol"
+        edited.isEnabled = false
+        store.upsert(edited)
+
+        // An edit rewrites the entry's one file rather than adding a second.
+        let updated = await eventually {
+            let files = self.filenames(in: directory)
+            guard files == [file] else { return false }
+            let data = (try? Data(contentsOf: directory.appendingPathComponent(file))) ?? Data()
+            return (try? SubstitutionJSONCoders.makeDecoder().decode(Substitution.self, from: data))?
+                .replacement == "Internet Protocol"
+        }
+        #expect(updated, "the record file did not follow the edit")
+
+        let relaunched = try makeStore(root: root)
+        #expect(relaunched.substitutions.map(\.replacement) == ["Internet Protocol"])
+        #expect(relaunched.substitutions.first?.isEnabled == false)
     }
 
-    // MARK: - Update
-
-    @Test("update: re-upserting the same id rewrites its single file")
-    func update() async throws {
+    @Test("A delete writes a tombstone, keeps the snapshot file, and stays deleted across a relaunch")
+    func deletesTombstoneTheEntry() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
+        let store = try makeStore(root: root)
+        await store.syncRecordFiles(in: directory)
 
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        let id = UUID()
-        store.upsert(Substitution(id: id, triggerPhrase: "ip", replacement: "IP address"))
-        let snapshot = substitutionsDir(in: root).appendingPathComponent("\(id.uuidString).json")
-        #expect(await eventually { self.fileExists(snapshot) })
+        let entry = Substitution(triggerPhrase: "secret", replacement: "REDACTED")
+        store.upsert(entry)
+        let snapshot = "\(entry.id.uuidString).json"
+        #expect(await eventually { self.filenames(in: directory).contains(snapshot) })
 
-        store.upsert(Substitution(id: id, triggerPhrase: "ip", replacement: "Internet Protocol", isEnabled: false))
-        #expect(store.substitutions.count == 1)
-        #expect(await eventually {
-            let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-            return reloaded.substitutions.first?.replacement == "Internet Protocol"
-        })
-
-        // Still exactly one file per entry, and the update stuck.
-        let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        #expect(reloaded.substitutions.count == 1)
-        let loaded = try #require(reloaded.substitutions.first)
-        #expect(loaded.replacement == "Internet Protocol")
-        #expect(loaded.isEnabled == false)
-
-        let files = try FileManager.default.contentsOfDirectory(
-            at: substitutionsDir(in: root), includingPropertiesForKeys: nil
-        ).filter { $0.lastPathComponent.hasSuffix(".json") }
-        #expect(files.count == 1)
-    }
-
-    // MARK: - Delete
-
-    @Test("delete: writes a tombstone, keeps the snapshot, suppresses the entry")
-    func delete() async throws {
-        let root = makeTempRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        let sub = Substitution(triggerPhrase: "secret", replacement: "REDACTED")
-        store.upsert(sub)
-        let dir = substitutionsDir(in: root)
-        let snapshot = dir.appendingPathComponent("\(sub.id.uuidString).json")
-        #expect(await eventually { self.fileExists(snapshot) })
-
-        store.delete(sub)
+        store.delete(try #require(store.substitutions.first))
         #expect(store.substitutions.isEmpty)
 
-        let tombstone = dir.appendingPathComponent("\(sub.id.uuidString).deleted.json")
-        #expect(await eventually { self.fileExists(tombstone) })
-        // Snapshot file is intentionally left on disk so unsynced peers merge.
-        #expect(fileExists(snapshot))
+        let tombstone = "\(entry.id.uuidString).deleted.json"
+        #expect(await eventually { self.filenames(in: directory).contains(tombstone) })
+        // The snapshot file stays so an unsynced peer still merges the delete.
+        #expect(filenames(in: directory).contains(snapshot))
 
-        // The tombstone carries the deleted id and a recent timestamp.
-        let data = try Data(contentsOf: tombstone)
-        let decoded = try SubstitutionJSONCoders.makeDecoder().decode(SubstitutionTombstone.self, from: data)
-        #expect(decoded.substitutionID == sub.id)
-
-        // A fresh store does not resurrect the deleted entry.
-        let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        #expect(reloaded.substitutions.isEmpty)
+        let relaunched = try makeStore(root: root)
+        #expect(relaunched.substitutions.isEmpty)
+        await relaunched.syncRecordFiles(in: directory)
+        #expect(relaunched.substitutions.isEmpty)
     }
 
-    @Test("concurrent edits to different entries both survive a delete of a third")
-    func perEntryGranularity() async throws {
+    // MARK: - Delete-vs-edit precedence
+
+    @Test("A delete wins only when it is strictly newer than the edit it deletes")
+    func deletePrecedenceIsDecidedOnTheStamps() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
 
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        let a = Substitution(triggerPhrase: "a", replacement: "alpha")
-        let b = Substitution(triggerPhrase: "b", replacement: "bravo")
-        let c = Substitution(triggerPhrase: "c", replacement: "charlie")
-        store.upsert(a)
-        store.upsert(b)
-        store.upsert(c)
-        let dir = substitutionsDir(in: root)
-        #expect(await eventually {
-            self.fileExists(dir.appendingPathComponent("\(c.id.uuidString).json"))
-        })
+        let resurrected = Substitution(
+            triggerPhrase: "back",
+            replacement: "re-added",
+            lastUpdated: Date(timeIntervalSince1970: 200)
+        )
+        let tied = Substitution(
+            triggerPhrase: "tie",
+            replacement: "kept",
+            lastUpdated: Date(timeIntervalSince1970: 500)
+        )
+        try writeRecordFile(resurrected, into: directory)
+        try writeTombstoneFile(id: resurrected.id, deletedAt: Date(timeIntervalSince1970: 100), into: directory)
+        try writeRecordFile(tied, into: directory)
+        try writeTombstoneFile(id: tied.id, deletedAt: Date(timeIntervalSince1970: 500), into: directory)
 
-        store.delete(b)
-        #expect(await eventually {
-            self.fileExists(dir.appendingPathComponent("\(b.id.uuidString).deleted.json"))
-        })
+        let store = try makeStore(root: root)
+        await store.syncRecordFiles(in: directory)
 
-        let reloaded = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        let ids = Set(reloaded.substitutions.map(\.id))
-        #expect(ids == [a.id, c.id])
+        #expect(Set(store.substitutions.map(\.id)) == [resurrected.id, tied.id])
     }
 
     // MARK: - LWW conflict resolution
@@ -204,11 +301,11 @@ struct SubstitutionStoreTests {
         #expect(winnerReversed.replacement == "NEW")
     }
 
-    @Test("LWW: winner decoded from sibling files written by the local store coders")
+    @Test("LWW: winner decoded from sibling files written by the store's own coders")
     func lwwOverDecodedSiblings() throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let dir = substitutionsDir(in: root)
+        let dir = recordFilesDirectory(in: root)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let id = UUID()
@@ -231,106 +328,11 @@ struct SubstitutionStoreTests {
         #expect(winner.lastUpdated == Date(timeIntervalSince1970: 30))
     }
 
-    // MARK: - Delete-vs-edit tombstone precedence
+    // MARK: - Transport
 
-    @Test("tombstone precedence: deletedAt > lastUpdated suppresses the entry")
-    func deleteWinsWhenNewer() throws {
-        let root = makeTempRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let dir = substitutionsDir(in: root)
-
-        let id = UUID()
-        try writeSnapshot(
-            Substitution(id: id, triggerPhrase: "t", replacement: "edit", lastUpdated: Date(timeIntervalSince1970: 100)),
-            into: dir
-        )
-        try writeTombstone(id: id, deletedAt: Date(timeIntervalSince1970: 200), into: dir)
-
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        #expect(store.substitutions.isEmpty)
-    }
-
-    @Test("tombstone precedence: a later edit (lastUpdated > deletedAt) resurrects the entry")
-    func editWinsWhenNewer() throws {
-        let root = makeTempRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let dir = substitutionsDir(in: root)
-
-        let id = UUID()
-        try writeTombstone(id: id, deletedAt: Date(timeIntervalSince1970: 100), into: dir)
-        try writeSnapshot(
-            Substitution(id: id, triggerPhrase: "t", replacement: "re-added", lastUpdated: Date(timeIntervalSince1970: 200)),
-            into: dir
-        )
-
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        #expect(store.substitutions.count == 1)
-        #expect(store.substitutions.first?.replacement == "re-added")
-    }
-
-    @Test("tombstone precedence: equal timestamps keep the entry (delete wins only when strictly newer)")
-    func equalTimestampsKeepEntry() throws {
-        let root = makeTempRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let dir = substitutionsDir(in: root)
-
-        let id = UUID()
-        let when = Date(timeIntervalSince1970: 500)
-        try writeSnapshot(
-            Substitution(id: id, triggerPhrase: "t", replacement: "kept", lastUpdated: when),
-            into: dir
-        )
-        try writeTombstone(id: id, deletedAt: when, into: dir)
-
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
-        #expect(store.substitutions.count == 1)
-    }
-
-    // MARK: - Factory
-
-    @Test("factory falls back to the local store when no ubiquity root is available")
-    func factoryFallsBackToLocal() {
-        let defaults = ephemeralDefaults()
-        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        let bootstrap = SubstitutionStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: nil)
-        let store = SubstitutionStoreFactory.make(bootstrap)
-        #expect(store is FileSubstitutionStore)
-    }
-
-    @Test("factory uses the local store when sync is disabled, even with a ubiquity root")
-    func factoryRespectsDisabledSync() {
-        let defaults = ephemeralDefaults()
-        defaults.set(false, forKey: SubstitutionStoreFactory.syncEnabledDefaultsKey)
-        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        let bootstrap = SubstitutionStoreFactory.loadBootstrap(
-            syncEnabled: syncEnabled,
-            ubiquityRoot: makeTempRoot()
-        )
-        let store = SubstitutionStoreFactory.make(bootstrap)
-        #expect(store is FileSubstitutionStore)
-    }
-
-    @Test("factory returns the ubiquity-backed store when sync is on and a root is available")
-    func factoryReturnsUbiquityWhenAvailable() {
-        let defaults = ephemeralDefaults()
-        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        let bootstrap = SubstitutionStoreFactory.loadBootstrap(
-            syncEnabled: syncEnabled,
-            ubiquityRoot: makeTempRoot()
-        )
-        let store = SubstitutionStoreFactory.make(bootstrap)
-        #expect(store is UbiquitySubstitutionStore)
-    }
-
-    @Test("ubiquity container identifier is the existing one — no new entitlement")
+    @Test("Substitutions sync through the existing container — no new entitlement")
     func reusesExistingContainerIdentifier() {
-        #expect(UbiquitySubstitutionStore.containerIdentifier == "iCloud.glebglazov.vcdr")
-    }
-
-    private func ephemeralDefaults() -> UserDefaults {
-        let suite = "test.substitutions.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite) ?? .standard
-        defaults.removePersistentDomain(forName: suite)
-        return defaults
+        #expect(SyncReconciler.containerIdentifier == "iCloud.glebglazov.vcdr")
+        #expect(SubstitutionSync.dataset.containerSubdirectory == "Substitutions")
     }
 }

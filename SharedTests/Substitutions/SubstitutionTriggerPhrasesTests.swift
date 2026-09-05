@@ -34,6 +34,19 @@ struct SubstitutionTriggerPhrasesTests {
         return url
     }
 
+    /// A store over its own database, with the directory of record files
+    /// already linked — the state the app reaches once its bootstrap and the
+    /// first reconcile pass are done.
+    private func makeStore(root: URL) async throws -> LocalSubstitutionStore {
+        let store = LocalSubstitutionStore(
+            snapshot: try LocalSubstitutionStore.loadSnapshot(
+                fileURL: root.appendingPathComponent("substitutions.sqlite3")
+            )
+        )
+        await store.syncRecordFiles(in: root.appendingPathComponent("Substitutions", isDirectory: true))
+        return store
+    }
+
     private func jsonObject(at url: URL) throws -> [String: Any] {
         let raw = try JSONSerialization.jsonObject(with: try Data(contentsOf: url))
         return try #require(raw as? [String: Any])
@@ -78,7 +91,7 @@ struct SubstitutionTriggerPhrasesTests {
     // MARK: - Storage
 
     @Test("a file written by the previous build loads with its single phrase intact")
-    func previousBuildFileLoads() throws {
+    func previousBuildFileLoads() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -93,7 +106,7 @@ struct SubstitutionTriggerPhrasesTests {
             into: root
         )
 
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
+        let store = try await makeStore(root: root)
 
         let loaded = try #require(store.substitutions.first)
         #expect(store.substitutions.count == 1)
@@ -106,7 +119,7 @@ struct SubstitutionTriggerPhrasesTests {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
+        let store = try await makeStore(root: root)
         let entry = Substitution(triggerPhrases: ["power zha", "powerja"], replacement: "Powierża")
         store.upsert(entry)
 
@@ -136,7 +149,7 @@ struct SubstitutionTriggerPhrasesTests {
             into: root
         )
 
-        let store = FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
+        let store = try await makeStore(root: root)
         var loaded = try #require(store.substitutions.first)
         loaded.replacement = "Oh My Zsh!"
         store.upsert(loaded)

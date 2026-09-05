@@ -148,7 +148,10 @@ final class RecordingFlowCoordinator {
     private(set) var history: (any HistoryStore)?
     /// Owns the iCloud transport for history. Nil while history is still
     /// bootstrapping, and for as long as the sync toggle is off.
-    private(set) var historySync: HistorySyncReconciler?
+    private(set) var historySync: SyncReconciler?
+    /// Owns the iCloud transport for Substitutions. Nil while they are still
+    /// bootstrapping, and for as long as the sync toggle is off.
+    private(set) var substitutionSync: SyncReconciler?
     private var isHistoryBootstrapRunning = false
     /// Stable Substitution store reference handed out at launch. Backed by a
     /// proxy so the Settings screen and the recording pipeline can read it
@@ -272,28 +275,44 @@ final class RecordingFlowCoordinator {
         // The record files are the sync transport, not the read path: the
         // reconciler resolves the iCloud container and merges it in behind a
         // history list that already answers.
-        historySync = HistorySyncReconciler.startIfEnabled(store: history, defaults: defaults)
+        historySync = SyncReconciler.startIfEnabled(
+            store: history,
+            dataset: HistorySync.dataset,
+            defaults: defaults
+        )
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
 
-    /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: resolves
-    /// the iCloud ubiquity container and loads the store snapshot off-main
-    /// (scan, decode, and account-token read can block), then installs the real
-    /// store on the main actor from that Sendable snapshot — replaying any
-    /// edits the user made before the store was ready. The proxy stays the
-    /// stable reference handed to the UI and pipeline throughout.
+    /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: opens the
+    /// Local Store off the main actor and installs the real store from its
+    /// Sendable snapshot, replaying any edits the user made before it was
+    /// ready. The proxy stays the stable reference handed to the UI and the
+    /// pipeline throughout.
+    ///
+    /// Nothing on this path asks iCloud anything — matching a transcript must
+    /// never wait on a container (ADR-0010). The reconciler links the record
+    /// files behind a list that already answers.
     func bootstrapSubstitutions() async {
         guard !isSubstitutionBootstrapRunning else { return }
         isSubstitutionBootstrapRunning = true
         defer { isSubstitutionBootstrapRunning = false }
         let defaults = SharedConstants.sharedDefaults
-        let syncEnabled = SubstitutionStoreFactory.effectiveSyncEnabled(defaults: defaults)
-        let bootstrap: SubstitutionStoreFactory.Bootstrap = await withBlockingTask(qos: .userInitiated) {
-            let root = UbiquitySubstitutionStore.resolveStorageRoot()
-            return SubstitutionStoreFactory.loadBootstrap(syncEnabled: syncEnabled, ubiquityRoot: root)
+        let snapshot: LocalSubstitutionStore.Snapshot
+        do {
+            snapshot = try await withThrowingBlockingTask(qos: .userInitiated) {
+                try LocalSubstitutionStore.loadSnapshot()
+            }
+        } catch {
+            Logger.app.error("Substitution store unavailable: \(error)")
+            return
         }
-        let store = SubstitutionStoreFactory.make(bootstrap)
+        let store = LocalSubstitutionStore(snapshot: snapshot)
         substitutionStore.setRealStore(store)
+        substitutionSync = SyncReconciler.startIfEnabled(
+            store: store,
+            dataset: SubstitutionSync.dataset,
+            defaults: defaults
+        )
     }
 
     /// Automatic launch path, driven by the Predicted Launch Verdict. A

@@ -42,22 +42,26 @@ _Avoid_: AIProvider, full backend list, selectable provider enum
 Each platform publishes which backends appear in settings and mode pickers. iOS may register Apple when AFM is available; macOS registers local-agent backends separately. Registration is explicit — never derived from `CaseIterable.allCases` on a shared enum.
 _Avoid_: allCases picker, shared Apple case, automatic backend discovery
 
-### History Storage
+### Local Storage and Sync
 
 **Local Store**:
-The on-device database every history read answers from — launch, the history list and paging. It lives in the app's own storage (the app group on iOS, Application Support on macOS) and never in the iCloud container, because a database cannot be synced as a file: iCloud file coordination resolves a conflict between its files as a corrupted database rather than a merge.
+The on-device database every read answers from — the launch of the history list, its paging, matching a transcript against the Substitutions, and the Substitutions screen. One SQLite file holds conversations and Substitutions in tables of their own. It lives in the app's own storage (the app group on iOS, Application Support on macOS) and never in the iCloud container, because a database cannot be synced as a file: iCloud file coordination resolves a conflict between its files as a corrupted database rather than a merge.
 _Avoid_: cache, local mirror, offline copy
 
 **Record File**:
-One conversation, or one delete of it, as a single JSON file in the directory the devices sync through. Record Files are the transport, not the store: a write lands in the Local Store first and is exported to its Record File behind that, and the Local Store remembers what still owes a file so an export deferred by an unreachable container still happens later.
+One conversation or one Substitution, or one delete of it, as a single JSON file in the directory the devices sync through. Record Files are the transport, not the store: a write lands in the Local Store first and is exported to its Record File behind that, and the Local Store remembers what still owes a file so an export deferred by an unreachable container still happens later.
 _Avoid_: snapshot file, iCloud store, history file
 
 **Sync Reconciler**:
 The background worker that makes the Local Store and the Record Files agree, after launch and never on a read path. It owns everything about the transport — resolving the iCloud container, watching it, materializing what is not downloaded yet, resolving conflicts last-writer-wins, and noticing that the user signed out. The Local Store it drives knows a database and a directory and nothing else, which is what lets a later transport replace this one. The sync toggle chooses whether a Sync Reconciler runs at all, not which store the app uses.
 _Avoid_: sync engine, iCloud store, background refresh
 
+**Synced Dataset**:
+What one Sync Reconciler carries: a folder of Record Files, the toggle that turns its sync on, where its files sit when there is no container, and how two devices' versions of one record are collapsed. Conversations and Substitutions differ only in those answers, which is why one reconciler serves either.
+_Avoid_: sync config, store descriptor, entity type
+
 **Replication Window**:
-How far back one reconcile pass reaches for changes. Unbounded today and stated in one place, because the container is the OS's to replicate and cannot be asked for less than all of it; it becomes a real bound when the transport is ours.
+How far back one reconcile pass reaches for changes. History's is unbounded today and stated in one place, because the container is the OS's to replicate and cannot be asked for less than all of it; it becomes a real bound when the transport is ours. Substitutions have none at all: a Substitution that arrives late puts visibly wrong text in the next transcript, where a history entry that arrives late costs nothing.
 _Avoid_: sync horizon, page size, retention period
 
 ## Initialization

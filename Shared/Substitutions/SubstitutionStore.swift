@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Persistence boundary for the iCloud-synced Substitutions list. Views and the
+/// Persistence boundary for the Substitutions list. Views and the
 /// text-processing pipeline observe the concrete conforming type's
 /// `@Observable` state through this existential.
 ///
@@ -22,6 +22,6 @@ protocol SubstitutionStore: AnyObject, Observable {
     /// snapshot file is left on disk so an unsynced peer still merges correctly.
     func delete(_ substitution: Substitution)
 
-    /// Re-reads the on-disk directory into `substitutions`.
+    /// Re-reads the Local Store into `substitutions`.
     func reload()
 }

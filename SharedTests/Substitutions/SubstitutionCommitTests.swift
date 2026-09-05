@@ -9,8 +9,8 @@ import Testing
 /// Exercises the rules that decide what a committed Substitution becomes:
 /// trimming, blank entries evaporating, repeated phrases collapsing, and a
 /// Trigger Phrase Clash being saved and reported rather than refused. Driven
-/// through `SubstitutionsViewModel` over the real file store, which is the path
-/// both editors take. One source tree compiled into both `vcdr-macTests` and
+/// through `SubstitutionsViewModel` over the real Local Store, which is the
+/// path both editors take. One source tree compiled into both `vcdr-macTests` and
 /// `vcdr-iosTests`.
 @MainActor
 @Suite("Substitution commit")
@@ -25,16 +25,35 @@ struct SubstitutionCommitTests {
         return root
     }
 
-    private func makeViewModel(root: URL) -> SubstitutionsViewModel {
-        SubstitutionsViewModel(
-            store: FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root))
+    private func makeViewModel(root: URL) async throws -> SubstitutionsViewModel {
+        SubstitutionsViewModel(store: try await makeStore(root: root, device: "editing"))
+    }
+
+    /// A store over its own database, with the directory of record files
+    /// already linked — the state the app reaches once its bootstrap and the
+    /// first reconcile pass are done. Two devices are two databases over one
+    /// directory.
+    private func makeStore(root: URL, device: String) async throws -> LocalSubstitutionStore {
+        let store = LocalSubstitutionStore(
+            snapshot: try LocalSubstitutionStore.loadSnapshot(
+                fileURL: root.appendingPathComponent("\(device).sqlite3")
+            )
         )
+        await store.syncRecordFiles(in: root.appendingPathComponent("Substitutions", isDirectory: true))
+        return store
+    }
+
+    private func recordFiles(in root: URL) -> [String] {
+        let dir = root.appendingPathComponent("Substitutions", isDirectory: true)
+        return (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
     }
 
     private func snapshotFiles(in root: URL) -> [String] {
-        let dir = root.appendingPathComponent("Substitutions", isDirectory: true)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-        return names.filter { !$0.hasSuffix(".deleted.json") }
+        recordFiles(in: root).filter { !$0.hasSuffix(".deleted.json") }
+    }
+
+    private func tombstoneFiles(in root: URL) -> [String] {
+        recordFiles(in: root).filter { $0.hasSuffix(".deleted.json") }
     }
 
     private func eventually(timeoutMS: Int = 3000, _ condition: @MainActor () -> Bool) async -> Bool {
@@ -50,19 +69,19 @@ struct SubstitutionCommitTests {
         return substitution
     }
 
-    /// What a peer device would load: the directory read back through a fresh
-    /// store, so tombstones and unwritten entries both show up as absent.
-    private func onDisk(_ root: URL) -> [Substitution] {
-        FileSubstitutionStore(snapshot: FileSubstitutionStore.loadSnapshot(storageRoot: root)).substitutions
+    /// What a peer device would load: the record files read into a store of
+    /// its own, so tombstones and unwritten entries both show up as absent.
+    private func onDisk(_ root: URL) async throws -> [Substitution] {
+        try await makeStore(root: root, device: "peer-\(UUID().uuidString)").substitutions
     }
 
     // MARK: - Blank and duplicate phrases
 
     @Test("a commit trims, drops blank phrases and collapses a repeat of one it already has")
-    func commitTidiesPhrases() throws {
+    func commitTidiesPhrases() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let viewModel = makeViewModel(root: root)
+        let viewModel = try await makeViewModel(root: root)
 
         let commit = viewModel.commit(
             Substitution(
@@ -84,7 +103,7 @@ struct SubstitutionCommitTests {
     func blankReplacementDeletesTheEntry() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let viewModel = makeViewModel(root: root)
+        let viewModel = try await makeViewModel(root: root)
 
         let entry = try #require(
             saved(viewModel.commit(Substitution(triggerPhrases: ["oh my zsh"], replacement: "Oh My Zsh")))
@@ -98,14 +117,15 @@ struct SubstitutionCommitTests {
 
         #expect(commit == .discarded)
         #expect(viewModel.drafts.isEmpty)
-        #expect(await eventually { self.onDisk(root).isEmpty })
+        #expect(await eventually { self.tombstoneFiles(in: root).count == 1 })
+        #expect(try await onDisk(root).isEmpty)
     }
 
     @Test("a new substitution reaches disk only once it carries a Replacement")
     func creatingASubstitutionWritesNothing() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let viewModel = makeViewModel(root: root)
+        let viewModel = try await makeViewModel(root: root)
 
         let id = viewModel.add()
         var draft = try #require(viewModel.drafts.first { $0.id == id })
@@ -120,16 +140,17 @@ struct SubstitutionCommitTests {
 
         draft.replacement = "Oh My Zsh"
         #expect(try #require(saved(viewModel.commit(draft))).triggerPhrases == ["oh my zsh"])
-        #expect(await eventually { self.onDisk(root).count == 1 })
+        #expect(await eventually { self.snapshotFiles(in: root).count == 1 })
+        #expect(try await onDisk(root).count == 1)
     }
 
     // MARK: - Trigger Phrase Clash
 
     @Test("a phrase two substitutions claim is saved, and the loser is told which Replacement wins")
-    func clashIsSavedAndReported() throws {
+    func clashIsSavedAndReported() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let viewModel = makeViewModel(root: root)
+        let viewModel = try await makeViewModel(root: root)
 
         let older = try #require(
             saved(viewModel.commit(Substitution(triggerPhrases: ["Power Zha"], replacement: "Powierża")))

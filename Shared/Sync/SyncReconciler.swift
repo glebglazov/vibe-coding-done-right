@@ -1,6 +1,7 @@
 import Foundation
+import OSLog
 
-/// Brings the record files other devices wrote into the Local Store, in the
+/// Brings the Record Files other devices wrote into a Local Store, in the
 /// background, after launch.
 ///
 /// Everything iCloud is here and nowhere else: resolving the ubiquity
@@ -11,12 +12,16 @@ import Foundation
 /// what lets a later transport replace this one without touching the read path
 /// (see `docs/adr/0010`).
 ///
+/// One reconciler carries one dataset. Conversations and Substitutions differ
+/// only in the answers `SyncedDataset` gives — which folder, which toggle —
+/// so both travel through this same worker.
+///
 /// The sync toggle decides whether this exists at all. With it off nothing
 /// here is constructed, the container is never resolved, and the app is a
 /// complete local-only app.
 @MainActor
 @Observable
-final class HistorySyncReconciler {
+final class SyncReconciler {
 
     nonisolated static let containerIdentifier = "iCloud.glebglazov.vcdr"
 
@@ -34,9 +39,10 @@ final class HistorySyncReconciler {
 
     // MARK: - State
 
-    private let store: LocalHistoryStore
+    private let store: any RecordFileSyncedStore
+    private let dataset: SyncedDataset
 
-    /// The directory of record files this device syncs through. Nil until
+    /// The directory of Record Files this device syncs through. Nil until
     /// `start` has resolved it — every pass is a no-op before that.
     private var directory: URL?
 
@@ -50,25 +56,27 @@ final class HistorySyncReconciler {
 
     // MARK: - Init
 
-    init(store: LocalHistoryStore) {
+    init(store: any RecordFileSyncedStore, dataset: SyncedDataset) {
         self.store = store
+        self.dataset = dataset
     }
 
-    /// Starts syncing history in the background when the toggle allows it, and
-    /// hands back the reconciler that owns it.
+    /// Starts syncing a dataset in the background when its toggle allows it,
+    /// and hands back the reconciler that owns it.
     ///
     /// With sync off there is no reconciler and the container is never
-    /// resolved: the store keeps its records as files in the app's own
-    /// storage, and reads — which never came from iCloud — are unchanged.
+    /// resolved: the store keeps its Record Files in the app's own storage,
+    /// and reads — which never came from iCloud — are unchanged.
     static func startIfEnabled(
-        store: LocalHistoryStore,
+        store: any RecordFileSyncedStore,
+        dataset: SyncedDataset,
         defaults: UserDefaults
-    ) -> HistorySyncReconciler? {
-        guard HistorySync.effectiveSyncEnabled(defaults: defaults) else {
-            Task { await store.syncRecordFiles(in: HistorySync.localRecordFilesDirectory) }
+    ) -> SyncReconciler? {
+        guard dataset.syncEnabled(defaults: defaults) else {
+            Task { await store.syncRecordFiles(in: dataset.localDirectory) }
             return nil
         }
-        let reconciler = HistorySyncReconciler(store: store)
+        let reconciler = SyncReconciler(store: store, dataset: dataset)
         Task { await reconciler.start() }
         return reconciler
     }
@@ -85,7 +93,10 @@ final class HistorySyncReconciler {
     /// account token, the merge itself — stays on a GCD thread (ADR-0005), and
     /// nothing on a read path waits for any of it.
     func start() async {
-        let resolved = await withBlockingTask(qos: .utility) { Self.resolveRecordFiles() }
+        let dataset = self.dataset
+        let resolved = await withBlockingTask(qos: .utility) {
+            Self.resolveRecordFiles(for: dataset)
+        }
         directory = resolved.directory
         syncState = resolved.hasAccount ? .idle : .paused(reason: Self.signedOutReason)
         observeAccountStateChanges()
@@ -129,18 +140,22 @@ final class HistorySyncReconciler {
         let hasAccount: Bool
     }
 
-    /// Where this device's record files live, and whether iCloud is usable —
+    /// Where this device's Record Files live, and whether iCloud is usable —
     /// one blocking hop, because both answers come from the iCloud daemon.
     ///
     /// Without a container the app's own storage stands in, so a device that
     /// cannot reach iCloud still keeps its records as files and starts
     /// carrying them the moment iCloud comes back.
-    nonisolated private static func resolveRecordFiles() -> Resolved {
+    nonisolated private static func resolveRecordFiles(for dataset: SyncedDataset) -> Resolved {
         guard let root = resolveStorageRoot() else {
-            return Resolved(directory: HistorySync.localRecordFilesDirectory, hasAccount: false)
+            Logger.sync.info("\(dataset.name) sync: no container, using local record files")
+            return Resolved(directory: dataset.localDirectory, hasAccount: false)
         }
-        let directory = root.appendingPathComponent("conversations")
-        HistoryMigrator.adoptLocalRecordFiles(into: directory)
+        let directory = root.appendingPathComponent(dataset.containerSubdirectory)
+        RecordFileMigrator.adoptLocalRecordFiles(
+            from: dataset.localDirectory,
+            into: directory
+        )
         return Resolved(
             directory: directory,
             hasAccount: FileManager.default.ubiquityIdentityToken != nil
@@ -151,7 +166,7 @@ final class HistorySyncReconciler {
 
     private func startWatchingContainer() {
         metadataQuery.searchScopes = [NSMetadataQueryUbiquitousDataScope]
-        // Everything under the conversations folder, record or tombstone.
+        // Everything under the dataset's folder, record or tombstone.
         metadataQuery.predicate = NSPredicate(
             format: "%K LIKE[c] %@",
             NSMetadataItemFSNameKey,
@@ -183,6 +198,7 @@ final class HistorySyncReconciler {
     private struct PendingItems: Sendable {
         let toDownload: [URL]
         let conflicts: [URL]
+        let resolveConflicts: @Sendable ([URL]) -> Void
     }
 
     /// Reads the current `NSMetadataQuery` results on the main actor —
@@ -207,7 +223,11 @@ final class HistorySyncReconciler {
             }
         }
 
-        return PendingItems(toDownload: toDownload, conflicts: conflicts)
+        return PendingItems(
+            toDownload: toDownload,
+            conflicts: conflicts,
+            resolveConflicts: dataset.resolveConflicts
+        )
     }
 
     /// Asks iCloud for the bytes behind the placeholders and collapses the
@@ -218,7 +238,7 @@ final class HistorySyncReconciler {
             try? FileManager.default.startDownloadingUbiquitousItem(at: url)
         }
         if !pending.conflicts.isEmpty {
-            HistoryConflictResolver.resolve(urls: pending.conflicts)
+            pending.resolveConflicts(pending.conflicts)
         }
     }
 
