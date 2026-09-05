@@ -8,6 +8,16 @@ struct ProvidersListView: View {
 
     var body: some View {
         List {
+            if let notice = settings.supersededProviderKeysNotice {
+                Section {
+                    Label(notice.message, systemImage: "arrow.triangle.2.circlepath")
+                        .font(.callout)
+                    Button("OK") {
+                        settings.acknowledgeSupersededProviderKeysNotice()
+                    }
+                }
+            }
+
             ForEach(AIProvider.allCases, id: \.self) { provider in
                 NavigationLink(value: provider) {
                     ProviderRowView(

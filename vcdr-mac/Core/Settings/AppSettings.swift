@@ -123,6 +123,17 @@ final class AppSettings {
     /// them so a working key is never lost silently.
     private(set) var providersWithSupersededKeys: [AIProvider]
 
+    /// The notice for the Providers screen, or `nil` once there is nothing to say.
+    var supersededProviderKeysNotice: SupersededProviderKeysNotice? {
+        SupersededProviderKeysNotice(providers: providersWithSupersededKeys)
+    }
+
+    /// Dismisses the superseded-keys notice; it does not return on a later launch.
+    func acknowledgeSupersededProviderKeysNotice() {
+        providersWithSupersededKeys = []
+        userDefaults.removeObject(forKey: Keys.providersWithSupersededKeys)
+    }
+
     // MARK: - AI Provider Keys
 
     /// The stored API key for an AI Provider (empty string if unset).
