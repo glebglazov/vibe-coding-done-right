@@ -60,12 +60,6 @@ struct MenuBarView: View {
             Text("Hotkey: \(hotkeyDisplay)")
                 .foregroundStyle(.secondary)
 
-            if dependencies.secureInputMonitor.isActive {
-                Label(secureInputWarning, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .font(.caption)
-            }
-
             // Style section with current style and submenu
             StyleSection(
                 styleResolution: dependencies.styleResolution,
@@ -102,16 +96,6 @@ struct MenuBarView: View {
         case .ready: .green
         case .preparing: .orange
         case .failed: .red
-        }
-    }
-
-    /// Names the holder when macOS gives us one, because "quit 1Password" is
-    /// actionable and "something is blocking your hotkeys" is not.
-    private var secureInputWarning: String {
-        if let holder = dependencies.secureInputMonitor.holderName {
-            "Hotkeys blocked by Secure Input (\(holder))"
-        } else {
-            "Hotkeys blocked by Secure Input"
         }
     }
 

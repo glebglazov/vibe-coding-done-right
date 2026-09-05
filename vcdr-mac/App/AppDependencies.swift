@@ -19,7 +19,6 @@ final class AppDependencies {
     let styleResolution: StyleResolutionPipeline
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
-    let secureInputMonitor = SecureInputMonitor()
     let hotkeyRegistry = SuspendableHotkeyRegistry(wrapping: CarbonHotkeyRegistry())
 
     #if DEBUG
@@ -158,7 +157,6 @@ final class AppDependencies {
         checkPermissions()
         isInitialized = true
         startPermissionPolling()
-        secureInputMonitor.start()
 
         await styleResolution.start()
 

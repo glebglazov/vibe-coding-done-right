@@ -7,8 +7,8 @@ import OSLog
 /// This exists because of Secure Event Input. While any process on the machine
 /// holds that flag, macOS silently stops delivering key events to every session
 /// event tap — the tap still reports itself installed, nothing is logged, and the
-/// user presses the key and gets nothing (see `SecureInputMonitor`). A Carbon
-/// registration is answered by the window server instead, and keeps firing.
+/// user presses the key and gets nothing. A Carbon registration is answered by
+/// the window server instead, and keeps firing.
 ///
 /// The whole app shares one Carbon event handler: registrations are process-wide
 /// and arrive already identified by `EventHotKeyID`, so a second handler would only
