@@ -32,7 +32,7 @@ struct SubstitutionsSettings: View {
                 ForEach($viewModel.drafts) { $substitution in
                     SubstitutionRow(
                         substitution: $substitution,
-                        onCommit: { viewModel.persist(substitution) }
+                        onCommit: { viewModel.commit(substitution) }
                     )
                 }
                 .onDelete { offsets in

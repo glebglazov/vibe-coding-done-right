@@ -10,6 +10,8 @@ import Foundation
 /// - Longest Trigger Phrase wins when candidate matches overlap; ties are
 ///   resolved left-to-right. Every phrase of every Substitution competes in the
 ///   same pass, so a long phrase on one entry beats a short phrase on another.
+/// - When two Substitutions claim the same phrase — a Trigger Phrase Clash — the
+///   most recently edited one wins, whatever order the list arrives in.
 /// - Single pass: a Replacement that is injected is **not** re-scanned for
 ///   further Trigger Phrases (no recursion, no loops).
 /// - Disabled Substitutions (`isEnabled == false`) are skipped.
@@ -49,9 +51,10 @@ struct SubstitutionMatcher: Sendable {
         let start: Int
         /// Exclusive Character index where the match ends.
         let end: Int
-        /// Position of the owning Substitution in `substitutions`, used as a
-        /// final deterministic tie-breaker. Phrases of one Substitution share
-        /// it: they carry no precedence between them.
+        /// Recency rank of the owning Substitution, newest edit first, used as
+        /// the final tie-breaker so a clash resolves to the entry last edited.
+        /// Phrases of one Substitution share it: they carry no precedence
+        /// between them.
         let order: Int
         /// The Replacement injected verbatim for this match.
         let replacement: String
@@ -68,7 +71,7 @@ struct SubstitutionMatcher: Sendable {
     private func collectCandidates(in characters: [Character]) -> [Candidate] {
         var candidates: [Candidate] = []
 
-        for (order, substitution) in substitutions.enumerated() {
+        for (order, substitution) in substitutions.rankedByMostRecentlyEdited().enumerated() {
             guard substitution.isEnabled else { continue }
 
             for phrase in substitution.triggerPhrases {
@@ -127,7 +130,7 @@ struct SubstitutionMatcher: Sendable {
     // MARK: - Selection
 
     /// Picks a non-overlapping subset of candidates: longest Trigger Phrase
-    /// first, ties broken left-to-right, then by declaration order. Selecting
+    /// first, ties broken left-to-right, then by the most recent edit. Selecting
     /// in this rank and rejecting anything that overlaps an already-chosen
     /// match yields the agreed longest-wins / leftmost-on-ties behavior.
     private func selectNonOverlapping(_ candidates: [Candidate]) -> [Candidate] {

@@ -195,7 +195,7 @@ struct MainWindowView: View {
                                 set: { substitutionsViewModel.drafts[index] = $0 }
                             ),
                             onCommit: {
-                                substitutionsViewModel.persist(substitutionsViewModel.drafts[index])
+                                substitutionsViewModel.commit(substitutionsViewModel.drafts[index])
                             }
                         )
                     }

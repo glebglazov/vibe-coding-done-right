@@ -31,20 +31,42 @@ final class SubstitutionsViewModel {
         drafts = store.substitutions
     }
 
-    /// Appends a blank Substitution, persists it, and returns its id so the
-    /// caller can push the detail view for editing. New rows go to the end so
-    /// existing rows keep their position.
+    /// Appends a blank Substitution to the UI list and returns its id so the
+    /// caller can push the detail view for editing. Nothing is written yet: the
+    /// entry reaches disk on its first commit that carries a Replacement, so a
+    /// substitution abandoned before anything is typed never syncs anywhere.
+    /// New rows go to the end so existing rows keep their position.
     @discardableResult
     func add() -> UUID {
-        let substitution = Substitution(triggerPhrase: "", replacement: "")
+        let substitution = Substitution(triggerPhrases: [], replacement: "")
         drafts.append(substitution)
-        store.upsert(substitution)
         return substitution.id
     }
 
-    /// Persists an in-place edit to an existing draft without reordering the UI list.
-    func persist(_ substitution: Substitution) {
-        store.upsert(substitution)
+    /// Applies the commit rules to an edited draft and persists the result,
+    /// without reordering the UI list. Returns what the commit did so the editor
+    /// can show the Trigger Phrase Clashes the entry lost.
+    @discardableResult
+    func commit(_ substitution: Substitution) -> SubstitutionCommit {
+        let tidied = substitution.tidiedForCommit()
+
+        guard !tidied.replacement.isEmpty else {
+            // An entry that never reached disk has nothing to delete; one that did
+            // is removed, so blanking a Replacement doesn't leave it on a peer.
+            if store.substitutions.contains(where: { $0.id == tidied.id }) {
+                delete(tidied)
+            }
+            return .discarded
+        }
+
+        store.upsert(tidied)
+        return .saved(tidied, clashes: clashes.clashes(for: tidied))
+    }
+
+    /// The Trigger Phrase Clashes across the persisted list, so a row can mark the
+    /// phrases it loses and name the Replacement that beats each one.
+    var clashes: TriggerPhraseClashes {
+        TriggerPhraseClashes(among: store.substitutions)
     }
 
     func delete(_ substitution: Substitution) {
