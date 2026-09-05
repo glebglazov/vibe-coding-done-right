@@ -24,6 +24,8 @@ final class FileSubstitutionStore: SubstitutionStore {
     private static let substitutionsDirName = "Substitutions"
     private static let appGroupIdentifier = "group.glebglazov.vcdr-ios"
     private static let storageFolderName = "VCDR"
+    /// One millisecond: what `SubstitutionJSONCoders` keeps of a `Date`.
+    private static let storageTimestampResolution: TimeInterval = 0.001
 
     // MARK: - State
 
@@ -87,8 +89,9 @@ final class FileSubstitutionStore: SubstitutionStore {
     }
 
     func delete(_ substitution: Substitution) {
-        let now = Date()
         let id = substitution.id
+        let known = substitutions.first { $0.id == id } ?? substitution
+        let now = Self.tombstoneStamp(after: known.lastUpdated)
         substitutions.removeAll { $0.id == id }
 
         let url = tombstoneURL(id: id)
@@ -192,6 +195,16 @@ final class FileSubstitutionStore: SubstitutionStore {
             return !(deletedAt > substitution.lastUpdated)
         }
         return live.sorted { $0.lastUpdated > $1.lastUpdated }
+    }
+
+    /// Stamps a tombstone so it dominates the edit it deletes. Stamps round-trip
+    /// through storage at millisecond resolution, so a delete issued in the same
+    /// millisecond as the edit before it reads back as a tie — and a tie leaves
+    /// the entry live, which would let a cleared Substitution return on the next
+    /// scan. Deleting an entry is always causally after the edit it saw, so the
+    /// stamp is carried forward one storage tick when the clock has not moved.
+    nonisolated private static func tombstoneStamp(after lastUpdated: Date, now: Date = Date()) -> Date {
+        max(now, lastUpdated + storageTimestampResolution)
     }
 
     // MARK: - Filenames

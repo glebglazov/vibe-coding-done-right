@@ -110,6 +110,12 @@ def ollama_version(origin):
         return None
 
 
+def relative_to_here(path):
+    """A path under the ledger commands, named from them; anything else as it is."""
+    path = Path(path).resolve()
+    return str(path.relative_to(HERE)) if path.is_relative_to(HERE) else str(path)
+
+
 def macos_build():
     """The OS naming itself. Apple ships no id for the on-device model, so the
     build it came with is the closest thing to a version this run can record."""
@@ -421,7 +427,11 @@ class AppleAFMArm:
                 "The OS build is the version, and the run records it as the runtime."
             )
         self.model = model
-        self.endpoint = endpoint
+        # A path, where every other arm has a URL. It is written relative to the
+        # ledger commands, because an absolute one would name this machine in a
+        # manifest that has to stay readable from any checkout.
+        self.shim = Path(endpoint)
+        self.endpoint = relative_to_here(self.shim)
         self.sampling = {"sampling": "greedy", "maximum_response_tokens": MAX_TOKENS}
         self.availability = self.probe()
         if self.availability != "available":
@@ -438,7 +448,7 @@ class AppleAFMArm:
         thirteen identical failures is a worse report than refusing to start.
         """
         asked = subprocess.run(
-            [str(self.endpoint), "--probe"], capture_output=True, text=True
+            [str(self.shim), "--probe"], capture_output=True, text=True
         )
         try:
             return json.loads(asked.stdout)["availability"]
@@ -456,7 +466,7 @@ class AppleAFMArm:
 
     def complete(self, system_prompt, user_message):
         asked = subprocess.run(
-            [str(self.endpoint)],
+            [str(self.shim)],
             input=json.dumps(
                 {
                     "system": system_prompt,

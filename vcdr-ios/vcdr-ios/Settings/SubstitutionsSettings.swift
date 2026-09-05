@@ -77,35 +77,12 @@ struct SubstitutionsSettings: View {
     }
 
     private func detail(for id: UUID) -> some View {
-        let substitution = binding(for: id)
+        let substitution = viewModel.binding(for: id)
         return SubstitutionDetailView(
             substitution: substitution,
             clashes: viewModel.clashes.clashes(for: substitution.wrappedValue),
             onCommit: { viewModel.commit(substitution.wrappedValue) }
         )
-    }
-
-    /// Edits the list entry by identity rather than by index: a Replacement
-    /// emptied while the screen is open evaporates the entry from the list, and
-    /// typing into it again should bring it back the way a freshly drafted one
-    /// arrives — not write to whatever row slid into its place. The stand-in for
-    /// an absent entry is fixed rather than freshly stamped, so re-reading it
-    /// never looks like an edit.
-    private func binding(for id: UUID) -> Binding<Substitution> {
-        Binding(
-            get: { viewModel.drafts.first { $0.id == id } ?? Self.evaporated(id) },
-            set: { edited in
-                if let index = viewModel.drafts.firstIndex(where: { $0.id == id }) {
-                    viewModel.drafts[index] = edited
-                } else {
-                    viewModel.drafts.append(edited)
-                }
-            }
-        )
-    }
-
-    private static func evaporated(_ id: UUID) -> Substitution {
-        Substitution(id: id, triggerPhrases: [], replacement: "", lastUpdated: .distantPast)
     }
 }
 

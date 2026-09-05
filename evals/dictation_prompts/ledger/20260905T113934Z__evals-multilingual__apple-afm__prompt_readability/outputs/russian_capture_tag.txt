@@ -1,0 +1,8 @@
+```markdown
+<dictation>
+    <capture id="1">struct SubstitutionTombstone: Codable, Equatable, Sendable {
+        let substitutionID: UUID
+        let deletedAt: Date
+    }</capture>
+</dictation>
+```

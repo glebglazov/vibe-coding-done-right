@@ -1,0 +1,351 @@
+{
+  "run_id": "20260905T113332Z__evals-english__apple-afm__prompt_readability",
+  "judged_at": "2026-09-05T11:35:58Z",
+  "judge": {
+    "model": "claude-opus-5",
+    "mode": "anchored",
+    "endpoint": "/Users/glebglazov/.local/bin/claude",
+    "runtime": "claude-code-cli 2.1.261",
+    "rubric": "agents/assessor.md",
+    "rubric_sha256": "61752b7c0a4cc27f378fa529651461d9eb00892a91f2b5505293ae43e2da5056",
+    "sampling": {
+      "temperature": null
+    }
+  },
+  "weights": {
+    "punctuation": 0.2,
+    "voice": 0.2,
+    "captures": 0.15,
+    "content": 0.3,
+    "format": 0.15
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "ca8cd98b3a91c8e86b7fc861d23eda569f47bfd62f693475ef5d35f356f3cf33"
+  },
+  "overall_mean": 0.841,
+  "dimension_means": {
+    "punctuation": 0.774,
+    "voice": 0.833,
+    "captures": 0.952,
+    "content": 0.781,
+    "format": 0.952
+  },
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.64,
+      "dimensions": {
+        "punctuation": 0.6,
+        "voice": 0.5,
+        "captures": 1.0,
+        "content": 0.4,
+        "format": 1.0
+      },
+      "notes": "Both hedges ('I think', 'I guess') were deleted rather than fronted, losing the speaker's hedged meaning and voice, and splitting into two sentences instead of the expected comma-joined clause."
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.8,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 0.7,
+        "captures": 1.0,
+        "content": 0.6,
+        "format": 1.0
+      },
+      "notes": "Failed the spoken-order reordering and added the word \"approximately,\" which wasn't in the original."
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.88,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.6,
+        "format": 1.0
+      },
+      "notes": "Failed the target transform: left the adverb in split-infinitive position instead of moving 'eventually' before 'wants'."
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.79,
+      "dimensions": {
+        "punctuation": 0.7,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.5,
+        "format": 1.0
+      },
+      "notes": "Failed to dedupe the two repeated 'I think' tics and omitted the comma before 'because'."
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.97,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a comma instead of the colon that sets off the topic from the list of symptoms."
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.97,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Collapsed the false start and punctuated correctly, but failed to capitalize the sentence-initial 'And'."
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period instead of the expected em-dash between the final two clauses; otherwise identical."
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a period instead of the expected em-dash to join the clauses; otherwise identical."
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.67,
+      "dimensions": {
+        "punctuation": 0.5,
+        "voice": 0.6,
+        "captures": 1.0,
+        "content": 0.5,
+        "format": 1.0
+      },
+      "notes": "Split the cascade into separate sentences, dropped initial capitalization, and changed 'we fall back' to 'you fall back', altering meaning."
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.945,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Sentence break placed at a different point and 'and then' reduced to 'Then', minor voice/punctuation drift but all events preserved."
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.775,
+      "dimensions": {
+        "punctuation": 0.8,
+        "voice": 0.6,
+        "captures": 1.0,
+        "content": 0.65,
+        "format": 1.0
+      },
+      "notes": "Dropped the characteristic wordy intro 'the thing with' and added connectives ('that', extra 'and'), tightening the speaker's voice."
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.63,
+      "dimensions": {
+        "punctuation": 0.7,
+        "voice": 0.5,
+        "captures": 1.0,
+        "content": 0.3,
+        "format": 1.0
+      },
+      "notes": "Failed to collapse the self-correction, kept the abandoned Postgres choice and filler 'actually wait no', and expanded names to PostgreSQL/MongoDB while dropping 'I think'."
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.82,
+      "dimensions": {
+        "punctuation": 0.5,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.8,
+        "format": 1.0
+      },
+      "notes": "Missing quotation marks around the quoted dialogue and the em-dash, leaving the self-correction unmarked as speech."
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.765,
+      "dimensions": {
+        "punctuation": 0.6,
+        "voice": 0.6,
+        "captures": 1.0,
+        "content": 0.75,
+        "format": 1.0
+      },
+      "notes": "Dropped the opening \"Okay, so\", used periods instead of em-dashes for the asides, kept the filler \"I mean\", and expanded \"infra\" to \"infrastructure\"."
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.95,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Missing em-dash and serial commas in the list clauses, plus an extra comma after 'Right now', though all fillers were removed and question marks correct."
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.71,
+      "dimensions": {
+        "punctuation": 0.6,
+        "voice": 0.4,
+        "captures": 1.0,
+        "content": 0.7,
+        "format": 1.0
+      },
+      "notes": "Added words ('Instead', 'that'), over-formalized 'But' to 'However', dropped 'this...thing' casual phrasing, no em-dash, and left 'sixty' unconverted to 60."
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.845,
+      "dimensions": {
+        "punctuation": 0.7,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.75,
+        "format": 1.0
+      },
+      "notes": "Kept fillers 'like' and 'basically', left 'forty-five' unconverted to 45, used a period instead of the em-dash and missed a comma before 'and everyone'."
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Missing the comma before 'and also'; everything else matches."
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.57,
+      "dimensions": {
+        "punctuation": 0.6,
+        "voice": 0.9,
+        "captures": 0.0,
+        "content": 0.9,
+        "format": 0.0
+      },
+      "notes": "Capture tags stripped entirely and output wrapped in code fences; also lowercase sentence start and period instead of em-dash."
+    }
+  ]
+}

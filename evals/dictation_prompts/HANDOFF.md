@@ -473,11 +473,50 @@ the on-device model is unavailable: appleIntelligenceNotEnabled. Turn Apple Inte
 System Settings > Apple Intelligence & Siri, wait for the model to download, and record again.
 ```
 
-**Not yet measured.** As of this writing Apple Intelligence is off on the recording machine, so no
-`apple-afm` run is in the ledger. The arm, its shim and its tests are in place; recording is the
-one command above once the switch is on. Record it over `--subset english` first: the on-device
-model's non-English behaviour is a separate question, and the English subset is where the s1-mini
-and gemma rows already sit for comparison.
+**The first reading** — `ledger/20260905T113332Z__evals-english__apple-afm__prompt_readability`,
+21 English cases, `prompt_readability`, macOS 26.5.1 (25F80), 2-4s per case with no failures:
+
+| axis | apple-afm |
+|---|---|
+| deterministic word / punctuation | 0.902 / 0.701 |
+| verdicts | EXACT 2, NORM 1, CLOSE 11, DIFF 5, FAIL 2 |
+| judge, blind (opus-5 via CLI) | 0.956 overall — punctuation 0.995, content 0.948, voice 0.912, format 0.981 |
+| judge, anchored (opus-5 via CLI) | 0.841 overall — content 0.781, voice 0.833 |
+
+**It follows a prompt.** This is the difference from S1-mini, which cannot read one: the on-device
+model was given `prompt_readability` unchanged and answered it, which is why its row sits on the
+prompt axis as well as the model axis.
+
+**It breaks the capture contract.** On `capture_with_code` it strips the `<capture id="1">` tags and
+wraps the whole answer in a code fence — captures 0.0 on both judge readings, and the one case where
+the format score moves at all. Whatever the app does with a capture tag, this model does not preserve
+it. That is a shipping blocker for the capture path specifically, not for dictation generally.
+
+**Its other weak spot is self-correction.** `self_correction_own` is the worst case in the set
+(word 0.474, anchored voice 0.5): the model resolves a spoken correction by rewriting the sentence
+rather than by dropping the retracted half.
+
+**Against S1-mini on the same 21 cases** (deterministic axis; A = apple-afm, B = S1-mini):
+A wins 5, B wins 9, ties 7. Read by category, the two models fail in different places —
+
+| category | apple-afm | S1-mini |
+|---|---|---|
+| readability_transform (6) | 0.858 | 0.799 |
+| content_preservation (3) | 0.883 | 0.963 |
+| self_correction (2) | 0.737 | 0.865 |
+| realistic_mixed (4) | 0.932 | 0.971 |
+| capture (1) | 0.938 | 1.0 |
+| voice_preservation (3), passthrough (2) | 1.0 | 1.0 |
+
+Apple's model edits more aggressively toward readability; S1-mini stays closer to the transcript and
+so loses less content. Note the comparison's own warning on that table: these references were fitted
+toward `prompt_readability`, the prompt apple-afm ran, so the deterministic columns are not a neutral
+reading of model quality. The blind judge reading is the one that does not share that fit.
+
+**The judge axis does not compare across these two runs**, and the tool says so: apple-afm was judged
+through the CLI, the S1-mini run through the API. Re-judging S1-mini with `--via cli` would make the
+columns comparable and cost no credits — it would overwrite that run's existing judge files, so it is
+left as a decision rather than done.
 
 ## The multilingual reading (2026-09-04)
 

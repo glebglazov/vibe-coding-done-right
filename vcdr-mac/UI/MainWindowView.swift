@@ -188,18 +188,14 @@ struct MainWindowView: View {
                     }
                 }
                 .navigationDestination(for: SubstitutionNavID.self) { navID in
-                    if let index = substitutionsViewModel.drafts.firstIndex(where: { $0.id == navID.id }) {
-                        SubstitutionDetailView(
-                            substitution: Binding(
-                                get: { substitutionsViewModel.drafts[index] },
-                                set: { substitutionsViewModel.drafts[index] = $0 }
-                            ),
-                            clashes: substitutionsViewModel.clashes.clashes(for: substitutionsViewModel.drafts[index]),
-                            onCommit: {
-                                substitutionsViewModel.commit(substitutionsViewModel.drafts[index])
-                            }
-                        )
-                    }
+                    let substitution = substitutionsViewModel.binding(for: navID.id)
+                    SubstitutionDetailView(
+                        substitution: substitution,
+                        clashes: substitutionsViewModel.clashes.clashes(for: substitution.wrappedValue),
+                        onCommit: {
+                            substitutionsViewModel.commit(substitution.wrappedValue)
+                        }
+                    )
                 }
                 .navigationDestination(for: StyleNavID.self) { navID in
                     StyleDetailContainer(

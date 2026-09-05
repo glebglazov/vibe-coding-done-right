@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 /// Drives the Substitutions settings tab. Owns the editable list shown in the
 /// UI and persists every add / edit / delete through the `SubstitutionStore`.
@@ -67,6 +68,32 @@ final class SubstitutionsViewModel {
     /// phrases it loses and name the Replacement that beats each one.
     var clashes: TriggerPhraseClashes {
         TriggerPhraseClashes(among: store.substitutions)
+    }
+
+    /// Edits one entry by identity rather than by index, for an editor screen
+    /// open on it: a Replacement emptied while the screen is open evaporates the
+    /// entry from the list, and typing into it again should bring it back the way
+    /// a freshly drafted one arrives — not write to whatever row slid into its
+    /// place. The stand-in for an absent entry is fixed rather than freshly
+    /// stamped, so re-reading it never looks like an edit.
+    func binding(for id: UUID) -> Binding<Substitution> {
+        Binding(
+            get: { [weak self] in
+                self?.drafts.first { $0.id == id } ?? Self.evaporated(id)
+            },
+            set: { [weak self] edited in
+                guard let self else { return }
+                if let index = drafts.firstIndex(where: { $0.id == id }) {
+                    drafts[index] = edited
+                } else {
+                    drafts.append(edited)
+                }
+            }
+        )
+    }
+
+    private static func evaporated(_ id: UUID) -> Substitution {
+        Substitution(id: id, triggerPhrases: [], replacement: "", lastUpdated: .distantPast)
     }
 
     func delete(_ substitution: Substitution) {
