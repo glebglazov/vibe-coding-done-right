@@ -44,11 +44,14 @@ final class SyncReconciler {
         case outstanding
     }
 
-    private(set) var passState: PassState = .settled
+    /// Working from construction: resolving the container takes seconds on
+    /// the first launch after install, and through that window the device has
+    /// not been checked. Only a finished pass moves this off working.
+    private(set) var passState: PassState = .working
 
     /// When this dataset last had a Settled Pass on this device. Restored from
-    /// defaults at construction, so a cold launch says how current the device
-    /// is before it has had a chance to check.
+    /// defaults at construction, so a pass that comes back Outstanding still
+    /// has the previous launch's time to show behind its note.
     private(set) var lastSyncTime: Date?
 
     private static let signedOutReason = "iCloud signed out"

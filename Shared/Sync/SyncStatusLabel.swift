@@ -27,16 +27,29 @@ struct SyncStatusLabel: View {
         }
     }
 
-    /// Relative and self-refreshing: SwiftUI re-renders a `.relative` date as
-    /// the minutes pass, so the list needs no timer to keep it true.
+    /// The Last Sync Time in words, refreshed on the cadence its own band
+    /// needs — once when the first minute is up, then a minute, an hour, a
+    /// day — so a settled control sits still instead of counting.
     @ViewBuilder
     private var syncedAgo: some View {
         if let lastSyncTime {
-            Text("synced")
-            Text(lastSyncTime, style: .relative)
-            Text("ago")
+            TimelineView(LastSyncSchedule(lastSyncTime: lastSyncTime)) { context in
+                Text("synced \(LastSyncPhrase.of(lastSyncTime, at: context.date).words)")
+            }
         } else {
             Text("not synced yet")
+        }
+    }
+}
+
+/// Wakes the label exactly when the phrase it is showing could have changed,
+/// which the phrase itself answers.
+private struct LastSyncSchedule: TimelineSchedule {
+    let lastSyncTime: Date
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> some Sequence<Date> {
+        sequence(first: startDate) { shownAt in
+            shownAt.addingTimeInterval(LastSyncPhrase.of(lastSyncTime, at: shownAt).staysTrueFor)
         }
     }
 }
