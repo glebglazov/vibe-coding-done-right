@@ -6,35 +6,40 @@ final class CopyLatestCaptureHandler {
     private let settings: AppSettings
     private let transcriptionHistory: any HistoryStore
     private let recordingIndicator: RecordingIndicatorPanel
-    private let hotkeyManager = GlobalHotkeyManager()
+    private let hotkeyRegistry: any HotkeyRegistry
+
+    private var hotkeyClaim: HotkeyClaim?
+    private var isHotkeySuppressed = false
 
     init(
         settings: AppSettings,
+        hotkeyRegistry: any HotkeyRegistry,
         transcriptionHistory: any HistoryStore,
         recordingIndicator: RecordingIndicatorPanel
     ) {
         self.settings = settings
+        self.hotkeyRegistry = hotkeyRegistry
         self.transcriptionHistory = transcriptionHistory
         self.recordingIndicator = recordingIndicator
         observeHotkeySettings()
+        // Claiming a combination needs no Accessibility grant, so the shortcut is
+        // live from launch rather than from whenever the grant arrives.
+        setupHotkey()
     }
 
+    /// Releases first and claims after, unconditionally: the window server refuses
+    /// a second registration of a combination that is still claimed, so re-arming
+    /// the same shortcut only works in that order.
     func setupHotkey() {
-        let binding = settings.copyLatestCaptureHotkey
-        guard binding.isAssigned else {
-            hotkeyManager.unregister()
-            Logger.hotkeys.info("Copy latest capture hotkey unassigned, unregistered")
-            return
-        }
+        hotkeyClaim?.release()
+        hotkeyClaim = nil
 
-        hotkeyManager.onKeyDown = { [weak self] in
+        let binding = settings.copyLatestCaptureHotkey
+        guard binding.isAssigned, !isHotkeySuppressed else { return }
+
+        hotkeyClaim = hotkeyRegistry.claim(binding) { [weak self] in
             self?.copyLatestCapture()
         }
-        hotkeyManager.onKeyUp = nil
-
-        let keyCode = CGKeyCode(binding.keyCode)
-        let modifiers = CGEventFlags(rawValue: binding.modifiers)
-        _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
     }
 
     private func copyLatestCapture() {
@@ -53,7 +58,7 @@ final class CopyLatestCaptureHandler {
 
     // MARK: - Settings tracking
 
-    /// Re-arms this handler's tap from `settings`, so a re-bound Copy Latest
+    /// Re-arms this handler's claim from `settings`, so a re-bound Copy Latest
     /// Capture shortcut applies at once. See `CaptureSession.observeHotkeySettings()`.
     private func observeHotkeySettings() {
         withObservationTracking {
@@ -67,9 +72,11 @@ final class CopyLatestCaptureHandler {
         }
     }
 
-    /// Used while the user is recording a new shortcut in the UI so this hotkey
-    /// passes through unconsumed.
+    /// Drops or restores this claim while the user records a new shortcut in the
+    /// UI, so the key press reaches the shortcut recorder.
     func setHotkeySuppressed(_ suppressed: Bool) {
-        hotkeyManager.isSuppressed = suppressed
+        guard suppressed != isHotkeySuppressed else { return }
+        isHotkeySuppressed = suppressed
+        setupHotkey()
     }
 }

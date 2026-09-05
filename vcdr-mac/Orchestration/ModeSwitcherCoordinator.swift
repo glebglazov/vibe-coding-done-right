@@ -1,48 +1,50 @@
 import Combine
 import Foundation
-import CoreGraphics
 import OSLog
 
 @Observable
 @MainActor
 final class ModeSwitcherCoordinator {
     private let settings: AppSettings
-    private let hotkeyManager = GlobalHotkeyManager()
+    private let hotkeyRegistry: any HotkeyRegistry
     private let panel = ModeSwitcherPanel()
     private let overrides: SessionOverrides
     private let styleResolution: StyleResolutionPipeline
+
+    @ObservationIgnored private var hotkeyClaim: HotkeyClaim?
+    @ObservationIgnored private var isHotkeySuppressed = false
 
     @ObservationIgnored weak var delegate: ModeSwitcherCoordinatorDelegate?
 
     init(
         settings: AppSettings,
+        hotkeyRegistry: any HotkeyRegistry,
         overrides: SessionOverrides,
         styleResolution: StyleResolutionPipeline
     ) {
         self.settings = settings
+        self.hotkeyRegistry = hotkeyRegistry
         self.overrides = overrides
         self.styleResolution = styleResolution
         observeHotkeySettings()
+        // Claiming a combination needs no Accessibility grant, so the switcher is
+        // live from launch rather than from whenever the grant arrives.
+        setupHotkey()
     }
 
+    /// Releases first and claims after, unconditionally: the window server refuses
+    /// a second registration of a combination that is still claimed, so re-arming
+    /// the same shortcut only works in that order.
     func setupHotkey() {
+        hotkeyClaim?.release()
+        hotkeyClaim = nil
+
         let binding = settings.modeSwitcherHotkey
-        guard binding.isAssigned else {
-            hotkeyManager.unregister()
-            Logger.hotkeys.info("Mode switcher hotkey unassigned, unregistered")
-            return
-        }
+        guard binding.isAssigned, !isHotkeySuppressed else { return }
 
-        hotkeyManager.onKeyDown = { [weak self] in
-            MainActor.assumeIsolated {
-                self?.toggleSwitcher()
-            }
+        hotkeyClaim = hotkeyRegistry.claim(binding) { [weak self] in
+            self?.toggleSwitcher()
         }
-        hotkeyManager.onKeyUp = nil
-
-        let keyCode = CGKeyCode(binding.keyCode)
-        let modifiers = CGEventFlags(rawValue: binding.modifiers)
-        _ = hotkeyManager.register(keyCode: keyCode, modifiers: modifiers)
     }
 
     /// Creates a ModeSwitcherViewModel with standard callbacks.
@@ -149,7 +151,7 @@ final class ModeSwitcherCoordinator {
 
     // MARK: - Settings + Re-registration
 
-    /// Re-arms this coordinator's tap from `settings`, so a re-bound Mode Switcher
+    /// Re-arms this coordinator's claim from `settings`, so a re-bound Mode Switcher
     /// shortcut applies at once. See `CaptureSession.observeHotkeySettings()`.
     private func observeHotkeySettings() {
         withObservationTracking {
@@ -163,7 +165,10 @@ final class ModeSwitcherCoordinator {
         }
     }
 
+    /// Drops or restores the switcher claim while the user records a new shortcut.
     func setHotkeySuppressed(_ suppressed: Bool) {
-        hotkeyManager.isSuppressed = suppressed
+        guard suppressed != isHotkeySuppressed else { return }
+        isHotkeySuppressed = suppressed
+        setupHotkey()
     }
 }

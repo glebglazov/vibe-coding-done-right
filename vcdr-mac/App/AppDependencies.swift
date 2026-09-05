@@ -78,12 +78,14 @@ final class AppDependencies {
 
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(
             settings: settings,
+            hotkeyRegistry: hotkeyRegistry,
             overrides: overrides,
             styleResolution: styleResolution
         )
 
         self.copyLatestCaptureHandler = CopyLatestCaptureHandler(
             settings: settings,
+            hotkeyRegistry: hotkeyRegistry,
             transcriptionHistory: history,
             recordingIndicator: recordingIndicator
         )
@@ -130,8 +132,8 @@ final class AppDependencies {
 
     /// Suppresses every app-owned hotkey while the user is recording a new shortcut
     /// in the UI, so the key press reaches the shortcut recorder and nothing in the
-    /// app reacts to it. The toggle's claim is released outright; the hotkeys still
-    /// on event taps pass their events through unconsumed.
+    /// app reacts to it. Claims are released outright; the hotkeys still on event
+    /// taps pass their events through unconsumed.
     @MainActor
     func setHotkeySuppression(_ suppressed: Bool) {
         session.setToggleHotkeySuppressed(suppressed)
@@ -164,8 +166,6 @@ final class AppDependencies {
 
         if hasAccessibilityPermission {
             session.accessibilityGranted()
-            modeSwitcherCoordinator.setupHotkey()
-            copyLatestCaptureHandler.setupHotkey()
         }
 
         await styleResolution.start()
@@ -279,8 +279,6 @@ final class AppDependencies {
 
             if !wasAccessible && self.hasAccessibilityPermission {
                 self.session.accessibilityGranted()
-                self.modeSwitcherCoordinator.setupHotkey()
-                self.copyLatestCaptureHandler.setupHotkey()
                 Logger.app.info("Accessibility granted, hotkeys registered")
             }
 

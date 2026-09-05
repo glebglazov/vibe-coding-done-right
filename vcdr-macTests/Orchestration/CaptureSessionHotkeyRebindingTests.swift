@@ -14,19 +14,6 @@ import Testing
 @Suite("CaptureSession — Hotkey re-binding")
 struct CaptureSessionHotkeyRebindingTests {
 
-    private static let armTimeout: Duration = .seconds(2)
-    private static let armPollInterval: Duration = .milliseconds(20)
-
-    @MainActor
-    private func waitFor(_ condition: @escaping () -> Bool) async -> Bool {
-        let start = ContinuousClock.now
-        while start.duration(to: .now) < Self.armTimeout {
-            if condition() { return true }
-            try? await Task.sleep(for: Self.armPollInterval)
-        }
-        return false
-    }
-
     @MainActor
     private func waitForArmed(
         _ session: CaptureSession,
