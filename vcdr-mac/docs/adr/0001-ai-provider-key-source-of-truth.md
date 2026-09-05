@@ -40,6 +40,8 @@ users keep both working AI calls and the bash fallback.
 - AI calls and bash scripts can intentionally diverge; the Variables screen warns
   when a Reserved override duplicates (safe to delete) or differs from the
   provider key (intended?).
-- Storage stays plain `UserDefaults` for now; because the Provider is the single
-  read/write seam for the key, swapping to Keychain / iCloud Keychain later is a
-  localized change.
+- Storage stayed plain `UserDefaults` at the time of this decision. Superseded by
+  root ADR-0009 (*Secrets live in a synced keychain, not UserDefaults*), which
+  made that swap — the localized change this bullet predicted, through the same
+  Provider seam. Everything else here still holds: the Provider still owns the
+  key, and the Reserved Variable is still a bash-only fallback.
