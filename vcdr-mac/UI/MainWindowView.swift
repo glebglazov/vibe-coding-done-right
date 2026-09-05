@@ -131,7 +131,11 @@ struct MainWindowView: View {
                     case .variables:
                         VariablesTabView(settings: dependencies.settings)
                     case .substitutions:
-                        SubstitutionsListView(viewModel: substitutionsViewModel, path: $path)
+                        SubstitutionsListView(
+                            viewModel: substitutionsViewModel,
+                            path: $path,
+                            substitutionSync: dependencies.substitutionSync
+                        )
                     case .outputDestinations:
                         OutputDestinationsListView(settings: dependencies.settings, path: $path)
                     case .transcription:

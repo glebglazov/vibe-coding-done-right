@@ -11,6 +11,10 @@ import SwiftUI
 struct SubstitutionsListView: View {
     @Bindable var viewModel: SubstitutionsViewModel
     @Binding var path: NavigationPath
+    /// Reporting on the Substitution dataset alone: a history backfill running
+    /// beside it says nothing about whether the next transcript will use the
+    /// Replacements shown here.
+    let substitutionSync: SyncReconciler?
 
     var body: some View {
         let clashes = viewModel.clashes
@@ -37,6 +41,11 @@ struct SubstitutionsListView: View {
                     }
                 }
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            SyncIndicator(reconciler: substitutionSync)
+                .padding(.trailing, 16)
+                .padding(.top, 8)
         }
         .navigationTitle("Substitutions")
         .toolbar {

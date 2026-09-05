@@ -14,8 +14,14 @@ struct SubstitutionsSettings: View {
     /// ready to type in rather than leaving a nameless row behind.
     @State private var drafted: DraftedSubstitution?
 
-    init(store: any SubstitutionStore) {
+    /// Reporting on the Substitution dataset alone: a history backfill running
+    /// beside it says nothing about whether the next transcript will use the
+    /// Replacements shown here.
+    private let sync: SyncReconciler?
+
+    init(store: any SubstitutionStore, sync: SyncReconciler?) {
         _viewModel = State(initialValue: SubstitutionsViewModel(store: store))
+        self.sync = sync
     }
 
     var body: some View {
@@ -51,6 +57,12 @@ struct SubstitutionsSettings: View {
                 }
             } footer: {
                 Text("Matching is case-insensitive and whole-word. A Substitution fires on any of its Triggers, and the longest Trigger wins when two overlap.")
+            }
+
+            if let sync {
+                Section {
+                    SyncIndicator(reconciler: sync)
+                }
             }
 
             Section {

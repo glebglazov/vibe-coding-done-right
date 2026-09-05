@@ -30,7 +30,7 @@ struct HistoryView: View {
                         .foregroundStyle(theme.onSurface)
                 }
                 ToolbarItem(placement: .principal) {
-                    SyncIndicator(reconciler: historySync, theme: theme)
+                    SyncIndicator(reconciler: historySync)
                 }
                 if !history.conversations.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -114,53 +114,6 @@ struct HistoryView: View {
             if copiedConversationID == conversation.id {
                 copiedConversationID = nil
             }
-        }
-    }
-}
-
-/// Absent when sync is off: there is no reconciler to report on, and the
-/// history the list shows is complete without one.
-///
-/// Two separate things are shown side by side: whether iCloud is carrying the
-/// records at all, and how the last Sync Pass went. A pass runs against local
-/// files while the user is signed out, so paused and working are both possible
-/// at once.
-private struct SyncIndicator: View {
-    let reconciler: SyncReconciler?
-    let theme: Theme
-
-    var body: some View {
-        if let reconciler {
-            Button {
-                Task { await reconciler.reconcile() }
-            } label: {
-                HStack(spacing: 6) {
-                    icon(for: reconciler.syncState)
-                    SyncStatusLabel(
-                        passState: reconciler.passState,
-                        lastSyncTime: reconciler.lastSyncTime
-                    )
-                    .font(.caption)
-                    .foregroundStyle(color(for: reconciler.passState))
-                }
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private func color(for state: SyncReconciler.PassState) -> Color {
-        state == .outstanding ? .orange : theme.onSurfaceVariant
-    }
-
-    @ViewBuilder
-    private func icon(for state: SyncReconciler.SyncState) -> some View {
-        switch state {
-        case .idle:
-            Image(systemName: "checkmark.icloud")
-                .foregroundStyle(theme.onSurfaceVariant)
-        case .paused:
-            Image(systemName: "exclamationmark.icloud")
-                .foregroundStyle(.orange)
         }
     }
 }

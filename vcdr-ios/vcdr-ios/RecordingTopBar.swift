@@ -7,6 +7,7 @@ struct RecordingTopBar: View {
     let history: (any HistoryStore)?
     let historySync: SyncReconciler?
     let substitutionStore: any SubstitutionStore
+    let substitutionSync: SyncReconciler?
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("appearance") private var appearance: Appearance = .system
     @State private var showSettings = false
@@ -75,7 +76,10 @@ struct RecordingTopBar: View {
         .padding(.leading, 4)
         .sheet(isPresented: $showSettings) {
             let _ = Logger.app.info("[LaunchProbe] settings sheet content built main=\(Thread.isMainThread)")
-            SettingsView(substitutionStore: substitutionStore)
+            SettingsView(
+                substitutionStore: substitutionStore,
+                substitutionSync: substitutionSync
+            )
                 .preferredColorScheme(appearance.colorScheme)
                 .onAppear {
                     Logger.app.info("[LaunchProbe] SettingsView onAppear main=\(Thread.isMainThread)")

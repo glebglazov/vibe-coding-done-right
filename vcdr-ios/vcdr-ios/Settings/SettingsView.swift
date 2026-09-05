@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let substitutionStore: any SubstitutionStore
+    let substitutionSync: SyncReconciler?
     @Environment(\.dismiss) private var dismiss
     @State private var diagnosticsUnlock = DiagnosticsUnlock()
     @State private var showClearLogsConfirmation = false
@@ -126,7 +127,10 @@ struct SettingsView: View {
     private var substitutionsSection: some View {
         Section {
             NavigationLink("Substitutions") {
-                SubstitutionsSettings(store: substitutionStore)
+                SubstitutionsSettings(
+                    store: substitutionStore,
+                    sync: substitutionSync
+                )
             }
         } footer: {
             Text("Swap a spoken Trigger for fixed Replacement text, applied before any other processing in every mode.")
