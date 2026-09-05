@@ -87,9 +87,25 @@ final class AppSettings {
     var audioSettings: AudioSettings {
         didSet { save() }
     }
+    /// The user's Variables — name/value pairs injected into every bash script, and so
+    /// the natural home for any other secret a script needs. The Secret Store owns the
+    /// list as one item; this mirrors what it held at launch so reads stay synchronous
+    /// and observable, and every write goes through to the Store. See
+    /// `docs/adr/0009-secrets-live-in-a-synced-keychain-not-userdefaults.md`.
     var variables: [Variable] {
-        didSet { save() }
+        get { mirroredVariables }
+        set {
+            mirroredVariables = newValue
+            writeVariablesToStore()
+            save()
+        }
     }
+
+    private var mirroredVariables: [Variable]
+
+    /// Whether the Secret Store refused to answer for the Variables list at launch. The
+    /// mirrored list is empty then, which is why it may never be mistaken for an empty list.
+    private var variablesUnreadable: Bool
 
     /// API keys per cloud AI Provider — the single source of truth for AI calls.
     /// The Secret Store owns them; this mirrors what it held at launch so reads stay
@@ -134,6 +150,17 @@ final class AppSettings {
             unreadableProviders.remove(provider)
         } catch {
             Logger.settings.error("Secret Store write failed for \(provider.displayName): \(error)")
+        }
+    }
+
+    /// Writes the Variables list through to the Secret Store as one item. A refused write
+    /// leaves the mirrored list in place, so the session the user edited it in keeps working.
+    private func writeVariablesToStore() {
+        do {
+            try secretStore.setSecret(Self.encodeVariables(mirroredVariables), forKey: Keys.variables)
+            variablesUnreadable = false
+        } catch {
+            Logger.settings.error("Secret Store write failed for the Variables list: \(error)")
         }
     }
 
@@ -216,6 +243,8 @@ final class AppSettings {
         static let outputDestinations = "outputDestinations"
         static let audioSettings = "audioSettings"
 
+        /// Names the Variables list's Secret Store item, and the UserDefaults entry the
+        /// one-shot migration drains into it.
         static let variables = "variables"
         // AI Provider API keys — own dedicated UserDefaults fields (mirrors iOS).
         static let anthropicAPIKey = "ai_processing_anthropic_api_key"
@@ -227,6 +256,8 @@ final class AppSettings {
         static let didMigrateProviderKeysToSecretStore = "didMigrateProviderKeysToSecretStore"
         /// Providers the Secret Store migration found already holding a differing key.
         static let providersWithSupersededKeys = "providersWithSupersededKeys"
+        /// Persisted flag gating the one-shot Variables list → Secret Store migration.
+        static let didMigrateVariablesToSecretStore = "didMigrateVariablesToSecretStore"
         static let removeFillerWords = "removeFillerWords"
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         static let legacyPushToTalkHotkey = "pushToTalkHotkey"
@@ -258,6 +289,22 @@ final class AppSettings {
 
     private static func boolSetting(from defaults: UserDefaults, forKey key: String, default defaultValue: Bool) -> Bool {
         defaults.object(forKey: key) != nil ? defaults.bool(forKey: key) : defaultValue
+    }
+
+    /// The Variables list as the one string its Secret Store item holds, and back. The
+    /// Store's values are strings, so the array travels as the same JSON that used to sit
+    /// in the preferences file.
+    private static func encodeVariables(_ variables: [Variable]) -> String? {
+        guard let data = try? JSONEncoder().encode(variables) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func decodeVariables(from secret: String?) -> [Variable] {
+        guard let secret, let data = secret.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([Variable].self, from: data) else {
+            return []
+        }
+        return decoded
     }
 
     private func encode<T: Codable>(_ value: T, forKey key: String) {
@@ -356,8 +403,16 @@ final class AppSettings {
             self.audioSettings = AudioSettings(preferredInputDeviceID: legacyDeviceID, pauseMediaDuringRecording: true)
         }
 
-        // Load variables
-        self.variables = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
+        // Load variables from the Secret Store — the list carries whatever secrets a bash
+        // script needs, so it sits beside the Provider keys rather than in UserDefaults.
+        do {
+            self.mirroredVariables = Self.decodeVariables(from: try secretStore.secret(forKey: Keys.variables))
+            self.variablesUnreadable = false
+        } catch {
+            self.mirroredVariables = []
+            self.variablesUnreadable = true
+            Logger.settings.error("Secret Store read failed for the Variables list: \(error)")
+        }
 
         // Load AI Provider API keys from the Secret Store — the single source of truth
         // for AI calls. A provider the Store refused is remembered as unreadable, never
@@ -400,6 +455,10 @@ final class AppSettings {
         // One-shot: move Provider keys out of UserDefaults into the Secret Store. Runs
         // first so the Reserved Variable migration below sees the keys it carried over.
         migrateProviderKeysToSecretStoreIfNeeded()
+
+        // One-shot: move the Variables list out of UserDefaults into the Secret Store.
+        // Runs before the Reserved Variable migration below, which reads the list.
+        migrateVariablesToSecretStoreIfNeeded()
 
         // One-shot: fold legacy Reserved-named Variable rows into Provider keys.
         migrateReservedVariablesIfNeeded()
@@ -446,6 +505,35 @@ final class AppSettings {
         Logger.settings.info("Provider keys migrated to the Secret Store; superseded: \(superseded.count)")
     }
 
+    /// One-shot migration of the Variables list out of `UserDefaults` and into the Secret
+    /// Store, gated by a persisted flag. The list is carried over only where the Store holds
+    /// none; a list already synced from another device wins, unnoticed, because a merge of
+    /// two name/value lists has no answer the user would recognise. The `UserDefaults` entry
+    /// goes either way: nothing secret stays there.
+    private func migrateVariablesToSecretStoreIfNeeded() {
+        guard !userDefaults.bool(forKey: Keys.didMigrateVariablesToSecretStore) else { return }
+        // A Store that would not answer is indistinguishable from one holding no list, and
+        // acting on that guess would overwrite a synced list. Retry next launch instead.
+        guard !variablesUnreadable else { return }
+
+        let carried: [Variable] = Self.decodeSetting(from: userDefaults, forKey: Keys.variables, default: [])
+        if !carried.isEmpty, mirroredVariables.isEmpty {
+            do {
+                try secretStore.setSecret(Self.encodeVariables(carried), forKey: Keys.variables)
+            } catch {
+                // Dropping the entry now would lose the list. Abandon the run with the flag
+                // unset so the next launch tries again.
+                Logger.settings.error("Secret Store migration failed for the Variables list: \(error)")
+                return
+            }
+            mirroredVariables = carried
+        }
+
+        userDefaults.removeObject(forKey: Keys.variables)
+        userDefaults.set(true, forKey: Keys.didMigrateVariablesToSecretStore)
+        Logger.settings.info("Variables list migrated to the Secret Store")
+    }
+
     /// One-shot migration of legacy Reserved-named Variable rows (`ANTHROPIC_API_KEY`,
     /// etc.) into the matching Provider key, then drops the rows. Gated by a persisted
     /// flag so it runs exactly once. A non-empty Reserved Variable is copied into the
@@ -490,7 +578,6 @@ final class AppSettings {
         encode(modeConfig.modes, forKey: Keys.modes)
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
-        encode(variables, forKey: Keys.variables)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
         Logger.settings.info("Settings saved")
     }
