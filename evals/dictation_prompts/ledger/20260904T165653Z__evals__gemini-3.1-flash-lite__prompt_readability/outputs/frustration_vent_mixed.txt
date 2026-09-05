@@ -1,0 +1,1 @@
+Honestly, I'm so tired of the standup format we have. We spend 45 minutes every day going around, and everyone just basically reads their Jira tickets out loud, and nobody actually listens. And half the team is remote, so they're muted anyway. I think we should just kill it and do async updates in Slack instead; nobody would miss it.

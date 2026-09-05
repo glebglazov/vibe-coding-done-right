@@ -1,0 +1,456 @@
+{
+  "run_id": "20260904T165613Z__evals__gemini-3.5-flash-lite__prompt_readability",
+  "judged_at": "2026-09-04T17:15:49Z",
+  "judge": {
+    "model": "claude-opus-5",
+    "mode": "anchored",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "runtime": "anthropic-messages-api 2023-06-01",
+    "rubric": "agents/assessor.md",
+    "rubric_sha256": "61752b7c0a4cc27f378fa529651461d9eb00892a91f2b5505293ae43e2da5056",
+    "sampling": {
+      "max_tokens": 2048
+    }
+  },
+  "weights": {
+    "punctuation": 0.2,
+    "voice": 0.2,
+    "captures": 0.15,
+    "content": 0.3,
+    "format": 0.15
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "3f6476272c1e1076b6eabb689f3ddbf8111f2b4eb77027c45e5eea00660f628f"
+  },
+  "overall_mean": 0.956,
+  "dimension_means": {
+    "punctuation": 0.895,
+    "voice": 0.966,
+    "captures": 1.0,
+    "content": 0.946,
+    "format": 1.0
+  },
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.94,
+      "dimensions": {
+        "punctuation": 0.7,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a comma instead of the expected colon after the topic clause, producing a comma splice, though the and-list was correctly collapsed."
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.97,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Replaced the sentence-ending period with a colon, lowercasing 'what', a minor deviation from the expected two-sentence punctuation."
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Used a comma splice where the expected output used an em-dash; everything else matches."
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.925,
+      "dimensions": {
+        "punctuation": 0.7,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Failed to split the run-on into two sentences and omitted the comma before the final 'and', though all content and connectors were preserved."
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.935,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Dropped the opening \"So\" and used a comma instead of the colon after \"works is\", though the wordy intro and meaning were otherwise preserved."
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.775,
+      "dimensions": {
+        "punctuation": 0.8,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.45,
+        "format": 1.0
+      },
+      "notes": "Kept the abandoned 'Postgres' option and the 'actually wait no' filler instead of collapsing the self-correction to the final decision."
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.99,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Only a missing comma after \"Tuesday\"; otherwise identical to expected."
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.94,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.9,
+        "format": 1.0
+      },
+      "notes": "Kept the filler \"basically\" in the first sentence, digitized \"twenty\", and shifted the em-dash placement in the runbook clause plus an extra comma."
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.9,
+      "dimensions": {
+        "punctuation": 0.6,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Substituted a colon for the sentence break, dropped the em-dash expansion, and omitted the list commas, though content and voice were intact."
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.89,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 0.85,
+        "captures": 1.0,
+        "content": 0.9,
+        "format": 1.0
+      },
+      "notes": "Dropped the 'kind of' hedge, replaced the clarifying em-dash with a period, and omitted the comma before 'because'."
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.82,
+      "dimensions": {
+        "punctuation": 0.75,
+        "voice": 0.8,
+        "captures": 1.0,
+        "content": 0.7,
+        "format": 1.0
+      },
+      "notes": "Kept the filler 'basically' while dropping the semantic 'just', left 'forty-five' unconverted, and replaced the em-dash with a period plus a missing comma."
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.965,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Dropped the casual opener \"So\" that the expected output preserved."
+    },
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.93,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.9,
+        "format": 1.0
+      },
+      "notes": "Missing comma after the introductory 'я думаю' and dropped 'как' from 'как минимум', though the reordering was done correctly."
+    },
+    {
+      "id": "russian_monolingual",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.965,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Ended the second sentence with a question mark instead of a period, slightly altering the statement's modality."
+    },
+    {
+      "id": "russian_with_english_terms",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.915,
+      "dimensions": {
+        "punctuation": 0.85,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 0.85,
+        "format": 1.0
+      },
+      "notes": "Lowercased \"k8s\" instead of \"K8s\" (the exact term-capitalization the case tests), plus a comma for an em-dash and a semicolon for a comma."
+    },
+    {
+      "id": "russian_english_code_switch",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output."
+    },
+    {
+      "id": "german_monolingual",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.97,
+      "dimensions": {
+        "punctuation": 0.9,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Ended the threat with a period instead of the expected exclamation mark, slightly flattening the emphatic tone."
+    },
+    {
+      "id": "german_passthrough",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Exact match with expected output; German passthrough handled correctly."
+    },
+    {
+      "id": "russian_capture_tag",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "anchored",
+      "overall": 0.96,
+      "dimensions": {
+        "punctuation": 0.8,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Comma splice instead of sentence break and a colon instead of a period, though the capture block and meaning are intact."
+    }
+  ]
+}

@@ -1,0 +1,456 @@
+{
+  "run_id": "20260904T165653Z__evals__gemini-3.1-flash-lite__prompt_readability",
+  "judged_at": "2026-09-05T09:56:31Z",
+  "judge": {
+    "model": "claude-opus-5",
+    "mode": "blind",
+    "endpoint": "/Users/glebglazov/.local/bin/claude",
+    "runtime": "claude-code-cli 2.1.261",
+    "rubric": "agents/assessor.md",
+    "rubric_sha256": "9ba4e598bc0d5ec298f2652128431359d87db7ced8fe24f0621189964eb1af87",
+    "sampling": {
+      "temperature": null
+    }
+  },
+  "weights": {
+    "punctuation": 0.2,
+    "voice": 0.2,
+    "captures": 0.15,
+    "content": 0.3,
+    "format": 0.15
+  },
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "3f6476272c1e1076b6eabb689f3ddbf8111f2b4eb77027c45e5eea00660f628f"
+  },
+  "overall_mean": 0.981,
+  "dimension_means": {
+    "punctuation": 0.991,
+    "voice": 0.955,
+    "captures": 1.0,
+    "content": 0.971,
+    "format": 1.0
+  },
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Both hedges preserved and repositioned naturally with correct punctuation and no added or lost meaning."
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.99,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean, correctly reorders the spoken quantity and drops the filler 'like'; only a slight restructuring of the speaker's word order."
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.895,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.85,
+        "captures": 1.0,
+        "content": 0.75,
+        "format": 1.0
+      },
+      "notes": "Relocating \"eventually\" ahead of \"wants\" shifts the meaning from the eventual hand-off to the eventual wanting, an unneeded rewrite of what the speaker said."
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.99,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean dedup of the repeated \"I think\" tic with voice and meaning intact; only the slightly unnecessary comma before \"because\" is debatable."
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.99,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean comma-list collapse of the repeated 'and' chain with correct terminal punctuation; meaning and register fully intact."
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Stutter removed, comma before coordinating clause, voice and meaning intact, clean output."
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Casual markers 'honestly' and 'But yeah' preserved, punctuation added correctly, no additions or omissions, clean output."
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Opening 'So' preserved, question mark added correctly, no additions or omissions."
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.99,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Hedges all preserved and output clean; semicolon is a slightly unusual but defensible boundary choice."
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Cascade of conditions preserved intact with clean comma segmentation and no wording changes."
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.95,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.9,
+        "format": 1.0
+      },
+      "notes": "Sequence and all clauses preserved with clean comma punctuation, but the speaker's \"and then\" sequencing marker before Sarah's approval was dropped."
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.98,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Dropped the opening casual marker \"so\"; otherwise the wordy intro, meaning, and punctuation are intact and the output is clean."
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.955,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Correctly resolved the self-correction to Mongo with clean punctuation and no preamble; only minor loss of the speaker's \"we should use\" phrasing."
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.985,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Clean, faithful rendering; quoting the reported speech preserves Jess's in-line self-correction and the speaker's casual markers intact."
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.925,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 0.75,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Clean and well-punctuated, but the casual openers \"so\" and \"I mean\" were dropped (the latter replaced with \"and\"), slightly flattening the spoken voice."
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.99,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean, faithful cleanup; filler 'like' removed correctly, casual register and all clauses preserved, question marks correctly applied."
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.89,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.75,
+        "captures": 1.0,
+        "content": 0.8,
+        "format": 1.0
+      },
+      "notes": "Dropped the opening \"so\" and the hedge \"kind of\" before \"weird,\" slightly flattening voice and softening the speaker's claim; otherwise clean and accurate."
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.965,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.9,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Clean and well-punctuated; dropped the casual marker \"I mean\" and the hedging \"like\" before forty-five minutes."
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean passthrough with correct comma, capitalization, and question mark; voice and content fully preserved."
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.99,
+      "dimensions": {
+        "punctuation": 0.95,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean passthrough with correct capitalization and terminal period; the comma before \"and also\" is slightly optional but harmless."
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean cleanup: capture preserved byte-for-byte, voice intact, punctuation correct."
+    },
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 0.975,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 0.95,
+        "captures": 1.0,
+        "content": 0.95,
+        "format": 1.0
+      },
+      "notes": "Clean and faithful; only the dropped \"и\" before \"документация\" and the reordering of \"два месяца как минимум\" to \"минимум два месяца\" deviate slightly from the spoken wording."
+    },
+    {
+      "id": "russian_monolingual",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Correct Russian punctuation and capitalization added with no wording changes, fillers, or added commentary."
+    },
+    {
+      "id": "russian_with_english_terms",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean, accurate punctuation and capitalization with all content and Russian language preserved."
+    },
+    {
+      "id": "russian_english_code_switch",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Code-switch preserved verbatim with correct Russian comma and English capitalization; nothing added or dropped."
+    },
+    {
+      "id": "german_monolingual",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean German output with correct sentence split, comma before the main clause, capitalization, and no added or lost content."
+    },
+    {
+      "id": "german_passthrough",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "German sentence passed through unchanged with correct question mark and clean output."
+    },
+    {
+      "id": "russian_capture_tag",
+      "category": "multilingual",
+      "judge_model": "claude-opus-5",
+      "judge_mode": "blind",
+      "overall": 1.0,
+      "dimensions": {
+        "punctuation": 1.0,
+        "voice": 1.0,
+        "captures": 1.0,
+        "content": 1.0,
+        "format": 1.0
+      },
+      "notes": "Clean output: capture preserved byte-for-byte, Russian text properly punctuated and capitalized with no added or lost meaning."
+    }
+  ]
+}

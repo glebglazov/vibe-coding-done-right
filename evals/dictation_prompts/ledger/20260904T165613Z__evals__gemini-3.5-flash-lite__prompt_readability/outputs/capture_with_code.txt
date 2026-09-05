@@ -1,0 +1,10 @@
+Here's the snippet for the rate limiter I was talking about. I think the bug is in how we're handling the cleanup — can you take a look?
+
+<capture id="1">function rateLimiter(userId) {
+  const now = Date.now();
+  const requests = cache.get(userId) || [];
+  const recent = requests.filter(t => t > now - 60000);
+  if (recent.length >= 100) return false;
+  cache.set(userId, [...recent, now]);
+  return true;
+}</capture>

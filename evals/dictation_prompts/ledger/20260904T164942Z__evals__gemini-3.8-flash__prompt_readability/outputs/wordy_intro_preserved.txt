@@ -1,0 +1,1 @@
+So the way the permissions system works is: you have a user, users can belong to multiple groups, and groups have roles.

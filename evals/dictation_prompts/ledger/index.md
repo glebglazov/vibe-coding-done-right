@@ -9,6 +9,11 @@ the case's reference, `anchored` scored deductions away from it. Each holds only
 within the judge named beside it, so no judge column is ever read against another
 judge's column, against the other mode, or against `word`.
 
+A mean that names a case count — `0.986 (claude-opus-5, 21/28 cases)` — was taken
+over that many of the run's cases and not the rest, so it is not a reading of the
+whole run and does not compare with one. A run the axis read none of holds no mean
+and prints `—`.
+
 | run | recorded | eval set | cases | model | prompt | runtime | word | punct | loss | inv | judge blind | judge anchored |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 20260904T101031Z__evals__claude-haiku-4-5-20251001__prompt_lean | 2026-09-04T10:10:31Z | evals.json | 22 | claude-haiku-4-5-20251001 | prompt_lean | anthropic-messages-api 2023-06-01 | 0.948 | 0.57 | 8 | 0 | — | 0.889 (claude-opus-5) |
@@ -30,3 +35,7 @@ judge's column, against the other mode, or against `word`.
 | 20260904T153651Z__evals-multilingual__gemma4-e2b__prompt_readability | 2026-09-04T15:36:51Z | evals.json | 7 | gemma4:e2b | prompt_readability | ollama 0.33.2 | 0.97 | 0.89 | 0 | 3 | — | 0.939 (claude-opus-5) |
 | 20260904T153743Z__evals-multilingual__qwen3.5-2b__prompt_readability | 2026-09-04T15:37:43Z | evals.json | 7 | qwen3.5:2b | prompt_readability | ollama 0.33.2 | 0.857 | 0.611 | 10 | 22 | — | 0.737 (claude-opus-5) |
 | 20260904T153759Z__evals-multilingual__claude-haiku-4-5-20251001__prompt_readability | 2026-09-04T15:37:59Z | evals.json | 7 | claude-haiku-4-5-20251001 | prompt_readability | anthropic-messages-api 2023-06-01 | 0.916 | 0.906 | 7 | 7 | — | 0.911 (claude-opus-5) |
+| 20260904T164747Z__evals__gemini-3.8-flash__prompt_readability | 2026-09-04T16:47:47Z | evals.json | 28 | gemini-3.8-flash | prompt_readability | google-generative-language-api v1beta | 0.971 | 0.868 | 17 | 1 | 0.983 (claude-opus-5) | 0.967 (claude-opus-5) |
+| 20260904T164942Z__evals__gemini-3.8-flash__prompt_readability | 2026-09-04T16:49:42Z | evals.json | 28 | gemini-3.8-flash | prompt_readability | google-generative-language-api v1beta | 0.974 | 0.888 | 13 | 1 | 0.982 (claude-opus-5) | 0.968 (claude-opus-5) |
+| 20260904T165613Z__evals__gemini-3.5-flash-lite__prompt_readability | 2026-09-04T16:56:13Z | evals.json | 28 | gemini-3.5-flash-lite | prompt_readability | google-generative-language-api v1beta | 0.977 | 0.836 | 7 | 1 | 0.986 (claude-opus-5) | 0.956 (claude-opus-5) |
+| 20260904T165653Z__evals__gemini-3.1-flash-lite__prompt_readability | 2026-09-04T16:56:53Z | evals.json | 28 | gemini-3.1-flash-lite | prompt_readability | google-generative-language-api v1beta | 0.975 | 0.865 | 15 | 2 | 0.981 (claude-opus-5) | 0.957 (claude-opus-5) |
