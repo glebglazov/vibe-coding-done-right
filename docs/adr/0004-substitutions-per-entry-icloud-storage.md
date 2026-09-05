@@ -1,5 +1,9 @@
 # Substitutions sync as per-entry files in the ubiquity container
 
+> **Amended by [ADR-0011](0011-substitutions-converge-on-their-replacement.md):** per-entry
+> granularity and tombstones stand; two Substitutions sharing one Replacement now
+> converge into one entry instead of resolving by last-writer-wins.
+
 Substitutions (Trigger Phrase → Replacement, applied to the raw transcript before any other text processing on both platforms) sync as **one file per Substitution** in the existing iCloud Drive ubiquity container (`iCloud.glebglazov.vcdr`, `Documents/VCDR/Substitutions/<id>.json`), reusing the history storage layer: `FileHistoryStore`-style I/O, `HistoryConflictResolver` LWW on `lastUpdated`, and a `SubstitutionTombstone` (delete wins when `deletedAt > lastUpdated`). The matching engine lives in `Shared/` so macOS and iOS share one matcher.
 
 ## Considered options
