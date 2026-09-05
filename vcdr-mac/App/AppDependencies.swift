@@ -19,6 +19,7 @@ final class AppDependencies {
     let styleResolution: StyleResolutionPipeline
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
+    let secureInputMonitor = SecureInputMonitor()
 
     #if DEBUG
     let audioRecorder: AudioRecorder
@@ -157,6 +158,7 @@ final class AppDependencies {
         checkPermissions()
         isInitialized = true
         startPermissionPolling()
+        secureInputMonitor.start()
 
         if hasAccessibilityPermission {
             session.accessibilityGranted()

@@ -110,6 +110,7 @@ struct MainWindowView: View {
                             hasMicrophonePermission: dependencies.hasMicrophonePermission,
                             hasAccessibilityPermission: dependencies.hasAccessibilityPermission,
                             isInitialized: dependencies.isInitialized,
+                            secureInputMonitor: dependencies.secureInputMonitor,
                             diagnosticsUnlock: diagnosticsUnlock
                         )
                     case .audio:

@@ -11,6 +11,7 @@ struct HomeTabView: View {
     let hasMicrophonePermission: Bool
     let hasAccessibilityPermission: Bool
     let isInitialized: Bool
+    let secureInputMonitor: SecureInputMonitor
     @Bindable var diagnosticsUnlock: DiagnosticsUnlock
 
     @AppStorage(HistoryStoreFactory.syncEnabledDefaultsKey) private var syncHistoryViaICloud: Bool = true
@@ -18,8 +19,33 @@ struct HomeTabView: View {
         isInitialized && (!hasMicrophonePermission || !hasAccessibilityPermission)
     }
 
+    /// Names the holder when macOS gives us one. The window server misreports it
+    /// when a background app took the flag (rdar://48953777), so this is phrased as
+    /// a lead for the user to check, not as a verdict.
+    private var secureInputHolderLabel: String {
+        if let holder = secureInputMonitor.holderName {
+            "Secure Input is held by \(holder)."
+        } else {
+            "Another app is holding Secure Input."
+        }
+    }
+
     var body: some View {
         Form {
+            if secureInputMonitor.isActive {
+                Section {
+                    LabeledContent {
+                        EmptyView()
+                    } label: {
+                        Text(secureInputHolderLabel)
+                        Text("While Secure Input is held, macOS delivers no key events to VCDR, so no hotkey can fire. Bring that app to the front and switch away again to release it; if that fails, quit and reopen it.")
+                    }
+                } header: {
+                    Label("Hotkeys Blocked", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            }
+
             if needsPermissionAttention {
                 Section {
                     if !hasMicrophonePermission {
