@@ -4,15 +4,24 @@ struct TranscriptionTabView: View {
     let settings: AppSettings
     let readiness: ModelReadiness
     let retryPreparation: () -> Void
+    /// Makes a model the Default Transcription Model. One that is not
+    /// downloaded yet may be chosen — Status then narrates its preparation.
+    let selectDefaultModel: (TranscriptionModel) -> Void
 
     var body: some View {
         Form {
-            Section("Models") {
-                LabeledContent {
+            Section("Model") {
+                Picker("Default Model", selection: Binding(
+                    get: { settings.transcriptionSettings.defaultModel },
+                    set: { selectDefaultModel($0) }
+                )) {
+                    ForEach(TranscriptionProviderRegistry.offeredModels, id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
+                }
+
+                LabeledContent("Status") {
                     ModelStatusBadge(readiness: readiness)
-                } label: {
-                    Text("Parakeet v3")
-                    Text("Multilingual speech-to-text (CoreML)")
                 }
 
                 if case .failed(let failure) = readiness {

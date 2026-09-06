@@ -111,7 +111,10 @@ final class CaptureSession {
     // MARK: - Dependencies
 
     struct Dependencies {
-        let transcription: any TranscriptionProvider
+        /// Resolves the provider for the Transcription Model this run uses. A
+        /// closure rather than a provider, because the Default Transcription
+        /// Model is a setting the user can change between runs.
+        let transcription: @MainActor @Sendable () -> any TranscriptionProvider
         /// Hands out the claims this session holds on its key combinations.
         let hotkeyRegistry: any HotkeyRegistry
         let audio: AudioRecorder
@@ -150,7 +153,12 @@ final class CaptureSession {
 
     let settings: AppSettings
     let history: any HistoryStore
-    let transcription: any TranscriptionProvider
+    let resolveTranscription: @MainActor @Sendable () -> any TranscriptionProvider
+
+    /// The provider for the Transcription Model this run transcribes with, read
+    /// at each use so that a Default chosen mid-session applies to the next
+    /// recording rather than the next launch.
+    var transcription: any TranscriptionProvider { resolveTranscription() }
     let hotkeyRegistry: any HotkeyRegistry
     let audio: AudioRecorder
     let media: MediaPlaybackController
@@ -246,7 +254,7 @@ final class CaptureSession {
     ) {
         self.settings = settings
         self.history = history
-        self.transcription = deps.transcription
+        self.resolveTranscription = deps.transcription
         self.hotkeyRegistry = deps.hotkeyRegistry
         self.audio = deps.audio
         self.media = deps.media

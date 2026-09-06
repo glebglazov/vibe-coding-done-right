@@ -1,0 +1,140 @@
+import Foundation
+import OSLog
+import WhisperKit
+
+actor WhisperProvider: TranscriptionProvider {
+    let model = TranscriptionModel.whisperLargeV3Turbo
+
+    /// The variant WhisperKit publishes for this model: large-v3-turbo quantized
+    /// to 627 MB, multilingual — so Russian is available — and the one
+    /// WhisperKit's own device table names as the default for an M1-class Mac.
+    private static let variant = "openai_whisper-large-v3-v20240930_626MB"
+
+    /// The Hugging Face repository the variant is published in. Named once
+    /// because two things derive from it: where the download goes, and where the
+    /// next launch looks for what a previous one downloaded.
+    private static let repo = "argmaxinc/whisperkit-coreml"
+
+    private var whisper: WhisperKit?
+    private(set) var isReady = false
+
+    private(set) var initPhase: ModelPreparationPhase = .preparing
+
+    /// The attempt currently running. A Preparation Failure offers a retry, so
+    /// re-entry is a real path: actors interleave at await points, and without
+    /// a shared attempt a retry pressed during a slow one would download the
+    /// model twice. A second caller waits on the first attempt instead.
+    private var attempt: Task<Void, Error>?
+
+    // MARK: - Constants
+    private static let millisecondsPerSecond: Double = 1000
+    private static let attosecondsPerMillisecond: Double = 1e15
+
+    private func elapsedMs(since start: ContinuousClock.Instant) -> String {
+        let duration = ContinuousClock.now - start
+        let ms = Double(duration.components.seconds) * Self.millisecondsPerSecond
+            + Double(duration.components.attoseconds) / Self.attosecondsPerMillisecond
+        return String(format: "%.0fms", ms)
+    }
+
+    func initialize() async throws {
+        guard !isReady else { return }
+        if let attempt {
+            return try await attempt.value
+        }
+        let attempt = Task { try await self.prepare() }
+        self.attempt = attempt
+        let result = await attempt.result
+        self.attempt = nil
+        try result.get()
+    }
+
+    private func prepare() async throws {
+        initPhase = .preparing
+        let totalStart = ContinuousClock.now
+        Logger.transcription.info("Initializing Whisper large-v3-turbo CoreML model...")
+
+        do {
+            // Phase 1: Fetch the artifacts, unless the model root already holds
+            // them. `WhisperKit.download` asks the Hub which folder the variant
+            // lives in before it fetches anything, so a launch that already has
+            // the files would both announce a download that never happens and
+            // need a connection to find out it was not needed.
+            let root = TranscriptionModelRoot.url
+            let modelDirectory = Self.installedDirectory(in: root)
+            if !FileManager.default.fileExists(atPath: modelDirectory.path) {
+                initPhase = .downloadingModel
+                let downloadStart = ContinuousClock.now
+                _ = try await WhisperKit.download(
+                    variant: Self.variant,
+                    downloadBase: root,
+                    from: Self.repo
+                )
+                Logger.transcription.info("Model download completed in \(self.elapsedMs(since: downloadStart))")
+            }
+
+            // Phase 2: Compile CoreML models for Neural Engine (the slow part).
+            // The root travels as `downloadBase` even though the weights are
+            // already resolved: the tokenizer is fetched separately from them,
+            // and without it that fetch would land in WhisperKit's own cache
+            // under Documents rather than in the root the Library owns.
+            initPhase = .loadingModel
+            let loadStart = ContinuousClock.now
+            let whisper = try await WhisperKit(WhisperKitConfig(
+                model: Self.variant,
+                downloadBase: root,
+                modelRepo: Self.repo,
+                modelFolder: modelDirectory.path,
+                verbose: false,
+                load: true,
+                download: false
+            ))
+            Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: loadStart))")
+
+            self.whisper = whisper
+            self.isReady = true
+            initPhase = .ready
+            Logger.transcription.info("Whisper large-v3-turbo ready (total: \(self.elapsedMs(since: totalStart)))")
+        } catch {
+            // Classified here, where the failing step and the backend's own
+            // error are both still in hand; the raw text goes to the log and
+            // no further.
+            let failure = PreparationFailure(error: error)
+            initPhase = .failed(failure)
+            Logger.transcription.error("Failed to initialize Whisper: \(error)")
+            throw TranscriptionError.initializationFailed(failure)
+        }
+    }
+
+    /// Where a download into `root` puts this variant's files. Asked of
+    /// WhisperKit's own Hub client rather than spelled out, because the layout
+    /// under the root is the SDK's to choose and only it can be trusted to say
+    /// what it chose.
+    private static func installedDirectory(in root: URL) -> URL {
+        HubApiWrapper(downloadBase: root)
+            .localRepoLocation(HubApiWrapper.Repo(id: repo))
+            .appending(path: variant)
+    }
+
+    func transcribe(audioFileURL: URL) async throws -> String {
+        guard let whisper else {
+            throw TranscriptionError.providerUnavailable
+        }
+
+        Logger.transcription.info("Transcribing audio file: \(audioFileURL.lastPathComponent)")
+
+        do {
+            // A recording longer than one 30-second window comes back as
+            // several results, in order; the merge is how WhisperKit itself
+            // puts them back into one transcript.
+            let results = try await whisper.transcribe(audioPath: audioFileURL.path)
+            let merged = TranscriptionUtilities.mergeTranscriptionResults(results)
+            let text = merged.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            Logger.transcription.info("Transcription complete (\(text.count) chars)")
+            return text
+        } catch {
+            Logger.transcription.error("Transcription failed: \(error)")
+            throw TranscriptionError.transcriptionFailed(error.localizedDescription)
+        }
+    }
+}

@@ -9,10 +9,15 @@
 4. Update `RecordingCoordinator.makeAction()` to construct with context (target PID, mode settings)
 5. Add UI in `SettingsView` for the new action type
 
-### Adding a New Transcription Provider
-1. Create a type conforming to `TranscriptionProvider` in `Transcription/`
-2. Wire it through `AppDependencies`
-3. The coordinator doesn't need to change — it uses the protocol
+### Adding a New Transcription Model
+1. Add a case to `TranscriptionModel` in `Shared/Transcription/`, with the raw
+   value settings and overrides key by
+2. Create a type conforming to `TranscriptionProvider` in `Transcription/`, and
+   download its files under `TranscriptionModelRoot.url`
+3. Construct it in `TranscriptionProviderRegistry` and list the model in
+   `offeredModels` — only what this platform's transcription path can drive
+4. Nothing else changes: the session resolves the Default's provider through the
+   protocol
 
 ### Modifying the Global Hotkey
 1. Update `AppSettings` if new settings are needed

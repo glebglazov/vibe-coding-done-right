@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		E5C1B1422F4674F50029DBEB /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = E5D6B8502F466D00002066AA /* FluidAudio */; };
+		E5C1B1502F4674F50029DBEB /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = E5C1B1522F4674F50029DBEB /* WhisperKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +68,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E5C1B1422F4674F50029DBEB /* FluidAudio in Frameworks */,
+				E5C1B1502F4674F50029DBEB /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -123,6 +125,7 @@
 			name = "vcdr-mac";
 			packageProductDependencies = (
 				E5D6B8502F466D00002066AA /* FluidAudio */,
+				E5C1B1522F4674F50029DBEB /* WhisperKit */,
 			);
 			productName = "vcdr-mac";
 			productReference = E5D6B81A2F466C82002066AA /* VCDR.app */;
@@ -182,6 +185,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				E5D6B84F2F466D00002066AA /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				E5C1B1512F4674F50029DBEB /* XCRemoteSwiftPackageReference "WhisperKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E5D6B81B2F466C82002066AA /* Products */;
@@ -517,6 +521,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		E5C1B1512F4674F50029DBEB /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
 		E5D6B84F2F466D00002066AA /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
@@ -528,6 +540,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		E5C1B1522F4674F50029DBEB /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E5C1B1512F4674F50029DBEB /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
 		E5D6B8502F466D00002066AA /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E5D6B84F2F466D00002066AA /* XCRemoteSwiftPackageReference "FluidAudio" */;

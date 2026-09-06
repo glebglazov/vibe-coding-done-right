@@ -150,6 +150,9 @@ struct MainWindowView: View {
                             readiness: dependencies.readiness,
                             retryPreparation: {
                                 Task { await dependencies.retryModelPreparation() }
+                            },
+                            selectDefaultModel: { model in
+                                Task { await dependencies.selectDefaultModel(model) }
                             }
                         )
                     case .history:

@@ -16,9 +16,14 @@ struct HotkeySettings: Codable, Equatable {
 
 struct TranscriptionSettings: Codable, Equatable {
     var removeFillerWords: Bool
+    /// The Transcription Model a recording run uses when nothing overrides it.
+    /// Per device and never synced: it names a model that has to be installed
+    /// here, and another device's answer would name one that is not.
+    var defaultModel: TranscriptionModel
 
     static let `default` = TranscriptionSettings(
-        removeFillerWords: true
+        removeFillerWords: true,
+        defaultModel: .parakeetV3
     )
 }
 

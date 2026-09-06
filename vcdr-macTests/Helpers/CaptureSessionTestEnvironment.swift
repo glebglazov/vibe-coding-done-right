@@ -21,6 +21,10 @@ struct CaptureSessionTestEnvironment {
     let fakePanel: FakeCapturePanel
     let scriptedAI: ScriptedAIProcessing
     let mockProvider: MockTranscriptionProvider
+    /// The provider behind the other Transcription Model, so a test can change
+    /// the Default the way the settings screen does and see which of the two
+    /// the next recording reaches.
+    let alternateProvider: MockTranscriptionProvider
     let audioRecorder: AudioRecorder
     let textProcessor: TextProcessor
     let hotkeyRegistry: FakeHotkeyRegistry
@@ -34,12 +38,14 @@ struct CaptureSessionTestEnvironment {
     /// the default "paste" code path (which needs CGEvent accessibility) never runs.
     init(
         mockProvider: MockTranscriptionProvider = MockTranscriptionProvider(),
+        alternateProvider: MockTranscriptionProvider = MockTranscriptionProvider(model: .whisperLargeV3Turbo),
         testAudioFileName: String = "short.wav",
         aiResults: [Result<String, Error>] = [],
         modePreview: Bool = false,
         modeProcessing: ProcessingType = .none
     ) {
         self.mockProvider = mockProvider
+        self.alternateProvider = alternateProvider
         self.scriptedAI = ScriptedAIProcessing(results: aiResults)
 
         let suiteName = "vcdr.test.\(UUID().uuidString)"
@@ -113,7 +119,10 @@ struct CaptureSessionTestEnvironment {
             settings: settings,
             history: history,
             deps: .init(
-                transcription: mockProvider,
+                transcription: {
+                    settings.transcriptionSettings.defaultModel == mockProvider.model
+                        ? mockProvider : alternateProvider
+                },
                 hotkeyRegistry: suspendableRegistry,
                 audio: audioRecorder,
                 media: MediaPlaybackController(),

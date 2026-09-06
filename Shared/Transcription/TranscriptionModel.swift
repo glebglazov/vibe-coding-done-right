@@ -7,14 +7,16 @@ import Foundation
 ///
 /// The raw value is that key, and is written down rather than derived from the
 /// case name, because it outlives any rename of the case.
-enum TranscriptionModel: String, Sendable {
+enum TranscriptionModel: String, Codable, Sendable {
     case parakeetV3 = "parakeet-v3"
+    case whisperLargeV3Turbo = "whisper-large-v3-turbo"
 
     /// What every readiness surface — menu bar, settings badge, recording pill —
     /// calls this model.
     var displayName: String {
         switch self {
         case .parakeetV3: "Parakeet Multilingual v3"
+        case .whisperLargeV3Turbo: "Whisper Large v3 Turbo"
         }
     }
 }

@@ -272,6 +272,7 @@ final class AppSettings {
         /// Persisted flag gating the one-shot Variables list → Secret Store migration.
         static let didMigrateVariablesToSecretStore = "didMigrateVariablesToSecretStore"
         static let removeFillerWords = "removeFillerWords"
+        static let defaultTranscriptionModel = "defaultTranscriptionModel"
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         static let legacyPushToTalkHotkey = "pushToTalkHotkey"
         static let legacyKeyCode = "hotkeyKeyCode"
@@ -302,6 +303,17 @@ final class AppSettings {
 
     private static func boolSetting(from defaults: UserDefaults, forKey key: String, default defaultValue: Bool) -> Bool {
         defaults.object(forKey: key) != nil ? defaults.bool(forKey: key) : defaultValue
+    }
+
+    /// The model stored under `key`, or `defaultValue` when nothing is stored or
+    /// what is stored names a model this build no longer has — a downgrade, or a
+    /// model dropped from the enum, must leave the app with one it can run.
+    private static func transcriptionModelSetting(
+        from defaults: UserDefaults, forKey key: String, default defaultValue: TranscriptionModel
+    ) -> TranscriptionModel {
+        guard let raw = defaults.string(forKey: key),
+              let model = TranscriptionModel(rawValue: raw) else { return defaultValue }
+        return model
     }
 
     /// The Variables list as the one string its Secret Store item holds, and back. The
@@ -360,7 +372,12 @@ final class AppSettings {
 
         // Load transcription settings
         self.transcriptionSettings = TranscriptionSettings(
-            removeFillerWords: Self.boolSetting(from: userDefaults, forKey: Keys.removeFillerWords, default: true)
+            removeFillerWords: Self.boolSetting(from: userDefaults, forKey: Keys.removeFillerWords, default: true),
+            defaultModel: Self.transcriptionModelSetting(
+                from: userDefaults,
+                forKey: Keys.defaultTranscriptionModel,
+                default: TranscriptionSettings.default.defaultModel
+            )
         )
 
         // Load modes (with legacy migration)
@@ -592,6 +609,7 @@ final class AppSettings {
         encode(outputDestinations, forKey: Keys.outputDestinations)
         encode(audioSettings, forKey: Keys.audioSettings)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
+        userDefaults.set(transcriptionSettings.defaultModel.rawValue, forKey: Keys.defaultTranscriptionModel)
         Logger.settings.info("Settings saved")
     }
 

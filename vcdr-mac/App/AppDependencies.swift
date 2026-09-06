@@ -7,7 +7,8 @@ import OSLog
 @Observable
 final class AppDependencies {
     let settings: AppSettings
-    let transcriptionProvider: ParakeetProvider
+    /// Every Transcription Model's provider, kept for the process lifetime.
+    private let transcriptionProviders: TranscriptionProviderRegistry
     let session: CaptureSession
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
@@ -41,6 +42,14 @@ final class AppDependencies {
     private(set) var readiness: ModelReadiness =
         .preparing(label: ModelPreparationPhase.initialLabel)
     var isTranscriptionReady: Bool { readiness == .ready }
+
+    /// The provider for the Default Transcription Model, resolved at each use:
+    /// the Default is a setting, and reading it late is what makes a change to
+    /// it apply to the next recording rather than to the next launch.
+    var transcriptionProvider: any TranscriptionProvider {
+        transcriptionProviders.provider(for: settings.transcriptionSettings.defaultModel)
+    }
+
     private(set) var hasMicrophonePermission = false
     private(set) var hasAccessibilityPermission = false
     private(set) var isInitialized = false
@@ -51,15 +60,20 @@ final class AppDependencies {
 
     private var permissionTimer: Timer?
 
+    /// Narrates the preparation currently on screen. A model chosen while
+    /// another is still preparing leaves that one downloading — the bytes are
+    /// paid for either way — but it must stop speaking for the app's readiness.
+    @ObservationIgnored private var phasePoller: Task<Void, Never>?
+
     /// Holds the active mode-switcher suspension token. Nilling it releases the
     /// suspension via `SuspensionToken`'s RAII deinit.
     @ObservationIgnored fileprivate var modeSwitcherSuspension: CaptureSession.SuspensionToken?
 
     init() {
         let settings = AppSettings(secretStore: KeychainSecretStore())
-        let provider = ParakeetProvider()
         self.settings = settings
-        self.transcriptionProvider = provider
+        let transcriptionProviders = TranscriptionProviderRegistry()
+        self.transcriptionProviders = transcriptionProviders
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
         let history = HistoryStoreProxy()
@@ -116,7 +130,9 @@ final class AppDependencies {
             settings: settings,
             history: history,
             deps: .init(
-                transcription: provider,
+                transcription: {
+                    transcriptionProviders.provider(for: settings.transcriptionSettings.defaultModel)
+                },
                 hotkeyRegistry: hotkeyRegistry,
                 audio: audioRecorder,
                 media: mediaPlayback,
@@ -179,7 +195,7 @@ final class AppDependencies {
         await bootstrapSubstitutions()
         await audioDeviceMonitor.start()
 
-        await prepareTranscriptionModel()
+        await prepareTranscriptionModel(transcriptionProvider)
     }
 
     /// The action a Preparation Failure carries: run preparation again from
@@ -188,19 +204,36 @@ final class AppDependencies {
     func retryModelPreparation() async {
         guard case .failed = readiness else { return }
         readiness = .preparing(label: ModelPreparationPhase.initialLabel)
-        await prepareTranscriptionModel()
+        await prepareTranscriptionModel(transcriptionProvider)
+    }
+
+    /// Makes `model` the Default Transcription Model and prepares it. The model
+    /// being left behind keeps everything it loaded, so choosing it again later
+    /// is not a second download or a second compile.
+    func selectDefaultModel(_ model: TranscriptionModel) async {
+        guard settings.transcriptionSettings.defaultModel != model else { return }
+        settings.transcriptionSettings.defaultModel = model
+
+        // The new model's own phase, before preparation starts: one already
+        // resident is ready now, and readiness left carrying the old model's
+        // answer would say Ready over a download that has not begun.
+        let provider = transcriptionProvider
+        var narrator = ModelPreparationNarrator()
+        readiness = narrator.readiness(for: await provider.initPhase)
+        await prepareTranscriptionModel(provider)
     }
 
     /// Runs model initialization and keeps `readiness` telling the truth about
     /// it throughout — the phase while it runs, and what stopped it if it stops.
-    private func prepareTranscriptionModel() async {
+    private func prepareTranscriptionModel(_ provider: any TranscriptionProvider) async {
+        self.phasePoller?.cancel()
         let phasePoller = Task {
             // `readiness` is @Observable: writing it unconditionally at the
             // poll cadence re-evaluates every SwiftUI body that reads it,
             // so only the polls that change the visible line are published.
             var narrator = ModelPreparationNarrator()
             while !Task.isCancelled {
-                let phase = await transcriptionProvider.initPhase
+                let phase = await provider.initPhase
                 let polled = narrator.readiness(for: phase)
                 if polled != readiness {
                     readiness = polled
@@ -208,18 +241,29 @@ final class AppDependencies {
                 try? await Task.sleep(for: Self.phasePollingInterval)
             }
         }
+        self.phasePoller = phasePoller
 
         do {
-            try await transcriptionProvider.initialize()
+            try await provider.initialize()
             phasePoller.cancel()
 
+            guard isDefault(provider) else { return }
             readiness = .ready
             Logger.app.info("App fully initialized")
         } catch {
             phasePoller.cancel()
+            guard isDefault(provider) else { return }
             readiness = .failed(from: error)
             Logger.app.error("Initialization failed: \(error)")
         }
+    }
+
+    /// Whether this provider still runs the Default Transcription Model. A
+    /// preparation outlives the choice that started it whenever the user picks
+    /// another model mid-download, and the one it finishes is not the one the
+    /// readiness surfaces are describing.
+    private func isDefault(_ provider: any TranscriptionProvider) -> Bool {
+        provider.model == settings.transcriptionSettings.defaultModel
     }
 
     /// Deferred history bootstrap: opens the Local Store off-main, then
