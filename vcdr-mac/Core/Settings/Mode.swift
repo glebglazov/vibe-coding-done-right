@@ -129,6 +129,14 @@ struct Mode: Identifiable, Codable, Equatable {
     // Parameters
     var parameters: [ModeParameter]
 
+    // Transcription
+    /// Which Transcription Model this Mode records with, and what it tells it.
+    /// A Mode that names nothing transcribes with the Default Transcription
+    /// Model and that model's own settings — transcription is a step of the
+    /// Capture Session one stage before processing, so it is an override here
+    /// rather than a field the Mode always carries (`docs/adr/0016`).
+    var transcriptionOverride: TranscriptionOverride
+
     // Output
     var defaultOutputDestinationID: UUID
 
@@ -215,6 +223,7 @@ struct Mode: Identifiable, Codable, Equatable {
         localAgentPassVariables: Bool = false,
         defaultOutputDestinationID: UUID = OutputDestination.builtInPasteID,
         parameters: [ModeParameter] = [],
+        transcriptionOverride: TranscriptionOverride = .none,
         showPreview: Bool = false,
         saveResultToClipboard: Bool = false,
         appliesStyles: Bool = true,
@@ -235,6 +244,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.localAgentPassVariables = localAgentPassVariables
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.parameters = parameters
+        self.transcriptionOverride = transcriptionOverride
         self.showPreview = showPreview
         self.saveResultToClipboard = saveResultToClipboard
         self.appliesStyles = appliesStyles
@@ -254,6 +264,7 @@ struct Mode: Identifiable, Codable, Equatable {
         case aiPromptType, localAgentPromptType, localAgentSystemPrompt
         case defaultOutputDestinationID
         case parameters
+        case transcriptionOverride
         case showPreview
         case saveResultToClipboard
         case appliesStyles
@@ -282,6 +293,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(localAgentPassVariables, forKey: .localAgentPassVariables)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
+        try container.encode(transcriptionOverride, forKey: .transcriptionOverride)
         try container.encode(showPreview, forKey: .showPreview)
         try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
         try container.encode(appliesStyles, forKey: .appliesStyles)
@@ -301,6 +313,11 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
+        // A Mode written before Modes could name a model overrides nothing, and
+        // so records with the Default.
+        transcriptionOverride = try container.decodeIfPresent(
+            TranscriptionOverride.self, forKey: .transcriptionOverride
+        ) ?? .none
         // New key takes precedence; fall back to inverted legacy quickAction
         if let preview = try container.decodeIfPresent(Bool.self, forKey: .showPreview) {
             showPreview = preview

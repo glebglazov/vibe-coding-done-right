@@ -25,6 +25,10 @@ struct CaptureSessionTestEnvironment {
     /// the Default the way the settings screen does and see which of the two
     /// the next recording reaches.
     let alternateProvider: MockTranscriptionProvider
+    /// The models the session asked to have prepared. A Mode's Transcription
+    /// Override may name one nothing has loaded, and the run has to start that
+    /// preparation rather than wait for one nobody began.
+    let preparedModels: PreparedModels
     let audioRecorder: AudioRecorder
     let textProcessor: TextProcessor
     let hotkeyRegistry: FakeHotkeyRegistry
@@ -115,14 +119,14 @@ struct CaptureSessionTestEnvironment {
         let suspendableRegistry = SuspendableHotkeyRegistry(wrapping: hotkeyRegistry)
         self.suspendableRegistry = suspendableRegistry
 
+        let preparedModels = PreparedModels()
+        self.preparedModels = preparedModels
         self.session = CaptureSession(
             settings: settings,
             history: history,
             deps: .init(
-                transcription: {
-                    settings.transcriptionSettings.defaultModel == mockProvider.model
-                        ? mockProvider : alternateProvider
-                },
+                transcription: { $0 == mockProvider.model ? mockProvider : alternateProvider },
+                prepareTranscription: { preparedModels.record($0) },
                 hotkeyRegistry: suspendableRegistry,
                 audio: audioRecorder,
                 media: MediaPlaybackController(),
@@ -162,5 +166,15 @@ struct CaptureSessionTestEnvironment {
 
     func cleanup() {
         UserDefaults.standard.removePersistentDomain(forName: userDefaultsSuiteName)
+    }
+}
+
+/// What `prepareTranscription` was asked for, in order.
+@MainActor
+final class PreparedModels {
+    private(set) var models: [TranscriptionModel] = []
+
+    func record(_ model: TranscriptionModel) {
+        models.append(model)
     }
 }

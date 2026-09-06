@@ -17,7 +17,13 @@ final class TranscriptionLibrary {
     /// its own state. Never shortened: a model whose installability is not
     /// known yet is a row saying so, not a row withheld.
     var entries: [Entry] {
-        models.map { Entry(model: $0, state: states[$0] ?? .installabilityUnknown) }
+        models.map(entry(for:))
+    }
+
+    /// One model's row, for a screen that shows a single model rather than the
+    /// whole Library — a Mode's own screen shows the model it names.
+    func entry(for model: TranscriptionModel) -> Entry {
+        Entry(model: model, state: states[model] ?? .installabilityUnknown)
     }
 
     private let models: [TranscriptionModel]
@@ -83,11 +89,26 @@ final class TranscriptionLibrary {
         }
     }
 
-    /// Why removing `model` is refused, or nil when it can go. The Default
-    /// Transcription Model is always installed, so it is the one model the
-    /// Library will not delete.
+    /// Why removing `model` is refused, or nil when it can go. A model may be
+    /// removed whenever nothing names it: not the Default Transcription Model,
+    /// and not any Mode's Transcription Override.
     func removalRefusal(for model: TranscriptionModel) -> ModelRemovalRefusal? {
-        model == settings.transcriptionSettings.defaultModel ? .isDefaultModel : nil
+        if model == settings.transcriptionSettings.defaultModel { return .isDefaultModel }
+        let namingModes = settings.modes
+            .filter { $0.transcriptionOverride.model == model }
+            .map(\.name)
+        return namingModes.isEmpty ? nil : .namedByModes(namingModes)
+    }
+
+    /// The Transcription Override a Mode gets when a model is named on its
+    /// screen. The model is installed there and then, so first use is warm
+    /// rather than a download that runs while the person is speaking; naming
+    /// nothing returns the Mode to the Default and installs nothing.
+    func override(_ override: TranscriptionOverride, naming model: TranscriptionModel?) -> TranscriptionOverride {
+        if let model { install(model) }
+        var named = override
+        named.model = model
+        return named
     }
 
     /// Deletes `model`'s files, or returns why it will not. Settings are

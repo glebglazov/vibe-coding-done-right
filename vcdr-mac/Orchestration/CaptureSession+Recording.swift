@@ -76,6 +76,11 @@ extension CaptureSession {
 
         preparingOK = true
         setStatus(.recording)
+        // The model this run needs may be one nothing has loaded — a Mode's
+        // Transcription Override names its own. Preparing it from here is what
+        // makes the download run while the person speaks rather than after
+        // they stop, and the narration below is what says so.
+        prepareTranscription(effectiveTranscription.model)
         startPreparationNarration()
         recordingStartInstant = .now
 

@@ -185,6 +185,7 @@ struct MainWindowView: View {
                                 set: { dependencies.settings.modes[index] = $0 }
                             ),
                             settings: dependencies.settings,
+                            transcriptionLibrary: dependencies.transcriptionLibrary,
                             outputDestinations: dependencies.settings.outputDestinations,
                             definedVariableNames: dependencies.settings.definedVariableNames
                         )

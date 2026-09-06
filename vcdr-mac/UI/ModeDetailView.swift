@@ -5,6 +5,9 @@ import SwiftUI
 struct ModeDetailView: View {
     @Binding var mode: Mode
     let settings: AppSettings
+    /// What this Mode's Transcription Override installs from, when it names a
+    /// model the device does not have yet.
+    let transcriptionLibrary: TranscriptionLibrary
     let outputDestinations: [OutputDestination]
     let definedVariableNames: Set<String>
     @FocusState private var isNameFieldFocused: Bool
@@ -139,6 +142,12 @@ struct ModeDetailView: View {
                 }
             }
 
+            ModeTranscriptionSection(
+                mode: $mode,
+                settings: settings,
+                library: transcriptionLibrary
+            )
+
             // Output section
             Section("Output") {
                 Picker("Default output destination", selection: $mode.defaultOutputDestinationID) {
@@ -165,6 +174,10 @@ struct ModeDetailView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(mode.name)
+        // The Transcription section shows a model's Library state, kept fresh
+        // the same way the Library screen keeps itself fresh — so a download
+        // named here reports its progress while the person watches.
+        .task { await transcriptionLibrary.refresh() }
         .modifier(SelectAllOnAppear(focusState: $isNameFieldFocused))
         .onChange(of: mode.processingType) { _, newType in
             if newType == .localAgent && mode.parameters.isEmpty {

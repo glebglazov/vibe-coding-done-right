@@ -76,11 +76,12 @@ final class AppDependencies {
         self.settings = settings
         let transcriptionProviders = TranscriptionProviderRegistry()
         self.transcriptionProviders = transcriptionProviders
-        self.transcriptionLibrary = TranscriptionLibrary(
+        let transcriptionLibrary = TranscriptionLibrary(
             models: TranscriptionProviderRegistry.offeredModels,
             provider: { transcriptionProviders.provider(for: $0) },
             settings: settings
         )
+        self.transcriptionLibrary = transcriptionLibrary
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
         let history = HistoryStoreProxy()
@@ -137,9 +138,12 @@ final class AppDependencies {
             settings: settings,
             history: history,
             deps: .init(
-                transcription: {
-                    transcriptionProviders.provider(for: settings.transcriptionSettings.defaultModel)
-                },
+                transcription: { transcriptionProviders.provider(for: $0) },
+                // Installing a model is the download and the load — what
+                // preparing it means — so a run that needs one nobody has
+                // prepared asks the Library for it rather than for a second
+                // preparation of its own.
+                prepareTranscription: { transcriptionLibrary.install($0) },
                 hotkeyRegistry: hotkeyRegistry,
                 audio: audioRecorder,
                 media: mediaPlayback,

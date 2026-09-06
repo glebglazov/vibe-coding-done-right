@@ -27,9 +27,21 @@
 6. Read the settings the run hands the provider in `transcribe(audioFileURL:settings:)`,
    and only the fields the model declared. A Language Hint of `detect` must
    send no language at all — see `docs/adr/0019`
-7. Nothing else changes: the session resolves the Default's provider through the
-   protocol, hands it its own settings, and the Library lists whatever
-   `offeredModels` names
+7. Nothing else changes: the session resolves the model a run uses through
+   `TranscriptionSettings.effectiveTranscription(for:)` — the active Mode's
+   Transcription Override, else the Default — hands the provider the settings
+   that came back, and the Library lists whatever `offeredModels` names
+
+### Adding a setting a Transcription Model accepts
+1. Add the field to `TranscriptionModelSettings` and a
+   `TranscriptionModelCapability` kind for it (`Shared/Transcription/`), and
+   declare the kind on every model that accepts it
+2. Add a control for the kind in `TranscriptionModelSettingsView` — both the
+   Transcription screen and a Mode's own section render from that one view
+3. Add the field to `TranscriptionSettingsPatch` and to each of its per-field
+   members — `applied(to:)`, `isSet`, `clear`, `record` — in
+   `Transcription/TranscriptionOverride.swift`, so a Mode can set it for itself
+   and give it back
 
 ### Modifying the Global Hotkey
 1. Update `AppSettings` if new settings are needed

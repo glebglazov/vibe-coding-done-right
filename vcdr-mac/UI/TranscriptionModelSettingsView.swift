@@ -1,5 +1,30 @@
 import SwiftUI
 
+/// Where the value in one settings control came from, and what can be done
+/// about it. The effective settings a Mode records with are computed rather
+/// than stored, so a Mode's screen has to account for every value it shows —
+/// that provenance is the transparency the Override exists for.
+enum TranscriptionSettingOrigin {
+    /// The model's own settings screen: the value is the model's own, and there
+    /// is nothing above it to have come from.
+    case theModelsOwn
+    /// A Mode that has not set this: the value is the model's, and editing the
+    /// model's own settings changes it here too.
+    case inherited(from: TranscriptionModel)
+    /// A Mode that has set this for itself, and the way to give it back.
+    case setByThisMode(useInherited: () -> Void)
+
+    /// What the control says about where its value came from, or nil when there
+    /// is nowhere else it could have come from.
+    var label: String? {
+        switch self {
+        case .theModelsOwn: nil
+        case .inherited(let model): "From \(model.displayName) settings"
+        case .setByThisMode: "Set by this Mode"
+        }
+    }
+}
+
 /// One Transcription Model's settings, built from what that model declares it
 /// can be told. Nothing here is written per model: a model that declares a
 /// Capability gets its control, and a model that declares none says why rather
@@ -13,6 +38,10 @@ struct TranscriptionModelSettingsView: View {
 
     let model: TranscriptionModel
     @Binding var settings: TranscriptionModelSettings
+    /// Where each value came from. The Transcription screen edits the model's
+    /// own settings and says nothing; a Mode's screen edits a patch over them
+    /// and accounts for every control.
+    var origin: (TranscriptionModelCapability) -> TranscriptionSettingOrigin = { _ in .theModelsOwn }
 
     var body: some View {
         switch model.capabilities {
@@ -21,7 +50,10 @@ struct TranscriptionModelSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .kinds(let capabilities):
-            ForEach(capabilities, id: \.self) { control(for: $0) }
+            ForEach(capabilities, id: \.self) { capability in
+                control(for: capability)
+                originRow(for: capability)
+            }
         }
     }
 
@@ -30,6 +62,22 @@ struct TranscriptionModelSettingsView: View {
         switch capability {
         case .languageHint: languageHint
         case .freeTextPrompt: freeTextPrompt
+        }
+    }
+
+    @ViewBuilder
+    private func originRow(for capability: TranscriptionModelCapability) -> some View {
+        let origin = origin(capability)
+        if let label = origin.label {
+            LabeledContent {
+                if case .setByThisMode(let useInherited) = origin {
+                    Button("Use Inherited", action: useInherited)
+                }
+            } label: {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

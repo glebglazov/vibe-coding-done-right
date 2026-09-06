@@ -10,13 +10,16 @@ struct TranscriptionLibraryRow: View {
     /// is read where the refusal is met.
     let removalRefusal: ModelRemovalRefusal?
     let install: () -> Void
-    let remove: () -> Void
+    /// How to remove this install, or nil on a screen that has nowhere to
+    /// remove a model from — a Mode's screen shows the model it names, and the
+    /// Library is where a model is taken off the disk.
+    let remove: (() -> Void)?
 
     var body: some View {
         LabeledContent {
             if let title = entry.state.installTitle {
                 Button(title, action: install)
-            } else if entry.state.offersRemoval {
+            } else if entry.state.offersRemoval, let remove {
                 Button("Remove", action: remove)
                     .disabled(removalRefusal != nil)
             }

@@ -10,15 +10,25 @@ extension CaptureSession {
     /// and maps the resulting disposition to UI transitions. Cancellation-aware at every await.
     func processTranscription(audioURL: URL) async {
         do {
+            // Resolved once, before the wait: the Mode may have been switched
+            // while the run was in flight, and the model waited for, the
+            // settings sent and the call made must all be about the same one.
+            let effective = effectiveTranscription
+            let provider = resolveTranscription(effective.model)
+            // Idempotent, and normally a no-op — recording start asked for this
+            // model already. It matters when the Mode changed since: a model
+            // nobody began preparing would be waited for forever.
+            prepareTranscription(effective.model)
+
             // The run may have started before the model was ready — ADR-0006:
             // the hotkey never refuses. This is the one moment the app cannot
             // proceed without the model, so the wait lives here. The pill has
             // been narrating the phase since the recording began.
-            while !(await transcription.isReady) {
+            while !(await provider.isReady) {
                 // A Preparation Failure ends the wait rather than outlasting
                 // it: the model is not coming, and the run must say so instead
                 // of holding the audio forever.
-                if case .failed(let failure) = await transcription.initPhase {
+                if case .failed(let failure) = await provider.initPhase {
                     throw TranscriptionError.initializationFailed(failure)
                 }
                 try Task.checkCancellation()
@@ -26,13 +36,9 @@ extension CaptureSession {
             }
 
             let transcriptionStart = ContinuousClock.now
-            // The provider is resolved once here and asked for its own
-            // settings: the Default may change while a run is in flight, and
-            // the model that transcribes must be told what that model accepts.
-            let provider = transcription
             let rawText = try await provider.transcribe(
                 audioFileURL: audioURL,
-                settings: settings.transcriptionSettings.modelSettings[provider.model]
+                settings: effective.settings
             )
             try Task.checkCancellation()
             let elapsed = transcriptionStart.duration(to: .now)

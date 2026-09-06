@@ -111,10 +111,15 @@ final class CaptureSession {
     // MARK: - Dependencies
 
     struct Dependencies {
-        /// Resolves the provider for the Transcription Model this run uses. A
-        /// closure rather than a provider, because the Default Transcription
-        /// Model is a setting the user can change between runs.
-        let transcription: @MainActor @Sendable () -> any TranscriptionProvider
+        /// Resolves the provider that runs a Transcription Model. A closure
+        /// rather than a provider, because which model a run uses is a setting
+        /// — the Default, or the active Mode's Transcription Override.
+        let transcription: @MainActor @Sendable (TranscriptionModel) -> any TranscriptionProvider
+        /// Starts preparing a Transcription Model, or joins the preparation
+        /// already running. A Mode's Override may name a model nothing has
+        /// loaded this launch, and the run waits for it rather than refusing to
+        /// record (`docs/adr/0006`) — so the run is what starts it.
+        let prepareTranscription: @MainActor @Sendable (TranscriptionModel) -> Void
         /// Hands out the claims this session holds on its key combinations.
         let hotkeyRegistry: any HotkeyRegistry
         let audio: AudioRecorder
@@ -153,12 +158,21 @@ final class CaptureSession {
 
     let settings: AppSettings
     let history: any HistoryStore
-    let resolveTranscription: @MainActor @Sendable () -> any TranscriptionProvider
+    let resolveTranscription: @MainActor @Sendable (TranscriptionModel) -> any TranscriptionProvider
+    let prepareTranscription: @MainActor @Sendable (TranscriptionModel) -> Void
 
-    /// The provider for the Transcription Model this run transcribes with, read
-    /// at each use so that a Default chosen mid-session applies to the next
-    /// recording rather than the next launch.
-    var transcription: any TranscriptionProvider { resolveTranscription() }
+    /// Which Transcription Model this run uses and what it is told: the active
+    /// Mode's Transcription Override, or the Default and the Default's own
+    /// settings. Read at each use so that a Mode switched or a model configured
+    /// mid-session applies to the next recording rather than the next launch.
+    var effectiveTranscription: EffectiveTranscription {
+        settings.transcriptionSettings.effectiveTranscription(for: settings.activeMode)
+    }
+
+    /// The provider for the model this run transcribes with.
+    var transcription: any TranscriptionProvider {
+        resolveTranscription(effectiveTranscription.model)
+    }
     let hotkeyRegistry: any HotkeyRegistry
     let audio: AudioRecorder
     let media: MediaPlaybackController
@@ -255,6 +269,7 @@ final class CaptureSession {
         self.settings = settings
         self.history = history
         self.resolveTranscription = deps.transcription
+        self.prepareTranscription = deps.prepareTranscription
         self.hotkeyRegistry = deps.hotkeyRegistry
         self.audio = deps.audio
         self.media = deps.media

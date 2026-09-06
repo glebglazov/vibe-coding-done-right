@@ -64,6 +64,7 @@ vcdr/
 │   ├── TranscriptionLibrary.swift        # What is installed, what it costs, install and remove
 │   ├── TranscriptionModelState.swift     # A model's own state as the Library shows it, and why a removal is refused
 │   ├── TranscriptionModelFiles.swift     # An install's size on disk, and its deletion
+│   ├── TranscriptionOverride.swift       # A Mode's own model and sparse settings patch, and the one place they are resolved
 │   │   # What a model accepts and what it has been told live in
 │   │   # Shared/Transcription/: TranscriptionModelCapability, LanguageHint,
 │   │   # TranscriptionModelSettings (keyed by model, so they stay its own)
