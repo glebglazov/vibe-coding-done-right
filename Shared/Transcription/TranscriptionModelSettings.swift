@@ -1,8 +1,8 @@
 import Foundation
 
-/// What one Transcription Model has been told. Only a model that declares the
-/// matching Capability reads a field here: a model with no Capabilities carries
-/// these values and nothing ever sends them anywhere.
+/// What one Transcription Model Family has been told. Only a family that
+/// declares the matching Capability reads a field here: a family with no
+/// Capabilities carries these values and nothing ever sends them anywhere.
 struct TranscriptionModelSettings: Codable, Equatable, Sendable {
     /// Which language the recording is in, or `detect` — the default, which
     /// sends no language at all. Never derived (`docs/adr/0019`).
@@ -37,25 +37,40 @@ struct TranscriptionModelSettings: Codable, Equatable, Sendable {
         self.storedFreeTextPrompt = Self.capped(freeTextPrompt)
     }
 
-    /// What a model that has never been configured is told: a language it has
+    /// What a family that has never been configured is told: a language it has
     /// to detect for itself, and nothing else.
     static let `default` = TranscriptionModelSettings()
 }
 
-/// Every Transcription Model's own settings, keyed by model. The keying is what
-/// makes them the model's own: switching the Default away and back, or removing
-/// the model and installing it again, finds the same answers waiting.
+/// Every Transcription Model Family's own settings, keyed by family. The
+/// keying is what makes them the family's own: switching the Default to
+/// another member of the same family, switching it away and back, or removing
+/// a model and installing it again, all find the same answers waiting.
 struct TranscriptionModelSettingsStore: Codable, Equatable, Sendable {
 
-    /// Keyed by the model's raw value rather than by the model, so settings
-    /// belonging to a model this build does not know are carried through a
-    /// downgrade instead of failing the decode for every model.
-    private var byModel: [String: TranscriptionModelSettings] = [:]
+    /// Keyed by the family's raw value rather than by the family, so settings
+    /// belonging to a family this build does not know are carried through a
+    /// downgrade instead of failing the decode for every family.
+    private var byFamily: [String: TranscriptionModelSettings] = [:]
 
     init() {}
 
-    subscript(model: TranscriptionModel) -> TranscriptionModelSettings {
-        get { byModel[model.rawValue] ?? .default }
-        set { byModel[model.rawValue] = newValue }
+    subscript(family: TranscriptionModelFamily) -> TranscriptionModelSettings {
+        get { byFamily[family.rawValue] ?? .default }
+        set { byFamily[family.rawValue] = newValue }
+    }
+
+    /// The name an older build wrote this dictionary under, kept as it was:
+    /// settings were keyed by model then, and renaming the key here would
+    /// strand every one of them.
+    private enum CodingKeys: String, CodingKey {
+        case byFamily = "byModel"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        byFamily = TranscriptionModelFamily.adoptingKeysBeforeFamilies(
+            in: try container.decodeIfPresent([String: TranscriptionModelSettings].self, forKey: .byFamily) ?? [:]
+        )
     }
 }

@@ -8,7 +8,7 @@ struct ModeTranscriptionOverrideTests {
 
     private static let testRecordingDuration: Duration = .milliseconds(100)
 
-    @Test("A Mode records with the model it names, told that model's settings under its own patch")
+    @Test("A Mode records with the model it names, told its family's settings under its own patch")
     func overrideDecidesTheModelAndWhatItIsTold() async {
         let env = CaptureSessionTestEnvironment(
             mockProvider: MockTranscriptionProvider(result: "from parakeet"),
@@ -18,7 +18,7 @@ struct ModeTranscriptionOverrideTests {
             )
         )
         defer { env.cleanup() }
-        env.settings.transcriptionSettings.modelSettings[.whisperLargeV3Turbo] =
+        env.settings.transcriptionSettings.modelSettings[.whisper] =
             TranscriptionModelSettings(languageHint: .detect, freeTextPrompt: "Parakeet")
 
         // The Mode names Whisper and sets one setting for itself; the Default is
@@ -29,50 +29,50 @@ struct ModeTranscriptionOverrideTests {
         #expect(env.settings.transcriptionSettings.defaultModel == .parakeetV3)
         #expect(await env.mockProvider.transcribeCallCount == 0)
         #expect(await env.alternateProvider.receivedSettings?.languageHint == .russian)
-        // Unset here, so it followed the model's own value all the way down.
+        // Unset here, so it followed the family's own value all the way down.
         #expect(await env.alternateProvider.receivedSettings?.freeTextPrompt == "Parakeet")
 
-        // Editing the model's own settings reaches the Mode, because what the
+        // Editing the family's own settings reaches the Mode, because what the
         // Mode never set was never copied.
-        env.settings.transcriptionSettings.modelSettings[.whisperLargeV3Turbo].freeTextPrompt = "VCDR"
+        env.settings.transcriptionSettings.modelSettings[.whisper].freeTextPrompt = "VCDR"
 
         _ = await record(with: env)
         #expect(await env.alternateProvider.receivedSettings?.freeTextPrompt == "VCDR")
         #expect(await env.alternateProvider.receivedSettings?.languageHint == .russian)
     }
 
-    @Test("A Mode's settings for a model survive it being pointed elsewhere and back")
+    @Test("A Mode's settings for a family survive it being pointed elsewhere and back")
     func patchesSurviveRepointing() {
         var mode = Mode.makeDefault()
         mode.transcriptionOverride.model = .whisperLargeV3Turbo
-        mode.transcriptionOverride[.whisperLargeV3Turbo].languageHint = .russian
+        mode.transcriptionOverride[.whisper].languageHint = .russian
 
         mode.transcriptionOverride.model = .parakeetV3
         mode.transcriptionOverride.model = nil
         mode.transcriptionOverride.model = .whisperLargeV3Turbo
 
-        #expect(mode.transcriptionOverride[.whisperLargeV3Turbo].languageHint == .russian)
+        #expect(mode.transcriptionOverride[.whisper].languageHint == .russian)
 
         let settings = TranscriptionSettings.default
         #expect(settings.effectiveTranscription(for: mode).settings.languageHint == .russian)
     }
 
-    @Test("A setting is either this Mode's own or the model's, and one of its own can be given back")
+    @Test("A setting is either this Mode's own or the family's, and one of its own can be given back")
     func provenanceIsPerSetting() {
         var settings = TranscriptionSettings.default
-        settings.modelSettings[.whisperLargeV3Turbo] =
+        settings.modelSettings[.whisper] =
             TranscriptionModelSettings(languageHint: .german, freeTextPrompt: "Parakeet")
         var mode = Mode.makeDefault()
         mode.transcriptionOverride.model = .whisperLargeV3Turbo
-        mode.transcriptionOverride[.whisperLargeV3Turbo].languageHint = .russian
+        mode.transcriptionOverride[.whisper].languageHint = .russian
 
-        let patch = mode.transcriptionOverride[.whisperLargeV3Turbo]
+        let patch = mode.transcriptionOverride[.whisper]
         #expect(patch.isSet(.languageHint))
         #expect(patch.isSet(.freeTextPrompt) == false)
 
-        mode.transcriptionOverride[.whisperLargeV3Turbo].clear(.languageHint)
+        mode.transcriptionOverride[.whisper].clear(.languageHint)
 
-        #expect(mode.transcriptionOverride[.whisperLargeV3Turbo].isSet(.languageHint) == false)
+        #expect(mode.transcriptionOverride[.whisper].isSet(.languageHint) == false)
         #expect(settings.effectiveTranscription(for: mode).settings.languageHint == .german)
     }
 
@@ -150,6 +150,22 @@ struct ModeTranscriptionOverrideTests {
         #expect(await env.whisper.isInstalled == false)
     }
 
+    @Test("A Mode's patch written against Whisper Large v3 Turbo is the Whisper family's after upgrading")
+    func patchesWrittenBeforeFamiliesAreAdopted() throws {
+        let legacy = Data("""
+        {"model":"whisper-large-v3-turbo",\
+        "patches":{"whisper-large-v3-turbo":{"languageHint":"ru"},"canary":{"languageHint":"de"}}}
+        """.utf8)
+
+        let override = try JSONDecoder().decode(TranscriptionOverride.self, from: legacy)
+
+        #expect(override[.whisper].languageHint == .russian)
+        // The family this build does not know keeps its patch rather than
+        // failing the decode of every Mode.
+        let rewritten = String(data: try JSONEncoder().encode(override), encoding: .utf8)!
+        #expect(rewritten.contains("canary"))
+    }
+
     @Test("A Mode persisted before Modes could name a model records with the Default")
     func modesWrittenBeforeThisDecodeToTheDefault() throws {
         let legacy = Data("""
@@ -167,7 +183,7 @@ struct ModeTranscriptionOverrideTests {
         #expect(mode.transcriptionOverride == .none)
         var settings = TranscriptionSettings.default
         settings.defaultModel = .whisperLargeV3Turbo
-        settings.modelSettings[.whisperLargeV3Turbo] = TranscriptionModelSettings(languageHint: .german)
+        settings.modelSettings[.whisper] = TranscriptionModelSettings(languageHint: .german)
         #expect(settings.effectiveTranscription(for: mode) == EffectiveTranscription(
             model: .whisperLargeV3Turbo,
             settings: TranscriptionModelSettings(languageHint: .german)
@@ -203,7 +219,7 @@ extension CaptureSessionTestEnvironment {
     ) {
         var mode = settings.activeMode
         mode.transcriptionOverride.model = model
-        patch(&mode.transcriptionOverride[model])
+        patch(&mode.transcriptionOverride[model.family])
         settings.modes[settings.modes.firstIndex { $0.id == mode.id }!] = mode
     }
 

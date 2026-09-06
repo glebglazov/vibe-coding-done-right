@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// A Mode's Transcription Override: the model it records with, what that model
-/// is told for this Mode, and — because the effective settings are computed —
-/// where each of those values came from.
+/// A Mode's Transcription Override: the model it records with, what that
+/// model's family is told for this Mode, and — because the effective settings
+/// are computed — where each of those values came from.
 struct ModeTranscriptionSection: View {
     @Binding var mode: Mode
     let settings: AppSettings
@@ -33,9 +33,9 @@ struct ModeTranscriptionSection: View {
                 )
 
                 TranscriptionModelSettingsView(
-                    model: model,
-                    settings: effectiveSettings(of: model),
-                    origin: { origin(of: $0, for: model) }
+                    family: model.family,
+                    settings: effectiveSettings(of: model.family),
+                    origin: { origin(of: $0, for: model.family) }
                 )
             }
         }
@@ -52,28 +52,28 @@ struct ModeTranscriptionSection: View {
 
     // MARK: - Settings, resolved and edited
 
-    /// What this Mode tells `model`: the model's own settings under this Mode's
-    /// patch. An edit lands as a patch of only what it changed, so everything
-    /// the Mode has not touched keeps following the model.
-    private func effectiveSettings(of model: TranscriptionModel) -> Binding<TranscriptionModelSettings> {
+    /// What this Mode tells `family`: the family's own settings under this
+    /// Mode's patch. An edit lands as a patch of only what it changed, so
+    /// everything the Mode has not touched keeps following the family.
+    private func effectiveSettings(of family: TranscriptionModelFamily) -> Binding<TranscriptionModelSettings> {
         Binding(
             get: { settings.transcriptionSettings.effectiveTranscription(for: mode).settings },
             set: { edited in
                 let shown = settings.transcriptionSettings.effectiveTranscription(for: mode).settings
-                var patch = mode.transcriptionOverride[model]
+                var patch = mode.transcriptionOverride[family]
                 patch.record(edited, replacing: shown)
-                mode.transcriptionOverride[model] = patch
+                mode.transcriptionOverride[family] = patch
             }
         )
     }
 
     private func origin(
         of capability: TranscriptionModelCapability,
-        for model: TranscriptionModel
+        for family: TranscriptionModelFamily
     ) -> TranscriptionSettingOrigin {
-        guard mode.transcriptionOverride[model].isSet(capability) else { return .inherited(from: model) }
+        guard mode.transcriptionOverride[family].isSet(capability) else { return .inherited(from: family) }
         return .setByThisMode {
-            mode.transcriptionOverride[model].clear(capability)
+            mode.transcriptionOverride[family].clear(capability)
         }
     }
 }

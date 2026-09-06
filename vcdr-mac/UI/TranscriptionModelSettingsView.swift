@@ -5,12 +5,12 @@ import SwiftUI
 /// than stored, so a Mode's screen has to account for every value it shows —
 /// that provenance is the transparency the Override exists for.
 enum TranscriptionSettingOrigin {
-    /// The model's own settings screen: the value is the model's own, and there
-    /// is nothing above it to have come from.
-    case theModelsOwn
-    /// A Mode that has not set this: the value is the model's, and editing the
-    /// model's own settings changes it here too.
-    case inherited(from: TranscriptionModel)
+    /// The family's own settings screen: the value is the family's own, and
+    /// there is nothing above it to have come from.
+    case theFamilysOwn
+    /// A Mode that has not set this: the value is the family's, and editing the
+    /// family's own settings changes it here too.
+    case inherited(from: TranscriptionModelFamily)
     /// A Mode that has set this for itself, and the way to give it back.
     case setByThisMode(useInherited: () -> Void)
 
@@ -18,17 +18,17 @@ enum TranscriptionSettingOrigin {
     /// is nowhere else it could have come from.
     var label: String? {
         switch self {
-        case .theModelsOwn: nil
-        case .inherited(let model): "From \(model.displayName) settings"
+        case .theFamilysOwn: nil
+        case .inherited(let family): "From \(family.displayName) settings"
         case .setByThisMode: "Set by this Mode"
         }
     }
 }
 
-/// One Transcription Model's settings, built from what that model declares it
-/// can be told. Nothing here is written per model: a model that declares a
-/// Capability gets its control, and a model that declares none says why rather
-/// than showing controls it would ignore.
+/// One Transcription Model Family's settings, built from what that family
+/// declares it can be told. Nothing here is written per family: a family that
+/// declares a Capability gets its control, and a family that declares none says
+/// why rather than showing controls it would ignore.
 struct TranscriptionModelSettingsView: View {
 
     // MARK: - Constants
@@ -36,15 +36,15 @@ struct TranscriptionModelSettingsView: View {
     private static let promptLineLimit = 3
     private static let promptSpacing: CGFloat = 4
 
-    let model: TranscriptionModel
+    let family: TranscriptionModelFamily
     @Binding var settings: TranscriptionModelSettings
-    /// Where each value came from. The Transcription screen edits the model's
+    /// Where each value came from. The Transcription screen edits the family's
     /// own settings and says nothing; a Mode's screen edits a patch over them
     /// and accounts for every control.
-    var origin: (TranscriptionModelCapability) -> TranscriptionSettingOrigin = { _ in .theModelsOwn }
+    var origin: (TranscriptionModelCapability) -> TranscriptionSettingOrigin = { _ in .theFamilysOwn }
 
     var body: some View {
-        switch model.capabilities {
+        switch family.capabilities {
         case .nothing(let reason):
             Text(reason)
                 .font(.caption)

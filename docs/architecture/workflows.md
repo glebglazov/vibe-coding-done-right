@@ -11,7 +11,9 @@
 
 ### Adding a New Transcription Model
 1. Add a case to `TranscriptionModel` in `Shared/Transcription/`, with the raw
-   value settings and overrides key by
+   value the Library and a Mode's naming key by, and say which
+   `TranscriptionModelFamily` it belongs to — an existing one when it accepts
+   exactly what that family accepts, a new one otherwise (`docs/adr/0020`)
 2. Create a type conforming to `TranscriptionProvider` in `Transcription/`, and
    download its files under `TranscriptionModelRoot.url`
 3. Construct it in `TranscriptionProviderRegistry` and list the model in
@@ -19,11 +21,13 @@
 4. Answer the Library's four questions in the provider: `installedDirectory`,
    `isInstalled`, `downloadProgress` (nil when the backend reports none) and
    `isInstallableOnThisDevice()`
-5. Declare what the model can be told in `TranscriptionModel.capabilities`
-   (`Shared/Transcription/`) — the kinds it accepts, or why it accepts nothing.
-   Its settings screen is generated from that declaration, so a model with an
-   unfamiliar hint needs a new `TranscriptionModelCapability` kind and its
-   control in `TranscriptionModelSettingsView`, not a wider string list
+5. For a new family, declare what it can be told in
+   `TranscriptionModelFamily.capabilities` (`Shared/Transcription/`) — the kinds
+   it accepts, or why it accepts nothing — and what its settings were stored
+   under before it existed, in `keyBeforeFamilies`. Its settings screen is
+   generated from that declaration, so a family with an unfamiliar hint needs a
+   new `TranscriptionModelCapability` kind and its control in
+   `TranscriptionModelSettingsView`, not a wider string list
 6. Read the settings the run hands the provider in `transcribe(audioFileURL:settings:)`,
    and only the fields the model declared. A Language Hint of `detect` must
    send no language at all — see `docs/adr/0019`
@@ -35,7 +39,7 @@
 ### Adding a setting a Transcription Model accepts
 1. Add the field to `TranscriptionModelSettings` and a
    `TranscriptionModelCapability` kind for it (`Shared/Transcription/`), and
-   declare the kind on every model that accepts it
+   declare the kind on every family that accepts it
 2. Add a control for the kind in `TranscriptionModelSettingsView` — both the
    Transcription screen and a Mode's own section render from that one view
 3. Add the field to `TranscriptionSettingsPatch` and to each of its per-field

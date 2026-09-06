@@ -46,16 +46,16 @@ struct TranscriptionTabView: View {
                 }
             }
 
-            // A section per model rather than one for the Default: the
-            // settings belong to the model, so they stay readable while
-            // another model is the one that runs.
-            ForEach(TranscriptionProviderRegistry.offeredModels, id: \.self) { model in
-                Section("\(model.displayName) Settings") {
+            // A section per family rather than one for the Default: the
+            // settings belong to the family, so they stay readable while
+            // another family is the one that runs.
+            ForEach(TranscriptionProviderRegistry.offeredFamilies, id: \.self) { family in
+                Section("\(family.displayName) Settings") {
                     TranscriptionModelSettingsView(
-                        model: model,
+                        family: family,
                         settings: Binding(
-                            get: { settings.transcriptionSettings.modelSettings[model] },
-                            set: { settings.transcriptionSettings.modelSettings[model] = $0 }
+                            get: { settings.transcriptionSettings.modelSettings[family] },
+                            set: { settings.transcriptionSettings.modelSettings[family] = $0 }
                         )
                     )
                 }

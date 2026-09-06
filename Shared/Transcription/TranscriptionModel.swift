@@ -2,14 +2,25 @@ import Foundation
 
 /// Which Transcription Model a provider runs. One vocabulary for both products,
 /// so a model is something the app can name rather than only something it can
-/// print: settings, Library membership and a Mode's override all key by this,
-/// where a display string would key by wording that is free to change.
+/// print: Library membership and the model a Mode names both key by this,
+/// where a display string would key by wording that is free to change. What a
+/// model is told keys by its family instead (`docs/adr/0020`).
 ///
 /// The raw value is that key, and is written down rather than derived from the
 /// case name, because it outlives any rename of the case.
 enum TranscriptionModel: String, Codable, Sendable {
     case parakeetV3 = "parakeet-v3"
     case whisperLargeV3Turbo = "whisper-large-v3-turbo"
+
+    /// The Transcription Model Family this model belongs to, and so what it
+    /// can be told and where those answers are kept. Every Whisper shares one
+    /// (`docs/adr/0020`).
+    var family: TranscriptionModelFamily {
+        switch self {
+        case .parakeetV3: .parakeet
+        case .whisperLargeV3Turbo: .whisper
+        }
+    }
 
     /// What every readiness surface — menu bar, settings badge, recording pill —
     /// calls this model.

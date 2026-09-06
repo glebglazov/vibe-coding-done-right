@@ -14,10 +14,10 @@ struct TranscriptionSettingsSection: View {
             LabeledContent("Model", value: model.displayName)
             TranscriptionStatusRow(coordinator: coordinator)
             TranscriptionModelSettingsView(
-                model: model,
+                family: model.family,
                 settings: Binding(
-                    get: { modelSettings[model] },
-                    set: { modelSettings[model] = $0 }
+                    get: { modelSettings[model.family] },
+                    set: { modelSettings[model.family] = $0 }
                 )
             )
         } header: {

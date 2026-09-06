@@ -9,7 +9,7 @@ import Foundation
 /// rather than `sharedDefaults`: the keyboard extension never transcribes, and
 /// nothing here crosses to another device.
 enum TranscriptionSettings {
-    /// Where the per-model settings live. Read through `@AppStorage` by the
+    /// Where the per-family settings live. Read through `@AppStorage` by the
     /// Transcription section, which is the only writer.
     static let modelSettingsKey = "transcription_model_settings"
 
@@ -22,7 +22,7 @@ enum TranscriptionSettings {
     static let defaultModel = TranscriptionModel.parakeetV3
 }
 
-/// Lets `@AppStorage` hold the whole model-keyed store, so the Transcription
+/// Lets `@AppStorage` hold the whole family-keyed store, so the Transcription
 /// section reads and writes settings the same way every other iOS setting is
 /// read and written. Follows `AIProvider`, which is stored the same way.
 extension TranscriptionModelSettingsStore: RawRepresentable {

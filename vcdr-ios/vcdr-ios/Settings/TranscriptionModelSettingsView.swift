@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// One Transcription Model's settings, built from what that model declares it
-/// can be told. Nothing here is written per model: a model that declares a
-/// Capability gets its control, and a model that declares none says why rather
-/// than leaving the settings area blank.
+/// One Transcription Model Family's settings, built from what that family
+/// declares it can be told. Nothing here is written per family: a family that
+/// declares a Capability gets its control, and a family that declares none says
+/// why rather than leaving the settings area blank.
 struct TranscriptionModelSettingsView: View {
 
     // MARK: - Constants
@@ -11,11 +11,11 @@ struct TranscriptionModelSettingsView: View {
     private static let promptLineLimit = 3
     private static let promptSpacing: CGFloat = 4
 
-    let model: TranscriptionModel
+    let family: TranscriptionModelFamily
     @Binding var settings: TranscriptionModelSettings
 
     var body: some View {
-        switch model.capabilities {
+        switch family.capabilities {
         case .nothing(let reason):
             Text(reason)
                 .font(.caption)

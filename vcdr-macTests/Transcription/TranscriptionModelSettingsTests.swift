@@ -9,7 +9,7 @@ struct TranscriptionModelSettingsTests {
 
     private static let testRecordingDuration: Duration = .milliseconds(100)
 
-    @Test("A model is told what only it accepts, and Whisper's hint reaches the call that transcribes")
+    @Test("A family is told what only it accepts, and Whisper's hint reaches the call that transcribes")
     func settingsReachTheModelThatRuns() async {
         let env = CaptureSessionTestEnvironment()
         defer { env.cleanup() }
@@ -17,7 +17,7 @@ struct TranscriptionModelSettingsTests {
         // A hint the recording does not match is the setting that costs most,
         // and the one a person can genuinely choose — so it is what is driven
         // through here.
-        env.settings.transcriptionSettings.modelSettings[.whisperLargeV3Turbo] =
+        env.settings.transcriptionSettings.modelSettings[.whisper] =
             TranscriptionModelSettings(languageHint: .russian, freeTextPrompt: "VCDR, Parakeet")
         env.settings.transcriptionSettings.defaultModel = .whisperLargeV3Turbo
 
@@ -53,11 +53,11 @@ struct TranscriptionModelSettingsTests {
         #expect(hinted.usePrefillPrompt)
     }
 
-    @Test("A model declares the kinds it accepts, and one that accepts nothing says why")
-    func capabilitiesAreDeclaredPerModel() {
-        #expect(TranscriptionModel.whisperLargeV3Turbo.capabilities == .kinds([.languageHint, .freeTextPrompt]))
+    @Test("A family declares the kinds it accepts, and one that accepts nothing says why")
+    func capabilitiesAreDeclaredPerFamily() {
+        #expect(TranscriptionModelFamily.whisper.capabilities == .kinds([.languageHint, .freeTextPrompt]))
 
-        guard case .nothing(let reason) = TranscriptionModel.parakeetV3.capabilities else {
+        guard case .nothing(let reason) = TranscriptionModelFamily.parakeet.capabilities else {
             Issue.record("Parakeet declares no Capability, so it owes an explanation")
             return
         }
@@ -73,20 +73,20 @@ struct TranscriptionModelSettingsTests {
         #expect(settings.freeTextPrompt.count == limit)
     }
 
-    @Test("A model's settings survive the Default moving away and back, a relaunch, and a removal")
-    func settingsStayWithTheirModel() async {
+    @Test("A family's settings survive the Default moving away and back, a relaunch, and a removal")
+    func settingsStayWithTheirFamily() async {
         let suiteName = "vcdr.test.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
         let settings = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
         let configured = TranscriptionModelSettings(languageHint: .russian, freeTextPrompt: "Parakeet")
 
-        settings.transcriptionSettings.modelSettings[.whisperLargeV3Turbo] = configured
+        settings.transcriptionSettings.modelSettings[.whisper] = configured
         settings.transcriptionSettings.defaultModel = .whisperLargeV3Turbo
         settings.transcriptionSettings.defaultModel = .parakeetV3
 
         // Parakeet being the Default gives it nothing of Whisper's.
-        #expect(settings.transcriptionSettings.modelSettings[.parakeetV3] == .default)
+        #expect(settings.transcriptionSettings.modelSettings[.parakeet] == .default)
 
         let root = FileManager.default.temporaryDirectory.appending(path: "vcdr-settings-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -103,7 +103,56 @@ struct TranscriptionModelSettingsTests {
         #expect(await library.remove(.whisperLargeV3Turbo) == nil)
 
         let relaunched = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
-        #expect(relaunched.transcriptionSettings.modelSettings[.whisperLargeV3Turbo] == configured)
+        #expect(relaunched.transcriptionSettings.modelSettings[.whisper] == configured)
+    }
+
+    @Test("What one Whisper is told is what every Whisper is told")
+    func settingsAreTheWholeFamilysAsSoonAsOneIsTold() {
+        var settings = TranscriptionSettings.default
+        let told = TranscriptionModelSettings(languageHint: .russian, freeTextPrompt: "VCDR, Parakeet")
+
+        // Said once, while whichever Whisper the Library offers first is the
+        // one on screen.
+        settings.modelSettings[.whisper] = told
+
+        for whisper in TranscriptionProviderRegistry.offeredModels where whisper.family == .whisper {
+            var mode = Mode.makeDefault()
+            mode.transcriptionOverride.model = whisper
+            #expect(settings.effectiveTranscription(for: mode) == EffectiveTranscription(
+                model: whisper,
+                settings: told
+            ))
+        }
+
+        // Parakeet is a family of one and hears none of it.
+        #expect(settings.modelSettings[.parakeet] == .default)
+    }
+
+    @Test("Settings an older build stored against Whisper Large v3 Turbo are the Whisper family's")
+    func settingsStoredBeforeFamiliesAreAdopted() {
+        let suiteName = "vcdr.test.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+        // What a build that keyed by model wrote — alongside a key belonging to
+        // a family this build has never heard of, which a downgrade still needs.
+        defaults.set(Data("""
+        {"byModel":{"whisper-large-v3-turbo":{"languageHint":"ru","freeTextPrompt":"VCDR, Parakeet"},\
+        "canary":{"languageHint":"de","freeTextPrompt":"Canary"}}}
+        """.utf8), forKey: "transcriptionModelSettings")
+
+        let upgraded = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
+
+        #expect(upgraded.transcriptionSettings.modelSettings[.whisper] == TranscriptionModelSettings(
+            languageHint: .russian,
+            freeTextPrompt: "VCDR, Parakeet"
+        ))
+
+        // Saving is where a carried-through key would be dropped, so the check
+        // is made after one.
+        upgraded.transcriptionSettings.defaultModel = .whisperLargeV3Turbo
+        let saved = String(data: defaults.data(forKey: "transcriptionModelSettings")!, encoding: .utf8)!
+        #expect(saved.contains("canary"))
+        #expect(saved.contains("whisper-large-v3-turbo") == false)
     }
 
     private func record(with env: CaptureSessionTestEnvironment) async {

@@ -1,9 +1,9 @@
 import Foundation
 
-/// A Mode's departure from a Transcription Model's own settings, setting by
-/// setting. Every field is optional, and nil means the Mode never said anything
-/// about it — so the model's own value is what runs, and editing that value on
-/// the Transcription screen reaches this Mode.
+/// A Mode's departure from a Transcription Model Family's own settings, setting
+/// by setting. Every field is optional, and nil means the Mode never said
+/// anything about it — so the family's own value is what runs, and editing that
+/// value on the Transcription screen reaches this Mode.
 ///
 /// A whole-blob snapshot was rejected for exactly that reason (`docs/adr/0016`):
 /// it would quietly cut the global settings screen off from the Modes that
@@ -13,7 +13,7 @@ struct TranscriptionSettingsPatch: Codable, Equatable, Sendable {
     var freeTextPrompt: String?
 
     /// `settings` with everything this Mode set for itself replacing what the
-    /// model's own settings say. The result is what the provider is told.
+    /// family's own settings say. The result is what the provider is told.
     func applied(to settings: TranscriptionModelSettings) -> TranscriptionModelSettings {
         var applied = settings
         if let languageHint { applied.languageHint = languageHint }
@@ -31,7 +31,7 @@ struct TranscriptionSettingsPatch: Codable, Equatable, Sendable {
         }
     }
 
-    /// Gives `capability` back to the model's own settings.
+    /// Gives `capability` back to the family's own settings.
     mutating func clear(_ capability: TranscriptionModelCapability) {
         switch capability {
         case .languageHint: languageHint = nil
@@ -42,7 +42,7 @@ struct TranscriptionSettingsPatch: Codable, Equatable, Sendable {
     /// Records what an edit changed, and only that. A settings screen hands
     /// back whole settings, so the difference from the ones it was showing is
     /// exactly the setting the person just touched — everything else stays
-    /// unset and keeps following the model.
+    /// unset and keeps following the family.
     mutating func record(_ edited: TranscriptionModelSettings, replacing shown: TranscriptionModelSettings) {
         if edited.languageHint != shown.languageHint { languageHint = edited.languageHint }
         if edited.freeTextPrompt != shown.freeTextPrompt { freeTextPrompt = edited.freeTextPrompt }
@@ -50,34 +50,45 @@ struct TranscriptionSettingsPatch: Codable, Equatable, Sendable {
 }
 
 /// A Mode's Transcription Override: the Transcription Model it names instead of
-/// the Default, and what it has told each model.
+/// the Default, and what it has told each Transcription Model Family.
 ///
-/// The patches are kept per model and outside the naming, so nothing a Mode has
+/// The patches are kept per family and outside the naming, so nothing a Mode has
 /// configured is attached to the selection (`docs/adr/0016`): pointing a Mode at
 /// another model — or back at the Default — and returning finds this Mode's own
-/// answers waiting.
+/// answers waiting, and pointing it at another member of the same family finds
+/// the same ones.
 struct TranscriptionOverride: Codable, Equatable, Sendable {
 
     /// The model this Mode transcribes with, or nil when the Mode leaves
     /// transcription alone and takes the Default.
     var model: TranscriptionModel?
 
-    /// Keyed by the model's raw value rather than by the model, so a patch
-    /// belonging to a model this build does not know is carried through a
+    /// Keyed by the family's raw value rather than by the family, so a patch
+    /// belonging to a family this build does not know is carried through a
     /// downgrade instead of failing the decode for every Mode.
     private var patches: [String: TranscriptionSettingsPatch] = [:]
 
     /// What a Mode that has never touched transcription carries.
     static let none = TranscriptionOverride()
 
-    subscript(model: TranscriptionModel) -> TranscriptionSettingsPatch {
-        get { patches[model.rawValue] ?? TranscriptionSettingsPatch() }
-        set { patches[model.rawValue] = newValue }
+    subscript(family: TranscriptionModelFamily) -> TranscriptionSettingsPatch {
+        get { patches[family.rawValue] ?? TranscriptionSettingsPatch() }
+        set { patches[family.rawValue] = newValue }
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        model = try container.decodeIfPresent(TranscriptionModel.self, forKey: .model)
+        patches = TranscriptionModelFamily.adoptingKeysBeforeFamilies(
+            in: try container.decodeIfPresent([String: TranscriptionSettingsPatch].self, forKey: .patches) ?? [:]
+        )
     }
 }
 
 /// What one recording run transcribes with: which Transcription Model, and what
-/// that model is told. Resolved from the Mode and the app's transcription
+/// its family is told. Resolved from the Mode and the app's transcription
 /// settings at each use and never stored, so an edit to either reaches the next
 /// recording rather than the next launch.
 struct EffectiveTranscription: Equatable, Sendable {
@@ -89,19 +100,19 @@ extension TranscriptionSettings {
 
     /// What `mode` transcribes with: its Transcription Override's model under
     /// the Mode's own patch, or the Default Transcription Model and the
-    /// Default's own settings when the Mode names nothing.
+    /// Default's family's own settings when the Mode names nothing.
     ///
-    /// The whole resolution — Mode's patch, else the model's own settings, else
-    /// the model's defaults — is this one function, because a bug in it shows up
+    /// The whole resolution — Mode's patch, else the family's own settings, else
+    /// the family's defaults — is this one function, because a bug in it shows up
     /// as the wrong model being told the wrong thing, with nothing on screen to
     /// say so.
     func effectiveTranscription(for mode: Mode) -> EffectiveTranscription {
         guard let model = mode.transcriptionOverride.model else {
-            return EffectiveTranscription(model: defaultModel, settings: modelSettings[defaultModel])
+            return EffectiveTranscription(model: defaultModel, settings: modelSettings[defaultModel.family])
         }
         return EffectiveTranscription(
             model: model,
-            settings: mode.transcriptionOverride[model].applied(to: modelSettings[model])
+            settings: mode.transcriptionOverride[model.family].applied(to: modelSettings[model.family])
         )
     }
 }
