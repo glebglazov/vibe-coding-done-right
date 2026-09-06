@@ -45,6 +45,14 @@ struct SyncReconcilerPassStateTests {
         )
     }
 
+    /// A container of this test's own: a folder handed to the watcher stands in
+    /// for the ubiquity container, so a pass here never provisions the real one.
+    private func makeWatcher() -> ContainerWatcher {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vcdr-container-\(UUID().uuidString)", isDirectory: true)
+        return ContainerWatcher(storageRoot: { root })
+    }
+
     private func makeDefaults(lastSyncTime: Date?) -> UserDefaults {
         let defaults = UserDefaults(suiteName: "vcdr-sync-\(UUID().uuidString)")!
         if let lastSyncTime {
@@ -59,7 +67,8 @@ struct SyncReconcilerPassStateTests {
         let reconciler = SyncReconciler(
             store: StubStore(outstanding: .none),
             dataset: makeDataset(),
-            defaults: makeDefaults(lastSyncTime: previousLaunch)
+            defaults: makeDefaults(lastSyncTime: previousLaunch),
+            watcher: makeWatcher()
         )
 
         #expect(reconciler.passState == .working)
@@ -72,7 +81,8 @@ struct SyncReconcilerPassStateTests {
         let reconciler = SyncReconciler(
             store: StubStore(outstanding: .none),
             dataset: makeDataset(),
-            defaults: makeDefaults(lastSyncTime: nil)
+            defaults: makeDefaults(lastSyncTime: nil),
+            watcher: makeWatcher()
         )
 
         await reconciler.start()
@@ -87,7 +97,8 @@ struct SyncReconcilerPassStateTests {
         let reconciler = SyncReconciler(
             store: StubStore(outstanding: OutstandingWork(rowsAwaitingExport: 1)),
             dataset: makeDataset(),
-            defaults: makeDefaults(lastSyncTime: previousLaunch)
+            defaults: makeDefaults(lastSyncTime: previousLaunch),
+            watcher: makeWatcher()
         )
 
         await reconciler.start()

@@ -10,7 +10,7 @@ import OSLog
 ///
 /// Nonisolated on purpose: this runs behind launch on a GCD thread, because
 /// the container it writes into was itself resolved by a blocking call
-/// (`SyncReconciler.resolveStorageRoot()`). The explicit `nonisolated`
+/// (`ContainerWatcher.resolveStorageRoot()`). The explicit `nonisolated`
 /// overrides the target-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
 /// setting.
 nonisolated enum RecordFileMigrator {

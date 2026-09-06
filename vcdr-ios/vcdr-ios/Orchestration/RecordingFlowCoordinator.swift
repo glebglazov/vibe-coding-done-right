@@ -146,6 +146,11 @@ final class RecordingFlowCoordinator {
     /// can take seconds on first launch after install. `nil` until the
     /// bootstrap task completes; callers must tolerate the transient gap.
     private(set) var history: (any HistoryStore)?
+    /// The container both datasets sync through, watched once. Each dataset
+    /// keeps its own reconciler — its own toggle, its own Last Sync Time — and
+    /// hears only about the Record Files its own folder holds.
+    private let containerWatcher = ContainerWatcher()
+
     /// Owns the iCloud transport for history. Nil while history is still
     /// bootstrapping, and for as long as the sync toggle is off.
     private(set) var historySync: SyncReconciler?
@@ -278,7 +283,8 @@ final class RecordingFlowCoordinator {
         historySync = SyncReconciler.startIfEnabled(
             store: history,
             dataset: HistorySync.dataset,
-            defaults: defaults
+            defaults: defaults,
+            watcher: containerWatcher
         )
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
     }
@@ -311,7 +317,8 @@ final class RecordingFlowCoordinator {
         substitutionSync = SyncReconciler.startIfEnabled(
             store: store,
             dataset: SubstitutionSync.dataset,
-            defaults: defaults
+            defaults: defaults,
+            watcher: containerWatcher
         )
     }
 

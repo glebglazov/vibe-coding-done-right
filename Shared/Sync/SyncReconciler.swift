@@ -4,17 +4,18 @@ import OSLog
 /// Brings the Record Files other devices wrote into a Local Store, in the
 /// background, after launch.
 ///
-/// Everything iCloud is here and in the `ContainerWatcher` this drives, and
-/// nowhere else: resolving the ubiquity container, hearing it stir,
-/// materializing the placeholders it hands back, resolving `NSFileVersion`
-/// siblings last-writer-wins, and noticing that the user signed out. The store
-/// this drives knows a database and a directory of files and nothing more,
-/// which is what lets a later transport replace this one without touching the
-/// read path (see `docs/adr/0010`).
+/// Everything iCloud is in the `ContainerWatcher` this drives and nowhere
+/// else: resolving the ubiquity container, hearing it stir, materializing the
+/// placeholders it hands back, and answering whether the user is still signed
+/// in. What is here is the dataset's own — which folder, which conflict rule,
+/// how a pass ended. The store this drives knows a database and a directory
+/// of files and nothing more, which is what lets a later transport replace
+/// this one without touching the read path (see `docs/adr/0010`).
 ///
 /// One reconciler carries one dataset. Conversations and Substitutions differ
 /// only in the answers `SyncedDataset` gives — which folder, which toggle —
-/// so both travel through this same worker.
+/// so both travel through this same worker, and both watch the container
+/// through the one `ContainerWatcher` they are handed.
 ///
 /// The sync toggle decides whether this exists at all. With it off nothing
 /// here is constructed, the container is never resolved, and the app is a
@@ -22,8 +23,6 @@ import OSLog
 @MainActor
 @Observable
 final class SyncReconciler {
-
-    nonisolated static let containerIdentifier = "iCloud.glebglazov.vcdr"
 
     /// Whether iCloud is carrying the device's records, and why not when it
     /// is not. Reads never observe this: they answer from the Local Store
@@ -71,7 +70,7 @@ final class SyncReconciler {
     /// `start` has resolved it — every pass is a no-op before that.
     private var directory: URL?
 
-    private let watcher = ContainerWatcher()
+    private let watcher: ContainerWatcher
     private var observerTokens: [NSObjectProtocol] = []
 
     /// Keeps passes from overlapping. A pull-to-refresh arriving while a
@@ -87,10 +86,16 @@ final class SyncReconciler {
 
     // MARK: - Init
 
-    init(store: any RecordFileSyncedStore, dataset: SyncedDataset, defaults: UserDefaults) {
+    init(
+        store: any RecordFileSyncedStore,
+        dataset: SyncedDataset,
+        defaults: UserDefaults,
+        watcher: ContainerWatcher
+    ) {
         self.store = store
         self.dataset = dataset
         self.defaults = defaults
+        self.watcher = watcher
         self.lastSyncTime = dataset.lastSyncTime(defaults: defaults)
     }
 
@@ -103,13 +108,19 @@ final class SyncReconciler {
     static func startIfEnabled(
         store: any RecordFileSyncedStore,
         dataset: SyncedDataset,
-        defaults: UserDefaults
+        defaults: UserDefaults,
+        watcher: ContainerWatcher
     ) -> SyncReconciler? {
         guard dataset.syncEnabled(defaults: defaults) else {
             Task { await store.syncRecordFiles(in: dataset.localDirectory) }
             return nil
         }
-        let reconciler = SyncReconciler(store: store, dataset: dataset, defaults: defaults)
+        let reconciler = SyncReconciler(
+            store: store,
+            dataset: dataset,
+            defaults: defaults,
+            watcher: watcher
+        )
         Task { await reconciler.start() }
         return reconciler
     }
@@ -126,13 +137,14 @@ final class SyncReconciler {
     /// nothing on a read path waits for any of it.
     func start() async {
         let dataset = self.dataset
+        let root = await watcher.storageRoot()
         let resolved = await withBlockingTask(qos: .utility) {
-            Self.resolveRecordFiles(for: dataset)
+            Self.resolveRecordFiles(for: dataset, under: root)
         }
         directory = resolved.directory
         syncState = resolved.hasAccount ? .idle : .paused(reason: Self.signedOutReason)
         observeAccountStateChanges()
-        watcher.start { [weak self] in
+        watcher.watch(resolved.directory) { [weak self] in
             Task { await self?.reconcile() }
         }
         await reconcile()
@@ -214,34 +226,23 @@ final class SyncReconciler {
 
     // MARK: - Container
 
-    /// Resolves the root of the ubiquity container's `Documents/VCDR` folder,
-    /// or nil if iCloud is unavailable to the process right now.
-    ///
-    /// `Documents/` is required for the folder to appear in Files.app and
-    /// Finder's iCloud Drive view — a useful debug escape hatch.
-    ///
-    /// Blocking: resolving the container provisions it, which takes seconds on
-    /// the first launch after install.
-    nonisolated static func resolveStorageRoot() -> URL? {
-        guard let container = FileManager.default.url(
-            forUbiquityContainerIdentifier: containerIdentifier
-        ) else { return nil }
-        return container.appendingPathComponent("Documents/VCDR")
-    }
-
     private struct Resolved: Sendable {
         let directory: URL
         let hasAccount: Bool
     }
 
-    /// Where this device's Record Files live, and whether iCloud is usable —
-    /// one blocking hop, because both answers come from the iCloud daemon.
+    /// Where this device's Record Files live under the container's root, and
+    /// whether iCloud is usable — one blocking hop, because adopting the local
+    /// files and reading the account token both go to disk or to the daemon.
     ///
     /// Without a container the app's own storage stands in, so a device that
     /// cannot reach iCloud still keeps its records as files and starts
     /// carrying them the moment iCloud comes back.
-    nonisolated private static func resolveRecordFiles(for dataset: SyncedDataset) -> Resolved {
-        guard let root = resolveStorageRoot() else {
+    nonisolated private static func resolveRecordFiles(
+        for dataset: SyncedDataset,
+        under root: URL?
+    ) -> Resolved {
+        guard let root else {
             Logger.sync.info("\(dataset.name) sync: no container, using local record files")
             return Resolved(directory: dataset.localDirectory, hasAccount: false)
         }
@@ -252,7 +253,7 @@ final class SyncReconciler {
         )
         return Resolved(
             directory: directory,
-            hasAccount: FileManager.default.ubiquityIdentityToken != nil
+            hasAccount: ContainerWatcher.hasAccount
         )
     }
 
@@ -268,7 +269,7 @@ final class SyncReconciler {
     }
 
     private func refreshAccountState() {
-        if FileManager.default.ubiquityIdentityToken != nil {
+        if ContainerWatcher.hasAccount {
             syncState = .idle
         } else {
             syncState = .paused(reason: Self.signedOutReason)

@@ -474,7 +474,7 @@ struct SubstitutionStoreTests {
 
     @Test("Substitutions sync through the existing container — no new entitlement")
     func reusesExistingContainerIdentifier() {
-        #expect(SyncReconciler.containerIdentifier == "iCloud.glebglazov.vcdr")
+        #expect(ContainerWatcher.containerIdentifier == "iCloud.glebglazov.vcdr")
         #expect(SubstitutionSync.dataset.containerSubdirectory == "Substitutions")
     }
 }

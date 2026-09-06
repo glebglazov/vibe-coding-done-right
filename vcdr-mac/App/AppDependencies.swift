@@ -25,6 +25,11 @@ final class AppDependencies {
     let audioRecorder: AudioRecorder
     #endif
 
+    /// The container both datasets sync through, watched once. Each dataset
+    /// keeps its own reconciler — its own toggle, its own Last Sync Time — and
+    /// hears only about the Record Files its own folder holds.
+    private let containerWatcher = ContainerWatcher()
+
     /// Owns the iCloud transport for history. Nil while history is still
     /// bootstrapping, and for as long as the sync toggle is off.
     private(set) var historySync: SyncReconciler?
@@ -242,7 +247,8 @@ final class AppDependencies {
         historySync = SyncReconciler.startIfEnabled(
             store: store,
             dataset: HistorySync.dataset,
-            defaults: UserDefaults.standard
+            defaults: UserDefaults.standard,
+            watcher: containerWatcher
         )
     }
 
@@ -268,7 +274,8 @@ final class AppDependencies {
         substitutionSync = SyncReconciler.startIfEnabled(
             store: store,
             dataset: SubstitutionSync.dataset,
-            defaults: UserDefaults.standard
+            defaults: UserDefaults.standard,
+            watcher: containerWatcher
         )
     }
 
