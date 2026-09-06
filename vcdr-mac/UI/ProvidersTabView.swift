@@ -85,7 +85,7 @@ struct ProviderDetailView: View {
                         .focused($isFocused)
                         .onSubmit { isEditing = false }
                 } else {
-                    Text(maskedKey)
+                    Text(apiKey.maskedAsSecret)
                         .font(.system(.body, design: .monospaced))
                         .foregroundStyle(apiKey.isEmpty ? .secondary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -118,13 +118,5 @@ struct ProviderDetailView: View {
                 isFocused = true
             }
         }
-    }
-
-    /// Masks all but the first and last three characters of the key.
-    private var maskedKey: String {
-        guard apiKey.count > 6 else {
-            return apiKey.isEmpty ? "Not set" : String(repeating: "\u{2022}", count: apiKey.count)
-        }
-        return "\(apiKey.prefix(3))\u{2022}\u{2022}\u{2022}\(apiKey.suffix(3))"
     }
 }

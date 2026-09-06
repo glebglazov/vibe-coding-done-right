@@ -28,6 +28,20 @@ enum ReservedVariableNotice: Equatable {
         }
     }
 
+    /// The same relationship in the few words a list row has for it. The row
+    /// only has to say that the name is spoken for; the detail screen is where
+    /// the full explanation and what to do about it belong.
+    var summary: String {
+        switch self {
+        case .duplicatesProviderKey:
+            "Duplicates the Providers key"
+        case let .overridesBashOnly(provider):
+            "Overrides \(provider.displayName) for bash only"
+        case .noEffect:
+            "No effect — uses the Providers key"
+        }
+    }
+
     /// Whether this notice flags a potential surprise (warrants a warning style).
     /// Only a divergent override is a warning; duplicate / empty are informational.
     var isWarning: Bool {

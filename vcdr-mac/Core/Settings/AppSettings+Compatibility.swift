@@ -167,6 +167,35 @@ extension AppSettings {
         return .overridesBashOnly(provider: provider)
     }
 
+    /// Appends a blank Variable and returns its ID, so the caller can send the
+    /// user straight to the detail screen that names it.
+    @discardableResult
+    func addVariable() -> UUID {
+        let variable = Variable()
+        variables.append(variable)
+        return variable.id
+    }
+
+    func deleteVariable(_ variable: Variable) {
+        variables.removeAll { $0.id == variable.id }
+    }
+
+    /// A binding to one Variable by ID, for the detail screen that edits it.
+    /// Reading by ID rather than by index keeps the screen standing while the
+    /// list under it changes — a removed Variable reads as a blank one until the
+    /// screen goes away, instead of indexing past the end.
+    func binding(forVariable id: UUID) -> Binding<Variable> {
+        Binding(
+            get: { [weak self] in
+                self?.variables.first { $0.id == id } ?? Variable(id: id)
+            },
+            set: { [weak self] edited in
+                guard let self, let index = variables.firstIndex(where: { $0.id == id }) else { return }
+                variables[index] = edited
+            }
+        )
+    }
+
     /// Set of all defined variable names (for highlighting in command editors).
     /// Reserved names are always defined because the Provider key is injected for them.
     var definedVariableNames: Set<String> {

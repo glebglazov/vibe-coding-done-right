@@ -12,6 +12,12 @@ struct SubstitutionNavID: Hashable {
     let id: UUID
 }
 
+/// Navigation value for variable detail views.
+/// Distinguishes variable UUIDs from mode UUIDs in NavigationStack.
+struct VariableNavID: Hashable {
+    let id: UUID
+}
+
 struct MainWindowView: View {
     let dependencies: AppDependencies
 
@@ -129,7 +135,7 @@ struct MainWindowView: View {
                             path: $path
                         )
                     case .variables:
-                        VariablesTabView(settings: dependencies.settings)
+                        VariablesListView(settings: dependencies.settings, path: $path)
                     case .substitutions:
                         SubstitutionsListView(
                             viewModel: substitutionsViewModel,
@@ -198,6 +204,16 @@ struct MainWindowView: View {
                         clashes: substitutionsViewModel.clashes.clashes(for: substitution.wrappedValue),
                         onCommit: {
                             substitutionsViewModel.commit(substitution.wrappedValue)
+                        }
+                    )
+                }
+                .navigationDestination(for: VariableNavID.self) { navID in
+                    let variable = dependencies.settings.binding(forVariable: navID.id)
+                    VariableDetailView(
+                        variable: variable,
+                        notice: dependencies.settings.reservedVariableNotice(for: variable.wrappedValue),
+                        onRemove: {
+                            dependencies.settings.deleteVariable(variable.wrappedValue)
                         }
                     )
                 }
