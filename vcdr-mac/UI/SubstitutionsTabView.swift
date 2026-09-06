@@ -5,9 +5,8 @@ import SwiftUI
 /// MainWindowView; the detail view and "+" toolbar add come from that shared
 /// pattern so every settings list looks and behaves the same.
 ///
-/// Rows lead with the Replacement — the text the user meant — because that is
-/// what identifies the entry; the Triggers that produce it read as its
-/// description.
+/// Rows read as the shared presentation layer composes them: the Triggers, an
+/// arrow, then the Replacement they produce.
 struct SubstitutionsListView: View {
     @Bindable var viewModel: SubstitutionsViewModel
     @Binding var path: NavigationPath
@@ -75,27 +74,15 @@ private struct SubstitutionRowView: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(SubstitutionCopy.title(for: substitution))
-                    .foregroundStyle(substitution.replacement.isEmpty ? .secondary : .primary)
-                    .lineLimit(1)
-
-                if let summary = substitution.triggerSummary(losing: clashes) {
-                    summary
-                        .font(.caption)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer()
+            SubstitutionRowLabel(substitution: substitution, clashes: clashes)
 
             if !substitution.isEnabled {
                 Text("Disabled")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .layoutPriority(1)
             }
         }
-        .opacity(substitution.isEnabled ? 1 : 0.5)
     }
 }
 

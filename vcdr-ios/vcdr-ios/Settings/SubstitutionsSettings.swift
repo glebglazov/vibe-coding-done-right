@@ -2,9 +2,9 @@ import SwiftUI
 
 /// iOS Substitutions screen. Part of the App Shell — reachable from Settings
 /// without Transcription Readiness. Two levels, like the macOS tab: a list of
-/// Substitutions led by their Replacement, with the Triggers that produce it as
-/// the description, and a screen behind each one where the Replacement is
-/// edited and Triggers are added, edited and deleted.
+/// Substitutions, each row reading from its Triggers through an arrow to the
+/// Replacement they produce, and a screen behind each one where the Replacement
+/// is edited and Triggers are added, edited and deleted.
 ///
 /// Shares the view model and its wording with the macOS tab; only the
 /// presentation is iOS-idiomatic (grouped list, swipe to delete).
@@ -44,7 +44,7 @@ struct SubstitutionsSettings: View {
                     NavigationLink {
                         detail(for: substitution.id)
                     } label: {
-                        SubstitutionRow(
+                        SubstitutionRowLabel(
                             substitution: substitution,
                             clashes: clashes.clashes(for: substitution)
                         )
@@ -102,28 +102,6 @@ struct SubstitutionsSettings: View {
 /// `UUID` is not one.
 private struct DraftedSubstitution: Identifiable, Hashable {
     let id: UUID
-}
-
-// MARK: - Substitution Row
-
-private struct SubstitutionRow: View {
-    let substitution: Substitution
-    let clashes: [TriggerPhraseClash]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(SubstitutionCopy.title(for: substitution))
-                .foregroundStyle(substitution.replacement.isEmpty ? .secondary : .primary)
-                .lineLimit(1)
-
-            if let summary = substitution.triggerSummary(losing: clashes) {
-                summary
-                    .font(.caption)
-                    .lineLimit(1)
-            }
-        }
-        .opacity(substitution.isEnabled ? 1 : 0.5)
-    }
 }
 
 // MARK: - Substitution Detail

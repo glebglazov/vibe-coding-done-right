@@ -18,9 +18,55 @@ enum SubstitutionCopy {
         "Another Substitution also uses this Trigger, and wins it: your dictation gets \"\(clash.winningReplacement)\"."
     }
 
-    /// The name a list row leads with.
+    /// The name a Substitution is known by — the row's prominent half, and the
+    /// detail screen's title.
     static func title(for substitution: Substitution) -> String {
         substitution.replacement.isEmpty ? untitled : substitution.replacement
+    }
+}
+
+/// A Substitution as one list row, read in the order a person thinks about
+/// one: what was said, then what it becomes.
+///
+///     "power zha", "powerja"  →  Powierza
+///
+/// The Trigger Phrases lead because that is the side the user recognises the
+/// entry by while looking for it; the Replacement still carries the prominence,
+/// because it is what the entry *is*. The arrow says the relation out loud, and
+/// goes with the Replacement so a Substitution with no phrases yet shows no
+/// dangling one.
+///
+/// Both apps show this, so a row cannot read one way on macOS and another on
+/// iOS. Trailing accessories — a "Disabled" tag, a chevron — belong to the app
+/// and sit after it.
+struct SubstitutionRowLabel: View {
+    let substitution: Substitution
+    let clashes: [TriggerPhraseClash]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let summary = substitution.triggerSummary(losing: clashes) {
+                // The phrases are the side that gives way when the row is
+                // narrow: the Replacement takes the width it needs first, so
+                // truncation eats phrases and never the name.
+                summary
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Image(systemName: "arrow.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Text(SubstitutionCopy.title(for: substitution))
+                .foregroundStyle(substitution.replacement.isEmpty ? .secondary : .primary)
+                .lineLimit(1)
+                .layoutPriority(1)
+
+            Spacer(minLength: 0)
+        }
+        .opacity(substitution.isEnabled ? 1 : 0.5)
     }
 }
 
