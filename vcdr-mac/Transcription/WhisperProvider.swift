@@ -221,27 +221,26 @@ actor WhisperProvider: TranscriptionProvider {
 
         Logger.transcription.info("Transcribing audio file: \(audioFileURL.lastPathComponent)")
 
-        do {
-            let options = Self.decodingOptions(for: settings) { prompt in
-                guard let tokenizer = whisper.tokenizer else { return [] }
-                // Leading space and the special-token filter are how
-                // WhisperKit's own server encodes a caller's prompt: the
-                // prompt joins the decoder's text, and a special token
-                // smuggled in through it would rewrite the prefill.
-                return tokenizer.encode(text: " " + prompt)
-                    .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+        return try await loggingTranscriptionTiming(audioFileURL: audioFileURL) {
+            do {
+                let options = Self.decodingOptions(for: settings) { prompt in
+                    guard let tokenizer = whisper.tokenizer else { return [] }
+                    // Leading space and the special-token filter are how
+                    // WhisperKit's own server encodes a caller's prompt: the
+                    // prompt joins the decoder's text, and a special token
+                    // smuggled in through it would rewrite the prefill.
+                    return tokenizer.encode(text: " " + prompt)
+                        .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+                }
+                // A recording longer than one 30-second window comes back as
+                // several results, in order; the merge is how WhisperKit itself
+                // puts them back into one transcript.
+                let results = try await whisper.transcribe(audioPath: audioFileURL.path, decodeOptions: options)
+                let merged = TranscriptionUtilities.mergeTranscriptionResults(results)
+                return merged.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                throw TranscriptionError.transcriptionFailed(error.localizedDescription)
             }
-            // A recording longer than one 30-second window comes back as
-            // several results, in order; the merge is how WhisperKit itself
-            // puts them back into one transcript.
-            let results = try await whisper.transcribe(audioPath: audioFileURL.path, decodeOptions: options)
-            let merged = TranscriptionUtilities.mergeTranscriptionResults(results)
-            let text = merged.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            Logger.transcription.info("Transcription complete (\(text.count) chars)")
-            return text
-        } catch {
-            Logger.transcription.error("Transcription failed: \(error)")
-            throw TranscriptionError.transcriptionFailed(error.localizedDescription)
         }
     }
 }

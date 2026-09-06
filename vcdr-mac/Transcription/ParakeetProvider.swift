@@ -136,14 +136,13 @@ actor ParakeetProvider: TranscriptionProvider {
 
         Logger.transcription.info("Transcribing audio file: \(audioFileURL.lastPathComponent)")
 
-        do {
-            let result = try await asr.transcribe(audioFileURL, source: .system)
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            Logger.transcription.info("Transcription complete (\(text.count) chars)")
-            return text
-        } catch {
-            Logger.transcription.error("Transcription failed: \(error)")
-            throw TranscriptionError.transcriptionFailed(error.localizedDescription)
+        return try await loggingTranscriptionTiming(audioFileURL: audioFileURL) {
+            do {
+                let result = try await asr.transcribe(audioFileURL, source: .system)
+                return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                throw TranscriptionError.transcriptionFailed(error.localizedDescription)
+            }
         }
     }
 }

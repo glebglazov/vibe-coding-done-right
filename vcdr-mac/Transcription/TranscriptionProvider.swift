@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 enum TranscriptionError: LocalizedError {
     case providerUnavailable
@@ -58,4 +59,37 @@ protocol TranscriptionProvider: Sendable {
 
 extension TranscriptionProvider {
     var name: String { model.displayName }
+
+    /// Runs a transcription attempt and puts its timing on the record: how
+    /// long it took against how long the audio was, and which model this was
+    /// — the numbers a person choosing between Whisper sizes needs, worded
+    /// identically regardless of which backend ran it. A failure is logged at
+    /// `.error` with its own wording, so it never reads as a slow success.
+    func loggingTranscriptionTiming(
+        audioFileURL: URL,
+        body: () async throws -> String
+    ) async throws -> String {
+        let audioDuration = TranscriptionTiming.audioDuration(of: audioFileURL)
+        let start = ContinuousClock.now
+        do {
+            let text = try await body()
+            let line = TranscriptionTiming.succeededLine(
+                model: self.model,
+                audioDuration: audioDuration,
+                elapsed: start.duration(to: .now),
+                characterCount: text.count
+            )
+            Logger.transcription.info("\(line)")
+            return text
+        } catch {
+            let line = TranscriptionTiming.failedLine(
+                model: self.model,
+                audioDuration: audioDuration,
+                elapsed: start.duration(to: .now),
+                error: error
+            )
+            Logger.transcription.error("\(line)")
+            throw error
+        }
+    }
 }
