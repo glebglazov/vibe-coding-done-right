@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct SettingsView: View {
+    /// Handed on whole rather than as a readiness string: the Transcription
+    /// section reads what it needs inside its own row, so nothing above it is
+    /// re-evaluated when the model's phase ticks.
+    let coordinator: RecordingFlowCoordinator
     let substitutionStore: any SubstitutionStore
     let substitutionSync: SyncReconciler?
     @Environment(\.dismiss) private var dismiss
@@ -32,6 +36,7 @@ struct SettingsView: View {
             Form {
                 textStyleSection
                 substitutionsSection
+                TranscriptionSettingsSection(coordinator: coordinator)
                 aiProcessingSection
                 syncSection
                 microphoneSection

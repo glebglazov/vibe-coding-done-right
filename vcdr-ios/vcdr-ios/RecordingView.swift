@@ -93,6 +93,7 @@ struct RecordingView: View {
             EmptyView()
         default:
             RecordingTopBar(
+                coordinator: coordinator,
                 history: coordinator.history,
                 historySync: coordinator.historySync,
                 substitutionStore: coordinator.substitutionStore,

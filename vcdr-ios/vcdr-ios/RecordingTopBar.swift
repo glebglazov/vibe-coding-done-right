@@ -4,6 +4,9 @@ import OSLog
 /// App Shell actions stay in their own observation scope so Transcription
 /// Readiness progress updates cannot interrupt sheet presentation.
 struct RecordingTopBar: View {
+    /// Passed to the Settings sheet and read nowhere here — this view's own
+    /// body must stay clear of Transcription Readiness.
+    let coordinator: RecordingFlowCoordinator
     let history: (any HistoryStore)?
     let historySync: SyncReconciler?
     let substitutionStore: any SubstitutionStore
@@ -77,6 +80,7 @@ struct RecordingTopBar: View {
         .sheet(isPresented: $showSettings) {
             let _ = Logger.app.info("[LaunchProbe] settings sheet content built main=\(Thread.isMainThread)")
             SettingsView(
+                coordinator: coordinator,
                 substitutionStore: substitutionStore,
                 substitutionSync: substitutionSync
             )
