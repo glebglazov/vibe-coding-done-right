@@ -160,7 +160,7 @@ enum LaunchTelemetry {
         if let cached = cachedPredictedVerdict { return cached }
         let predicted = await withBlockingTask(qos: .userInitiated) {
             predictVerdict(
-                artifactsOnDisk: AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .v3)),
+                artifactsOnDisk: AsrModels.modelsExist(at: ParakeetModelDirectory.url()),
                 lastVerdict: loadRecordsSync().last?.verdict,
                 rebootedSinceLastRecord: rebootedSinceLastRecordSync()
             )

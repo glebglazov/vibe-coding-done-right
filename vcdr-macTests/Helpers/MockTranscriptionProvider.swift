@@ -4,6 +4,7 @@ import Foundation
 /// A configurable mock TranscriptionProvider for e2e tests.
 /// Uses actor isolation to satisfy the Sendable requirement.
 actor MockTranscriptionProvider: TranscriptionProvider {
+    let model = TranscriptionModel.parakeetV3
     let name = "Mock"
 
     var mockIsReady: Bool

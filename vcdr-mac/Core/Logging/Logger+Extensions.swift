@@ -5,7 +5,6 @@ extension Logger {
 
     static let app = AppLog(subsystem: subsystem, category: "app")
     static let recording = AppLog(subsystem: subsystem, category: "recording")
-    static let transcription = AppLog(subsystem: subsystem, category: "transcription")
     static let hotkeys = AppLog(subsystem: subsystem, category: "hotkeys")
     static let actions = AppLog(subsystem: subsystem, category: "actions")
     static let settings = AppLog(subsystem: subsystem, category: "settings")

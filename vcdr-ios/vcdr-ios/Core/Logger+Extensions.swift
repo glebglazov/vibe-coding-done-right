@@ -5,6 +5,5 @@ nonisolated extension Logger {
 
     static let app = AppLog(subsystem: subsystem, category: "app")
     static let recording = AppLog(subsystem: subsystem, category: "recording")
-    static let transcription = AppLog(subsystem: subsystem, category: "transcription")
     static let ai = AppLog(subsystem: subsystem, category: "ai")
 }

@@ -8,7 +8,7 @@ protocol ModelCacheWarmer: Sendable {
 
 struct ParakeetBackgroundModelWarmer: ModelCacheWarmer {
     func warmParakeetCache() async throws -> LaunchLoadOutcome? {
-        let modelDirectory = AsrModels.defaultCacheDirectory(for: .v3)
+        let modelDirectory = ParakeetModelDirectory.url()
         guard AsrModels.modelsExist(at: modelDirectory) || ParakeetProviderTestSupport.bypassRealMLLoad else {
             Logger.transcription.info("Background model warm skipped; Parakeet artifacts are not on disk")
             return nil

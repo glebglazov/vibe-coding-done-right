@@ -4,7 +4,7 @@ import FluidAudio
 import OSLog
 
 actor ParakeetProvider: TranscriptionProvider {
-    let name = "Parakeet Multilingual v3"
+    let model = TranscriptionModel.parakeetV3
 
     private var asr: AsrManager?
     private(set) var isReady = false
@@ -94,14 +94,14 @@ actor ParakeetProvider: TranscriptionProvider {
         Logger.transcription.info("Initializing Parakeet v3 CoreML model (core phase)...")
 
         modelsOnDiskAtInit = ParakeetProviderTestSupport.stubModelsOnDiskAtInit
-            ?? AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .v3))
+            ?? AsrModels.modelsExist(at: ParakeetModelDirectory.url())
         Logger.transcription.info("[InitTiming] artifacts onDisk=\(self.modelsOnDiskAtInit) before download")
 
         do {
             initPhase = .downloadingModel
             Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=downloading set main=\(Thread.isMainThread)")
             let downloadStart = ContinuousClock.now
-            let modelDir = AsrModels.defaultCacheDirectory(for: .v3)
+            let modelDir = ParakeetModelDirectory.url()
             Logger.transcription.info("[LaunchProbe] ParakeetProvider before downloadRepo main=\(Thread.isMainThread)")
             if !ParakeetProviderTestSupport.bypassRealMLLoad,
                !AsrModels.modelsExist(at: modelDir)

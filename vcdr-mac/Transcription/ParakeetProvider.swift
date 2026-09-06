@@ -3,7 +3,7 @@ import FluidAudio
 import OSLog
 
 actor ParakeetProvider: TranscriptionProvider {
-    let name = "Parakeet Multilingual v3"
+    let model = TranscriptionModel.parakeetV3
 
     private var asr: AsrManager?
     private(set) var isReady = false
@@ -45,16 +45,16 @@ actor ParakeetProvider: TranscriptionProvider {
         Logger.transcription.info("Initializing Parakeet v3 CoreML model...")
 
         do {
-            // Phase 1: Fetch the artifacts, unless the cache already holds
-            // them — `download` short-circuits on a cached launch, so entering
-            // the downloading phase there would announce a download that never
-            // happens.
+            // Phase 1: Fetch the artifacts, unless the model root already
+            // holds them — `download` short-circuits on a filled root, so
+            // entering the downloading phase there would announce a download
+            // that never happens.
             let downloadStart = ContinuousClock.now
-            let cacheDir = AsrModels.defaultCacheDirectory(for: .v3)
-            if !AsrModels.modelsExist(at: cacheDir, version: .v3) {
+            let modelDir = TranscriptionModelRoot.adopting(AsrModels.defaultCacheDirectory(for: .v3))
+            if !AsrModels.modelsExist(at: modelDir, version: .v3) {
                 initPhase = .downloadingModel
             }
-            let modelDir = try await AsrModels.download(version: .v3)
+            _ = try await AsrModels.download(to: modelDir, version: .v3)
             Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
 
             // Phase 2: Compile CoreML models for Neural Engine (the slow part)
