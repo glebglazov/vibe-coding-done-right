@@ -41,6 +41,11 @@ actor MockTranscriptionProvider: TranscriptionProvider {
 
     private(set) var initPhase: ModelPreparationPhase
 
+    /// Whether preparation has taken its turn on the queue and begun — the
+    /// seam a sequencing test uses to ask for a second preparation only once
+    /// the first is observably running, rather than racing two into the queue.
+    private(set) var hasTakenItsTurn = false
+
     var isReady: Bool { mockIsReady }
 
     init(
@@ -128,6 +133,7 @@ actor MockTranscriptionProvider: TranscriptionProvider {
         // The real providers open their preparation on `.preparing`; a mock
         // that was held back would otherwise still be reporting the queue.
         if initPhase == .waitingItsTurn { initPhase = .preparing }
+        hasTakenItsTurn = true
         guard holdsPreparationOpen else { return }
         while !Task.isCancelled {
             switch initPhase {

@@ -27,7 +27,11 @@ struct TranscriptionLibraryTests {
         let watching = Task { await env.library.watch() }
         defer { watching.cancel() }
 
+        // Asking for both in the same breath would leave which one takes the
+        // turn to the scheduler; the second press a person makes lands on a
+        // queue that is already running, so the test starts them that way too.
         env.library.install(.whisperLargeV3Turbo, urgency: .unawaited)
+        #expect(await waitFor { await env.whisper.hasTakenItsTurn })
         env.library.install(.parakeetV3, urgency: .unawaited)
 
         await env.whisper.beginDownload(progress: 0.5)

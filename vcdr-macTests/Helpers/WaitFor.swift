@@ -9,11 +9,11 @@ import Foundation
 func waitFor(
     timeout: Duration = .seconds(2),
     pollInterval: Duration = .milliseconds(20),
-    _ condition: @escaping () -> Bool
+    _ condition: @escaping () async -> Bool
 ) async -> Bool {
     let start = ContinuousClock.now
     while start.duration(to: .now) < timeout {
-        if condition() { return true }
+        if await condition() { return true }
         try? await Task.sleep(for: pollInterval)
     }
     return false
