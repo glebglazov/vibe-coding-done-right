@@ -6,7 +6,8 @@ import SwiftUI
 /// the same thing by the same name.
 enum VariableCopy {
 
-    /// The blurb over the list, explaining what a Variable is for.
+    /// What a Variable is for: the blurb over the list, and the hint under the
+    /// name field on the detail screen.
     static let overview = "Variables are injected as environment variables into all bash scripts. Reference them as $VARIABLE_NAME in your commands."
 
     /// What a Variable is called while it has no name yet.
@@ -72,6 +73,8 @@ struct VariablesListView: View {
 
 /// One Variable as a list row: the name it is referenced by, and under it what
 /// the scripts will get — masked, because a list is read where anyone can see it.
+/// A name the Providers screen already owns has something more urgent to say
+/// than its value, so the notice takes that second line instead.
 private struct VariableRowView: View {
     let variable: Variable
     let notice: ReservedVariableNotice?

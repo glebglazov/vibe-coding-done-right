@@ -8,6 +8,7 @@ extension String {
     /// screen showing either in full.
     ///
     /// A secret too short for that is hidden whole — its ends would be the secret.
+    /// An absent one has nothing to mask, so it says it is not set instead.
     var maskedAsSecret: String {
         guard count > Self.maskedSecretVisibleEnd * 2 else {
             return isEmpty ? "Not set" : String(repeating: Self.maskedSecretBullet, count: count)
