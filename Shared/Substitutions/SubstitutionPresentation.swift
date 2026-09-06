@@ -8,6 +8,10 @@ enum SubstitutionCopy {
     /// The blurb over the list, explaining what a Substitution does.
     static let overview = "Substitutions swap a spoken Trigger for fixed Replacement text in your dictation, before any other processing. They apply in every mode and sync across your devices."
 
+    /// How a Trigger is matched against what was said, and what happens when
+    /// two Substitutions want the same words.
+    static let matchingRules = "Matching is case-insensitive and whole-word. A Substitution fires on any of its Triggers, and the longest Trigger wins when two overlap."
+
     /// What a Substitution is called while its Replacement is still empty.
     static let untitled = "New Substitution"
 
