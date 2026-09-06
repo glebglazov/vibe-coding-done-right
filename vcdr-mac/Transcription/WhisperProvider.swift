@@ -30,10 +30,17 @@ actor WhisperProvider: TranscriptionProvider {
             .appending(path: checkpoint.rawValue)
     }
 
+    /// The CoreML components WhisperKit's own `loadModels` looks for by these
+    /// exact names before it will run a job.
+    private static let requiredComponents = ["MelSpectrogram", "AudioEncoder", "TextDecoder"]
+
     /// WhisperKit publishes no local-inventory API — its own reference app reads
-    /// the variant's folder, which is what this does.
+    /// the variant's folder. Checking that the folder exists is not enough: an
+    /// install interrupted after its first file also leaves a folder, and the
+    /// three components it moves files into place one at a time are what a load
+    /// actually needs present.
     nonisolated var isInstalled: Bool {
-        FileManager.default.fileExists(atPath: installedDirectory.path)
+        TranscriptionModelFiles(directory: installedDirectory).hasAllComponents(named: Self.requiredComponents)
     }
 
     private(set) var downloadProgress: Double?

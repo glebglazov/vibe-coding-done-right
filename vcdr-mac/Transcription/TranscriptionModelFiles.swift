@@ -29,4 +29,18 @@ nonisolated struct TranscriptionModelFiles: Sendable {
     func remove() throws {
         try FileManager.default.removeItem(at: directory)
     }
+
+    /// True when every named component is present, compiled (`.mlmodelc`) or
+    /// not (`.mlpackage`) — the same two names a CoreML-backed transcription
+    /// SDK looks for before it will load a job. Files land one at a time as a
+    /// download finishes them, so a directory that exists but is short one
+    /// component is an install interrupted partway through, not a finished one.
+    func hasAllComponents(named componentNames: [String]) -> Bool {
+        componentNames.allSatisfy { name in
+            let compiled = directory.appending(path: "\(name).mlmodelc")
+            let package = directory.appending(path: "\(name).mlpackage/Data/com.apple.CoreML/model.mlmodel")
+            return FileManager.default.fileExists(atPath: compiled.path)
+                || FileManager.default.fileExists(atPath: package.path)
+        }
+    }
 }
