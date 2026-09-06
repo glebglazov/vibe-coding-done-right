@@ -5,6 +5,11 @@ import Foundation
 enum ModelPreparationPhase: Sendable, Equatable {
     /// Initialization has not begun.
     case preparing
+    /// Another model is preparing, and this one is kept back until that one
+    /// finishes. Its own phase because a model held back is neither idle nor
+    /// under way, and a surface that said either would be lying to whoever is
+    /// waiting on it.
+    case waitingItsTurn
     /// Artifacts are being fetched. A launch that finds them already cached
     /// never enters this phase, and so must never claim to be downloading.
     case downloadingModel
@@ -90,6 +95,7 @@ extension ModelPreparationPhase {
         let phaseLabel: String
         switch self {
         case .preparing: phaseLabel = "Preparing"
+        case .waitingItsTurn: phaseLabel = "Waiting its turn"
         case .downloadingModel: phaseLabel = "Downloading model"
         case .loadingModel: phaseLabel = "Loading model"
         case .ready: return "Ready"

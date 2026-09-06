@@ -20,30 +20,39 @@ struct TranscriptionLibraryTests {
         #expect(env.state(of: .whisperLargeV3Turbo) == .notInstalled)
     }
 
-    @Test("Installing a model shows its progress and leaves it ready")
+    @Test("Two models installed at once install one after the other, each showing its progress")
     func installShowsProgress() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
         let watching = Task { await env.library.watch() }
         defer { watching.cancel() }
 
-        env.library.install(.whisperLargeV3Turbo)
-        env.library.install(.parakeetV3)
+        env.library.install(.whisperLargeV3Turbo, urgency: .unawaited)
+        env.library.install(.parakeetV3, urgency: .unawaited)
 
         await env.whisper.beginDownload(progress: 0.5)
         #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .downloading(.fraction(0.5)) })
 
-        // A backend that reports no fraction still has to say it is downloading,
-        // which is the elapsed wait rather than a percentage.
-        await env.parakeet.beginDownload()
+        // The second model is not downloading beside the first: it is held
+        // back, and its row says so rather than looking stalled.
         #expect(await waitFor {
-            guard case .downloading(let progress) = env.state(of: .parakeetV3) else { return false }
-            return progress.fraction == nil && progress.label.hasPrefix("Downloading model")
+            guard case .waitingItsTurn(let label) = env.state(of: .parakeetV3) else { return false }
+            return label.hasPrefix("Waiting its turn")
         })
 
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.whisper.becomeReady()
         #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .ready(bytes: 1024) })
+
+        // Its turn came the moment the first finished: the row stopped being a
+        // queued one. A backend that reports no fraction still has to say it is
+        // downloading, which is the elapsed wait rather than a percentage.
+        #expect(await waitFor { env.state(of: .parakeetV3) == .notInstalled })
+        await env.parakeet.beginDownload()
+        #expect(await waitFor {
+            guard case .downloading(let progress) = env.state(of: .parakeetV3) else { return false }
+            return progress.fraction == nil && progress.label.hasPrefix("Downloading model")
+        })
 
         // The Library never cancels a download — the bytes are paid for either
         // way — so Parakeet's held-open preparation is finished here rather
@@ -108,14 +117,14 @@ struct TranscriptionLibraryTests {
         defer { env.cleanup() }
         await env.library.refresh()
 
-        env.library.install(env.whisper.model)
+        env.library.install(env.whisper.model, urgency: .unawaited)
         await env.whisper.fail(.offline)
         #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .failed(.offline) })
         #expect(env.state(of: .whisperLargeV3Turbo)?.installTitle == "Try Again")
         #expect(env.state(of: .parakeetV3) == .notInstalled)
 
         await env.whisper.prepareAgain()
-        env.library.install(.whisperLargeV3Turbo)
+        env.library.install(.whisperLargeV3Turbo, urgency: .unawaited)
         env.installFiles(for: env.whisper, bytes: 512)
         await env.whisper.becomeReady()
         #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .ready(bytes: 512) })

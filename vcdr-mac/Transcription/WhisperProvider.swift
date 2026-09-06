@@ -11,8 +11,13 @@ actor WhisperProvider: TranscriptionProvider {
 
     nonisolated var model: TranscriptionModel { checkpoint.model }
 
-    init(checkpoint: WhisperCheckpoint) {
+    /// The queue every provider shares, so this model's preparation waits for
+    /// another model's rather than competing with it for the neural engine.
+    private let preparationQueue: ModelPreparationQueue
+
+    init(checkpoint: WhisperCheckpoint, preparationQueue: ModelPreparationQueue) {
         self.checkpoint = checkpoint
+        self.preparationQueue = preparationQueue
     }
 
     /// The Hugging Face repository the variant is published in. Named once
@@ -87,16 +92,32 @@ actor WhisperProvider: TranscriptionProvider {
         return String(format: "%.0fms", ms)
     }
 
-    func initialize() async throws {
+    func initialize(urgency: PreparationUrgency) async throws {
         guard !isReady else { return }
         if let attempt {
             return try await attempt.value
         }
-        let attempt = Task { try await self.prepare() }
+        let attempt = Task { try await self.prepareInTurn(urgency: urgency) }
         self.attempt = attempt
         let result = await attempt.result
         self.attempt = nil
         try result.get()
+    }
+
+    /// The download and the load, run once no other model is in them.
+    private func prepareInTurn(urgency: PreparationUrgency) async throws {
+        try await preparationQueue.takingTurn(
+            urgency: urgency,
+            whileHeldBack: { await self.reportHeldBack() }
+        ) {
+            try await self.prepare()
+        }
+    }
+
+    /// Says the model is queued rather than moving, so every readiness surface
+    /// shows a wait that is real instead of one that looks like a hang.
+    private func reportHeldBack() {
+        initPhase = .waitingItsTurn
     }
 
     private func prepare() async throws {

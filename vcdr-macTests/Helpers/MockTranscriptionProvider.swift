@@ -25,6 +25,12 @@ actor MockTranscriptionProvider: TranscriptionProvider {
     /// surface says mid-preparation.
     private let holdsPreparationOpen: Bool
 
+    /// The queue this provider prepares through, as the real ones do. Its own
+    /// by default, so a test that is not about sequencing sees no queue at all;
+    /// tests that are hand the same one to several providers, the way the
+    /// registry does in the app.
+    private let preparationQueue: ModelPreparationQueue
+
     var mockIsReady: Bool
     var mockTranscribeResult: String
     var mockTranscribeError: Error?
@@ -45,8 +51,10 @@ actor MockTranscriptionProvider: TranscriptionProvider {
         error: Error? = nil,
         installedDirectory: URL = FileManager.default.temporaryDirectory
             .appending(path: "vcdr-mock-model-\(UUID().uuidString)"),
-        holdsPreparationOpen: Bool = false
+        holdsPreparationOpen: Bool = false,
+        preparationQueue: ModelPreparationQueue = ModelPreparationQueue()
     ) {
+        self.preparationQueue = preparationQueue
         self.model = model
         self.installedDirectory = installedDirectory
         self.holdsPreparationOpen = holdsPreparationOpen
@@ -103,7 +111,23 @@ actor MockTranscriptionProvider: TranscriptionProvider {
         initPhase = .preparing
     }
 
-    func initialize() async throws {
+    func initialize(urgency: PreparationUrgency) async throws {
+        try await preparationQueue.takingTurn(
+            urgency: urgency,
+            whileHeldBack: { await self.reportHeldBack() }
+        ) {
+            try await self.prepare()
+        }
+    }
+
+    private func reportHeldBack() {
+        initPhase = .waitingItsTurn
+    }
+
+    private func prepare() async throws {
+        // The real providers open their preparation on `.preparing`; a mock
+        // that was held back would otherwise still be reporting the queue.
+        if initPhase == .waitingItsTurn { initPhase = .preparing }
         guard holdsPreparationOpen else { return }
         while !Task.isCancelled {
             switch initPhase {

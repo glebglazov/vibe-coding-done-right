@@ -12,6 +12,10 @@ struct LibraryEnvironment {
     let whisper: MockTranscriptionProvider
     let library: TranscriptionLibrary
 
+    /// One queue for both providers, the way the registry gives one to every
+    /// provider it hands out — so a test sees the sequencing the app has.
+    let preparationQueue = ModelPreparationQueue()
+
     init() {
         settings = AppSettings(
             userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!,
@@ -22,14 +26,16 @@ struct LibraryEnvironment {
             isReady: false,
             preparationPhase: .preparing,
             installedDirectory: root.appending(path: "parakeet"),
-            holdsPreparationOpen: true
+            holdsPreparationOpen: true,
+            preparationQueue: preparationQueue
         )
         whisper = MockTranscriptionProvider(
             model: .whisperLargeV3Turbo,
             isReady: false,
             preparationPhase: .preparing,
             installedDirectory: root.appending(path: "whisper"),
-            holdsPreparationOpen: true
+            holdsPreparationOpen: true,
+            preparationQueue: preparationQueue
         )
         let providers = [parakeet, whisper]
         library = TranscriptionLibrary(

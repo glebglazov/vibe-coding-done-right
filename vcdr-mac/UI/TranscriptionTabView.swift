@@ -40,7 +40,7 @@ struct TranscriptionTabView: View {
                     TranscriptionLibraryRow(
                         entry: entry,
                         removalRefusal: library.removalRefusal(for: entry.model),
-                        install: { library.install(entry.model) },
+                        install: { library.install(entry.model, urgency: .unawaited) },
                         remove: { Task { await library.remove(entry.model) } }
                     )
                 }

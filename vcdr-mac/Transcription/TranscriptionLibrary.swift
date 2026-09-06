@@ -84,13 +84,13 @@ final class TranscriptionLibrary {
     /// preparing it means. Also the retry a Preparation Failure offers: the
     /// provider begins a fresh attempt, and a second press while one runs joins
     /// that attempt rather than downloading twice.
-    func install(_ model: TranscriptionModel) {
+    func install(_ model: TranscriptionModel, urgency: PreparationUrgency) {
         guard installations[model] == nil else { return }
         let provider = provider(model)
         installations[model] = Task {
             // Whatever stopped it rides on the phase, which the next state read
             // picks up — the throw has nothing left to tell this screen.
-            try? await provider.initialize()
+            try? await provider.initialize(urgency: urgency)
             await refreshState(of: model)
             installations[model] = nil
         }
@@ -112,7 +112,7 @@ final class TranscriptionLibrary {
     /// rather than a download that runs while the person is speaking; naming
     /// nothing returns the Mode to the Default and installs nothing.
     func override(_ override: TranscriptionOverride, naming model: TranscriptionModel?) -> TranscriptionOverride {
-        if let model { install(model) }
+        if let model { install(model, urgency: .unawaited) }
         var named = override
         named.model = model
         return named
@@ -150,6 +150,7 @@ final class TranscriptionLibrary {
         for model in models {
             let phase = await provider(model).initPhase
             let hasStartedMoving = phase == .downloadingModel || phase == .loadingModel
+                || phase == .waitingItsTurn
             guard states[model]?.isPreparing == true || hasStartedMoving else { continue }
             await refreshState(of: model)
         }
@@ -174,6 +175,8 @@ final class TranscriptionLibrary {
             return .downloading(.elapsed(label: label(for: phase, of: model)))
         case .loadingModel:
             return .loading(label: label(for: phase, of: model))
+        case .waitingItsTurn:
+            return .waitingItsTurn(label: label(for: phase, of: model))
         case .failed(let failure):
             return .failed(failure)
         case .preparing, .ready:

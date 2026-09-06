@@ -28,7 +28,7 @@ struct ModeTranscriptionSection: View {
                 TranscriptionLibraryRow(
                     entry: library.entry(for: model),
                     removalRefusal: nil,
-                    install: { library.install(model) },
+                    install: { library.install(model, urgency: .unawaited) },
                     remove: nil
                 )
 

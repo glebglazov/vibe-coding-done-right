@@ -18,16 +18,21 @@ final class TranscriptionProviderRegistry {
 
     private var providers: [TranscriptionModel: any TranscriptionProvider] = [:]
 
+    /// The one queue every provider handed out prepares through. It lives here
+    /// because this is the only place that sees all of them, and sequencing
+    /// preparations is only possible from somewhere that does.
+    private let preparationQueue = ModelPreparationQueue()
+
     func provider(for model: TranscriptionModel) -> any TranscriptionProvider {
         if let resident = providers[model] { return resident }
         let provider: any TranscriptionProvider = switch model {
-        case .parakeetV3: ParakeetProvider()
-        case .whisperTiny: WhisperProvider(checkpoint: .tiny)
-        case .whisperBase: WhisperProvider(checkpoint: .base)
-        case .whisperSmall: WhisperProvider(checkpoint: .small)
-        case .whisperMedium: WhisperProvider(checkpoint: .medium)
-        case .whisperLargeV3: WhisperProvider(checkpoint: .largeV3)
-        case .whisperLargeV3Turbo: WhisperProvider(checkpoint: .largeV3Turbo)
+        case .parakeetV3: ParakeetProvider(preparationQueue: preparationQueue)
+        case .whisperTiny: WhisperProvider(checkpoint: .tiny, preparationQueue: preparationQueue)
+        case .whisperBase: WhisperProvider(checkpoint: .base, preparationQueue: preparationQueue)
+        case .whisperSmall: WhisperProvider(checkpoint: .small, preparationQueue: preparationQueue)
+        case .whisperMedium: WhisperProvider(checkpoint: .medium, preparationQueue: preparationQueue)
+        case .whisperLargeV3: WhisperProvider(checkpoint: .largeV3, preparationQueue: preparationQueue)
+        case .whisperLargeV3Turbo: WhisperProvider(checkpoint: .largeV3Turbo, preparationQueue: preparationQueue)
         }
         providers[model] = provider
         return provider

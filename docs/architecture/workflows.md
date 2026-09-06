@@ -15,7 +15,11 @@
    `TranscriptionModelFamily` it belongs to — an existing one when it accepts
    exactly what that family accepts, a new one otherwise (`docs/adr/0020`)
 2. Create a type conforming to `TranscriptionProvider` in `Transcription/`, and
-   download its files under `TranscriptionModelRoot.url`
+   download its files under `TranscriptionModelRoot.url`. Run the download and
+   the load inside `ModelPreparationQueue.takingTurn(urgency:whileHeldBack:)`,
+   taking the queue the registry hands every provider: two models preparing at
+   once make each other slower, and a model kept back says so by reporting
+   `ModelPreparationPhase.waitingItsTurn`
 3. Construct it in `TranscriptionProviderRegistry` and list the model in
    `offeredModels` — only what this platform's transcription path can drive.
    Another size of Whisper needs none of steps 1–2: add a case to

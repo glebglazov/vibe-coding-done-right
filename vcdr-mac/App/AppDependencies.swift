@@ -142,8 +142,9 @@ final class AppDependencies {
                 // Installing a model is the download and the load — what
                 // preparing it means — so a run that needs one nobody has
                 // prepared asks the Library for it rather than for a second
-                // preparation of its own.
-                prepareTranscription: { transcriptionLibrary.install($0) },
+                // preparation of its own. Awaited: a run is holding audio for
+                // this model, so it goes ahead of any model nothing waits on.
+                prepareTranscription: { transcriptionLibrary.install($0, urgency: .awaited) },
                 hotkeyRegistry: hotkeyRegistry,
                 audio: audioRecorder,
                 media: mediaPlayback,
@@ -255,7 +256,10 @@ final class AppDependencies {
         self.phasePoller = phasePoller
 
         do {
-            try await provider.initialize()
+            // Nothing is waiting on this one: the Default is warmed so the
+            // first recording finds it ready, and a model some recording is
+            // already held up by must be let past it.
+            try await provider.initialize(urgency: .unawaited)
             phasePoller.cancel()
 
             guard isDefault(provider) else { return }

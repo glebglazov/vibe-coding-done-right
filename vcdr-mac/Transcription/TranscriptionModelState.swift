@@ -14,6 +14,11 @@ enum TranscriptionModelState: Equatable {
     case unsupported
     case notInstalled
     case downloading(DownloadProgress)
+    /// Another model is preparing and this one is kept back until it finishes,
+    /// worded by this model's own narrator so the wait is seen to be moving.
+    /// Its own state: a row saying "Installed", or saying nothing new for a
+    /// minute, reads as a model that has stopped rather than one in a queue.
+    case waitingItsTurn(label: String)
     /// The files are here, and nothing has loaded them this run.
     case installed(bytes: Int64)
     /// The files are here and CoreML is compiling and loading them, worded by
@@ -37,6 +42,8 @@ enum TranscriptionModelState: Equatable {
             "Not installed"
         case .downloading(let progress):
             progress.label
+        case .waitingItsTurn(let label):
+            label
         case .installed(let bytes):
             "Installed · \(Self.formatted(bytes))"
         case .loading(let label):
@@ -52,7 +59,7 @@ enum TranscriptionModelState: Equatable {
     /// Library knows which rows are worth re-reading.
     var isPreparing: Bool {
         switch self {
-        case .downloading, .loading: true
+        case .downloading, .loading, .waitingItsTurn: true
         default: false
         }
     }

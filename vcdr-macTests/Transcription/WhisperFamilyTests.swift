@@ -93,7 +93,10 @@ struct WhisperFamilyTests {
         // screen that the family's own settings do not reach.
         #expect(WhisperCheckpoint.allCases.allSatisfy { !$0.rawValue.contains(".en") })
 
-        let directories = WhisperCheckpoint.allCases.map { WhisperProvider(checkpoint: $0).installedDirectory }
+        let queue = ModelPreparationQueue()
+        let directories = WhisperCheckpoint.allCases.map {
+            WhisperProvider(checkpoint: $0, preparationQueue: queue).installedDirectory
+        }
         #expect(Set(directories).count == WhisperCheckpoint.allCases.count)
     }
 }

@@ -45,7 +45,10 @@ protocol TranscriptionProvider: Sendable {
     /// throws and takes time — the Library treats not knowing as its own state
     /// rather than as "no".
     func isInstallableOnThisDevice() async throws -> Bool
-    func initialize() async throws
+    /// Prepares the model: the download, then the load. Preparations are
+    /// sequenced across models, and `urgency` is what decides the order — say
+    /// whether anything is waiting on this one right now.
+    func initialize(urgency: PreparationUrgency) async throws
     /// Transcribes the recording with what this model has been told. A model
     /// that declares no Capability is handed the settings like any other and
     /// reads nothing out of them — declaring a Capability is what makes a
