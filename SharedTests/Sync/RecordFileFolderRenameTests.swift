@@ -86,10 +86,12 @@ struct RecordFileFolderRenameTests {
         #expect(entries(of: parent) == ["conversations"])
     }
 
-    @Test("an older build still reaches the folder by the capitalised name")
-    func theOlderNameStillResolves() throws {
+    @Test(
+        "an older build still reaches the folder by the capitalised name",
+        .enabled(if: temporaryVolumeFoldsCase, "a case-sensitive volume cannot answer this")
+    )
+    func theOlderNameStillResolves() {
         let parent = makeParent(recordFiles: 4)
-        try #require(foldsCase(parent), "a case-sensitive volume cannot answer this")
 
         RecordFileFolderRename.apply(folder, in: parent)
 
@@ -97,10 +99,22 @@ struct RecordFileFolderRenameTests {
         let asOlderBuildsAsk = parent.appendingPathComponent("Substitutions", isDirectory: true)
         #expect(entries(of: asOlderBuildsAsk).count == 4)
     }
-
-    /// Whether this volume folds case, which is the premise the mixed-build
-    /// window rests on and not something a test may assume.
-    private func foldsCase(_ parent: URL) -> Bool {
-        FileManager.default.fileExists(atPath: parent.appendingPathComponent("SUBSTITUTIONS").path)
-    }
 }
+
+/// Whether the volume the tests write to folds case, which is the premise the
+/// mixed-build window rests on (see `docs/adr/0013`) and not something a test
+/// may assume. True on the Mac's case-insensitive APFS boot volume; false
+/// inside the simulator's data container, where the older name stays a second
+/// real directory and the merge path — not case folding — is what keeps every
+/// Record File.
+private let temporaryVolumeFoldsCase: Bool = {
+    let fm = FileManager.default
+    let leaf = "vcdr-case-probe-\(UUID().uuidString)"
+    let probe = fm.temporaryDirectory.appendingPathComponent(leaf, isDirectory: true)
+    guard (try? fm.createDirectory(at: probe, withIntermediateDirectories: true)) != nil else {
+        return false
+    }
+    defer { try? fm.removeItem(at: probe) }
+    let shouted = fm.temporaryDirectory.appendingPathComponent(leaf.uppercased(), isDirectory: true)
+    return fm.fileExists(atPath: shouted.path)
+}()
