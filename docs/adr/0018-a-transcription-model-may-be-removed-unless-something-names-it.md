@@ -57,7 +57,10 @@ constraint.
 
 - iOS's deliverable is the seam and one model. This is deliberate: offering
   Whisper on iPhone would make the live view behave differently with nothing to
-  explain it.
+  explain it. **Amended by [ADR-0021](0021-the-ios-library-becomes-plural.md):**
+  iOS's Library becomes plural, and the WhisperKit streaming work deferred in
+  point 6 above is funded rather than deferred. The removal rule this ADR
+  decides is unaffected.
 - VCDR owns a directory two SDKs also believe they manage. Both take the path
   as a parameter for exactly this reason, but an SDK changing its layout inside
   that directory is a risk the Library absorbs.
