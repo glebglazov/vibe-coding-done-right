@@ -3,9 +3,8 @@ import Foundation
 /// A kind of thing a Transcription Model Family can be told. Typed by kind
 /// rather than as a list of string options, because two families differ in
 /// *what* they accept and not only in the values: Parakeet has no language
-/// token and no
-/// text prompt at all, which no value of a closed string list can express
-/// (`docs/adr/0017`).
+/// token and no text prompt at all, which no value of a closed string list can
+/// express (`docs/adr/0017`).
 enum TranscriptionModelCapability: String, Codable, Sendable, Hashable {
     case languageHint
     case freeTextPrompt

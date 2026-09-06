@@ -2,7 +2,7 @@
 
 VCDR is a minimal macOS menu bar voice transcription app. Toggle a global hotkey to record, toggle again to transcribe (via the Default Transcription Model), then execute an action (paste or run a bash command).
 
-**Tech stack:** Swift 6 (strict concurrency), SwiftUI, AVFoundation, Carbon `RegisterEventHotKey` for global hotkeys, FluidAudio (Parakeet v3 CoreML) and WhisperKit (large-v3-turbo CoreML) for transcription.
+**Tech stack:** Swift 6 (strict concurrency), SwiftUI, AVFoundation, Carbon `RegisterEventHotKey` for global hotkeys, FluidAudio (Parakeet v3 CoreML) and WhisperKit (six multilingual Whisper checkpoints, Tiny through Large v3 Turbo, CoreML) for transcription.
 
 **Target:** macOS 15.0+ (Sequoia), no App Sandbox.
 
@@ -65,11 +65,13 @@ vcdr/
 │   ├── TranscriptionModelState.swift     # A model's own state as the Library shows it, and why a removal is refused
 │   ├── TranscriptionModelFiles.swift     # An install's size on disk, and its deletion
 │   ├── TranscriptionOverride.swift       # A Mode's own model and sparse settings patch, and the one place they are resolved
-│   │   # What a model accepts and what it has been told live in
-│   │   # Shared/Transcription/: TranscriptionModelCapability, LanguageHint,
-│   │   # TranscriptionModelSettings (keyed by model, so they stay its own)
+│   │   # What a family accepts and what it has been told live in
+│   │   # Shared/Transcription/: TranscriptionModelFamily,
+│   │   # TranscriptionModelCapability, LanguageHint, TranscriptionModelSettings
+│   │   # (keyed by family, so every Whisper shares one set — docs/adr/0020)
 │   ├── ParakeetProvider.swift            # FluidAudio Parakeet implementation (actor)
-│   └── WhisperProvider.swift             # WhisperKit large-v3-turbo implementation (actor)
+│   ├── WhisperCheckpoint.swift           # The Whisper weights argmax publishes, and which model each one is
+│   └── WhisperProvider.swift             # WhisperKit implementation, one actor per checkpoint
 ├── Audio/AudioRecorder.swift             # AVFoundation 16kHz mono recording
 ├── Hotkeys/
 │   ├── CarbonHotkeyRegistry.swift        # Claims key combos; survives Secure Input
