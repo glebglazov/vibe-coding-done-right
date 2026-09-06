@@ -29,6 +29,9 @@ actor MockTranscriptionProvider: TranscriptionProvider {
     var mockTranscribeResult: String
     var mockTranscribeError: Error?
     private(set) var transcribeCallCount = 0
+    /// What the last transcription was told, so a test can read the settings a
+    /// whole run carried down to the model that ran it.
+    private(set) var receivedSettings: TranscriptionModelSettings?
 
     private(set) var initPhase: ModelPreparationPhase
 
@@ -105,8 +108,9 @@ actor MockTranscriptionProvider: TranscriptionProvider {
         }
     }
 
-    func transcribe(audioFileURL: URL) async throws -> String {
+    func transcribe(audioFileURL: URL, settings: TranscriptionModelSettings) async throws -> String {
         transcribeCallCount += 1
+        receivedSettings = settings
         if let error = mockTranscribeError {
             throw error
         }

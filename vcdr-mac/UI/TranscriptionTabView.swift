@@ -46,6 +46,21 @@ struct TranscriptionTabView: View {
                 }
             }
 
+            // A section per model rather than one for the Default: the
+            // settings belong to the model, so they stay readable while
+            // another model is the one that runs.
+            ForEach(TranscriptionProviderRegistry.offeredModels, id: \.self) { model in
+                Section("\(model.displayName) Settings") {
+                    TranscriptionModelSettingsView(
+                        model: model,
+                        settings: Binding(
+                            get: { settings.transcriptionSettings.modelSettings[model] },
+                            set: { settings.transcriptionSettings.modelSettings[model] = $0 }
+                        )
+                    )
+                }
+            }
+
             Section("Pre-processing") {
                 Toggle("Remove filler words (um, uh, etc.)", isOn: Binding(
                     get: { settings.removeFillerWords },

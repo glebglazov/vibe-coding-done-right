@@ -20,10 +20,14 @@ struct TranscriptionSettings: Codable, Equatable {
     /// Per device and never synced: it names a model that has to be installed
     /// here, and another device's answer would name one that is not.
     var defaultModel: TranscriptionModel
+    /// What each Transcription Model has been told. Kept per model rather than
+    /// per app so the settings stay with the model that accepts them.
+    var modelSettings: TranscriptionModelSettingsStore
 
     static let `default` = TranscriptionSettings(
         removeFillerWords: true,
-        defaultModel: .parakeetV3
+        defaultModel: .parakeetV3,
+        modelSettings: TranscriptionModelSettingsStore()
     )
 }
 

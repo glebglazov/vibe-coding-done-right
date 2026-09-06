@@ -26,7 +26,14 @@ extension CaptureSession {
             }
 
             let transcriptionStart = ContinuousClock.now
-            let rawText = try await transcription.transcribe(audioFileURL: audioURL)
+            // The provider is resolved once here and asked for its own
+            // settings: the Default may change while a run is in flight, and
+            // the model that transcribes must be told what that model accepts.
+            let provider = transcription
+            let rawText = try await provider.transcribe(
+                audioFileURL: audioURL,
+                settings: settings.transcriptionSettings.modelSettings[provider.model]
+            )
             try Task.checkCancellation()
             let elapsed = transcriptionStart.duration(to: .now)
             Logger.app.info("Transcribed in \(elapsed): \(rawText)")

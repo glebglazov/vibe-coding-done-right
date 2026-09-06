@@ -273,6 +273,7 @@ final class AppSettings {
         static let didMigrateVariablesToSecretStore = "didMigrateVariablesToSecretStore"
         static let removeFillerWords = "removeFillerWords"
         static let defaultTranscriptionModel = "defaultTranscriptionModel"
+        static let transcriptionModelSettings = "transcriptionModelSettings"
         static let legacyPreferredInputDeviceID = "preferredInputDeviceID"
         static let legacyPushToTalkHotkey = "pushToTalkHotkey"
         static let legacyKeyCode = "hotkeyKeyCode"
@@ -377,6 +378,11 @@ final class AppSettings {
                 from: userDefaults,
                 forKey: Keys.defaultTranscriptionModel,
                 default: TranscriptionSettings.default.defaultModel
+            ),
+            modelSettings: Self.decodeSetting(
+                from: userDefaults,
+                forKey: Keys.transcriptionModelSettings,
+                default: TranscriptionSettings.default.modelSettings
             )
         )
 
@@ -610,6 +616,7 @@ final class AppSettings {
         encode(audioSettings, forKey: Keys.audioSettings)
         userDefaults.set(transcriptionSettings.removeFillerWords, forKey: Keys.removeFillerWords)
         userDefaults.set(transcriptionSettings.defaultModel.rawValue, forKey: Keys.defaultTranscriptionModel)
+        encode(transcriptionSettings.modelSettings, forKey: Keys.transcriptionModelSettings)
         Logger.settings.info("Settings saved")
     }
 

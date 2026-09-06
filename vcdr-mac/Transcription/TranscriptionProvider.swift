@@ -46,7 +46,11 @@ protocol TranscriptionProvider: Sendable {
     /// rather than as "no".
     func isInstallableOnThisDevice() async throws -> Bool
     func initialize() async throws
-    func transcribe(audioFileURL: URL) async throws -> String
+    /// Transcribes the recording with what this model has been told. A model
+    /// that declares no Capability is handed the settings like any other and
+    /// reads nothing out of them — declaring a Capability is what makes a
+    /// setting reach a backend at all.
+    func transcribe(audioFileURL: URL, settings: TranscriptionModelSettings) async throws -> String
 }
 
 extension TranscriptionProvider {

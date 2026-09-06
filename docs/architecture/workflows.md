@@ -19,8 +19,17 @@
 4. Answer the Library's four questions in the provider: `installedDirectory`,
    `isInstalled`, `downloadProgress` (nil when the backend reports none) and
    `isInstallableOnThisDevice()`
-5. Nothing else changes: the session resolves the Default's provider through the
-   protocol, and the Library lists whatever `offeredModels` names
+5. Declare what the model can be told in `TranscriptionModel.capabilities`
+   (`Shared/Transcription/`) — the kinds it accepts, or why it accepts nothing.
+   Its settings screen is generated from that declaration, so a model with an
+   unfamiliar hint needs a new `TranscriptionModelCapability` kind and its
+   control in `TranscriptionModelSettingsView`, not a wider string list
+6. Read the settings the run hands the provider in `transcribe(audioFileURL:settings:)`,
+   and only the fields the model declared. A Language Hint of `detect` must
+   send no language at all — see `docs/adr/0019`
+7. Nothing else changes: the session resolves the Default's provider through the
+   protocol, hands it its own settings, and the Library lists whatever
+   `offeredModels` names
 
 ### Modifying the Global Hotkey
 1. Update `AppSettings` if new settings are needed

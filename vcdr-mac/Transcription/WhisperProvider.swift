@@ -144,7 +144,34 @@ actor WhisperProvider: TranscriptionProvider {
         downloadProgress = fraction
     }
 
-    func transcribe(audioFileURL: URL) async throws -> String {
+    /// What `settings` mean to WhisperKit's decoder.
+    ///
+    /// A Language Hint of Detect must leave `language` nil *and* ask for
+    /// detection: with neither, WhisperKit fills the prefill's language slot
+    /// with its own default of English, which is exactly the silent
+    /// wrong-language transcript Detect exists to avoid. A named hint is the
+    /// opposite — the token is forced and detection is off, which is what the
+    /// person choosing it asked for.
+    ///
+    /// The prompt is encoded by the caller because only a loaded model has a
+    /// tokenizer, and an empty prompt is left absent rather than sent as no
+    /// tokens: a bare prompt marker with nothing after it biases the model
+    /// toward ending the segment early.
+    static func decodingOptions(
+        for settings: TranscriptionModelSettings,
+        encodePrompt: (String) -> [Int]
+    ) -> DecodingOptions {
+        let promptTokens = encodePrompt(settings.freeTextPrompt)
+        let prompt = settings.freeTextPrompt.isEmpty || promptTokens.isEmpty ? nil : promptTokens
+        return DecodingOptions(
+            language: settings.languageHint.languageCode,
+            usePrefillPrompt: true,
+            detectLanguage: settings.languageHint == .detect,
+            promptTokens: prompt
+        )
+    }
+
+    func transcribe(audioFileURL: URL, settings: TranscriptionModelSettings) async throws -> String {
         guard let whisper else {
             throw TranscriptionError.providerUnavailable
         }
@@ -152,10 +179,19 @@ actor WhisperProvider: TranscriptionProvider {
         Logger.transcription.info("Transcribing audio file: \(audioFileURL.lastPathComponent)")
 
         do {
+            let options = Self.decodingOptions(for: settings) { prompt in
+                guard let tokenizer = whisper.tokenizer else { return [] }
+                // Leading space and the special-token filter are how
+                // WhisperKit's own server encodes a caller's prompt: the
+                // prompt joins the decoder's text, and a special token
+                // smuggled in through it would rewrite the prefill.
+                return tokenizer.encode(text: " " + prompt)
+                    .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+            }
             // A recording longer than one 30-second window comes back as
             // several results, in order; the merge is how WhisperKit itself
             // puts them back into one transcript.
-            let results = try await whisper.transcribe(audioPath: audioFileURL.path)
+            let results = try await whisper.transcribe(audioPath: audioFileURL.path, decodeOptions: options)
             let merged = TranscriptionUtilities.mergeTranscriptionResults(results)
             let text = merged.text.trimmingCharacters(in: .whitespacesAndNewlines)
             Logger.transcription.info("Transcription complete (\(text.count) chars)")
