@@ -177,7 +177,7 @@ struct ModeDetailView: View {
         // The Transcription section shows a model's Library state, kept fresh
         // the same way the Library screen keeps itself fresh — so a download
         // named here reports its progress while the person watches.
-        .task { await transcriptionLibrary.refresh() }
+        .task { await transcriptionLibrary.watch() }
         .modifier(SelectAllOnAppear(focusState: $isNameFieldFocused))
         .onChange(of: mode.processingType) { _, newType in
             if newType == .localAgent && mode.parameters.isEmpty {

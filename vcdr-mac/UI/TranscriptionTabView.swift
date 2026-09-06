@@ -69,9 +69,11 @@ struct TranscriptionTabView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Transcription")
-        // Each visit re-reads the Library, which is also how a device that was
-        // offline last time finally learns what it can install.
-        .task { await library.refresh() }
+        // Each visit re-reads the Library — which is also how a device that
+        // was offline last time finally learns what it can install — and then
+        // keeps watching, so a model preparing while this screen is open moves
+        // and reaches ready without the screen being closed and reopened.
+        .task { await library.watch() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Color.clear.frame(width: 0, height: 0)

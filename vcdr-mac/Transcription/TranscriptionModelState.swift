@@ -16,7 +16,10 @@ enum TranscriptionModelState: Equatable {
     case downloading(DownloadProgress)
     /// The files are here, and nothing has loaded them this run.
     case installed(bytes: Int64)
-    case loading
+    /// The files are here and CoreML is compiling and loading them, worded by
+    /// this model's own narrator — the label carries the Preparation Heartbeat,
+    /// because a cold load takes minutes and a constant line reads as a hang.
+    case loading(label: String)
     /// Loaded, and able to transcribe now.
     case ready(bytes: Int64)
     case failed(PreparationFailure)
@@ -36,12 +39,21 @@ enum TranscriptionModelState: Equatable {
             progress.label
         case .installed(let bytes):
             "Installed · \(Self.formatted(bytes))"
-        case .loading:
-            ModelPreparationPhase.loadingModel.label(elapsedSeconds: 0)
+        case .loading(let label):
+            label
         case .ready(let bytes):
             "Ready · \(Self.formatted(bytes))"
         case .failed(let failure):
             failure.headline
+        }
+    }
+
+    /// Whether this is a state that moves on its own, so a screen watching the
+    /// Library knows which rows are worth re-reading.
+    var isPreparing: Bool {
+        switch self {
+        case .downloading, .loading: true
+        default: false
         }
     }
 

@@ -80,8 +80,10 @@ struct ModeTranscriptionOverrideTests {
     func namingAModelInstallsIt() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
-        await env.library.refresh()
-        #expect(env.state(of: .whisperLargeV3Turbo) == .notInstalled)
+        // The Mode's screen is open, which is what keeps the row it shows fresh.
+        let watching = Task { await env.library.watch() }
+        defer { watching.cancel() }
+        #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .notInstalled })
 
         let override = env.library.override(.none, naming: .whisperLargeV3Turbo)
 

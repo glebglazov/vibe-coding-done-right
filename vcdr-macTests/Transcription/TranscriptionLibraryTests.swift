@@ -24,7 +24,8 @@ struct TranscriptionLibraryTests {
     func installShowsProgress() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
-        await env.library.refresh()
+        let watching = Task { await env.library.watch() }
+        defer { watching.cancel() }
 
         env.library.install(.whisperLargeV3Turbo)
         env.library.install(.parakeetV3)
@@ -118,5 +119,29 @@ struct TranscriptionLibraryTests {
         env.installFiles(for: env.whisper, bytes: 512)
         await env.whisper.becomeReady()
         #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .ready(bytes: 512) })
+    }
+
+    @Test("A preparation the Library never started still moves a row, and the row reaches ready")
+    func watchesAPreparationItDidNotStart() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        let watching = Task { await env.library.watch() }
+        defer { watching.cancel() }
+
+        // What launch does with the Default: the provider prepares, and nothing
+        // ever asks the Library to install it.
+        await env.whisper.beginLoading()
+
+        #expect(await waitFor { env.state(of: .whisperLargeV3Turbo)?.isPreparing == true })
+        // Past the heartbeat threshold the line has to carry the seconds spent,
+        // which is how a slow load reads differently from a stuck one.
+        #expect(await waitFor(timeout: .seconds(6)) {
+            env.state(of: .whisperLargeV3Turbo)?.label.hasPrefix("Loading model · ") == true
+        })
+
+        env.installFiles(for: env.whisper, bytes: 1024)
+        await env.whisper.becomeReady()
+
+        #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .ready(bytes: 1024) })
     }
 }

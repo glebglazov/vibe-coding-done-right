@@ -49,6 +49,20 @@ final class TranscriptionLibrary {
         self.settings = settings
     }
 
+    /// Keeps the Library telling the truth for as long as a screen is showing
+    /// it: one read of everything, then every preparing model re-read at the
+    /// Preparation Heartbeat's cadence until the screen goes away. The loop
+    /// belongs here rather than to `install()` because a preparation this
+    /// Library never started — the Default being prepared at launch — is read
+    /// off the provider the same way, and has to reach the row too.
+    func watch() async {
+        await refresh()
+        while !Task.isCancelled {
+            try? await Task.sleep(for: Self.statePollingInterval)
+            await refreshPreparingModels()
+        }
+    }
+
     /// Reads every model's state, then asks the backends whose model is not
     /// here whether this Mac could run it. Cheap to run on each visit to the
     /// screen — and that visit is also how an answer that never arrived, on a
@@ -74,16 +88,9 @@ final class TranscriptionLibrary {
         guard installations[model] == nil else { return }
         let provider = provider(model)
         installations[model] = Task {
-            let poller = Task {
-                while !Task.isCancelled {
-                    await refreshState(of: model)
-                    try? await Task.sleep(for: Self.statePollingInterval)
-                }
-            }
             // Whatever stopped it rides on the phase, which the next state read
             // picks up — the throw has nothing left to tell this screen.
             try? await provider.initialize()
-            poller.cancel()
             await refreshState(of: model)
             installations[model] = nil
         }
@@ -136,6 +143,18 @@ final class TranscriptionLibrary {
 
     // MARK: - Reading a model's state
 
+    /// Re-reads only the models with something to report: one already moving,
+    /// and one whose provider has just started moving. Sizing an install on
+    /// disk is what a state read costs, and an idle Library owes nobody that.
+    private func refreshPreparingModels() async {
+        for model in models {
+            let phase = await provider(model).initPhase
+            let hasStartedMoving = phase == .downloadingModel || phase == .loadingModel
+            guard states[model]?.isPreparing == true || hasStartedMoving else { continue }
+            await refreshState(of: model)
+        }
+    }
+
     private func refreshState(of model: TranscriptionModel) async {
         let state = await state(of: model)
         if states[model] != state {
@@ -154,7 +173,7 @@ final class TranscriptionLibrary {
             }
             return .downloading(.elapsed(label: label(for: phase, of: model)))
         case .loadingModel:
-            return .loading
+            return .loading(label: label(for: phase, of: model))
         case .failed(let failure):
             return .failed(failure)
         case .preparing, .ready:

@@ -77,6 +77,12 @@ actor MockTranscriptionProvider: TranscriptionProvider {
         initPhase = .downloadingModel
     }
 
+    /// Enters the load phase the way the real provider does once the files are
+    /// on disk — the seam a test uses to watch a cold CoreML load from outside.
+    func beginLoading() {
+        initPhase = .loadingModel
+    }
+
     /// The answer the backend's support table would give, or the failure asking
     /// for it would raise.
     func setInstallability(supported: Bool = true, error: Error? = nil) {
