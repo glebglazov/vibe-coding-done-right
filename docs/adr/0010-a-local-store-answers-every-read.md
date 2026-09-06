@@ -1,5 +1,14 @@
 # A local store answers every read; sync is a background transport
 
+> **Amended by [ADR-0014](0014-one-history-across-every-build.md):** the CloudKit
+> deferral below now carries a second condition. Every build of the app must show
+> one history, and CloudKit chooses its database by how the build is signed — so
+> the container proving insufficient is no longer enough on its own.
+>
+> **Amended by [ADR-0015](0015-a-sync-pass-skips-a-record-file-by-its-stamp.md):**
+> decision 7's Sync Window is bounded by a per-file stamp, not by a duration. A
+> clock cutoff would permanently drop a Record File that arrives late.
+
 Reads — launch, the history list, paging, Substitution matching — go to an
 on-device SQLite database and never to a remote service. Cross-device sync
 becomes a background reconciler that may be slow, offline or signed out with no
