@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 #if os(macOS)
 @testable import vcdr_mac
@@ -194,6 +195,33 @@ struct SubstitutionCommitTests {
         #expect(try #require(persistedStamp(viewModel)) > stampBeforeOpening)
         #expect(await eventually { self.recordFileStamps(in: root) != exportsBeforeOpening })
         #expect(try await onDisk(root).first?.triggerPhrases == ["power zha", "powerja"])
+    }
+
+    @Test("closing the editor with nothing typed leaves the entry's triggers as they were")
+    func blankTriggerRowLeavesNoRowBehind() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let viewModel = try await makeViewModel(root: root)
+
+        let stored = try #require(saved(viewModel.commit(
+            Substitution(triggerPhrases: ["power zha"], replacement: "Powierża")
+        )))
+        viewModel.syncFromStore()
+        let editing = viewModel.binding(for: stored.id)
+
+        // Three visits that typed nothing: each opens a row for the caret and
+        // closes on it, so the list must read the same after the third as the
+        // first.
+        for _ in 1...3 {
+            editing.wrappedValue.addPhrase()
+            _ = viewModel.commit(editing.wrappedValue)
+            editing.wrappedValue.dropBlankPhrases()
+            _ = viewModel.commit(editing.wrappedValue)
+        }
+
+        #expect(editing.wrappedValue.triggerPhrases == ["power zha"])
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(try await onDisk(root).first?.triggerPhrases == ["power zha"])
     }
 
     @Test("a blank trigger row on an entry that never reached the store keeps it off the store")

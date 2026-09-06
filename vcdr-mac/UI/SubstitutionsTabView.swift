@@ -94,6 +94,8 @@ private enum SubstitutionField: Hashable {
     case trigger(Int)
 }
 
+/// The editor for one Substitution, asking in the order the answers arrive:
+/// the Trigger Phrases that were said, then the Replacement they produce.
 struct SubstitutionDetailView: View {
     @Binding var substitution: Substitution
     let clashes: [TriggerPhraseClash]
@@ -103,12 +105,6 @@ struct SubstitutionDetailView: View {
 
     var body: some View {
         Form {
-            Section {
-                TextField("Replacement", text: $substitution.replacement, axis: .vertical)
-                    .lineLimit(2...6)
-                    .focused($focus, equals: .replacement)
-            }
-
             Section("Triggers") {
                 ForEach(Array(substitution.livePhrases.enumerated()), id: \.element.id) { index, phrase in
                     TriggerRowView(
@@ -125,6 +121,12 @@ struct SubstitutionDetailView: View {
                 Button("Add Trigger", action: addTrigger)
             }
 
+            Section("Replacement") {
+                TextField("Replacement", text: $substitution.replacement, axis: .vertical)
+                    .lineLimit(2...6)
+                    .focused($focus, equals: .replacement)
+            }
+
             Section {
                 Toggle("Enabled", isOn: $substitution.isEnabled)
                     .help(substitution.isEnabled ? "Substitution is active" : "Substitution is disabled")
@@ -136,9 +138,14 @@ struct SubstitutionDetailView: View {
             onCommit()
         }
         .onAppear {
-            if substitution.replacement.isEmpty {
-                focus = .replacement
-            }
+            // Unconditionally, because the alternative is a rule that reads the
+            // entry to guess what the visit came for — and a wrong guess types a
+            // Trigger Phrase into the Replacement. A visit that came to fix the
+            // Replacement pays one click instead.
+            addTrigger()
+        }
+        .onDisappear {
+            substitution.dropBlankPhrases()
         }
     }
 

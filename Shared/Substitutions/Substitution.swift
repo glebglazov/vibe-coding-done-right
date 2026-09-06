@@ -72,6 +72,14 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
         phrases.append(TriggerPhrase(text: "", addedAt: Date()))
     }
 
+    /// Forgets the phrases still holding no text. They leave no removal behind
+    /// because a blank phrase never reached disk for a peer to be showing: it is
+    /// the row an opened editor puts the caret in, dropped again when the editor
+    /// closes with nothing typed into it.
+    mutating func dropBlankPhrases() {
+        phrases.removeAll { $0.isLive && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
     /// Takes a phrase off the entry, keeping the record so the removal travels
     /// to the devices that still show it.
     mutating func removePhrase(_ id: UUID, at now: Date = Date()) {
