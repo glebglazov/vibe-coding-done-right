@@ -10,6 +10,11 @@ import Foundation
 /// case name, because it outlives any rename of the case.
 enum TranscriptionModel: String, Codable, Sendable {
     case parakeetV3 = "parakeet-v3"
+    case whisperTiny = "whisper-tiny"
+    case whisperBase = "whisper-base"
+    case whisperSmall = "whisper-small"
+    case whisperMedium = "whisper-medium"
+    case whisperLargeV3 = "whisper-large-v3"
     case whisperLargeV3Turbo = "whisper-large-v3-turbo"
 
     /// The Transcription Model Family this model belongs to, and so what it
@@ -18,7 +23,7 @@ enum TranscriptionModel: String, Codable, Sendable {
     var family: TranscriptionModelFamily {
         switch self {
         case .parakeetV3: .parakeet
-        case .whisperLargeV3Turbo: .whisper
+        case .whisperTiny, .whisperBase, .whisperSmall, .whisperMedium, .whisperLargeV3, .whisperLargeV3Turbo: .whisper
         }
     }
 
@@ -27,6 +32,11 @@ enum TranscriptionModel: String, Codable, Sendable {
     var displayName: String {
         switch self {
         case .parakeetV3: "Parakeet Multilingual v3"
+        case .whisperTiny: "Whisper Tiny"
+        case .whisperBase: "Whisper Base"
+        case .whisperSmall: "Whisper Small"
+        case .whisperMedium: "Whisper Medium"
+        case .whisperLargeV3: "Whisper Large v3"
         case .whisperLargeV3Turbo: "Whisper Large v3 Turbo"
         }
     }

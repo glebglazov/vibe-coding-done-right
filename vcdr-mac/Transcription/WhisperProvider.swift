@@ -3,12 +3,17 @@ import OSLog
 import WhisperKit
 
 actor WhisperProvider: TranscriptionProvider {
-    let model = TranscriptionModel.whisperLargeV3Turbo
 
-    /// The variant WhisperKit publishes for this model: large-v3-turbo quantized
-    /// to 627 MB, multilingual — so Russian is available — and the one
-    /// WhisperKit's own device table names as the default for an M1-class Mac.
-    private static let variant = "openai_whisper-large-v3-v20240930_626MB"
+    /// Which Whisper this provider runs. One provider per checkpoint, each
+    /// downloading, sizing and loading its own weights, so a person whose Mac
+    /// cannot keep up with the largest can install a smaller one instead.
+    private let checkpoint: WhisperCheckpoint
+
+    nonisolated var model: TranscriptionModel { checkpoint.model }
+
+    init(checkpoint: WhisperCheckpoint) {
+        self.checkpoint = checkpoint
+    }
 
     /// The Hugging Face repository the variant is published in. Named once
     /// because two things derive from it: where the download goes, and where the
@@ -22,7 +27,7 @@ actor WhisperProvider: TranscriptionProvider {
     nonisolated var installedDirectory: URL {
         HubApiWrapper(downloadBase: TranscriptionModelRoot.url)
             .localRepoLocation(HubApiWrapper.Repo(id: Self.repo))
-            .appending(path: Self.variant)
+            .appending(path: checkpoint.rawValue)
     }
 
     /// WhisperKit publishes no local-inventory API — its own reference app reads
@@ -36,11 +41,21 @@ actor WhisperProvider: TranscriptionProvider {
     /// WhisperKit filters the variants it publishes through a support config
     /// fetched from the repo, so what this Mac can run is a network answer and
     /// a Mac too old for the variant is told so rather than offered it.
+    /// Absent from every device's list is a different answer again: argmax
+    /// publishes `openai_whisper-medium` but ranks it for no device at all, and
+    /// a config with no opinion about a checkpoint has not refused it. Such a
+    /// checkpoint stands on being published.
     func isInstallableOnThisDevice() async throws -> Bool {
-        try await WhisperKit.fetchAvailableModels(
+        let runnableHere = try await WhisperKit.fetchAvailableModels(
             from: Self.repo,
             downloadBase: TranscriptionModelRoot.url
-        ).contains(Self.variant)
+        )
+        if runnableHere.contains(checkpoint.rawValue) { return true }
+        let rankedAnywhere = await WhisperKit.fetchModelSupportConfig(
+            from: Self.repo,
+            downloadBase: TranscriptionModelRoot.url
+        ).knownModels
+        return !rankedAnywhere.contains(checkpoint.rawValue)
     }
 
     private var whisper: WhisperKit?
@@ -80,7 +95,7 @@ actor WhisperProvider: TranscriptionProvider {
     private func prepare() async throws {
         initPhase = .preparing
         let totalStart = ContinuousClock.now
-        Logger.transcription.info("Initializing Whisper large-v3-turbo CoreML model...")
+        Logger.transcription.info("Initializing \(self.model.displayName) CoreML model...")
 
         do {
             // Phase 1: Fetch the artifacts, unless the model root already holds
@@ -94,7 +109,7 @@ actor WhisperProvider: TranscriptionProvider {
                 initPhase = .downloadingModel
                 let downloadStart = ContinuousClock.now
                 _ = try await WhisperKit.download(
-                    variant: Self.variant,
+                    variant: checkpoint.rawValue,
                     downloadBase: root,
                     from: Self.repo,
                     progressCallback: { [weak self] progress in
@@ -113,7 +128,7 @@ actor WhisperProvider: TranscriptionProvider {
             initPhase = .loadingModel
             let loadStart = ContinuousClock.now
             let whisper = try await WhisperKit(WhisperKitConfig(
-                model: Self.variant,
+                model: checkpoint.rawValue,
                 downloadBase: root,
                 modelRepo: Self.repo,
                 modelFolder: modelDirectory.path,
@@ -126,14 +141,14 @@ actor WhisperProvider: TranscriptionProvider {
             self.whisper = whisper
             self.isReady = true
             initPhase = .ready
-            Logger.transcription.info("Whisper large-v3-turbo ready (total: \(self.elapsedMs(since: totalStart)))")
+            Logger.transcription.info("\(self.model.displayName) ready (total: \(self.elapsedMs(since: totalStart)))")
         } catch {
             // Classified here, where the failing step and the backend's own
             // error are both still in hand; the raw text goes to the log and
             // no further.
             let failure = PreparationFailure(error: error)
             initPhase = .failed(failure)
-            Logger.transcription.error("Failed to initialize Whisper: \(error)")
+            Logger.transcription.error("Failed to initialize \(self.model.displayName): \(error)")
             throw TranscriptionError.initializationFailed(failure)
         }
     }

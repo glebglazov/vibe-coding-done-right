@@ -17,7 +17,12 @@
 2. Create a type conforming to `TranscriptionProvider` in `Transcription/`, and
    download its files under `TranscriptionModelRoot.url`
 3. Construct it in `TranscriptionProviderRegistry` and list the model in
-   `offeredModels` — only what this platform's transcription path can drive
+   `offeredModels` — only what this platform's transcription path can drive.
+   Another size of Whisper needs none of steps 1–2: add a case to
+   `WhisperCheckpoint` naming the variant argmax publishes, and the registry
+   offers it and hands it a `WhisperProvider` of its own. Only a multilingual
+   checkpoint may join — the English-only ones take no Language Hint, and a
+   family whose members disagree about a setting is not one family
 4. Answer the Library's four questions in the provider: `installedDirectory`,
    `isInstalled`, `downloadProgress` (nil when the backend reports none) and
    `isInstallableOnThisDevice()`

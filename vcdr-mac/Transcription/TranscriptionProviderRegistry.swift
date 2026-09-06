@@ -8,11 +8,13 @@ import Foundation
 final class TranscriptionProviderRegistry {
 
     /// The Transcription Model Library this platform offers. macOS transcribes a
-    /// finished recording, which is the path both of these drive; iOS drives a
-    /// live view and so offers only Parakeet (`docs/adr/0018`). Written out
-    /// rather than derived from the enum's cases, because a case existing is
-    /// not a claim that this platform can run it.
-    static let offeredModels: [TranscriptionModel] = [.parakeetV3, .whisperLargeV3Turbo]
+    /// finished recording, which is the path all of these drive; iOS drives a
+    /// live view and so offers only Parakeet (`docs/adr/0018`). Not derived
+    /// from `TranscriptionModel`'s cases, because a case existing is not a
+    /// claim that this platform can run it — the Whispers come from the
+    /// checkpoints this platform has a provider for, smallest first, which is
+    /// the order someone hunting for one their Mac keeps up with reads in.
+    static let offeredModels: [TranscriptionModel] = [.parakeetV3] + WhisperCheckpoint.allCases.map(\.model)
 
     /// The families those models belong to, each named once and in the order
     /// the Library offers them. What a family is told is one answer for all of
@@ -29,7 +31,12 @@ final class TranscriptionProviderRegistry {
         if let resident = providers[model] { return resident }
         let provider: any TranscriptionProvider = switch model {
         case .parakeetV3: ParakeetProvider()
-        case .whisperLargeV3Turbo: WhisperProvider()
+        case .whisperTiny: WhisperProvider(checkpoint: .tiny)
+        case .whisperBase: WhisperProvider(checkpoint: .base)
+        case .whisperSmall: WhisperProvider(checkpoint: .small)
+        case .whisperMedium: WhisperProvider(checkpoint: .medium)
+        case .whisperLargeV3: WhisperProvider(checkpoint: .largeV3)
+        case .whisperLargeV3Turbo: WhisperProvider(checkpoint: .largeV3Turbo)
         }
         providers[model] = provider
         return provider
