@@ -16,8 +16,11 @@
    download its files under `TranscriptionModelRoot.url`
 3. Construct it in `TranscriptionProviderRegistry` and list the model in
    `offeredModels` — only what this platform's transcription path can drive
-4. Nothing else changes: the session resolves the Default's provider through the
-   protocol
+4. Answer the Library's four questions in the provider: `installedDirectory`,
+   `isInstalled`, `downloadProgress` (nil when the backend reports none) and
+   `isInstallableOnThisDevice()`
+5. Nothing else changes: the session resolves the Default's provider through the
+   protocol, and the Library lists whatever `offeredModels` names
 
 ### Modifying the Global Hotkey
 1. Update `AppSettings` if new settings are needed

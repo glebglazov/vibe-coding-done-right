@@ -27,6 +27,24 @@ protocol TranscriptionProvider: Sendable {
     /// — menu bar, settings badge, the recording pill — words the wait from
     /// this, so none of them has to guess from `isReady` alone.
     var initPhase: ModelPreparationPhase { get async }
+    /// The directory inside the owned model root this model's files occupy.
+    /// Neither backend offers an inventory or a delete, so the Library sizes
+    /// and removes an install through the directory — and only the provider
+    /// knows the layout its own SDK chose under the root.
+    nonisolated var installedDirectory: URL { get }
+    /// Whether this model's files are on disk and complete enough to load,
+    /// answered by the SDK that wrote them wherever one can say. A model can be
+    /// installed without being loaded: preparing it is what loads it.
+    nonisolated var isInstalled: Bool { get }
+    /// How much of the download is done, or nil for a backend that reports no
+    /// progress at all. Only the Library shows it; the menu bar and the
+    /// recording pill collapse the whole wait into one label.
+    var downloadProgress: Double? { get async }
+    /// Whether this Mac can install this model. A backend that publishes a
+    /// per-device support table has to be asked over the network, so this both
+    /// throws and takes time — the Library treats not knowing as its own state
+    /// rather than as "no".
+    func isInstallableOnThisDevice() async throws -> Bool
     func initialize() async throws
     func transcribe(audioFileURL: URL) async throws -> String
 }

@@ -15,6 +15,34 @@ actor WhisperProvider: TranscriptionProvider {
     /// next launch looks for what a previous one downloaded.
     private static let repo = "argmaxinc/whisperkit-coreml"
 
+    /// Where a download puts this variant's files under the owned model root.
+    /// Asked of WhisperKit's own Hub client rather than spelled out, because the
+    /// layout under the root is the SDK's to choose and only it can be trusted
+    /// to say what it chose.
+    nonisolated var installedDirectory: URL {
+        HubApiWrapper(downloadBase: TranscriptionModelRoot.url)
+            .localRepoLocation(HubApiWrapper.Repo(id: Self.repo))
+            .appending(path: Self.variant)
+    }
+
+    /// WhisperKit publishes no local-inventory API — its own reference app reads
+    /// the variant's folder, which is what this does.
+    nonisolated var isInstalled: Bool {
+        FileManager.default.fileExists(atPath: installedDirectory.path)
+    }
+
+    private(set) var downloadProgress: Double?
+
+    /// WhisperKit filters the variants it publishes through a support config
+    /// fetched from the repo, so what this Mac can run is a network answer and
+    /// a Mac too old for the variant is told so rather than offered it.
+    func isInstallableOnThisDevice() async throws -> Bool {
+        try await WhisperKit.fetchAvailableModels(
+            from: Self.repo,
+            downloadBase: TranscriptionModelRoot.url
+        ).contains(Self.variant)
+    }
+
     private var whisper: WhisperKit?
     private(set) var isReady = false
 
@@ -61,15 +89,19 @@ actor WhisperProvider: TranscriptionProvider {
             // the files would both announce a download that never happens and
             // need a connection to find out it was not needed.
             let root = TranscriptionModelRoot.url
-            let modelDirectory = Self.installedDirectory(in: root)
-            if !FileManager.default.fileExists(atPath: modelDirectory.path) {
+            let modelDirectory = installedDirectory
+            if !isInstalled {
                 initPhase = .downloadingModel
                 let downloadStart = ContinuousClock.now
                 _ = try await WhisperKit.download(
                     variant: Self.variant,
                     downloadBase: root,
-                    from: Self.repo
+                    from: Self.repo,
+                    progressCallback: { [weak self] progress in
+                        Task { await self?.report(downloaded: progress.fractionCompleted) }
+                    }
                 )
+                downloadProgress = nil
                 Logger.transcription.info("Model download completed in \(self.elapsedMs(since: downloadStart))")
             }
 
@@ -106,14 +138,10 @@ actor WhisperProvider: TranscriptionProvider {
         }
     }
 
-    /// Where a download into `root` puts this variant's files. Asked of
-    /// WhisperKit's own Hub client rather than spelled out, because the layout
-    /// under the root is the SDK's to choose and only it can be trusted to say
-    /// what it chose.
-    private static func installedDirectory(in root: URL) -> URL {
-        HubApiWrapper(downloadBase: root)
-            .localRepoLocation(HubApiWrapper.Repo(id: repo))
-            .appending(path: variant)
+    /// Hops the Hub client's progress onto this actor, where the Library polls
+    /// it from.
+    private func report(downloaded fraction: Double) {
+        downloadProgress = fraction
     }
 
     func transcribe(audioFileURL: URL) async throws -> String {

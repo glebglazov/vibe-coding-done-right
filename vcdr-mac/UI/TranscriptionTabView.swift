@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TranscriptionTabView: View {
     let settings: AppSettings
+    let library: TranscriptionLibrary
     let readiness: ModelReadiness
     let retryPreparation: () -> Void
     /// Makes a model the Default Transcription Model. One that is not
@@ -34,6 +35,17 @@ struct TranscriptionTabView: View {
                 }
             }
 
+            Section("Library") {
+                ForEach(library.entries) { entry in
+                    TranscriptionLibraryRow(
+                        entry: entry,
+                        removalRefusal: library.removalRefusal(for: entry.model),
+                        install: { library.install(entry.model) },
+                        remove: { Task { await library.remove(entry.model) } }
+                    )
+                }
+            }
+
             Section("Pre-processing") {
                 Toggle("Remove filler words (um, uh, etc.)", isOn: Binding(
                     get: { settings.removeFillerWords },
@@ -43,6 +55,9 @@ struct TranscriptionTabView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Transcription")
+        // Each visit re-reads the Library, which is also how a device that was
+        // offline last time finally learns what it can install.
+        .task { await library.refresh() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Color.clear.frame(width: 0, height: 0)

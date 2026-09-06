@@ -1,0 +1,180 @@
+import Foundation
+import OSLog
+
+/// The Transcription Model Library: which models this device has installed,
+/// what each install costs on disk, and the two things a person can do about it
+/// — add one, remove one that is not the Default.
+@Observable
+final class TranscriptionLibrary {
+
+    struct Entry: Identifiable {
+        let model: TranscriptionModel
+        let state: TranscriptionModelState
+        var id: TranscriptionModel { model }
+    }
+
+    /// Every model this platform offers, in the order it offers them, each with
+    /// its own state. Never shortened: a model whose installability is not
+    /// known yet is a row saying so, not a row withheld.
+    var entries: [Entry] {
+        models.map { Entry(model: $0, state: states[$0] ?? .installabilityUnknown) }
+    }
+
+    private let models: [TranscriptionModel]
+    private let provider: (TranscriptionModel) -> any TranscriptionProvider
+    private let settings: AppSettings
+
+    private var states: [TranscriptionModel: TranscriptionModelState] = [:]
+    /// Whether this Mac can install a model, once the backend has been asked.
+    /// Absent until the answer arrives, which is what the unknown state renders.
+    private var installability: [TranscriptionModel: Bool] = [:]
+    /// One clock per model, so the Preparation Heartbeat a row shows measures
+    /// that model's own wait rather than whichever model asked last.
+    @ObservationIgnored private var narrators: [TranscriptionModel: ModelPreparationNarrator] = [:]
+    @ObservationIgnored private var installations: [TranscriptionModel: Task<Void, Never>] = [:]
+
+    init(
+        models: [TranscriptionModel],
+        provider: @escaping (TranscriptionModel) -> any TranscriptionProvider,
+        settings: AppSettings
+    ) {
+        self.models = models
+        self.provider = provider
+        self.settings = settings
+    }
+
+    /// Reads every model's state, then asks the backends whose model is not
+    /// here whether this Mac could run it. Cheap to run on each visit to the
+    /// screen — and that visit is also how an answer that never arrived, on a
+    /// device that was offline, gets asked for a second time.
+    func refresh() async {
+        for model in models {
+            await refreshState(of: model)
+        }
+        // Only a model that is absent needs the network answer: one already on
+        // disk is installable by the fact of being installed, and a screen
+        // opened with everything installed asks nothing of the network.
+        for model in models where states[model] == .installabilityUnknown {
+            await askInstallability(of: model)
+            await refreshState(of: model)
+        }
+    }
+
+    /// Installs `model` — the download and the load, which together are what
+    /// preparing it means. Also the retry a Preparation Failure offers: the
+    /// provider begins a fresh attempt, and a second press while one runs joins
+    /// that attempt rather than downloading twice.
+    func install(_ model: TranscriptionModel) {
+        guard installations[model] == nil else { return }
+        let provider = provider(model)
+        installations[model] = Task {
+            let poller = Task {
+                while !Task.isCancelled {
+                    await refreshState(of: model)
+                    try? await Task.sleep(for: Self.statePollingInterval)
+                }
+            }
+            // Whatever stopped it rides on the phase, which the next state read
+            // picks up — the throw has nothing left to tell this screen.
+            try? await provider.initialize()
+            poller.cancel()
+            await refreshState(of: model)
+            installations[model] = nil
+        }
+    }
+
+    /// Why removing `model` is refused, or nil when it can go. The Default
+    /// Transcription Model is always installed, so it is the one model the
+    /// Library will not delete.
+    func removalRefusal(for model: TranscriptionModel) -> ModelRemovalRefusal? {
+        model == settings.transcriptionSettings.defaultModel ? .isDefaultModel : nil
+    }
+
+    /// Deletes `model`'s files, or returns why it will not. Settings are
+    /// untouched: a removed model keeps everything it was configured with, so
+    /// installing it again finds its own answers waiting.
+    @discardableResult
+    func remove(_ model: TranscriptionModel) async -> ModelRemovalRefusal? {
+        if let refusal = removalRefusal(for: model) { return refusal }
+
+        let provider = provider(model)
+        do {
+            try TranscriptionModelFiles(directory: provider.installedDirectory).remove()
+            Logger.transcription.info("Removed \(model.rawValue) from the model root")
+        } catch {
+            Logger.transcription.error("Could not remove \(model.rawValue): \(error)")
+        }
+        await refreshState(of: model)
+        return nil
+    }
+
+    // MARK: - Constants
+
+    /// The same cadence the app's own readiness polls its provider at.
+    private static let statePollingInterval: Duration = .milliseconds(200)
+
+    // MARK: - Reading a model's state
+
+    private func refreshState(of model: TranscriptionModel) async {
+        let state = await state(of: model)
+        if states[model] != state {
+            states[model] = state
+        }
+    }
+
+    private func state(of model: TranscriptionModel) async -> TranscriptionModelState {
+        let provider = provider(model)
+        let phase = await provider.initPhase
+
+        switch phase {
+        case .downloadingModel:
+            if let fraction = await provider.downloadProgress {
+                return .downloading(.fraction(fraction))
+            }
+            return .downloading(.elapsed(label: label(for: phase, of: model)))
+        case .loadingModel:
+            return .loading
+        case .failed(let failure):
+            return .failed(failure)
+        case .preparing, .ready:
+            // Disk decides before the phase does: a provider loaded this run
+            // still reports `.ready` after its files have been removed, and a
+            // provider nothing has prepared reports `.preparing` forever.
+            guard provider.isInstalled else { return uninstalledState(of: model) }
+            // Being installed answers whether this Mac can install it, so a
+            // removal later never asks the network for what is already known.
+            installability[model] = true
+            let bytes = TranscriptionModelFiles(directory: provider.installedDirectory).sizeOnDisk ?? 0
+            return phase == .ready ? .ready(bytes: bytes) : .installed(bytes: bytes)
+        }
+    }
+
+    private func uninstalledState(of model: TranscriptionModel) -> TranscriptionModelState {
+        switch installability[model] {
+        case .some(true): .notInstalled
+        case .some(false): .unsupported
+        case .none: .installabilityUnknown
+        }
+    }
+
+    private func askInstallability(of model: TranscriptionModel) async {
+        do {
+            installability[model] = try await provider(model).isInstallableOnThisDevice()
+        } catch {
+            // Left unknown on purpose: a lost connection means the Library does
+            // not know what this Mac can run, which is not the same as knowing
+            // it cannot run it.
+            Logger.transcription.error("Could not tell whether \(model.rawValue) is installable: \(error)")
+        }
+    }
+
+    /// This model's phase, worded by this model's own narrator so the heartbeat
+    /// counts the wait in front of the person reading the row.
+    private func label(for phase: ModelPreparationPhase, of model: TranscriptionModel) -> String {
+        var narrator = narrators[model] ?? ModelPreparationNarrator()
+        let readiness = narrator.readiness(for: phase)
+        narrators[model] = narrator
+        if case .preparing(let label) = readiness { return label }
+        return phase.label(elapsedSeconds: 0)
+    }
+}

@@ -9,6 +9,8 @@ final class AppDependencies {
     let settings: AppSettings
     /// Every Transcription Model's provider, kept for the process lifetime.
     private let transcriptionProviders: TranscriptionProviderRegistry
+    /// What this device has installed, and where a model is added or removed.
+    let transcriptionLibrary: TranscriptionLibrary
     let session: CaptureSession
     let audioDeviceMonitor: AudioDeviceMonitor
     let inputLevelMonitor: InputLevelMonitor
@@ -74,6 +76,11 @@ final class AppDependencies {
         self.settings = settings
         let transcriptionProviders = TranscriptionProviderRegistry()
         self.transcriptionProviders = transcriptionProviders
+        self.transcriptionLibrary = TranscriptionLibrary(
+            models: TranscriptionProviderRegistry.offeredModels,
+            provider: { transcriptionProviders.provider(for: $0) },
+            settings: settings
+        )
         let mediaPlayback = MediaPlaybackController()
         self.mediaPlaybackController = mediaPlayback
         let history = HistoryStoreProxy()

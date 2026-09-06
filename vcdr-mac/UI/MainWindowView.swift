@@ -147,6 +147,7 @@ struct MainWindowView: View {
                     case .transcription:
                         TranscriptionTabView(
                             settings: dependencies.settings,
+                            library: dependencies.transcriptionLibrary,
                             readiness: dependencies.readiness,
                             retryPreparation: {
                                 Task { await dependencies.retryModelPreparation() }

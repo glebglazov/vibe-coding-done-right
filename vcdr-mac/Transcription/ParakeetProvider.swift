@@ -5,6 +5,26 @@ import OSLog
 actor ParakeetProvider: TranscriptionProvider {
     let model = TranscriptionModel.parakeetV3
 
+    /// Where FluidAudio's files live under the owned model root. The SDK's own
+    /// folder name is kept, because `AsrModels` recomputes the repo path from
+    /// the parent directory and would not find files under any other name.
+    nonisolated var installedDirectory: URL {
+        TranscriptionModelRoot.directory(named: AsrModels.defaultCacheDirectory(for: .v3).lastPathComponent)
+    }
+
+    nonisolated var isInstalled: Bool {
+        AsrModels.modelsExist(at: installedDirectory, version: .v3)
+    }
+
+    /// FluidAudio 0.12 reports nothing while it downloads — its own progress
+    /// handler is documented unused — so the only honest number for Parakeet is
+    /// the time spent, which the Library shows instead.
+    nonisolated var downloadProgress: Double? { nil }
+
+    /// FluidAudio publishes one build for every Apple Silicon Mac and no
+    /// support table to consult, so this needs neither the network nor a maybe.
+    func isInstallableOnThisDevice() async throws -> Bool { true }
+
     private var asr: AsrManager?
     private(set) var isReady = false
 
@@ -51,7 +71,7 @@ actor ParakeetProvider: TranscriptionProvider {
             // that never happens.
             let downloadStart = ContinuousClock.now
             let modelDir = TranscriptionModelRoot.adopting(AsrModels.defaultCacheDirectory(for: .v3))
-            if !AsrModels.modelsExist(at: modelDir, version: .v3) {
+            if !isInstalled {
                 initPhase = .downloadingModel
             }
             _ = try await AsrModels.download(to: modelDir, version: .v3)

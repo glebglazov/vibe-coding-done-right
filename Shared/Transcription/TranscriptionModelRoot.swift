@@ -32,7 +32,7 @@ nonisolated enum TranscriptionModelRoot {
     /// other name.
     static func adopting(_ existingDownload: URL, into root: URL = url) -> URL {
         let fm = FileManager.default
-        let destination = root.appendingPathComponent(existingDownload.lastPathComponent, isDirectory: true)
+        let destination = directory(named: existingDownload.lastPathComponent, in: root)
 
         do {
             try fm.createDirectory(at: root, withIntermediateDirectories: true)
@@ -57,5 +57,12 @@ nonisolated enum TranscriptionModelRoot {
             Logger.transcription.error("Could not move \(existingDownload.path) to \(destination.path): \(error)")
         }
         return destination
+    }
+
+    /// The directory inside the root that holds the model whose files an SDK
+    /// names `folderName`. The Library asks this to size and delete an install
+    /// without running the migration `adopting(_:into:)` performs.
+    static func directory(named folderName: String, in root: URL = url) -> URL {
+        root.appendingPathComponent(folderName, isDirectory: true)
     }
 }
