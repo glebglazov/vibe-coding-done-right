@@ -16,15 +16,6 @@ final class TranscriptionProviderRegistry {
     /// the order someone hunting for one their Mac keeps up with reads in.
     static let offeredModels: [TranscriptionModel] = [.parakeetV3] + WhisperCheckpoint.allCases.map(\.model)
 
-    /// The families those models belong to, each named once and in the order
-    /// the Library offers them. What a family is told is one answer for all of
-    /// its members, so a screen that renders settings renders one section per
-    /// family rather than one per model.
-    static let offeredFamilies: [TranscriptionModelFamily] = offeredModels.reduce(into: []) { families, model in
-        guard !families.contains(model.family) else { return }
-        families.append(model.family)
-    }
-
     private var providers: [TranscriptionModel: any TranscriptionProvider] = [:]
 
     func provider(for model: TranscriptionModel) -> any TranscriptionProvider {

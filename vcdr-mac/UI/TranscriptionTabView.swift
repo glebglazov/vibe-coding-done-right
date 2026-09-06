@@ -46,19 +46,18 @@ struct TranscriptionTabView: View {
                 }
             }
 
-            // A section per family rather than one for the Default: the
-            // settings belong to the family, so they stay readable while
-            // another family is the one that runs.
-            ForEach(TranscriptionProviderRegistry.offeredFamilies, id: \.self) { family in
-                Section("\(family.displayName) Settings") {
-                    TranscriptionModelSettingsView(
-                        family: family,
-                        settings: Binding(
-                            get: { settings.transcriptionSettings.modelSettings[family] },
-                            set: { settings.transcriptionSettings.modelSettings[family] = $0 }
-                        )
+            // Only the family the Default belongs to: the settings on this
+            // screen are the ones the next recording carries, so a family
+            // that is not running has nothing to say here. Its values are
+            // kept, not shown — making it the Default brings them back.
+            Section("\(runningFamily.displayName) Settings") {
+                TranscriptionModelSettingsView(
+                    family: runningFamily,
+                    settings: Binding(
+                        get: { settings.transcriptionSettings.modelSettings[runningFamily] },
+                        set: { settings.transcriptionSettings.modelSettings[runningFamily] = $0 }
                     )
-                }
+                )
             }
 
             Section("Pre-processing") {
@@ -78,6 +77,12 @@ struct TranscriptionTabView: View {
                 Color.clear.frame(width: 0, height: 0)
             }
         }
+    }
+
+    /// The family the Default Transcription Model belongs to — the one whose
+    /// settings this screen shows.
+    private var runningFamily: TranscriptionModelFamily {
+        settings.transcriptionSettings.defaultModel.family
     }
 }
 
