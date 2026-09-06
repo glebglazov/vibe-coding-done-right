@@ -13,13 +13,29 @@ enum TranscriptionSettings {
     /// Transcription section, which is the only writer.
     static let modelSettingsKey = "transcription_model_settings"
 
-    /// The Transcription Model every recording runs. iOS transcribes through a
-    /// sliding window over the offline Parakeet encoder, and WhisperKit's live
-    /// path is chunked re-decoding with different confirmation semantics, so
-    /// the iOS Library holds this one model until that streaming work is done
-    /// (`docs/adr/0018`) — one model is one answer, and there is nothing to
-    /// store until there is a second.
-    static let defaultModel = TranscriptionModel.parakeetV3
+    /// Where the Default Transcription Model lives. Read through `@AppStorage`
+    /// by the Transcription section, and read afresh for every recording so a
+    /// model chosen between two of them takes effect on the second.
+    static let defaultModelKey = "transcription_default_model"
+
+    /// The Transcription Model every recording runs unless something names
+    /// another. Parakeet until someone chooses otherwise: it is the model iOS
+    /// shipped with, and the one already on disk for everyone upgrading.
+    static var defaultModel: TranscriptionModel {
+        UserDefaults.standard.string(forKey: defaultModelKey)
+            .flatMap(TranscriptionModel.init(rawValue:))
+            ?? .parakeetV3
+    }
+
+    /// What `family` has been told on this device. Read at the point a
+    /// recording starts rather than held, for the same reason the Default is:
+    /// a vocabulary prompt typed in Settings applies to the next recording.
+    static func settings(for family: TranscriptionModelFamily) -> TranscriptionModelSettings {
+        let store = UserDefaults.standard.string(forKey: modelSettingsKey)
+            .flatMap(TranscriptionModelSettingsStore.init(rawValue:))
+            ?? TranscriptionModelSettingsStore()
+        return store[family]
+    }
 }
 
 /// Lets `@AppStorage` hold the whole family-keyed store, so the Transcription

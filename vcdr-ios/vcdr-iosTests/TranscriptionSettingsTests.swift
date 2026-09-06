@@ -35,4 +35,28 @@ struct TranscriptionSettingsTests {
         #expect(reloaded?[.parakeet] == .default)
         #expect(shared.object(forKey: key) == nil)
     }
+
+    /// The Default a person picks is read afresh for every recording, so the
+    /// next one runs the model they just chose — no relaunch, and nothing
+    /// carried over from the model that ran the last one.
+    @Test("the Default Transcription Model is this device's, and takes effect on the next recording")
+    func defaultModelIsChosenPerDevice() {
+        let key = TranscriptionSettings.defaultModelKey
+        let standard = UserDefaults.standard
+        let original = standard.string(forKey: key)
+        defer {
+            if let original {
+                standard.set(original, forKey: key)
+            } else {
+                standard.removeObject(forKey: key)
+            }
+        }
+
+        standard.removeObject(forKey: key)
+        #expect(TranscriptionSettings.defaultModel == .parakeetV3)
+
+        standard.set(TranscriptionModel.whisperLargeV3Turbo.rawValue, forKey: key)
+        #expect(TranscriptionSettings.defaultModel == .whisperLargeV3Turbo)
+        #expect(SharedConstants.sharedDefaults.object(forKey: key) == nil)
+    }
 }

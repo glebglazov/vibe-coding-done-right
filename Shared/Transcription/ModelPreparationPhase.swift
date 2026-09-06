@@ -42,7 +42,7 @@ extension PreparationFailure {
         NSURLErrorInternationalRoamingOff
     ]
 
-    init(error: Error) {
+    nonisolated init(error: Error) {
         let nsError = error as NSError
         let isOffline = nsError.domain == NSURLErrorDomain
             && Self.offlineURLErrorCodes.contains(nsError.code)

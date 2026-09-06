@@ -122,12 +122,16 @@ final class RecordingFlowCoordinator {
     /// `recordingStarted` / `recordingStopped`, `policyChanged`) and never
     /// touches the engine's warmth directly.
     private let hotMicSession: HotMicSession
-    private let transcriptionProvider: ParakeetProvider
-    /// Builds the streaming transport for each Recording Run. Defaults to the
-    /// production `LiveRecordingStreamingSession`; tests inject a controllable
-    /// fake to hold a run in Finalizing so Discard's ignore-during-Finalizing
-    /// behaviour can be exercised deterministically.
-    private let makeStreamingSession: () -> any RecordingStreamingSession
+    /// Every Transcription Model this device can run, each provider kept once
+    /// it has been handed out so switching the Default away and back does not
+    /// pay the cold load twice.
+    private let providers: TranscriptionProviderRegistry
+    /// Overrides the streaming transport for each Recording Run. Nil in
+    /// production, where the run's own model makes the session that suits it;
+    /// tests inject a controllable fake to hold a run in Finalizing so
+    /// Discard's ignore-during-Finalizing behaviour can be exercised
+    /// deterministically.
+    private let makeStreamingSession: (() -> any RecordingStreamingSession)?
     /// Reused, prewarmed haptic generator. A freshly constructed generator
     /// connects to the haptic daemon lazily on its first `impactOccurred()`,
     /// and that connect blocks the *main thread* for seconds under the
@@ -137,7 +141,7 @@ final class RecordingFlowCoordinator {
     /// skip it until then.
     private let recordHaptic = UIImpactFeedbackGenerator(style: .medium)
     /// Cached transcription-model readiness for synchronous checks on the hot
-    /// path (the authoritative flag lives in the `ParakeetProvider` actor).
+    /// path (the authoritative phase lives in the provider actor).
     /// Gates the haptic so a cold first-use connect never blocks recording.
     private var isModelReady = false
     let keyboardChannel: any KeyboardChannelProtocol
@@ -189,17 +193,28 @@ final class RecordingFlowCoordinator {
     init(
         keyboardChannel: (any KeyboardChannelProtocol)? = nil,
         recordingEngine: (any RecordingEngine)? = nil,
-        transcriptionProvider: ParakeetProvider? = nil,
+        transcriptionProvider: (any StreamingTranscriptionProvider)? = nil,
         hotMicSession: HotMicSession? = nil,
         makeStreamingSession: (() -> any RecordingStreamingSession)? = nil
     ) {
         let engine = recordingEngine ?? AudioRecorder()
         let keyboardChannel = keyboardChannel ?? KeyboardChannel.live
+        let providers = TranscriptionProviderRegistry()
+        if let transcriptionProvider {
+            providers.adopt(transcriptionProvider)
+        }
         self.recordingEngine = engine
-        self.transcriptionProvider = transcriptionProvider ?? ParakeetProvider()
+        self.providers = providers
         self.keyboardChannel = keyboardChannel
         self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, keyboard: keyboardChannel)
-        self.makeStreamingSession = makeStreamingSession ?? { LiveRecordingStreamingSession() }
+        self.makeStreamingSession = makeStreamingSession
+    }
+
+    /// The provider for the Default Transcription Model as it stands right now.
+    /// Read per recording rather than held, so a Default changed between two
+    /// recordings takes effect on the second without the app being relaunched.
+    private var defaultProvider: any StreamingTranscriptionProvider {
+        providers.provider(for: TranscriptionSettings.defaultModel)
     }
 
     // MARK: - Constants
@@ -363,9 +378,10 @@ final class RecordingFlowCoordinator {
         Logger.app.info("[InitTiming] initializeModel entered")
         publishReadinessPresentation(for: predictedVerdict)
         // Initial label; pollTask below replaces this on the first iteration
-        // with phase-true text once `ParakeetProvider.initPhase` advances.
+        // with phase-true text once the provider's `initPhase` advances.
         initProgress = ModelPreparationPhase.initialLabel
 
+        let provider = defaultProvider
         let pollTask = Task {
             Logger.app.info("[LaunchProbe] pollTask started main=\(Thread.isMainThread)")
             // Track the last published phase + the last text we wrote so we
@@ -380,7 +396,7 @@ final class RecordingFlowCoordinator {
             var phaseStart = ContinuousClock.now
             var lastWrittenText = ""
             while !Task.isCancelled {
-                let phase = await transcriptionProvider.initPhase
+                let phase = await provider.initPhase
                 if phase != lastPhase {
                     Logger.app.info("[LaunchProbe] pollTask phase=\(String(describing: phase)) main=\(Thread.isMainThread)")
                     phaseStart = ContinuousClock.now
@@ -406,21 +422,19 @@ final class RecordingFlowCoordinator {
                 await hotMicSession.prewarmIfPermitted()
                 LaunchTelemetry.mark(.recordPathArmed)
             }
-            Logger.app.info("[LaunchProbe] before transcriptionProvider.loadCoreModels await main=\(Thread.isMainThread)")
-            try await transcriptionProvider.loadCoreModels(
+            Logger.app.info("[LaunchProbe] before \(provider.model.rawValue) prepareAtLaunch await main=\(Thread.isMainThread)")
+            try await provider.prepareAtLaunch(
                 priority: priority,
                 predictedVerdict: predictedVerdict
-            )
-            Logger.app.info("[LaunchProbe] before engine prewarm barrier main=\(Thread.isMainThread)")
-            await waitForPrewarmBarrier(
-                prewarmTask,
-                predictedVerdict: predictedVerdict,
-                timeout: prewarmBarrierTimeout
-            )
-            Logger.app.info("[LaunchProbe] before transcriptionProvider.finishWithEncoder await main=\(Thread.isMainThread)")
-            try await transcriptionProvider.finishWithEncoder()
-            Logger.app.info("[LaunchProbe] after transcriptionProvider.finishWithEncoder main=\(Thread.isMainThread)")
-            Logger.app.info("[InitTiming] transcriptionProvider two-phase init done at +\(ContinuousClock.now - initStart)")
+            ) { [weak self] in
+                Logger.app.info("[LaunchProbe] before engine prewarm barrier main=\(Thread.isMainThread)")
+                await self?.waitForPrewarmBarrier(
+                    prewarmTask,
+                    predictedVerdict: predictedVerdict,
+                    timeout: prewarmBarrierTimeout
+                )
+            }
+            Logger.app.info("[InitTiming] \(provider.model.rawValue) launch preparation done at +\(ContinuousClock.now - initStart)")
 
             pollTask.cancel()
             // Don't overwrite state if recording started while we were initializing
@@ -435,7 +449,7 @@ final class RecordingFlowCoordinator {
             // instead of connecting under load on the main thread.
             recordHaptic.prepare()
             Logger.app.info("[InitTiming] initializeModel complete at +\(ContinuousClock.now - initStart)")
-            if let outcome = await transcriptionProvider.launchLoadOutcome {
+            if let outcome = await provider.launchLoadOutcome {
                 await LaunchTelemetry.recordOnce(outcome: outcome)
                 if outcome.verdict == .coldSpecialize {
                     await UserDefaultsBackgroundModelWarmTriggerStore()
@@ -782,10 +796,12 @@ final class RecordingFlowCoordinator {
     }
 
     private func makeRecordingRun(deliversToKeyboard: Bool) -> RecordingRun {
-        RecordingRun(
+        let provider = defaultProvider
+        return RecordingRun(
             audioRecorder: recordingEngine,
-            transcriptionProvider: transcriptionProvider,
-            streaming: makeStreamingSession(),
+            streaming: makeStreamingSession?() ?? provider.makeLiveSession(
+                settings: TranscriptionSettings.settings(for: provider.model.family)
+            ),
             transcriptProcessor: makeTranscriptProcessor(),
             completionAdapters: [
                 KeyboardChannelRecordingRunCompletionAdapter(

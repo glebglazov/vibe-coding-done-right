@@ -1,5 +1,4 @@
 import AVFoundation
-import FluidAudio
 import Foundation
 import Testing
 @testable import vcdr_ios
@@ -129,7 +128,6 @@ struct RecordingRunTerminalOutcomeTests {
         let keyboard = FakeKeyboardChannel()
         let run = RecordingRun(
             audioRecorder: FakeRecordingAudioCapture(),
-            transcriptionProvider: UnusedStreamingTranscriptionProvider(),
             streaming: streaming,
             transcriptProcessor: TranscriptProcessor(
                 makeAIProvider: { _ in
@@ -175,36 +173,6 @@ private final class FakeRecordingAudioCapture: RecordingAudioCapturing {
     }
 
     func stopCapture() {}
-}
-
-private actor FakeRecordingStreamingSession: RecordingStreamingSession {
-    let result: Result<String, any Error>
-
-    init(result: Result<String, any Error>) {
-        self.result = result
-    }
-
-    func start(using transcriptionProvider: any StreamingTranscriptionProvider) async throws {}
-
-    nonisolated func streamAudio(_ buffer: AVAudioPCMBuffer) {}
-
-    func cancel() async {}
-
-    func finish() async throws -> String {
-        try result.get()
-    }
-
-    func liveTranscriptUpdates() async -> AsyncStream<String> {
-        AsyncStream { continuation in
-            continuation.finish()
-        }
-    }
-}
-
-private struct UnusedStreamingTranscriptionProvider: StreamingTranscriptionProvider {
-    func initialize() async throws {}
-
-    var loadedModels: AsrModels? { get async { nil } }
 }
 
 private struct ForcedFailure: LocalizedError {

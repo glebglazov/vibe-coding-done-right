@@ -16,17 +16,3 @@ enum TranscriptionError: LocalizedError {
         }
     }
 }
-
-protocol TranscriptionProvider: Sendable {
-    /// Which Transcription Model this provider runs, so a caller can key
-    /// settings and Library membership by it rather than by its wording.
-    var model: TranscriptionModel { get }
-    var name: String { get }
-    var isReady: Bool { get async }
-    func initialize() async throws
-    func transcribe(audioFileURL: URL) async throws -> String
-}
-
-extension TranscriptionProvider {
-    var name: String { model.displayName }
-}

@@ -3,7 +3,7 @@ import Foundation
 import FluidAudio
 import OSLog
 
-actor ParakeetProvider: TranscriptionProvider {
+actor ParakeetProvider: StreamingTranscriptionProvider {
     let model = TranscriptionModel.parakeetV3
 
     private var asr: AsrManager?
@@ -274,22 +274,25 @@ actor ParakeetProvider: TranscriptionProvider {
         }
     }
 
-    func transcribe(audioFileURL: URL) async throws -> String {
-        guard let asr else {
-            throw TranscriptionError.providerUnavailable
-        }
+    nonisolated func makeLiveSession(settings: TranscriptionModelSettings) -> any RecordingStreamingSession {
+        // Parakeet declares no Capability, so `settings` reaches it and stops
+        // here: a family is told what it has declared it can be told, and this
+        // one has declared nothing (`docs/adr/0020`).
+        ParakeetLiveSession(provider: self)
+    }
 
-        Logger.transcription.info("Transcribing audio file: \(audioFileURL.lastPathComponent)")
-
-        do {
-            let result = try await asr.transcribe(audioFileURL, source: .system)
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            Logger.transcription.info("Transcription complete (\(text.count) chars)")
-            return text
-        } catch {
-            Logger.transcription.error("Transcription failed: \(error)")
-            throw TranscriptionError.transcriptionFailed(error.localizedDescription)
-        }
+    /// Parakeet's load splits in two — four cheap CoreML models, then the
+    /// encoder's ANE specialization — and the gap between them is where the
+    /// audio engine's HAL warm belongs, because the encoder is the part that
+    /// would compete with it.
+    func prepareAtLaunch(
+        priority: TaskPriority,
+        predictedVerdict: LaunchVerdict,
+        beforeTheHeavyLoad: @Sendable () async -> Void
+    ) async throws {
+        try await loadCoreModels(priority: priority, predictedVerdict: predictedVerdict)
+        await beforeTheHeavyLoad()
+        try await finishWithEncoder()
     }
 
     // MARK: - Initialization helpers

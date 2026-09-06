@@ -73,4 +73,14 @@ struct TranscriptionModelSettingsStore: Codable, Equatable, Sendable {
             in: try container.decodeIfPresent([String: TranscriptionModelSettings].self, forKey: .byFamily) ?? [:]
         )
     }
+
+    /// Written out rather than synthesized, because iOS also makes this type
+    /// `RawRepresentable` so `@AppStorage` can hold it. Both conformances are
+    /// in one module there, and Swift then satisfies `Encodable` with
+    /// `RawRepresentable`'s default — which encodes `rawValue`, which encodes
+    /// the store, forever. A member of its own wins over that default.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(byFamily, forKey: .byFamily)
+    }
 }

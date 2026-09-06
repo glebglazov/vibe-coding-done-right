@@ -1,4 +1,3 @@
-import FluidAudio
 import Foundation
 import AVFoundation
 import Testing
@@ -12,7 +11,7 @@ struct RecordingRunTests {
         let adapter = SpyCompletionAdapter()
         let run = RecordingRun(
             audioRecorder: AudioRecorder(),
-            transcriptionProvider: FakeStreamingTranscriptionProvider(),
+            streaming: FakeRecordingStreamingSession(),
             transcriptProcessor: TranscriptProcessor(
                 makeAIProvider: { _ in
                     ProviderCascade(
@@ -285,7 +284,7 @@ struct RecordingRunTests {
     ) -> RecordingRun {
         RecordingRun(
             audioRecorder: audioRecorder,
-            transcriptionProvider: FakeStreamingTranscriptionProvider(),
+            streaming: FakeRecordingStreamingSession(),
             transcriptProcessor: TranscriptProcessor(
                 makeAIProvider: { _ in
                     ProviderCascade(
@@ -400,9 +399,4 @@ private final class ControllableRecordingAudioCapture: RecordingAudioCapturing {
         buffer.frameLength = 160
         onBuffer?(buffer)
     }
-}
-
-private struct FakeStreamingTranscriptionProvider: StreamingTranscriptionProvider {
-    func initialize() async throws {}
-    var loadedModels: AsrModels? { get async { nil } }
 }

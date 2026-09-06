@@ -189,9 +189,8 @@ private actor FinalizingGate {
     }
 }
 
-/// Never touches `transcriptionProvider` — Finalizing-phase tests need no
-/// real model load, only control over when `RecordingRun.stop()`'s wait on
-/// `setupTask` resolves.
+/// Never prepares a model — Finalizing-phase tests need no real model load,
+/// only control over when `RecordingRun.stop()`'s wait on `setupTask` resolves.
 private actor GatedStreamingSession: RecordingStreamingSession {
     private let gate: FinalizingGate
     private let finishText: String
@@ -201,7 +200,7 @@ private actor GatedStreamingSession: RecordingStreamingSession {
         self.finishText = finishText
     }
 
-    func start(using transcriptionProvider: any StreamingTranscriptionProvider) async throws {
+    func start() async throws {
         await gate.awaitRelease()
     }
 

@@ -13,7 +13,10 @@ protocol RecordingAudioCapturing: AnyObject {
 extension AudioRecorder: RecordingAudioCapturing {}
 
 protocol RecordingStreamingSession: Sendable {
-    func start(using transcriptionProvider: any StreamingTranscriptionProvider) async throws
+    /// Prepares the model this session runs and begins consuming the buffers
+    /// captured so far. The session already knows its provider — it was made by
+    /// one (`docs/adr/0022`).
+    func start() async throws
     /// Synchronous + ordered: callers feed buffers FIFO from the audio thread.
     /// Implementations must not block.
     func streamAudio(_ buffer: AVAudioPCMBuffer)
@@ -33,7 +36,6 @@ final class RecordingRun {
 
     private let conversationID = UUID()
     let audioRecorder: any RecordingAudioCapturing
-    private let transcriptionProvider: any StreamingTranscriptionProvider
     let streaming: any RecordingStreamingSession
     private let transcriptProcessor: TranscriptProcessor
     private let completionAdapters: [any RecordingRunCompletionAdapter]
@@ -55,8 +57,7 @@ final class RecordingRun {
 
     init(
         audioRecorder: any RecordingAudioCapturing,
-        transcriptionProvider: any StreamingTranscriptionProvider,
-        streaming: any RecordingStreamingSession = LiveRecordingStreamingSession(),
+        streaming: any RecordingStreamingSession,
         transcriptProcessor: TranscriptProcessor,
         completionAdapters: [any RecordingRunCompletionAdapter],
         clock: HotMicClock? = nil,
@@ -69,7 +70,6 @@ final class RecordingRun {
         onTerminal: @escaping @MainActor (RecordingRunTerminalState) -> Void = { _ in }
     ) {
         self.audioRecorder = audioRecorder
-        self.transcriptionProvider = transcriptionProvider
         self.streaming = streaming
         self.transcriptProcessor = transcriptProcessor
         self.completionAdapters = completionAdapters
@@ -88,8 +88,8 @@ final class RecordingRun {
     var isTerminal: Bool { terminalState != nil }
 
     func start() async -> Bool {
-        setupTask = Task.detached { [transcriptionProvider, streaming] in
-            try await streaming.start(using: transcriptionProvider)
+        setupTask = Task.detached { [streaming] in
+            try await streaming.start()
         }
 
         latestLiveTranscript = ""
