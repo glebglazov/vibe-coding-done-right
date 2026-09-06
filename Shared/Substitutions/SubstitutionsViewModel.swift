@@ -62,6 +62,14 @@ final class SubstitutionsViewModel {
             return .discarded
         }
 
+        // A commit carrying nothing new — an opened editor's blank Trigger
+        // Phrase row, tidied away again — is answered from the persisted copy
+        // rather than written over it.
+        if let stored = store.substitutions.first(where: { $0.id == tidied.id }),
+           tidied.wouldNotChange(stored) {
+            return .saved(stored, clashes: clashes.clashes(for: stored))
+        }
+
         store.upsert(tidied)
         return .saved(tidied, clashes: clashes.clashes(for: tidied))
     }

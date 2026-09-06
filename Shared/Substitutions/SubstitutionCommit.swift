@@ -28,6 +28,19 @@ extension Substitution {
         tidied.phrases = phrases.tidiedForCommit()
         return tidied
     }
+
+    /// Whether committing this entry would leave the persisted copy as it is,
+    /// its Merge Stamp aside. Opening a Substitution appends a blank Trigger
+    /// Phrase row for the caret to land in, and that row tidies away to
+    /// nothing — so the commit it triggers would stamp the entry and export a
+    /// Record File saying only that somebody looked, which then beats a real
+    /// edit made on the other device (ADR-0014). The Merge Stamp is excluded
+    /// because it is the very thing the write would move.
+    func wouldNotChange(_ stored: Substitution) -> Bool {
+        var comparable = self
+        comparable.lastUpdated = stored.lastUpdated
+        return comparable == stored
+    }
 }
 
 private extension Array where Element == TriggerPhrase {

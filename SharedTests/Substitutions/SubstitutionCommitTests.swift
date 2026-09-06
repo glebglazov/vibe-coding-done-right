@@ -52,6 +52,18 @@ struct SubstitutionCommitTests {
         recordFiles(in: root).filter { !$0.hasSuffix(".deleted.json") }
     }
 
+    /// Every Record File and when it was last written, so a commit that should
+    /// export nothing can be told from one that rewrote the same bytes.
+    private func recordFileStamps(in root: URL) -> [String: Date] {
+        let dir = root.appendingPathComponent("Substitutions", isDirectory: true)
+        return recordFiles(in: root).reduce(into: [:]) { stamps, name in
+            let attributes = try? FileManager.default.attributesOfItem(
+                atPath: dir.appendingPathComponent(name).path
+            )
+            stamps[name] = attributes?[.modificationDate] as? Date
+        }
+    }
+
     private func tombstoneFiles(in root: URL) -> [String] {
         recordFiles(in: root).filter { $0.hasSuffix(".deleted.json") }
     }
@@ -62,6 +74,14 @@ struct SubstitutionCommitTests {
             try? await Task.sleep(for: .milliseconds(10))
         }
         return condition()
+    }
+
+    /// The Merge Stamp the store holds for the entry under edit, re-read the way
+    /// a reopened tab reads it. `commit` hands back the entry as the caller
+    /// typed it, which is stamped only once the store has it.
+    private func persistedStamp(_ viewModel: SubstitutionsViewModel) -> Date? {
+        viewModel.syncFromStore()
+        return viewModel.drafts.first?.lastUpdated
     }
 
     private func saved(_ commit: SubstitutionCommit) -> Substitution? {
@@ -143,6 +163,72 @@ struct SubstitutionCommitTests {
         #expect(try #require(saved(viewModel.commit(draft))).triggerPhrases == ["oh my zsh"])
         #expect(await eventually { self.snapshotFiles(in: root).count == 1 })
         #expect(try await onDisk(root).count == 1)
+    }
+
+    // MARK: - Opening is not editing
+
+    @Test("a blank trigger row added on open leaves the store alone until it carries text")
+    func blankTriggerRowWritesNothing() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let viewModel = try await makeViewModel(root: root)
+
+        _ = viewModel.commit(Substitution(triggerPhrases: ["power zha"], replacement: "Powierża"))
+        #expect(await eventually { self.snapshotFiles(in: root).count == 1 })
+        viewModel.syncFromStore()
+        var draft = try #require(viewModel.drafts.first)
+        let stampBeforeOpening = draft.lastUpdated
+        let exportsBeforeOpening = recordFileStamps(in: root)
+
+        // What opening the editor does: a row for the caret to land in.
+        draft.addPhrase()
+        _ = viewModel.commit(draft)
+
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(persistedStamp(viewModel) == stampBeforeOpening)
+        #expect(recordFileStamps(in: root) == exportsBeforeOpening)
+
+        draft[phrase: try #require(draft.phrases.last).id] = "powerja"
+        #expect(try #require(saved(viewModel.commit(draft))).triggerPhrases == ["power zha", "powerja"])
+
+        #expect(try #require(persistedStamp(viewModel)) > stampBeforeOpening)
+        #expect(await eventually { self.recordFileStamps(in: root) != exportsBeforeOpening })
+        #expect(try await onDisk(root).first?.triggerPhrases == ["power zha", "powerja"])
+    }
+
+    @Test("a blank trigger row on an entry that never reached the store keeps it off the store")
+    func blankTriggerRowOnADraftWritesNothing() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let viewModel = try await makeViewModel(root: root)
+
+        let id = viewModel.add()
+        var draft = try #require(viewModel.drafts.first { $0.id == id })
+        draft.addPhrase()
+
+        #expect(viewModel.commit(draft) == .discarded)
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(try await onDisk(root).isEmpty)
+    }
+
+    @Test("editing the Replacement alone still commits")
+    func replacementOnlyEditCommits() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let viewModel = try await makeViewModel(root: root)
+
+        _ = viewModel.commit(Substitution(triggerPhrases: ["power zha"], replacement: "Powierza"))
+        #expect(await eventually { self.snapshotFiles(in: root).count == 1 })
+        viewModel.syncFromStore()
+        var draft = try #require(viewModel.drafts.first)
+        let stampBeforeEdit = try #require(persistedStamp(viewModel))
+        let exportsBeforeEdit = recordFileStamps(in: root)
+        draft.replacement = "Powierża"
+        _ = viewModel.commit(draft)
+
+        #expect(try #require(persistedStamp(viewModel)) > stampBeforeEdit)
+        #expect(await eventually { self.recordFileStamps(in: root) != exportsBeforeEdit })
+        #expect(try await onDisk(root).first?.replacement == "Powierża")
     }
 
     // MARK: - Trigger Phrase Clash
