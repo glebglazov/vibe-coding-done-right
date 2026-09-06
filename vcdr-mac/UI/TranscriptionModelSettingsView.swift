@@ -103,22 +103,19 @@ struct TranscriptionModelSettingsView: View {
     }
 
     private var freeTextPrompt: some View {
-        LabeledContent {
-            VStack(alignment: .trailing, spacing: Self.promptSpacing) {
-                TextField("Names and jargon", text: $settings.freeTextPrompt, axis: .vertical)
-                    .lineLimit(Self.promptLineLimit, reservesSpace: true)
-                Text("\(settings.freeTextPrompt.count)/\(TranscriptionModelSettings.freeTextPromptCharacterLimit)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-        } label: {
+        VStack(alignment: .leading, spacing: Self.promptSpacing) {
             Text("Vocabulary Prompt")
             Text("""
                 Proper nouns and jargon written here bias how the model spells \
                 them. It is a hint the model may ignore, and a long one makes \
                 it more likely to repeat itself.
                 """)
+            TextField("Names and jargon", text: $settings.freeTextPrompt, axis: .vertical)
+                .lineLimit(Self.promptLineLimit, reservesSpace: true)
+            Text("\(settings.freeTextPrompt.count)/\(TranscriptionModelSettings.freeTextPromptCharacterLimit)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
     }
 }
