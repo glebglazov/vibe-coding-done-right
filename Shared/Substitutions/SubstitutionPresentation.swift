@@ -32,13 +32,13 @@ enum SubstitutionCopy {
 /// A Substitution as one list row, read in the order a person thinks about
 /// one: what was said, then what it becomes.
 ///
-///     "power zha", "powerja"  →  Powierza
+///     "power zha", "powerja"  →  Powierża
 ///
-/// The Trigger Phrases lead because that is the side the user recognises the
-/// entry by while looking for it; the Replacement still carries the prominence,
-/// because it is what the entry *is*. The arrow says the relation out loud, and
-/// goes with the Replacement so a Substitution with no phrases yet shows no
-/// dangling one.
+/// The Trigger Phrases lead because that is the order, not because they name the
+/// entry: the Replacement keeps the prominence, being what the entry *is* and
+/// what a list of thirty is scanned for. The arrow says the relation out loud,
+/// and goes with the Trigger Phrases so a Substitution with no phrases yet shows
+/// no dangling one.
 ///
 /// Both apps show this, so a row cannot read one way on macOS and another on
 /// iOS. Trailing accessories — a "Disabled" tag, a chevron — belong to the app
