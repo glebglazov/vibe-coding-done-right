@@ -28,18 +28,19 @@ nonisolated enum HistorySync {
     /// ours to bound (see `docs/adr/0010`).
     static let replicationWindow: TimeInterval? = nil
 
+    /// The folder history's Record Files occupy, on either side of the
+    /// container.
+    static let recordFilesFolder = RecordFilesFolder("conversations")
+
     /// Where the device keeps its record files when it is not syncing through
     /// a container: the app's own storage, alongside the Local Store.
-    static var localRecordFilesDirectory: URL {
-        FileHistoryStore.localStorageRoot.appendingPathComponent("conversations")
-    }
+    static var localRecordFilesDirectory: URL { recordFilesFolder.localDirectory }
 
     /// History as the reconciler carries it.
     static var dataset: SyncedDataset {
         SyncedDataset(
             name: "History",
-            containerSubdirectory: "conversations",
-            localDirectory: localRecordFilesDirectory,
+            folder: recordFilesFolder,
             syncEnabledDefaultsKey: syncEnabledDefaultsKey,
             syncEnabledDefault: syncEnabledDefault,
             lastSyncTimeDefaultsKey: lastSyncTimeDefaultsKey,

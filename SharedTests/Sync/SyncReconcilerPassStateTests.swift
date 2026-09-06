@@ -30,14 +30,13 @@ struct SyncReconcilerPassStateTests {
     }
 
     /// A dataset of this test's own. Its record-file directory is a name and
-    /// nothing more: the stub store answers every pass, and the migrator skips a
-    /// source that does not exist — so no test here puts one on disk.
+    /// nothing more: the stub store answers every pass, the migrator skips a
+    /// source that does not exist, and a folder that was never renamed is left
+    /// alone — so no test here puts one on disk.
     private func makeDataset() -> SyncedDataset {
         SyncedDataset(
             name: "test",
-            containerSubdirectory: "test",
-            localDirectory: FileManager.default.temporaryDirectory
-                .appendingPathComponent("vcdr-sync-\(UUID().uuidString)", isDirectory: true),
+            folder: RecordFilesFolder("test"),
             syncEnabledDefaultsKey: "test.sync.enabled",
             syncEnabledDefault: true,
             lastSyncTimeDefaultsKey: "test.sync.lastSyncTime",

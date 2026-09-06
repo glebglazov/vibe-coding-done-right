@@ -11,11 +11,10 @@ nonisolated struct SyncedDataset: Sendable {
     /// Names the dataset in the reconciler's log lines.
     let name: String
 
-    /// The folder under the container's `Documents/VCDR` holding its files.
-    let containerSubdirectory: String
-
-    /// Where its Record Files live when sync is off, or iCloud is unreachable.
-    let localDirectory: URL
+    /// The folder its Record Files occupy: under the container's
+    /// `Documents/VCDR` when it syncs through one, and in the app's own
+    /// storage when it does not.
+    let folder: RecordFilesFolder
 
     let syncEnabledDefaultsKey: String
     let syncEnabledDefault: Bool

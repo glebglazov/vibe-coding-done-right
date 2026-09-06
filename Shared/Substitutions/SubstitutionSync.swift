@@ -17,14 +17,15 @@ nonisolated enum SubstitutionSync {
     /// Default when the user has not yet toggled the setting.
     static let syncEnabledDefault = true
 
+    /// The folder Substitution Record Files occupy, on either side of the
+    /// container. Named `Substitutions` until this build, and renamed to read
+    /// like conversations' folder (see `docs/adr/0013`).
+    static let recordFilesFolder = RecordFilesFolder("substitutions", renamedFrom: "Substitutions")
+
     /// Where the device keeps its Substitution record files when it is not
     /// syncing through a container: the app's own storage, alongside the Local
-    /// Store, and the same folder the app has always used.
-    static var localRecordFilesDirectory: URL {
-        FileHistoryStore.localStorageRoot.appendingPathComponent(containerSubdirectory)
-    }
-
-    private static let containerSubdirectory = "Substitutions"
+    /// Store.
+    static var localRecordFilesDirectory: URL { recordFilesFolder.localDirectory }
 
     /// Substitutions as the reconciler carries them.
     ///
@@ -36,8 +37,7 @@ nonisolated enum SubstitutionSync {
     static var dataset: SyncedDataset {
         SyncedDataset(
             name: "Substitutions",
-            containerSubdirectory: containerSubdirectory,
-            localDirectory: localRecordFilesDirectory,
+            folder: recordFilesFolder,
             syncEnabledDefaultsKey: syncEnabledDefaultsKey,
             syncEnabledDefault: syncEnabledDefault,
             lastSyncTimeDefaultsKey: lastSyncTimeDefaultsKey,

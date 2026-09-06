@@ -112,7 +112,13 @@ final class SyncReconciler {
         watcher: ContainerWatcher
     ) -> SyncReconciler? {
         guard dataset.syncEnabled(defaults: defaults) else {
-            Task { await store.syncRecordFiles(in: dataset.localDirectory) }
+            let folder = dataset.folder
+            Task {
+                await withBlockingTask(qos: .utility) {
+                    RecordFileFolderRename.applyLocally(folder)
+                }
+                await store.syncRecordFiles(in: folder.localDirectory)
+            }
             return nil
         }
         let reconciler = SyncReconciler(
@@ -232,8 +238,9 @@ final class SyncReconciler {
     }
 
     /// Where this device's Record Files live under the container's root, and
-    /// whether iCloud is usable — one blocking hop, because adopting the local
-    /// files and reading the account token both go to disk or to the daemon.
+    /// whether iCloud is usable — one blocking hop, because giving the folder
+    /// its current name, adopting the local files and reading the account
+    /// token all go to disk or to the daemon.
     ///
     /// Without a container the app's own storage stands in, so a device that
     /// cannot reach iCloud still keeps its records as files and starts
@@ -242,13 +249,17 @@ final class SyncReconciler {
         for dataset: SyncedDataset,
         under root: URL?
     ) -> Resolved {
+        let folder = dataset.folder
+        let localDirectory = folder.localDirectory
+        RecordFileFolderRename.applyLocally(folder)
         guard let root else {
             Logger.sync.info("\(dataset.name) sync: no container, using local record files")
-            return Resolved(directory: dataset.localDirectory, hasAccount: false)
+            return Resolved(directory: localDirectory, hasAccount: false)
         }
-        let directory = root.appendingPathComponent(dataset.containerSubdirectory)
+        RecordFileFolderRename.apply(folder, in: root)
+        let directory = root.appendingPathComponent(folder.name)
         RecordFileMigrator.adoptLocalRecordFiles(
-            from: dataset.localDirectory,
+            from: localDirectory,
             into: directory
         )
         return Resolved(
