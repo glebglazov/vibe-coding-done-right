@@ -62,13 +62,16 @@ vcdr/
 │   ├── TranscriptionProvider.swift       # Protocol
 │   ├── TranscriptionProviderRegistry.swift # The models macOS offers, one resident provider each
 │   ├── TranscriptionLibrary.swift        # What is installed, what it costs, install and remove
-│   ├── TranscriptionModelState.swift     # A model's own state as the Library shows it, and why a removal is refused
 │   ├── TranscriptionModelFiles.swift     # An install's size on disk, and its deletion
 │   ├── TranscriptionOverride.swift       # A Mode's own model and sparse settings patch, and the one place they are resolved
-│   │   # What a family accepts and what it has been told live in
-│   │   # Shared/Transcription/: TranscriptionModelFamily,
+│   │   # What a family accepts, what it has been told, and what a model is
+│   │   # doing live in Shared/Transcription/: TranscriptionModelFamily,
 │   │   # TranscriptionModelCapability, LanguageHint, TranscriptionModelSettings
-│   │   # (keyed by family, so every Whisper shares one set — docs/adr/0020)
+│   │   # (keyed by family, so every Whisper shares one set — docs/adr/0020),
+│   │   # TranscriptionModelState (a model's own state as a Library row shows
+│   │   # it, and why a removal is refused) and ModelReadiness with the
+│   │   # narrator that words the Preparation Heartbeat — both products show
+│   │   # the same Library, so both read the same wording
 │   ├── ParakeetProvider.swift            # FluidAudio Parakeet implementation (actor)
 │   ├── WhisperCheckpoint.swift           # The Whisper weights argmax publishes, and which model each one is
 │   └── WhisperProvider.swift             # WhisperKit implementation, one actor per checkpoint

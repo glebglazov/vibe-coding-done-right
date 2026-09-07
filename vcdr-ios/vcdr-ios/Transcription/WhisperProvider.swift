@@ -44,6 +44,28 @@ actor WhisperProvider: StreamingTranscriptionProvider {
         TranscriptionModelFiles(directory: installedDirectory).hasAllComponents(named: Self.requiredComponents)
     }
 
+    /// WhisperKit filters the variants it publishes through a support config
+    /// fetched from the repo, so what this phone can run is a network answer and
+    /// a phone too old for the variant is told so rather than offered it.
+    /// Absent from every device's list is a different answer again: argmax
+    /// publishes `openai_whisper-medium` but ranks it for no device at all, and
+    /// a config with no opinion about a checkpoint has not refused it. Such a
+    /// checkpoint stands on being published.
+    func isInstallableOnThisDevice() async throws -> Bool {
+        let runnableHere = try await WhisperKit.fetchAvailableModels(
+            from: Self.repo,
+            downloadBase: TranscriptionModelRoot.url
+        )
+        if runnableHere.contains(checkpoint.rawValue) { return true }
+        let rankedAnywhere = await WhisperKit.fetchModelSupportConfig(
+            from: Self.repo,
+            downloadBase: TranscriptionModelRoot.url
+        ).knownModels
+        return !rankedAnywhere.contains(checkpoint.rawValue)
+    }
+
+    private(set) var downloadProgress: Double?
+
     private var whisper: WhisperKit?
     private(set) var isReady = false
     private(set) var initPhase: ModelPreparationPhase = .preparing
@@ -92,8 +114,12 @@ actor WhisperProvider: StreamingTranscriptionProvider {
                 _ = try await WhisperKit.download(
                     variant: checkpoint.rawValue,
                     downloadBase: root,
-                    from: Self.repo
+                    from: Self.repo,
+                    progressCallback: { [weak self] progress in
+                        Task { await self?.report(downloaded: progress.fractionCompleted) }
+                    }
                 )
+                downloadProgress = nil
                 Logger.transcription.info("Model download completed in \(self.elapsedMs(since: downloadStart))")
             }
 
@@ -129,6 +155,12 @@ actor WhisperProvider: StreamingTranscriptionProvider {
             Logger.transcription.error("Failed to initialize \(self.model.displayName): \(error)")
             throw TranscriptionError.initializationFailed(failure.message)
         }
+    }
+
+    /// Hops the Hub client's progress onto this actor, where the Library polls
+    /// it from.
+    private func report(downloaded fraction: Double) {
+        downloadProgress = fraction
     }
 
     nonisolated func makeLiveSession(settings: TranscriptionModelSettings) -> any RecordingStreamingSession {

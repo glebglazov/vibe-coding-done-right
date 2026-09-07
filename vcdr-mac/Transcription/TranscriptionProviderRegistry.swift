@@ -9,9 +9,9 @@ final class TranscriptionProviderRegistry {
 
     /// The Transcription Model Library this platform offers. macOS transcribes a
     /// finished recording, which is the path all of these drive; iOS drives a
-    /// live view and so offers only Parakeet (`docs/adr/0018`). Not derived
-    /// from `TranscriptionModel`'s cases, because a case existing is not a
-    /// claim that this platform can run it — the Whispers come from the
+    /// live view and offers the same models through it (`docs/adr/0021`). Not
+    /// derived from `TranscriptionModel`'s cases, because a case existing is
+    /// not a claim that this platform can run it — the Whispers come from the
     /// checkpoints this platform has a provider for, smallest first, which is
     /// the order someone hunting for one their Mac keeps up with reads in.
     static let offeredModels: [TranscriptionModel] = [.parakeetV3] + WhisperCheckpoint.allCases.map(\.model)

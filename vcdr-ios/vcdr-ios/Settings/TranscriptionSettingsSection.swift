@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Chooses the Transcription Model that runs on this device, says what it is
-/// doing, and offers whatever that model accepts being told.
+/// doing, offers whatever that model accepts being told, and lists the Library
+/// every model can be installed from and removed again.
 struct TranscriptionSettingsSection: View {
     let coordinator: RecordingFlowCoordinator
     @AppStorage(TranscriptionSettings.modelSettingsKey)
@@ -13,36 +14,78 @@ struct TranscriptionSettingsSection: View {
         TranscriptionModel(rawValue: storedModel) ?? .parakeetV3
     }
 
+    /// The one Library the app has, so a model preparing for a recording moves
+    /// the row this screen shows for it.
+    private var library: TranscriptionLibrary {
+        coordinator.transcriptionLibrary
+    }
+
     var body: some View {
-        Section {
-            Picker("Model", selection: $storedModel) {
-                ForEach(TranscriptionProviderRegistry.offeredModels, id: \.self) { offered in
-                    Text(offered.displayName).tag(offered.rawValue)
+        Group {
+            Section {
+                Picker("Default Model", selection: $storedModel) {
+                    ForEach(TranscriptionProviderRegistry.offeredModels, id: \.self) { offered in
+                        Text(offered.displayName).tag(offered.rawValue)
+                    }
                 }
-            }
-            TranscriptionStatusRow(coordinator: coordinator)
-            TranscriptionModelSettingsView(
-                family: model.family,
-                settings: Binding(
-                    get: { modelSettings[model.family] },
-                    set: { modelSettings[model.family] = $0 }
+                TranscriptionStatusRow(library: library, model: model)
+                TranscriptionModelSettingsView(
+                    family: model.family,
+                    settings: Binding(
+                        get: { modelSettings[model.family] },
+                        set: { modelSettings[model.family] = $0 }
+                    )
                 )
-            )
-        } header: {
-            Text("Transcription")
-        } footer: {
-            Text("Transcription runs on this device. A model chosen here downloads the first time it records. The model and everything it is told are this device's own — neither is shared with your other devices.")
+            } header: {
+                Text("Transcription")
+            } footer: {
+                Text("Transcription runs on this device. A model chosen here downloads if it is not installed yet. The model and everything it is told are this device's own — neither is shared with your other devices.")
+            }
+
+            Section("Library") {
+                LibraryRows(library: library)
+            }
         }
+        // A Default may be chosen before it is here: choosing it is what starts
+        // the download, and the Status row above narrates it from that moment.
+        .onChange(of: storedModel) { _, chosen in
+            guard let chosen = TranscriptionModel(rawValue: chosen) else { return }
+            library.install(chosen)
+        }
+        // Each visit re-reads the Library — which is also how a device that was
+        // offline last time finally learns what it can install — and then keeps
+        // watching, so a model preparing while Settings is open moves and
+        // reaches ready without the screen being closed and reopened.
+        .task { await library.watch() }
     }
 }
 
-/// Reads Transcription Readiness inside its own body, so a phase tick redraws
-/// this row alone rather than the whole Settings form — the same reason
+/// Reads one model's state inside its own body, so a phase tick redraws this
+/// row alone rather than the whole Settings form — the same reason
 /// `InitProgressLabel` exists on the recording screen.
 private struct TranscriptionStatusRow: View {
-    let coordinator: RecordingFlowCoordinator
+    let library: TranscriptionLibrary
+    let model: TranscriptionModel
 
     var body: some View {
-        LabeledContent("Status", value: coordinator.initProgress)
+        LabeledContent("Status", value: library.entry(for: model).state.label)
+    }
+}
+
+/// Reads the whole Library inside its own body, for the same reason the Status
+/// row reads one model's state inside its own: a download ticking must not
+/// re-evaluate the Settings form above it.
+private struct LibraryRows: View {
+    let library: TranscriptionLibrary
+
+    var body: some View {
+        ForEach(library.entries) { entry in
+            TranscriptionLibraryRow(
+                entry: entry,
+                removalRefusal: library.removalRefusal(for: entry.model),
+                install: { library.install(entry.model) },
+                remove: { Task { await library.remove(entry.model) } }
+            )
+        }
     }
 }

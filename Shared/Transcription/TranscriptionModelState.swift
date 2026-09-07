@@ -1,16 +1,16 @@
 import Foundation
 
 /// What one Transcription Model is doing on this device, as the Library shows
-/// it. Wider than the Model Preparation Phase: the Library is the surface that
-/// answers whether a model is here at all and how far along a download is,
-/// where the menu bar and the recording pill collapse the whole wait into one
-/// label.
+/// it. One vocabulary for both products, the way the Model Preparation Phase
+/// is. Wider than that phase: the Library is the surface that answers whether a
+/// model is here at all and how far along a download is, where the menu bar and
+/// the recording pill collapse the whole wait into one label.
 enum TranscriptionModelState: Equatable {
-    /// Whether this Mac can install the model is a per-device answer that needs
-    /// the network, and it has not arrived. Its own state, so a row can say so
-    /// instead of claiming the model is unavailable.
+    /// Whether this device can install the model is a per-device answer that
+    /// needs the network, and it has not arrived. Its own state, so a row can
+    /// say so instead of claiming the model is unavailable.
     case installabilityUnknown
-    /// The backend publishes no build this Mac can run.
+    /// The backend publishes no build this device can run.
     case unsupported
     case notInstalled
     case downloading(DownloadProgress)
@@ -35,9 +35,9 @@ enum TranscriptionModelState: Equatable {
     var label: String {
         switch self {
         case .installabilityUnknown:
-            "Cannot tell yet what this Mac can install — needs a connection"
+            "Cannot tell yet what this device can install — needs a connection"
         case .unsupported:
-            "This Mac cannot run this model"
+            "This device cannot run this model"
         case .notInstalled:
             "Not installed"
         case .downloading(let progress):

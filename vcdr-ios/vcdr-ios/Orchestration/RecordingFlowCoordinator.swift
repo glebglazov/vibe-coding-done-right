@@ -126,6 +126,11 @@ final class RecordingFlowCoordinator {
     /// it has been handed out so switching the Default away and back does not
     /// pay the cold load twice.
     private let providers: TranscriptionProviderRegistry
+    /// The Library over this device's Transcription Models, reading the same
+    /// providers a recording runs — so a model installed in Settings is the one
+    /// the next recording finds already loaded, and a model preparing for a
+    /// recording moves the Library's row while Settings is open.
+    let transcriptionLibrary: TranscriptionLibrary
     /// Overrides the streaming transport for each Recording Run. Nil in
     /// production, where the run's own model makes the session that suits it;
     /// tests inject a controllable fake to hold a run in Finalizing so
@@ -205,6 +210,10 @@ final class RecordingFlowCoordinator {
         }
         self.recordingEngine = engine
         self.providers = providers
+        self.transcriptionLibrary = TranscriptionLibrary(
+            models: TranscriptionProviderRegistry.offeredModels,
+            provider: { providers.provider(for: $0) }
+        )
         self.keyboardChannel = keyboardChannel
         self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, keyboard: keyboardChannel)
         self.makeStreamingSession = makeStreamingSession
