@@ -16,7 +16,7 @@ struct ModesView: View {
                     }
                 }
             } footer: {
-                Text("Each mode records with the Default Transcription Model unless it names its own.")
+                Text("Each mode records with the Default Transcription Model unless it pins its own.")
             }
         }
         .navigationTitle("Modes")

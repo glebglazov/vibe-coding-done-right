@@ -64,7 +64,7 @@ struct TranscriptionSettingsTests {
     /// The whole resolution a recording runs through: the mode's own model, the
     /// one setting it adjusted, everything it left alone still following the
     /// family — and the adjusted one handed back.
-    @Test("a mode records with the model it names, adjusts one setting and inherits the rest")
+    @Test("a mode records with the model it pins, adjusts one setting and inherits the rest")
     func aModeRecordsWithItsOwnModel() {
         let standard = UserDefaults.standard
         let keys = [
@@ -99,7 +99,7 @@ struct TranscriptionSettingsTests {
         #expect(dictation.settings.languageHint == .english)
         #expect(dictation.settings.freeTextPrompt == "VCDR")
 
-        // A mode that names nothing takes the Default and the Default family's
+        // A mode that pins nothing takes the Default and the Default family's
         // own settings, untouched by the mode next to it.
         let assistant = TranscriptionSettings.effectiveTranscription(for: .assistant)
         #expect(assistant.model == .parakeetV3)

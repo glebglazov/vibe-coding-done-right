@@ -116,7 +116,7 @@ final class CaptureSession {
         /// — the Default, or the active Mode's Transcription Override.
         let transcription: @MainActor @Sendable (TranscriptionModel) -> any TranscriptionProvider
         /// Starts preparing a Transcription Model, or joins the preparation
-        /// already running. A Mode's Override may name a model nothing has
+        /// already running. A Mode's Override may pin a model nothing has
         /// loaded this launch, and the run waits for it rather than refusing to
         /// record (`docs/adr/0006`) — so the run is what starts it.
         let prepareTranscription: @MainActor @Sendable (TranscriptionModel) -> Void

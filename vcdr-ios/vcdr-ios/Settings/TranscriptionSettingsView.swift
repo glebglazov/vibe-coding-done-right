@@ -47,9 +47,7 @@ struct TranscriptionSettingsView: View {
                 Text("Transcription runs on this device. Choose from the models you have installed — the Library below is where models are installed and removed. The model and everything it is told are this device's own — neither is shared with your other devices.")
             }
 
-            Section("Library") {
-                LibraryRows(library: library)
-            }
+            LibrarySection(library: library)
         }
         .navigationTitle("Transcription")
         .navigationBarTitleDisplayMode(.inline)
@@ -76,7 +74,7 @@ private struct TranscriptionStatusRow: View {
 /// Reads the whole Library inside its own body, for the same reason the Status
 /// row reads one model's state inside its own: a download ticking must not
 /// re-evaluate the Settings form above it.
-private struct LibraryRows: View {
+private struct LibrarySection: View {
     let library: TranscriptionLibrary
 
     /// The pinned removal awaiting consent, or nil when none is. A removal with
@@ -85,13 +83,15 @@ private struct LibraryRows: View {
     @State private var pendingRemoval: PinnedModelRemoval?
 
     var body: some View {
-        ForEach(library.entries) { entry in
-            TranscriptionLibraryRow(
-                entry: entry,
-                removalRefusal: library.removalRefusal(for: entry.model),
-                install: { library.install(entry.model) },
-                remove: { remove(entry.model) }
-            )
+        Section("Library") {
+            ForEach(library.entries) { entry in
+                TranscriptionLibraryRow(
+                    entry: entry,
+                    removalRefusal: library.removalRefusal(for: entry.model),
+                    install: { library.install(entry.model) },
+                    remove: { remove(entry.model) }
+                )
+            }
         }
         .confirmationDialog(
             "Remove this model?",

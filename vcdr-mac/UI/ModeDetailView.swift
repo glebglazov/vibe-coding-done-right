@@ -5,7 +5,7 @@ import SwiftUI
 struct ModeDetailView: View {
     @Binding var mode: Mode
     let settings: AppSettings
-    /// What this Mode's Transcription Override installs from, when it names a
+    /// What this Mode's Transcription Override installs from, when it pins a
     /// model the device does not have yet.
     let transcriptionLibrary: TranscriptionLibrary
     let outputDestinations: [OutputDestination]

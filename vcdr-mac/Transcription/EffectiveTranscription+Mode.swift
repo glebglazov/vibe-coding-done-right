@@ -4,7 +4,7 @@ extension TranscriptionSettings {
 
     /// What `mode` transcribes with: its Transcription Override's model under
     /// the Mode's own patch, or the Default Transcription Model and the
-    /// Default's family's own settings when the Mode names nothing.
+    /// Default's family's own settings when the Mode pins nothing.
     ///
     /// The whole resolution — Mode's patch, else the family's own settings, else
     /// the family's defaults — is this one function, because a bug in it shows up

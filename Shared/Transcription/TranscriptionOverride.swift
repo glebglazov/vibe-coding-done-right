@@ -49,10 +49,10 @@ struct TranscriptionSettingsPatch: Codable, Equatable, Sendable {
     }
 }
 
-/// A Mode's Transcription Override: the Transcription Model it names instead of
+/// A Mode's Transcription Override: the Transcription Model it pins instead of
 /// the Default, and what it has told each Transcription Model Family.
 ///
-/// The patches are kept per family and outside the naming, so nothing a Mode has
+/// The patches are kept per family and outside the pin, so nothing a Mode has
 /// configured is attached to the selection (`docs/adr/0016`): pointing a Mode at
 /// another model — or back at the Default — and returning finds this Mode's own
 /// answers waiting, and pointing it at another member of the same family finds

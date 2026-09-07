@@ -131,7 +131,7 @@ struct Mode: Identifiable, Codable, Equatable {
 
     // Transcription
     /// Which Transcription Model this Mode records with, and what it tells it.
-    /// A Mode that names nothing transcribes with the Default Transcription
+    /// A Mode that pins nothing transcribes with the Default Transcription
     /// Model and that model's own settings — transcription is a step of the
     /// Capture Session one stage before processing, so it is an override here
     /// rather than a field the Mode always carries (`docs/adr/0016`).
@@ -313,7 +313,7 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteID
         parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
-        // A Mode written before Modes could name a model overrides nothing, and
+        // A Mode written before Modes could pin a model overrides nothing, and
         // so records with the Default.
         transcriptionOverride = try container.decodeIfPresent(
             TranscriptionOverride.self, forKey: .transcriptionOverride

@@ -2,7 +2,7 @@ import Foundation
 
 /// Which Transcription Model a provider runs. One vocabulary for both products,
 /// so a model is something the app can name rather than only something it can
-/// print: Library membership and the model a Mode names both key by this,
+/// print: Library membership and the model a Mode pins both key by this,
 /// where a display string would key by wording that is free to change. What a
 /// model is told keys by its family instead (`docs/adr/0020`).
 ///
