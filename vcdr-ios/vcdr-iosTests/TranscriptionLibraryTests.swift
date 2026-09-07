@@ -153,6 +153,9 @@ struct TranscriptionLibraryTests {
         await env.library.refresh()
         let toldBefore = TranscriptionSettings.settings(for: .whisper)
 
+        // Nothing pins it, so there is nothing to disclose and no consent to
+        // gather: the press removes it.
+        #expect(env.library.pinnedModelRemoval(for: .whisperTiny) == nil)
         #expect(await env.library.remove(.whisperTiny) == nil)
 
         #expect(env.state(of: .whisperTiny) == .notInstalled)
@@ -169,34 +172,60 @@ struct TranscriptionLibraryTests {
         await env.library.refresh()
         #expect(TranscriptionSettings.defaultModel == .parakeetV3)
 
-        let objection = await env.library.remove(.parakeetV3)
+        let refusal = await env.library.remove(.parakeetV3)
 
-        #expect(objection == .refused(.isDefaultModel))
-        #expect(objection?.message.contains("Default Model") == true)
+        #expect(refusal == .isDefaultModel)
+        #expect(refusal?.message.contains("Default Model") == true)
         #expect(await env.parakeet.isInstalled)
         #expect(env.state(of: .parakeetV3) == .installed(bytes: 1024))
     }
 
-    @Test("Removing a model a Prompt Mode records with is refused, and names that mode")
-    func refusesToRemoveAModelAModePins() async {
+    @Test("Removing a model Prompt Modes pin discloses those modes, the model and what they will use instead — and until it is agreed to, removes nothing")
+    func pinnedRemovalDisclosesBothEndsAndWaits() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.library.refresh()
-        var override = TranscriptionOverride.none
-        override.model = .whisperTiny
-        env.defaults.set(override.rawValue,
-                         forKey: TranscriptionSettings.modeOverrideKey(for: .dictation))
+        env.pin(.whisperTiny, on: .dictation)
+        env.pin(.whisperTiny, on: .assistant)
 
-        let objection = await env.library.remove(.whisperTiny)
+        let removal = env.library.pinnedModelRemoval(for: .whisperTiny)
 
-        #expect(objection == .pinned(PinnedModelRemoval(
-            model: .whisperTiny,
-            pinningModes: [AIPromptMode.dictation.displayName],
-            defaultModel: .parakeetV3
-        )))
-        #expect(objection?.message.contains("Dictation") == true)
+        #expect(removal?.pinningModes == [AIPromptMode.dictation.displayName,
+                                          AIPromptMode.assistant.displayName])
+        #expect(removal?.disclosure == "Dictation and Assistant pin Whisper Tiny. "
+            + "Remove it and they will use Parakeet Multilingual v3 (the Default Model).")
+        // Declining is having read it and stopped here: nothing has moved.
         #expect(await env.whisper.isInstalled)
+        #expect(TranscriptionSettings.override(for: .dictation).model == .whisperTiny)
+    }
+
+    @Test("Agreeing to a pinned removal deletes the model and unpins those Prompt Modes, which then follow the Default")
+    func agreeingUnpinsAndLeavesTheModesOnTheDefault() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        env.installFiles(for: env.whisper, bytes: 1024)
+        await env.library.refresh()
+        var pinned = TranscriptionOverride.none
+        pinned.model = .whisperTiny
+        pinned[.whisper].languageHint = .russian
+        TranscriptionSettings.setOverride(pinned, for: .dictation)
+        env.pin(.whisperTiny, on: .assistant)
+
+        #expect(await env.library.remove(.whisperTiny) == nil)
+
+        #expect(await env.whisper.isInstalled == false)
+        #expect(AIPromptMode.allCases.allSatisfy { TranscriptionSettings.override(for: $0).model == nil })
+        // The unpin cleared the model and nothing else it carried, and it is on
+        // the phone rather than in this launch's memory.
+        #expect(TranscriptionSettings.override(for: .dictation)[.whisper].languageHint == .russian)
+        #expect(env.relaunched().pinnedModelRemoval(for: .whisperTiny) == nil)
+
+        // Those modes follow the Default now, and move with it.
+        #expect(TranscriptionSettings.effectiveTranscription(for: .dictation).model == .parakeetV3)
+        env.defaults.set(TranscriptionModel.whisperTiny.rawValue,
+                         forKey: TranscriptionSettings.defaultModelKey)
+        #expect(TranscriptionSettings.effectiveTranscription(for: .dictation).model == .whisperTiny)
     }
 
     @Test("An installability answer survives a relaunch, and one that never arrived leaves nothing behind")
@@ -330,6 +359,13 @@ private struct LibraryEnvironment {
 
     private static let namingKeys: [String] = [TranscriptionSettings.defaultModelKey]
         + AIPromptMode.allCases.map(TranscriptionSettings.modeOverrideKey(for:))
+
+    /// Pins `model` on `mode`, the way that mode's own screen would.
+    func pin(_ model: TranscriptionModel, on mode: AIPromptMode) {
+        var override = TranscriptionSettings.override(for: mode)
+        override.model = model
+        TranscriptionSettings.setOverride(override, for: mode)
+    }
 
     func installFiles(for provider: FakeInstallableProvider, bytes: Int) {
         let directory = provider.installedDirectory

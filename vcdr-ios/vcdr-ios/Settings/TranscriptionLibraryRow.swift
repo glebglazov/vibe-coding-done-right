@@ -14,7 +14,7 @@ struct TranscriptionLibraryRow: View {
     let entry: TranscriptionLibrary.Entry
     /// Why removal is refused, shown next to the disabled button so the reason
     /// is read where the refusal is met.
-    let removalObjection: ModelRemovalObjection?
+    let removalRefusal: ModelRemovalRefusal?
     let install: () -> Void
     let remove: () -> Void
 
@@ -29,8 +29,8 @@ struct TranscriptionLibraryRow: View {
             if let fraction = downloadFraction {
                 ProgressView(value: fraction)
             }
-            if entry.state.offersRemoval, let removalObjection {
-                Text(removalObjection.message)
+            if entry.state.offersRemoval, let removalRefusal {
+                Text(removalRefusal.message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -47,7 +47,7 @@ struct TranscriptionLibraryRow: View {
         } else if entry.state.offersRemoval {
             Button("Remove", action: remove)
                 .buttonStyle(.borderless)
-                .disabled(removalObjection != nil)
+                .disabled(removalRefusal != nil)
         }
     }
 

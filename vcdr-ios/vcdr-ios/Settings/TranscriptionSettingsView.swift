@@ -79,14 +79,45 @@ private struct TranscriptionStatusRow: View {
 private struct LibraryRows: View {
     let library: TranscriptionLibrary
 
+    /// The pinned removal awaiting consent, or nil when none is. A removal with
+    /// nothing to disclose never lands here: it happens on the press
+    /// (`docs/adr/0024`).
+    @State private var pendingRemoval: PinnedModelRemoval?
+
     var body: some View {
         ForEach(library.entries) { entry in
             TranscriptionLibraryRow(
                 entry: entry,
-                removalObjection: library.removalObjection(for: entry.model),
+                removalRefusal: library.removalRefusal(for: entry.model),
                 install: { library.install(entry.model) },
-                remove: { Task { await library.remove(entry.model) } }
+                remove: { remove(entry.model) }
             )
+        }
+        .confirmationDialog(
+            "Remove this model?",
+            isPresented: Binding(
+                get: { pendingRemoval != nil },
+                set: { if $0 == false { pendingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingRemoval
+        ) { removal in
+            Button("Remove and Unpin", role: .destructive) {
+                Task { await library.remove(removal.model) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { removal in
+            Text(removal.disclosure)
+        }
+    }
+
+    /// Presses Remove: a model Prompt Modes pin discloses what agreeing costs
+    /// them and waits, and a model nothing pins goes now.
+    private func remove(_ model: TranscriptionModel) {
+        if let removal = library.pinnedModelRemoval(for: model) {
+            pendingRemoval = removal
+        } else {
+            Task { await library.remove(model) }
         }
     }
 }
