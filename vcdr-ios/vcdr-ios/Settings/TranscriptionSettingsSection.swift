@@ -24,7 +24,10 @@ struct TranscriptionSettingsSection: View {
         Group {
             Section {
                 Picker("Default Model", selection: $storedModel) {
-                    ForEach(TranscriptionProviderRegistry.offeredModels, id: \.self) { offered in
+                    // The Installed Models, plus the one this setting already
+                    // holds. Installing is the Library section below, where the
+                    // cost and the progress are (`docs/adr/0023`).
+                    ForEach(library.selectableModels(holding: model), id: \.self) { offered in
                         Text(offered.displayName).tag(offered.rawValue)
                     }
                 }
@@ -39,18 +42,12 @@ struct TranscriptionSettingsSection: View {
             } header: {
                 Text("Transcription")
             } footer: {
-                Text("Transcription runs on this device. A model chosen here downloads if it is not installed yet. The model and everything it is told are this device's own — neither is shared with your other devices.")
+                Text("Transcription runs on this device. Choose from the models you have installed — the Library below is where models are installed and removed. The model and everything it is told are this device's own — neither is shared with your other devices.")
             }
 
             Section("Library") {
                 LibraryRows(library: library)
             }
-        }
-        // A Default may be chosen before it is here: choosing it is what starts
-        // the download, and the Status row above narrates it from that moment.
-        .onChange(of: storedModel) { _, chosen in
-            guard let chosen = TranscriptionModel(rawValue: chosen) else { return }
-            library.install(chosen)
         }
         // Each visit re-reads the Library — which is also how a device that was
         // offline last time finally learns what it can install — and then keeps

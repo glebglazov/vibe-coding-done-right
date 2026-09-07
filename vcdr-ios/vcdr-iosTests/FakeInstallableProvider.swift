@@ -14,6 +14,10 @@ actor FakeInstallableProvider: StreamingTranscriptionProvider {
     }
 
     private(set) var initPhase: ModelPreparationPhase = .preparing
+    /// How many times preparation has been started on this provider — the seam
+    /// a test uses to ask whether an install ran at all, and whether it ran
+    /// twice.
+    private(set) var preparationsBegun = 0
     private(set) var downloadProgress: Double?
 
     private var isInstallable = true
@@ -63,6 +67,7 @@ actor FakeInstallableProvider: StreamingTranscriptionProvider {
     /// Holds preparation open until the test says how it ended, the way a real
     /// download and load hold it open — that wait is what a Library row is for.
     func initialize() async throws {
+        preparationsBegun += 1
         while !Task.isCancelled {
             switch initPhase {
             case .ready: return

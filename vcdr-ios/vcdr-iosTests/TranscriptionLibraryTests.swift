@@ -69,6 +69,80 @@ struct TranscriptionLibraryTests {
         })
     }
 
+    @Test("A model select offers what is installed, plus the value it already holds")
+    func selectOffersInstalledModelsAndItsOwnValue() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        env.installFiles(for: env.whisper, bytes: 1024)
+        await env.library.refresh()
+        // The Default names Parakeet, and this phone does not have it.
+        #expect(TranscriptionSettings.defaultModel == .parakeetV3)
+        #expect(env.state(of: .parakeetV3) == .notInstalled)
+
+        // The Default Model select: what is here, and what it is already
+        // showing — dropping the latter would repoint the Default silently.
+        #expect(env.library.selectableModels(holding: .parakeetV3) == [.parakeetV3, .whisperTiny])
+
+        // A Prompt Mode's select, naming nothing of its own, offers only what
+        // is here.
+        #expect(env.library.selectableModels(holding: nil) == [.whisperTiny])
+    }
+
+    @Test("Choosing a Default and naming a model on a Prompt Mode both install nothing")
+    func pickingAModelInstallsNothing() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        // The only model this phone has is the one about to be picked — which
+        // is the only kind the selects offer it.
+        env.installFiles(for: env.whisper, bytes: 1024)
+        await env.library.refresh()
+        let before = env.library.entries.map(\.state)
+
+        env.defaults.set(TranscriptionModel.whisperTiny.rawValue, forKey: TranscriptionSettings.defaultModelKey)
+        let override = env.library.override(.none, naming: .whisperTiny)
+
+        #expect(override.model == .whisperTiny)
+        // Two reads' worth of chances for an install to have started.
+        await env.library.refresh()
+        await env.library.refresh()
+        #expect(env.library.entries.map(\.state) == before)
+        #expect(await env.whisper.preparationsBegun == 0)
+        #expect(await env.parakeet.preparationsBegun == 0)
+    }
+
+    @Test("A phone whose Library is empty installs the shipped Default once, and one with a model installed does not")
+    func emptyLibraryInstallsTheDefaultOnce() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        let watching = Task { await env.library.watch() }
+        defer { watching.cancel() }
+
+        // A later launch on a phone whose Default was deleted from under the
+        // app: it still has a model to record with, so nothing is fetched
+        // unasked.
+        env.installFiles(for: env.whisper, bytes: 1024)
+        #expect(await waitFor { env.state(of: .whisperTiny) == .installed(bytes: 1024) })
+
+        env.library.installDefaultIfLibraryIsEmpty()
+
+        await env.library.refresh()
+        await env.library.refresh()
+        #expect(await env.parakeet.preparationsBegun == 0)
+
+        // The same phone with nothing installed at all: the shipped Default is
+        // the one install the app makes on its own behalf, and asking twice
+        // still downloads it once.
+        #expect(await env.library.remove(.whisperTiny) == nil)
+        env.library.installDefaultIfLibraryIsEmpty()
+        env.library.installDefaultIfLibraryIsEmpty()
+
+        #expect(await waitFor { await env.parakeet.preparationsBegun == 1 })
+        env.installFiles(for: env.parakeet, bytes: 2048)
+        await env.parakeet.becomeReady()
+        #expect(await waitFor { env.state(of: .parakeetV3) == .ready(bytes: 2048) })
+        #expect(await env.parakeet.preparationsBegun == 1)
+    }
+
     @Test("A model nothing names can be removed, and what it was told survives")
     func removesAModelNothingNames() async {
         let env = LibraryEnvironment()

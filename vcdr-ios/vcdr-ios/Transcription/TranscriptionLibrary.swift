@@ -26,6 +26,35 @@ final class TranscriptionLibrary {
         Entry(model: model, state: states[model] ?? .installabilityUnknown)
     }
 
+    /// What a model select may offer: the models this phone has installed, plus
+    /// `held` — the value the select already carries. A pick spends nothing, so
+    /// installing is the Library's alone (`docs/adr/0023`); the held value stays
+    /// on the list even when its files have gone, because a select that drops
+    /// what it is showing has silently repointed it. Offered in the platform's
+    /// own order, the order the Library reads in.
+    func selectableModels(holding held: TranscriptionModel?) -> [TranscriptionModel] {
+        models.filter { states[$0]?.isOnDisk == true || $0 == held }
+    }
+
+    /// Installs the Default Transcription Model on a phone that has nothing
+    /// installed at all. This is the one install the app makes unasked: a fresh
+    /// phone has no installed model a select could offer instead, so the
+    /// shipped Default is a first-run install rather than a pick
+    /// (`docs/adr/0023`).
+    ///
+    /// A phone with anything in its Library is left alone — including one whose
+    /// Default was deleted from under the app, which still has a model to
+    /// record with and can be asked what to install next.
+    func installDefaultIfLibraryIsEmpty() {
+        guard installedModels.isEmpty else { return }
+        install(TranscriptionSettings.defaultModel)
+    }
+
+    /// The models whose files are on this phone, as the last read found them.
+    private var installedModels: [TranscriptionModel] {
+        models.filter { states[$0]?.isOnDisk == true }
+    }
+
     private let models: [TranscriptionModel]
     private let provider: (TranscriptionModel) -> any StreamingTranscriptionProvider
 
@@ -84,8 +113,7 @@ final class TranscriptionLibrary {
     }
 
     /// Installs `model` — the download and the load, which together are what
-    /// preparing it means. Also what choosing a model that is not here yet as
-    /// the Default does, and the retry a Preparation Failure offers: the
+    /// preparing it means. Also the retry a Preparation Failure offers: the
     /// provider begins a fresh attempt, and a second press while one runs joins
     /// that attempt rather than downloading twice.
     func install(_ model: TranscriptionModel) {
@@ -110,11 +138,11 @@ final class TranscriptionLibrary {
     }
 
     /// The Transcription Override a Prompt Mode gets when a model is named on
-    /// its screen. The model is installed there and then, so first use is warm
-    /// rather than a download that runs while the person is speaking; naming
-    /// nothing returns the mode to the Default and installs nothing.
+    /// its screen. Naming moves a pointer and nothing else: the screen offers
+    /// only models this phone already has, so there is nothing left to fetch,
+    /// and no other model's state is touched (`docs/adr/0023`). Naming nothing
+    /// returns the mode to the Default.
     func override(_ override: TranscriptionOverride, naming model: TranscriptionModel?) -> TranscriptionOverride {
-        if let model { install(model) }
         var named = override
         named.model = model
         return named

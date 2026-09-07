@@ -37,7 +37,8 @@ struct VCDRiOSApp: App {
                     //       Apple Intelligence state.
                     //   0c. Read the Transcription Model Library off disk, so
                     //       which models are installed — and which of them this
-                    //       phone can install — is known before Settings asks.
+                    //       phone can install — is known before Settings asks,
+                    //       then install the Default if nothing is installed.
                     //   1. Migrate pre-split legacy keys (idempotent).
                     //   2. Drop any leftover session overrides so the run
                     //      starts from the user's configured defaults.
@@ -71,6 +72,10 @@ struct VCDRiOSApp: App {
                     Logger.app.info("[LaunchProbe] substitutionsReady awaited")
                     await libraryReady
                     Logger.app.info("[LaunchProbe] libraryReady awaited")
+                    // A phone with nothing installed has no model a select
+                    // could offer, so the shipped Default is fetched unasked —
+                    // once, and only here (`docs/adr/0023`).
+                    coordinator.transcriptionLibrary.installDefaultIfLibraryIsEmpty()
                     await modelReady
                     Logger.app.info("[LaunchProbe] initializeModel returned")
                     _ = await afmReady

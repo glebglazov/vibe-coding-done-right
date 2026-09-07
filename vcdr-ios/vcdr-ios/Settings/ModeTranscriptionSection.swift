@@ -5,8 +5,8 @@ import SwiftUI
 /// are computed — where each of those values came from.
 struct ModeTranscriptionSection: View {
     @Binding var override: TranscriptionOverride
-    /// Where a named model is installed from, and the state its row shows while
-    /// that download runs.
+    /// Which models this phone has, so the select offers only those. Nothing is
+    /// installed from this screen.
     let library: TranscriptionLibrary
     @AppStorage(TranscriptionSettings.defaultModelKey)
     private var storedDefault = TranscriptionSettings.defaultModel.rawValue
@@ -18,23 +18,16 @@ struct ModeTranscriptionSection: View {
             Picker("Model", selection: namedModel) {
                 Text("Default (\(defaultModel.displayName))")
                     .tag(TranscriptionModel?.none)
-                ForEach(TranscriptionProviderRegistry.offeredModels, id: \.self) { model in
+                // The Installed Models, plus whatever this Prompt Mode
+                // already names. Naming a model here moves a pointer and spends
+                // nothing, so there is no download to narrate and no Library row
+                // to narrate it with (`docs/adr/0023`).
+                ForEach(library.selectableModels(holding: override.model), id: \.self) { model in
                     Text(model.displayName).tag(TranscriptionModel?.some(model))
                 }
             }
 
             if let model = override.model {
-                // The same row the Library shows, because a model named here is
-                // downloaded here: without progress a person watching a 627 MB
-                // fetch has nothing to read. There is nowhere to remove a model
-                // from on this screen — the Library owns that.
-                TranscriptionLibraryRow(
-                    entry: library.entry(for: model),
-                    removalRefusal: nil,
-                    install: { library.install(model) },
-                    remove: nil
-                )
-
                 TranscriptionModelSettingsView(
                     family: model.family,
                     settings: effectiveSettings(of: model.family),
@@ -42,9 +35,6 @@ struct ModeTranscriptionSection: View {
                 )
             }
         }
-        // A model may be named before it is here, and it downloads from the
-        // moment it is named — the row above narrates that.
-        .task { await library.watch() }
     }
 
     private var defaultModel: TranscriptionModel {
