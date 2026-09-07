@@ -32,6 +32,10 @@ constraint.
    Modes use reports that fact and stops. Repointing them at the Default would
    change what those Modes transcribe with, and therefore what they produce,
    without saying so.
+   **Amended by [ADR-0024](0024-a-pinned-model-is-removed-with-consent-only-the-default-is-refused.md):**
+   the refusal survives for the Default alone. A model Modes pin is removed once
+   the person has been told which Modes pin it and what they will use instead —
+   said out loud, so it is no longer silent, and consented to.
 3. **No model is special.** Parakeet is not an undeletable floor. Making it one
    hard-codes today's answer into the invariant, and the moment Apple's
    `SpeechTranscriber` (no download, no cold load) or Nemotron is the better

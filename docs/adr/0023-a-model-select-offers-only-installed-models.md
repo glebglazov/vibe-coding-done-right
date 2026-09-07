@@ -32,7 +32,9 @@ Two rules keep that honest:
   refused for the Default and for any model a Mode names
   ([ADR-0018](0018-a-transcription-model-may-be-removed-unless-something-names-it.md)),
   and that refusal is what guarantees a select always has at least one thing to
-  offer. To reclaim the space the Default holds, install another model, make it
+  offer. **Amended by [ADR-0024](0024-a-pinned-model-is-removed-with-consent-only-the-default-is-refused.md):**
+  only the Default half of that refusal remains; a model Modes pin is removable
+  with consent. The guarantee this rule rests on is unaffected. To reclaim the space the Default holds, install another model, make it
   the Default, and then remove the first.
 - **A device with an empty Library installs the shipped Default once.** This is
   the one install the app does unasked, because a fresh device has no
