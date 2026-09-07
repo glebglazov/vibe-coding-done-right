@@ -8,7 +8,7 @@ import Foundation
 ///
 /// The raw value is that key, and is written down rather than derived from the
 /// case name, because it outlives any rename of the case.
-enum TranscriptionModel: String, Codable, Sendable {
+enum TranscriptionModel: String, CaseIterable, Codable, Sendable {
     case parakeetV3 = "parakeet-v3"
     case whisperTiny = "whisper-tiny"
     case whisperBase = "whisper-base"
@@ -38,6 +38,30 @@ enum TranscriptionModel: String, Codable, Sendable {
         case .whisperMedium: "Whisper Medium"
         case .whisperLargeV3: "Whisper Large v3"
         case .whisperLargeV3Turbo: "Whisper Large v3 Turbo"
+        }
+    }
+
+    /// Roughly what this model's files take up once installed, in bytes on
+    /// disk. The same measure the Library prints for an install it can see, so
+    /// the number weighed before an install and the number shown after it are
+    /// two readings of one thing.
+    ///
+    /// Written down here rather than asked of a backend, because neither
+    /// WhisperKit nor FluidAudio publishes a size before a download, and the
+    /// one moment the number decides anything is before there is anything to
+    /// measure. Keyed by the same enum as `displayName` so a new model cannot
+    /// arrive without one. The figures are argmax's published file sizes for
+    /// the Whispers and a measured install for Parakeet, rounded to 0.1 GB:
+    /// finer than that is precision no decision needs.
+    var approximateSizeOnDisk: Int64 {
+        switch self {
+        case .parakeetV3: 500_000_000
+        case .whisperTiny: 100_000_000
+        case .whisperBase: 100_000_000
+        case .whisperSmall: 500_000_000
+        case .whisperMedium: 1_500_000_000
+        case .whisperLargeV3: 3_100_000_000
+        case .whisperLargeV3Turbo: 600_000_000
         }
     }
 }

@@ -68,7 +68,7 @@ private struct TranscriptionStatusRow: View {
     let model: TranscriptionModel
 
     var body: some View {
-        LabeledContent("Status", value: library.entry(for: model).state.label)
+        LabeledContent("Status", value: library.entry(for: model).state.label(for: model))
     }
 }
 

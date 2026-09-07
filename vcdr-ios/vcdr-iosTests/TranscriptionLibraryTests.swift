@@ -16,7 +16,7 @@ struct TranscriptionLibraryTests {
 
         #expect(env.library.entries.map(\.model) == TranscriptionProviderRegistry.offeredModels)
         #expect(env.state(of: .parakeetV3) == .installed(bytes: 2048))
-        #expect(env.state(of: .parakeetV3)?.label.localizedCaseInsensitiveContains("2 kb") == true)
+        #expect(env.state(of: .parakeetV3)?.label(for: .parakeetV3).localizedCaseInsensitiveContains("2 kb") == true)
         #expect(env.state(of: .whisperTiny) == .notInstalled)
     }
 
@@ -45,7 +45,7 @@ struct TranscriptionLibraryTests {
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.whisper.becomeReady()
         #expect(await waitFor { env.state(of: .whisperTiny) == .ready(bytes: 1024) })
-        #expect(env.state(of: .whisperTiny)?.label.localizedCaseInsensitiveContains("1 kb") == true)
+        #expect(env.state(of: .whisperTiny)?.label(for: .whisperTiny).localizedCaseInsensitiveContains("1 kb") == true)
 
         await env.parakeet.becomeReady()
     }
@@ -65,7 +65,7 @@ struct TranscriptionLibraryTests {
         // Past the heartbeat threshold the line has to carry the seconds spent,
         // which is how a slow load reads differently from a stuck one.
         #expect(await waitFor(timeout: .seconds(6)) {
-            env.state(of: .whisperTiny)?.label.hasPrefix("Loading model · ") == true
+            env.state(of: .whisperTiny)?.label(for: .whisperTiny).hasPrefix("Loading model · ") == true
         })
     }
 

@@ -25,7 +25,7 @@ struct TranscriptionLibraryRow: View {
             }
         } label: {
             Text(entry.model.displayName)
-            Text(entry.state.label)
+            Text(entry.state.label(for: entry.model))
             if let fraction = downloadFraction {
                 ProgressView(value: fraction)
             }

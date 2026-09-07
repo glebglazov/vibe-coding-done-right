@@ -29,17 +29,22 @@ enum TranscriptionModelState: Equatable {
     case ready(bytes: Int64)
     case failed(PreparationFailure)
 
-    /// The line a Library row shows for this state, size on disk included when
-    /// there is an install to weigh — a person deciding what to remove is
-    /// deciding by that number.
-    var label: String {
+    /// The line a Library row shows for this state, size on disk included
+    /// whenever there is a cost to weigh — a person deciding what to install,
+    /// or what to remove, is deciding by that number.
+    ///
+    /// Takes the model because an absent one has no files to measure: what its
+    /// row can say is what the model declares it will cost, and the states that
+    /// say nothing else about cost — a model this device cannot run, a model
+    /// whose installability has not come back — say that instead of nothing.
+    func label(for model: TranscriptionModel) -> String {
         switch self {
         case .installabilityUnknown:
-            "Cannot tell yet what this device can install — needs a connection"
+            "Cannot tell yet what this device can install — needs a connection · \(Self.approximate(model))"
         case .unsupported:
-            "This device cannot run this model"
+            "This device cannot run this model · \(Self.approximate(model))"
         case .notInstalled:
-            "Not installed"
+            "Not installed · \(Self.approximate(model))"
         case .downloading(let progress):
             progress.label
         case .waitingItsTurn(let label):
@@ -95,6 +100,12 @@ enum TranscriptionModelState: Equatable {
 
     private static func formatted(_ bytes: Int64) -> String {
         bytes.formatted(.byteCount(style: .file))
+    }
+
+    /// A declared size, marked as the estimate it is and formatted the way a
+    /// measured one is, so the two read as the same kind of number.
+    private static func approximate(_ model: TranscriptionModel) -> String {
+        "≈ \(formatted(model.approximateSizeOnDisk))"
     }
 }
 
