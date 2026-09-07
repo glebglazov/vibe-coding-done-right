@@ -1,0 +1,1 @@
+Honestly, the whole refactor has been a dumpster fire from day one. But yeah, I don't think it's salvageable anymore—we should just rewrite the module from scratch.

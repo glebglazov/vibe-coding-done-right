@@ -1,0 +1,23 @@
+prompt_id,eval_id,overall,punctuation,voice,captures,content,format,notes
+prompt_010,casual_tech_opinion,0.895,0.90,0.80,1.00,0.85,1.00,Drops opening framing 'I've been thinking about this whole AI thing' and 'honestly' which expected keeps; loses context-setting intro
+prompt_010,meeting_followup,0.955,0.95,0.90,1.00,0.95,1.00,Very close; drops 'I think' and 'more like' from expected
+prompt_010,personal_reflection,0.920,0.95,0.80,1.00,0.90,1.00,Keeps fillers 'or something' and 'just somewhere different'; reorders clauses slightly
+prompt_010,technical_explanation,0.885,0.85,0.80,1.00,0.90,0.90,Less compact than expected; keeps verbose intro; paragraph break not in expected
+prompt_010,product_idea,0.845,0.90,0.70,1.00,0.75,1.00,Keeps many fillers: 'Okay' 'actually' 'or whatever' 'I know' 'I think'; significantly less compact than expected
+prompt_010,frustration_vent,0.955,0.95,0.90,1.00,0.95,1.00,Very close to expected; drops 'about the deployment process'
+prompt_010,recipe_ramble,0.920,0.90,0.85,1.00,0.90,1.00,Keeps fillers 'the usual' 'at some point' 'I think' parenthetical; slightly verbose
+prompt_010,short_quick_thought,0.960,0.80,1.00,1.00,1.00,1.00,Correct bullet format; adds periods after each item where expected has none
+prompt_010,scattered_planning,0.885,0.90,0.75,1.00,0.85,1.00,Over-formalizes: 'sort out' vs 'figure out'; 'prices are rising' vs 'going up'; adds inference 'probably more expensive now'
+prompt_010,self_correction_removal,0.955,0.95,0.90,1.00,0.95,1.00,Self-correction handled well; minor phrasing differences
+prompt_010,citation_with_self_correction,0.855,0.95,0.85,1.00,0.65,1.00,CRITICAL: Collapses Mike's quoted self-correction (Lisbon->Porto) instead of preserving it as dialogue
+prompt_010,philosophical_musing,0.915,0.95,0.85,1.00,0.85,1.00,Drops 'You know what's weird?' opener; keeps fillers 'the other day' and 'really'
+prompt_010,capture_with_data_reference,0.905,0.90,0.85,1.00,0.85,1.00,Keeps 'I think' twice where expected removes both; drops 'there' from budget allocation
+prompt_010,capture_with_error_log,0.955,0.95,0.90,1.00,0.95,1.00,Very close; colon vs em-dash; minor phrasing differences
+prompt_010,multiple_captures,0.945,0.95,0.85,1.00,0.95,1.00,Keeps 'I think'; formalizes 'to ensure' vs 'for...not going below'; captures preserved exactly
+prompt_010,capture_with_code_review,0.930,0.95,0.85,1.00,0.90,1.00,Drops 'Hey' opener that expected keeps; keeps 'I think' that expected removes
+prompt_010,russian_casual_planning,0.900,0.85,0.80,1.00,0.90,1.00,Over-formalizes with 'Кроме того'; drops 'Это критичный баг' sentence; missing hyphen in более-менее
+prompt_010,greeting_passthrough,1.000,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_010,short_question_passthrough,1.000,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_010,thank_you_passthrough,0.980,0.90,1.00,1.00,1.00,1.00,Period instead of comma after 'help'
+prompt_010,single_sentence_passthrough,1.000,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_010,conversational_dictation,1.000,1.00,1.00,1.00,1.00,1.00,Exact match

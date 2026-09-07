@@ -80,4 +80,36 @@ struct ChunkedRedecodingTests {
         #expect(again.settled == "One")
         #expect(again.text == "One two three")
     }
+
+    /// What Whisper transcribes is words. Each re-decode used to fold its own
+    /// control markers — start-of-transcript, language, task, one timestamp per
+    /// segment — into the segment text, so a long recording accumulated a set
+    /// of them per pass and delivered them to the keyboard. The decode is asked
+    /// to leave them out; this is the transcript that proves none arrive, over
+    /// the several passes it took for them to pile up.
+    @Test("a transcript folded from several decodes carries no Whisper marker")
+    func transcriptCarriesNoMarkers() {
+        var live = ChunkedRedecoding()
+
+        _ = live.absorb([
+            DecodedSegment(text: "Hello there", endSeconds: 1),
+            DecodedSegment(text: "this is", endSeconds: 2),
+            DecodedSegment(text: "a test", endSeconds: 3)
+        ])
+        _ = live.absorb([
+            DecodedSegment(text: "this is", endSeconds: 2),
+            DecodedSegment(text: "a test of", endSeconds: 3),
+            DecodedSegment(text: "dictation", endSeconds: 4),
+            DecodedSegment(text: "on a phone", endSeconds: 5)
+        ])
+        let transcript = live.transcript(endingWith: [
+            DecodedSegment(text: "dictation", endSeconds: 4),
+            DecodedSegment(text: "on a phone.", endSeconds: 5)
+        ])
+
+        // Every Whisper marker opens with the same delimiter, so one check
+        // covers the whole set rather than naming markers that may change.
+        #expect(transcript.contains("<|") == false)
+        #expect(transcript == "Hello there this is a test of dictation on a phone.")
+    }
 }

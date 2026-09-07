@@ -1,0 +1,1 @@
+The launch date is probably May now. The design team said their new components won't be ready until mid-April, pushing everything back by at least two weeks. Maria mentioned the accessibility audit hasn't started yet. We also need to loop in the backend team — there are API changes that might affect the frontend.

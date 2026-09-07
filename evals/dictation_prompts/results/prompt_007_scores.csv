@@ -1,0 +1,28 @@
+eval_id,punctuation,voice,captures,content,format,overall,notes
+ casual_tech_opinion,0.75,1.00,1.00,0.95,1.00,0.92,"Missing comma after 'thing', colon instead of period, comma after 'programming', period before 'Although'"
+meeting_followup,0.95,1.00,1.00,0.90,1.00,0.96,"Minor: em-dash spacing, 'are' vs 'there's', word order"
+personal_reflection,0.80,1.00,1.00,0.90,1.00,0.93,"Missing 'really', comma after 'themselves', em-dash spacing, period vs comma"
+technical_explanation,0.75,1.00,1.00,0.90,1.00,0.92,"Missing commas after 'invalidation' and 'actually', periods instead of commas, missing 'And'"
+product_idea,0.70,0.85,1.00,0.85,1.00,0.87,"Split sentence with '? But', quote formatting, 'in your face' vs 'in-your-face', missing 'kind of'"
+frustration_vent,0.80,0.95,1.00,0.95,1.00,0.94,"Quote style (single vs double), missing commas, em-dash spacing"
+recipe_ramble,0.80,0.95,1.00,0.95,1.00,0.94,"em-dash spacing, dash vs ellipsis, missing 'like', extra comma"
+short_quick_thought,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+scattered_planning,0.95,1.00,1.00,0.70,1.00,0.90,"CRITICAL: Failed to clean up self-correction (Lisbon/Porto). Missing 'like' before $400"
+self_correction_removal,0.95,1.00,1.00,0.40,1.00,0.81,"CRITICAL: Failed to remove self-corrections - kept React/Django mentions that should be removed"
+citation_with_self_correction,0.80,0.80,1.00,0.70,1.00,0.83,"Failed to format self-correction in quotes properly, too formal with capitals"
+philosophical_musing,0.80,1.00,1.00,0.90,1.00,0.93,"Single quotes vs double, period instead of em-dash between quotes, missing comma"
+capture_with_data_reference,0.90,1.00,1.00,0.95,1.00,0.97,"Period instead of comma before 'Maybe'. Capture perfect."
+capture_with_error_log,0.95,1.00,1.00,0.95,1.00,0.98,"Extra comma after 'Basically', missing 'So'. Capture perfect."
+multiple_captures,0.90,1.00,1.00,0.95,1.00,0.97,"Missing period after 'prices'. Captures perfect."
+capture_with_code_review,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+russian_casual_planning,0.85,0.95,1.00,0.90,1.00,0.93,"Missing em-dash, sentence split, word order change, added 'Такой'"
+greeting_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+short_question_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+thank_you_passthrough,0.85,0.95,1.00,1.00,1.00,0.96,"Period instead of comma - more choppy"
+single_sentence_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+conversational_dictation,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+number_words_dollars,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+number_words_percent,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+number_words_year,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+number_words_mixed,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match
+number_words_time,1.00,1.00,1.00,1.00,1.00,1.00,Perfect match

@@ -1,0 +1,1 @@
+For this project, we're using Vue and FastAPI. Vue makes sense because the team already has Vue experience, and FastAPI gives us the async support we need.

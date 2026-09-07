@@ -1,0 +1,23 @@
+prompt_id,eval_id,overall,punctuation,voice,captures,content,format,notes
+prompt_002,casual_tech_opinion,0.90,0.80,0.85,1.00,0.90,1.00,Kept fillers 'like' and 'you know' that expected removed; unspaced em-dash; missing commas around 'honestly'; period+Although vs em-dash+although
+prompt_002,meeting_followup,0.93,0.85,0.85,1.00,0.95,1.00,Kept 'Okay so' opener; missing comma after 'Oh'; comma vs em-dash before 'we need to loop in'; dropped 'basically' from final sentence
+prompt_002,personal_reflection,0.95,0.90,0.90,1.00,0.95,1.00,Dropped 'really' from 'haven't really taken'; period+sentence vs em-dash for 'doesn't even matter'; unspaced em-dash; very close
+prompt_002,technical_explanation,0.90,0.80,0.85,1.00,0.90,1.00,Dropped 'basically:' after 'works is'; unspaced em-dash vs comma; missing comma before 'because'; added 'And' connector
+prompt_002,product_idea,0.91,0.80,0.90,1.00,0.90,1.00,Split into question+new sentence vs comma continuation; dropped 'kind of'; period+Although vs em-dash+although; capitalized 'Hey' in quote
+prompt_002,frustration_vent,0.91,0.85,0.85,1.00,0.90,1.00,Kept 'Like' filler at start of two sentences; unspaced em-dash; missing comma after 'done deal'; 'says comma quote' vs 'says quote'
+prompt_002,recipe_ramble,0.90,0.80,0.85,1.00,0.90,1.00,Unspaced em-dashes throughout; dropped 'I think' from miso paste; 'wasn't' vs 'was not'; dropped 'maybe'; em-dash vs comma+because for potato
+prompt_002,short_quick_thought,0.98,0.90,1.00,1.00,1.00,1.00,Missing comma after 'Oh'; otherwise perfect
+prompt_002,scattered_planning,0.90,0.80,0.85,1.00,0.90,1.00,Dropped 'I think'; spurious quotes around '$400 round trip'; missing comma before 'unless'; dropped 'like' before $400
+prompt_002,self_correction_removal,0.90,0.85,0.80,1.00,0.90,1.00,Over-condensed: dropped 'So I think' opener; 'more sense' vs 'the most sense'; unspaced em-dash; good self-correction handling but lost casual voice
+prompt_002,citation_with_self_correction,0.80,0.85,0.70,1.00,0.65,1.00,Collapsed Mike's quoted self-correction 'Lisbon oh wait no Porto' to just 'Porto' — lost attributed self-correction; dropped 'and everything'
+prompt_002,philosophical_musing,0.90,0.80,0.85,1.00,0.90,1.00,Broke 'what's weird is that' into 'what's weird?' new sentence; comma+period inside quotes vs em-dash; missing comma after 'also'
+prompt_002,capture_with_data_reference,0.97,0.90,0.95,1.00,1.00,1.00,Extra comma after 'numbers'; 'and maybe' vs comma+maybe; capture preserved perfectly
+prompt_002,capture_with_error_log,0.95,0.95,0.90,1.00,0.95,1.00,Dropped 'Basically' that expected kept; capture preserved perfectly; very close otherwise
+prompt_002,multiple_captures,1.00,1.00,1.00,1.00,1.00,1.00,Exact match; captures preserved perfectly
+prompt_002,capture_with_code_review,1.00,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_002,russian_casual_planning,0.92,0.85,0.90,1.00,0.90,1.00,Missing comma after 'думаю' before 'нам'; kept 'такой' filler; word order 'два дня минимум' vs 'минимум два дня'; missing comma before 'и без'
+prompt_002,greeting_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_002,short_question_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_002,thank_you_passthrough,0.96,0.85,0.95,1.00,1.00,1.00,Period instead of comma after 'help'; slightly more formal sentence break
+prompt_002,single_sentence_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_002,conversational_dictation,1.00,1.00,1.00,1.00,1.00,1.00,Exact match

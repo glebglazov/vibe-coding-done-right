@@ -1,0 +1,1 @@
+So the way this whole queuing system basically works is: you have a queue and workers pull from it and process jobs.

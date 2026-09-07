@@ -194,6 +194,15 @@ actor WhisperProvider: StreamingTranscriptionProvider {
             language: settings.languageHint.languageCode,
             usePrefillPrompt: true,
             detectLanguage: settings.languageHint == .detect,
+            // The live view folds each *segment's* own text, and WhisperKit
+            // leaves the control markers — start-of-transcript, language, task,
+            // timestamp — in a segment's text unless this is set. macOS reads
+            // the whole result's text instead, which the SDK builds from word
+            // tokens only, so it never saw them. Left in, one marker per
+            // re-decode pass would reach the transcript, and with it the
+            // Substitution matcher, the AI prompt and — in Verbatim Mode — the
+            // keyboard.
+            skipSpecialTokens: true,
             promptTokens: settings.freeTextPrompt.isEmpty || promptTokens.isEmpty ? nil : promptTokens
         )
     }

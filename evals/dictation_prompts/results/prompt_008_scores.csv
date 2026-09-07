@@ -1,0 +1,23 @@
+prompt_id,eval_id,overall,punctuation,voice,captures,content,format,notes
+prompt_008,casual_tech_opinion,0.80,0.95,0.55,1.00,0.65,1.00,Dropped opening thought and over-condensed; lost conversational framing
+prompt_008,meeting_followup,0.77,0.90,0.45,1.00,0.65,1.00,Reorganized paragraph structure; moved conclusion to beginning; dropped hedging and casual markers
+prompt_008,personal_reflection,0.79,0.95,0.45,1.00,0.70,1.00,Dropped walking-home context; changed funny to ironic; made tone more decisive
+prompt_008,technical_explanation,0.83,0.90,0.55,1.00,0.80,1.00,Rewrote opener to be more formal; compressed explanation but preserved all technical content
+prompt_008,product_idea,0.75,0.85,0.30,1.00,0.75,0.95,Converted conversational pitch into product brief; lost questioning tone and qualifiers
+prompt_008,frustration_vent,0.76,0.85,0.45,1.00,0.65,1.00,Dropped strong emotional opener; removed hedging and quotation marks around reported speech
+prompt_008,recipe_ramble,0.74,0.90,0.35,1.00,0.65,0.95,Heavy rewrite; added content not in original; lost casual qualifiers and storytelling style
+prompt_008,short_quick_thought,0.87,0.80,0.70,1.00,0.90,1.00,Merged three sentences into one list; lost Oh and Also markers but content intact
+prompt_008,scattered_planning,0.76,0.90,0.40,1.00,0.65,1.00,Lost inland/coast uncertainty; added words not in original; compressed conversational planning
+prompt_008,self_correction_removal,0.79,0.90,0.35,1.00,0.80,1.00,Reordered conclusion-first; heavy compression but core meaning preserved
+prompt_008,citation_with_self_correction,0.75,0.90,0.30,1.00,0.70,1.00,Lost reported-speech quotation style; flattened conversational retelling into summary
+prompt_008,philosophical_musing,0.88,0.95,0.65,1.00,0.85,1.00,Moderate trimming of casual markers; preserved quotes and core philosophical content well
+prompt_008,capture_with_data_reference,0.82,0.90,0.55,1.00,0.75,1.00,Dropped context reference and hedging; capture preserved perfectly
+prompt_008,capture_with_error_log,0.77,0.95,0.35,1.00,0.70,1.00,Lost narrative framing of investigation; reduced to just findings; capture preserved
+prompt_008,multiple_captures,0.81,0.90,0.50,1.00,0.75,1.00,Dropped explanation of first capture context; both captures preserved perfectly
+prompt_008,capture_with_code_review,0.75,0.95,0.40,1.00,0.60,1.00,Lost positive assessment and action context; heavily compressed; capture preserved
+prompt_008,russian_casual_planning,0.83,0.85,0.60,1.00,0.80,1.00,Lost yesterday timing detail; minor punctuation differences; good preservation overall
+prompt_008,greeting_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_008,short_question_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_008,thank_you_passthrough,0.97,0.90,0.95,1.00,1.00,1.00,Period instead of comma after help; trivial difference
+prompt_008,single_sentence_passthrough,1.00,1.00,1.00,1.00,1.00,1.00,Exact match
+prompt_008,conversational_dictation,1.00,1.00,1.00,1.00,1.00,1.00,Exact match

@@ -1,0 +1,7 @@
+After the meeting with the design team, we need to reconsider the timeline. Several factors are pushing the launch back:
+
+- The new components won't be ready until mid-April
+- The accessibility audit hasn't even started yet
+- The backend team has API changes that might affect the frontend
+
+The launch date is probably May at this point.

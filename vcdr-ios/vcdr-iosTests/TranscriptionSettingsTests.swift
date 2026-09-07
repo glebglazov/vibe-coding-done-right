@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WhisperKit
 @testable import vcdr_ios
 
 @Suite("iOS transcription settings storage", .serialized)
@@ -107,5 +108,30 @@ struct TranscriptionSettingsTests {
         override[.whisper].clear(.languageHint)
         standard.set(override.rawValue, forKey: TranscriptionSettings.modeOverrideKey(for: .dictation))
         #expect(TranscriptionSettings.effectiveTranscription(for: .dictation).settings.languageHint == .russian)
+    }
+
+    /// What a family is told, as WhisperKit's decoder receives it — plus the
+    /// one thing nobody chose: this phone reads a decode segment by segment,
+    /// and a segment carries Whisper's control markers unless the options say
+    /// otherwise. Asserted here so a later edit to the options cannot drop it
+    /// and put the markers back in a person's transcript.
+    @Test("the decoder is asked to leave Whisper's markers out, whatever the family was told")
+    func decodingOptionsSkipSpecialTokens() {
+        let detecting = WhisperProvider.decodingOptions(for: .default, tokenizedBy: nil)
+        #expect(detecting.skipSpecialTokens)
+        // Nil alone is not enough: WhisperKit fills an unset language slot
+        // with English unless it is asked to detect.
+        #expect(detecting.language == nil)
+        #expect(detecting.detectLanguage)
+        #expect(detecting.promptTokens == nil)
+
+        let hinted = WhisperProvider.decodingOptions(
+            for: TranscriptionModelSettings(languageHint: .russian, freeTextPrompt: "Parakeet"),
+            tokenizedBy: nil
+        )
+        #expect(hinted.skipSpecialTokens)
+        #expect(hinted.language == "ru")
+        #expect(hinted.detectLanguage == false)
+        #expect(hinted.usePrefillPrompt)
     }
 }

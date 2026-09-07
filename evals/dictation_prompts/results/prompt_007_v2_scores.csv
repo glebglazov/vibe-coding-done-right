@@ -1,0 +1,28 @@
+case_id,punctuation,voice,captures,content,format,overall,notes
+short_quick_thought,90.0,100.0,100.0,70.0,100.0,89.0,Significant content reduction
+scattered_planning,100.0,85.0,100.0,75.0,100.0,89.5,"Lost conversational marker: 'like'; Number mismatch: {'400'} vs {'400', '2', '4'}"
+casual_tech_opinion,80.0,100.0,100.0,80.0,100.0,90.0,Em-dash count diff: 0 vs 1; Low content similarity: 0.14
+citation_with_self_correction,90.0,100.0,100.0,80.0,100.0,92.0,Low content similarity: 0.85
+philosophical_musing,80.0,100.0,100.0,90.0,100.0,93.0,Em-dash count diff: 2 vs 0
+product_idea,100.0,100.0,100.0,80.0,100.0,94.0,Low content similarity: 0.36
+recipe_ramble,100.0,100.0,100.0,80.0,100.0,94.0,Low content similarity: 0.77
+meeting_followup,100.0,100.0,100.0,85.0,100.0,95.5,Number mismatch: set() vs {'2'}
+capture_with_error_log,100.0,85.0,100.0,100.0,100.0,97.0,Lost conversational marker: 'basically'
+personal_reflection,90.0,100.0,100.0,100.0,100.0,98.0,Em-dash count diff: 1 vs 0
+technical_explanation,90.0,100.0,100.0,100.0,100.0,98.0,OK
+self_correction_removal,90.0,100.0,100.0,100.0,100.0,98.0,OK
+capture_with_code_review,90.0,100.0,100.0,100.0,100.0,98.0,OK
+russian_casual_planning,90.0,100.0,100.0,100.0,100.0,98.0,OK
+thank_you_passthrough,90.0,100.0,100.0,100.0,100.0,98.0,OK
+frustration_vent,100.0,100.0,100.0,100.0,100.0,100.0,OK
+capture_with_data_reference,100.0,100.0,100.0,100.0,100.0,100.0,OK
+multiple_captures,100.0,100.0,100.0,100.0,100.0,100.0,OK
+greeting_passthrough,100.0,100.0,100.0,100.0,100.0,100.0,OK
+short_question_passthrough,100.0,100.0,100.0,100.0,100.0,100.0,OK
+single_sentence_passthrough,100.0,100.0,100.0,100.0,100.0,100.0,OK
+conversational_dictation,100.0,100.0,100.0,100.0,100.0,100.0,OK
+number_words_dollars,100.0,100.0,100.0,100.0,100.0,100.0,OK
+number_words_percent,100.0,100.0,100.0,100.0,100.0,100.0,OK
+number_words_year,100.0,100.0,100.0,100.0,100.0,100.0,OK
+number_words_mixed,100.0,100.0,100.0,100.0,100.0,100.0,OK
+number_words_time,100.0,100.0,100.0,100.0,100.0,100.0,OK

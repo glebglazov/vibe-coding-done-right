@@ -1,0 +1,1 @@
+So Vue would be better because we already have Vue experience on the team. And for the backend, FastAPI makes more sense since we need async support. So yeah, Vue plus FastAPI is the stack.

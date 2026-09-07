@@ -1,0 +1,3 @@
+The caching layer has two levels: Redis as the primary cache, backed by an in-memory cache on each node. When a request comes in, it checks the local cache first, then Redis, then the database.
+
+The tricky part is invalidation—you have to invalidate both layers. If you only invalidate Redis but not the local cache, you get stale data for up to 30 seconds (the local cache's TTL). We had a bug last month where prices were showing wrong for some users because of exactly this issue.

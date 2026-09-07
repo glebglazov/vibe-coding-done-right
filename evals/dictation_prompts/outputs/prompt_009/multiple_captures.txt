@@ -1,0 +1,14 @@
+The first capture shows the current discount logic; the second is Jake's proposed replacement. I think Jake's version is better because it handles promo codes. I'd like to add:
+- Validation to prevent the discount from going below 70%
+- Tests for edge cases like negative prices
+
+<capture id="1">def calculate_discount(price, tier):
+    if tier == "gold":
+        return price * 0.8
+    return price * 0.95</capture>
+
+<capture id="2">def calculate_discount(price, tier, promo_code=None):
+    base = 0.8 if tier == "gold" else 0.95
+    if promo_code:
+        base -= 0.05
+    return price * base</capture>

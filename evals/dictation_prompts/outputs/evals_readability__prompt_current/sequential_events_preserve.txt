@@ -1,0 +1,1 @@
+So I opened the PR and waited for reviews. Someone commented with 20 nits. I fixed them, resubmitted, and got approved three days later.

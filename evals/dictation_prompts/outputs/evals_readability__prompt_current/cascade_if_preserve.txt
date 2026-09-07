@@ -1,0 +1,1 @@
+So the request flow is: first we check the cache, and if it hits, we return. If not, we check Redis, and if that's also a miss, we go to the database.

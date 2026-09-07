@@ -1,0 +1,1 @@
+The new onboarding flow is working really well, I think, and we can probably ship it Friday, I guess.

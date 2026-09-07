@@ -1,0 +1,5 @@
+I was reviewing the error logs and found something interesting: there's a pattern where timeout errors spike every day around 2 PM UTC. I think it's related to the daily backup job that runs on replica 3. We should probably move the backup window or route traffic away from that replica during that time.
+
+<capture id="1">TimeoutError: Connection to db-replica-3 timed out after 30000ms
+  at ConnectionPool.acquire (pool.js:142)
+  at QueryRunner.connect (runner.js:89)</capture>

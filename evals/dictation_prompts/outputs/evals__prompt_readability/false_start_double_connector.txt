@@ -1,0 +1,1 @@
+and then we hit the scaling wall and had to restart the whole node pool.

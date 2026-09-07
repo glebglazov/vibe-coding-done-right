@@ -1,0 +1,7 @@
+Hey, I need to send this snippet to the team for review. I think the implementation is mostly fine, but there's a potential race condition in the event handler. Let me grab the code real quick.
+
+<capture id="1">eventBus.on('user.updated', async (event) => {
+  const user = await db.users.findById(event.userId);
+  user.lastSync = Date.now();
+  await user.save();
+});</capture>

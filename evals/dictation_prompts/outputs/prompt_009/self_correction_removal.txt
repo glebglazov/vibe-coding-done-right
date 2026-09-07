@@ -1,0 +1,1 @@
+We should use Vue for the frontend because the team already has Vue experience, and FastAPI for the backend since we need async support.
