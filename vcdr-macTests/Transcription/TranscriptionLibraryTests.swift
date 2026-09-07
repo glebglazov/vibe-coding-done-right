@@ -78,7 +78,7 @@ struct TranscriptionLibraryTests {
         // showing — dropping the latter would repoint the Default silently.
         #expect(env.library.selectableModels(holding: .parakeetV3) == [.parakeetV3, .whisperLargeV3Turbo])
 
-        // A Mode's select, naming nothing of its own, offers only what is here.
+        // A Mode's select, pinning nothing of its own, offers only what is here.
         #expect(env.library.selectableModels(holding: nil) == [.whisperLargeV3Turbo])
     }
 

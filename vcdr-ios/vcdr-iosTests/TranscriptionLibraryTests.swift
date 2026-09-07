@@ -84,12 +84,12 @@ struct TranscriptionLibraryTests {
         // showing — dropping the latter would repoint the Default silently.
         #expect(env.library.selectableModels(holding: .parakeetV3) == [.parakeetV3, .whisperTiny])
 
-        // A Prompt Mode's select, naming nothing of its own, offers only what
+        // A Prompt Mode's select, pinning nothing of its own, offers only what
         // is here.
         #expect(env.library.selectableModels(holding: nil) == [.whisperTiny])
     }
 
-    @Test("Choosing a Default and naming a model on a Prompt Mode both install nothing")
+    @Test("Choosing a Default and pinning a model on a Prompt Mode both install nothing")
     func pickingAModelInstallsNothing() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
@@ -100,7 +100,7 @@ struct TranscriptionLibraryTests {
         let before = env.library.entries.map(\.state)
 
         env.defaults.set(TranscriptionModel.whisperTiny.rawValue, forKey: TranscriptionSettings.defaultModelKey)
-        let override = env.library.override(.none, naming: .whisperTiny)
+        let override = env.library.override(.none, pinnedTo: .whisperTiny)
 
         #expect(override.model == .whisperTiny)
         // Two reads' worth of chances for an install to have started.
@@ -178,7 +178,7 @@ struct TranscriptionLibraryTests {
     }
 
     @Test("Removing a model a Prompt Mode records with is refused, and names that mode")
-    func refusesToRemoveAModelAModeNames() async {
+    func refusesToRemoveAModelAModePins() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
         env.installFiles(for: env.whisper, bytes: 1024)
@@ -190,7 +190,7 @@ struct TranscriptionLibraryTests {
 
         let refusal = await env.library.remove(.whisperTiny)
 
-        #expect(refusal == .namedByModes([AIPromptMode.dictation.displayName]))
+        #expect(refusal == .pinnedBy([AIPromptMode.dictation.displayName]))
         #expect(refusal?.message.contains("Dictation") == true)
         #expect(await env.whisper.isInstalled)
     }

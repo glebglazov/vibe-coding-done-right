@@ -15,11 +15,11 @@ struct ModeTranscriptionSection: View {
 
     var body: some View {
         Section("Transcription") {
-            Picker("Model", selection: namedModel) {
+            Picker("Model", selection: pinnedModel) {
                 Text("Default (\(defaultModel.displayName))")
                     .tag(TranscriptionModel?.none)
                 // The Installed Models, plus whatever this Prompt Mode
-                // already names. Naming a model here moves a pointer and spends
+                // already pins. Pinning a model here moves a pointer and spends
                 // nothing, so there is no download to narrate and no Library row
                 // to narrate it with (`docs/adr/0023`).
                 ForEach(library.selectableModels(holding: override.model), id: \.self) { model in
@@ -41,12 +41,12 @@ struct ModeTranscriptionSection: View {
         TranscriptionModel(rawValue: storedDefault) ?? .parakeetV3
     }
 
-    // MARK: - Naming a model
+    // MARK: - Pinning a model
 
-    private var namedModel: Binding<TranscriptionModel?> {
+    private var pinnedModel: Binding<TranscriptionModel?> {
         Binding(
             get: { override.model },
-            set: { override = library.override(override, naming: $0) }
+            set: { override = library.override(override, pinnedTo: $0) }
         )
     }
 

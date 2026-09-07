@@ -141,9 +141,9 @@ enum DownloadProgress: Equatable {
     }
 }
 
-/// Why the Library will not remove a Transcription Model: something names it.
-/// The Default names it, or a Mode's Transcription Override does. Either way the
-/// refusal carries the reason rather than repointing what named it at another
+/// Why the Library will not remove a Transcription Model: something holds it.
+/// The Default names it, or a Mode's Transcription Override pins it. Either way
+/// the refusal carries the reason rather than repointing what held it at another
 /// model on the user's behalf, which would change what those runs transcribe
 /// with and therefore what they produce (`docs/adr/0018`).
 ///
@@ -153,17 +153,17 @@ enum DownloadProgress: Equatable {
 /// leaves them with nowhere to go.
 enum ModelRemovalRefusal: Equatable {
     case isDefaultModel
-    /// The Modes whose Transcription Override names this model, by name — a
+    /// The Modes whose Transcription Override pins this model, by name — a
     /// refusal that does not say which Modes leaves the user hunting for them.
-    case namedByModes([String])
+    case pinnedBy([String])
 
     var message: String {
         switch self {
         case .isDefaultModel:
             "The Default Model is always installed. Install another model, make that one the Default, "
                 + "and then this one can go."
-        case .namedByModes(let names):
-            "Named by \(names.formatted(.list(type: .and))). "
+        case .pinnedBy(let names):
+            "Pinned by \(names.formatted(.list(type: .and))). "
                 + "Point every one of them at another model first, and then this one can go."
         }
     }

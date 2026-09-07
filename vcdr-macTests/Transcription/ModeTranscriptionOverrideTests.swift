@@ -76,17 +76,17 @@ struct ModeTranscriptionOverrideTests {
         #expect(settings.effectiveTranscription(for: mode).settings.languageHint == .german)
     }
 
-    @Test("Naming a model on a Mode's screen moves a pointer and installs nothing")
-    func namingAModelInstallsNothing() async {
+    @Test("Pinning a model on a Mode's screen moves a pointer and installs nothing")
+    func pinningAModelInstallsNothing() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
-        // The only model this Mac has is the one the Mode is about to name —
+        // The only model this Mac has is the one the Mode is about to pin —
         // which is the only kind the select offers it.
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.library.refresh()
         let before = env.library.entries.map(\.state)
 
-        let override = env.library.override(.none, naming: .whisperLargeV3Turbo)
+        let override = env.library.override(.none, pinnedTo: .whisperLargeV3Turbo)
 
         #expect(override.model == .whisperLargeV3Turbo)
         // Two reads' worth of chances for an install to have started.
@@ -129,26 +129,26 @@ struct ModeTranscriptionOverrideTests {
         #expect(await env.mockProvider.transcribeCallCount == 0)
     }
 
-    @Test("Removing a model a Mode names is refused, and the refusal names the Modes")
-    func removalNamesTheModes() async {
+    @Test("Removing a model a Mode pins is refused, and the refusal names the Modes")
+    func removalNamesThePinningModes() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.library.refresh()
         env.settings.modes = [
-            namingMode("Email", .whisperLargeV3Turbo),
-            namingMode("Notes", .whisperLargeV3Turbo),
-            namingMode("Shell", nil)
+            pinningMode("Email", .whisperLargeV3Turbo),
+            pinningMode("Notes", .whisperLargeV3Turbo),
+            pinningMode("Shell", nil)
         ]
 
         let refusal = await env.library.remove(.whisperLargeV3Turbo)
 
-        #expect(refusal == .namedByModes(["Email", "Notes"]))
+        #expect(refusal == .pinnedBy(["Email", "Notes"]))
         #expect(refusal?.message.contains("Email and Notes") == true)
         #expect(await env.whisper.isInstalled)
 
-        // Nothing names it once those Modes are pointed elsewhere.
-        env.settings.modes = [namingMode("Shell", nil)]
+        // Nothing pins it once those Modes are pointed elsewhere.
+        env.settings.modes = [pinningMode("Shell", nil)]
         #expect(await env.library.remove(.whisperLargeV3Turbo) == nil)
         #expect(await env.whisper.isInstalled == false)
     }
@@ -195,7 +195,7 @@ struct ModeTranscriptionOverrideTests {
 
     // MARK: - Helpers
 
-    private func namingMode(_ name: String, _ model: TranscriptionModel?) -> Mode {
+    private func pinningMode(_ name: String, _ model: TranscriptionModel?) -> Mode {
         var mode = Mode(id: UUID(), name: name)
         mode.transcriptionOverride.model = model
         return mode

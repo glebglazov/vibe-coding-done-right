@@ -133,19 +133,19 @@ final class TranscriptionLibrary {
     /// and not any Prompt Mode's Transcription Override.
     func removalRefusal(for model: TranscriptionModel) -> ModelRemovalRefusal? {
         if model == TranscriptionSettings.defaultModel { return .isDefaultModel }
-        let namingModes = TranscriptionSettings.promptModesNaming(model).map(\.displayName)
-        return namingModes.isEmpty ? nil : .namedByModes(namingModes)
+        let pinningModes = TranscriptionSettings.promptModesPinning(model).map(\.displayName)
+        return pinningModes.isEmpty ? nil : .pinnedBy(pinningModes)
     }
 
-    /// The Transcription Override a Prompt Mode gets when a model is named on
-    /// its screen. Naming moves a pointer and nothing else: the screen offers
+    /// The Transcription Override a Prompt Mode gets when a model is pinned on
+    /// its screen. Pinning moves a pointer and nothing else: the screen offers
     /// only models this phone already has, so there is nothing left to fetch,
-    /// and no other model's state is touched (`docs/adr/0023`). Naming nothing
+    /// and no other model's state is touched (`docs/adr/0023`). Pinning nothing
     /// returns the mode to the Default.
-    func override(_ override: TranscriptionOverride, naming model: TranscriptionModel?) -> TranscriptionOverride {
-        var named = override
-        named.model = model
-        return named
+    func override(_ override: TranscriptionOverride, pinnedTo model: TranscriptionModel?) -> TranscriptionOverride {
+        var pinned = override
+        pinned.model = model
+        return pinned
     }
 
     /// Deletes `model`'s files, or returns why it will not. Settings are

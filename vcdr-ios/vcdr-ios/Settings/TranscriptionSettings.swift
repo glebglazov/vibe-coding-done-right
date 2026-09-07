@@ -43,10 +43,10 @@ enum TranscriptionSettings {
             ?? TranscriptionOverride.none
     }
 
-    /// Every Prompt Mode that names `model`. The Library asks before it removes
+    /// Every Prompt Mode that pins `model`. The Library asks before it removes
     /// one: a model a mode records with is refused rather than deleted out from
     /// under that mode.
-    static func promptModesNaming(_ model: TranscriptionModel) -> [AIPromptMode] {
+    static func promptModesPinning(_ model: TranscriptionModel) -> [AIPromptMode] {
         AIPromptMode.allCases.filter { override(for: $0).model == model }
     }
 

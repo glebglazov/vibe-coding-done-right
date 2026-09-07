@@ -136,21 +136,21 @@ final class TranscriptionLibrary {
     /// and not any Mode's Transcription Override.
     func removalRefusal(for model: TranscriptionModel) -> ModelRemovalRefusal? {
         if model == settings.transcriptionSettings.defaultModel { return .isDefaultModel }
-        let namingModes = settings.modes
+        let pinningModes = settings.modes
             .filter { $0.transcriptionOverride.model == model }
             .map(\.name)
-        return namingModes.isEmpty ? nil : .namedByModes(namingModes)
+        return pinningModes.isEmpty ? nil : .pinnedBy(pinningModes)
     }
 
-    /// The Transcription Override a Mode gets when a model is named on its
-    /// screen. Naming moves a pointer and nothing else: the screen offers only
+    /// The Transcription Override a Mode gets when a model is pinned on its
+    /// screen. Pinning moves a pointer and nothing else: the screen offers only
     /// models this Mac already has, so there is nothing left to fetch, and no
-    /// other model's state is touched (`docs/adr/0023`). Naming nothing returns
+    /// other model's state is touched (`docs/adr/0023`). Pinning nothing returns
     /// the Mode to the Default.
-    func override(_ override: TranscriptionOverride, naming model: TranscriptionModel?) -> TranscriptionOverride {
-        var named = override
-        named.model = model
-        return named
+    func override(_ override: TranscriptionOverride, pinnedTo model: TranscriptionModel?) -> TranscriptionOverride {
+        var pinned = override
+        pinned.model = model
+        return pinned
     }
 
     /// Deletes `model`'s files, or returns why it will not. Settings are
