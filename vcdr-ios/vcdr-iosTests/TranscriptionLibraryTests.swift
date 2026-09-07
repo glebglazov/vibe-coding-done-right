@@ -120,6 +120,55 @@ struct TranscriptionLibraryTests {
         #expect(await env.whisper.isInstalled)
     }
 
+    @Test("An installability answer survives a relaunch, and one that never arrived leaves nothing behind")
+    func remembersDefiniteAnswersAcrossLaunches() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        let offline = URLError(.notConnectedToInternet)
+        await env.whisper.setInstallability(supported: false)
+        await env.parakeet.setInstallability(error: offline)
+
+        await env.library.refresh()
+        #expect(env.state(of: .whisperTiny) == .unsupported)
+        #expect(env.state(of: .parakeetV3) == .installabilityUnknown)
+
+        // A second launch on a phone that can no longer reach the backend: the
+        // answer it was given is drawn from what it already knows, and the one
+        // that never arrived is still the row honest about not knowing.
+        await env.whisper.setInstallability(error: offline)
+        let relaunched = env.relaunched()
+        await relaunched.refresh()
+
+        #expect(relaunched.entry(for: .whisperTiny).state == .unsupported)
+        #expect(relaunched.entry(for: .parakeetV3).state == .installabilityUnknown)
+        // This phone's own fact: nothing about it travels to another device.
+        #expect(SharedConstants.sharedDefaults.object(forKey: ModelInstallabilityCache.storageKey) == nil)
+    }
+
+    @Test("A remembered answer is asked again at the next launch, and a wrong one is replaced")
+    func asksAbsentModelsAgainAtLaunch() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        await env.whisper.setInstallability(supported: false)
+        await env.library.refresh()
+        #expect(env.state(of: .whisperTiny) == .unsupported)
+
+        // The backend now publishes a build this phone can run. Nobody reopens
+        // the screen: the launch read alone turns the row into an offer.
+        await env.whisper.setInstallability(supported: true)
+        let corrected = env.relaunched()
+        await corrected.refresh()
+        #expect(corrected.entry(for: .whisperTiny).state == .notInstalled)
+        #expect(corrected.entry(for: .whisperTiny).state.installTitle == "Install")
+
+        // And a yes is remembered the way the no was: offline from here on, the
+        // Install button is still on the row.
+        await env.whisper.setInstallability(error: URLError(.notConnectedToInternet))
+        let offlineLaunch = env.relaunched()
+        await offlineLaunch.refresh()
+        #expect(offlineLaunch.entry(for: .whisperTiny).state == .notInstalled)
+    }
+
     @Test("A model whose installability is not known yet still has a row that says so")
     func unknownInstallabilityIsARow() async {
         let env = LibraryEnvironment()
@@ -153,6 +202,13 @@ private struct LibraryEnvironment {
     /// them: the Library reads this device's own settings, which every test in
     /// this process shares.
     private let namingBefore: [String: String?]
+    /// What this phone remembered about installability before the test, kept
+    /// for the same reason.
+    private let rememberedBefore: [String: Any]?
+
+    /// Builds the Library the way the app builds it, so a test can ask for a
+    /// second one over the same phone.
+    private let makeLibrary: @MainActor () -> TranscriptionLibrary
 
     init() {
         let root = root
@@ -166,10 +222,6 @@ private struct LibraryEnvironment {
         )
         parakeet = providers[.parakeetV3]!
         whisper = providers[.whisperTiny]!
-        library = TranscriptionLibrary(
-            models: TranscriptionProviderRegistry.offeredModels,
-            provider: { providers[$0]! }
-        )
         let defaults = defaults
         namingBefore = Dictionary(
             uniqueKeysWithValues: Self.namingKeys.map { ($0, defaults.string(forKey: $0)) }
@@ -177,6 +229,24 @@ private struct LibraryEnvironment {
         for key in Self.namingKeys {
             defaults.removeObject(forKey: key)
         }
+        rememberedBefore = defaults.dictionary(forKey: ModelInstallabilityCache.storageKey)
+        defaults.removeObject(forKey: ModelInstallabilityCache.storageKey)
+        // Built last: the Library reads what this phone remembers as it is
+        // made, so it must be made on a phone that remembers nothing.
+        let make: @MainActor () -> TranscriptionLibrary = {
+            TranscriptionLibrary(
+                models: TranscriptionProviderRegistry.offeredModels,
+                provider: { providers[$0]! }
+            )
+        }
+        makeLibrary = make
+        library = make()
+    }
+
+    /// The same phone on a later launch: a new Library over the same providers,
+    /// holding nothing of what the first one read.
+    func relaunched() -> TranscriptionLibrary {
+        makeLibrary()
     }
 
     private static let namingKeys: [String] = [TranscriptionSettings.defaultModelKey]
@@ -194,6 +264,11 @@ private struct LibraryEnvironment {
 
     func cleanup() {
         try? FileManager.default.removeItem(at: root)
+        if let rememberedBefore {
+            defaults.set(rememberedBefore, forKey: ModelInstallabilityCache.storageKey)
+        } else {
+            defaults.removeObject(forKey: ModelInstallabilityCache.storageKey)
+        }
         for (key, value) in namingBefore {
             if let value {
                 defaults.set(value, forKey: key)

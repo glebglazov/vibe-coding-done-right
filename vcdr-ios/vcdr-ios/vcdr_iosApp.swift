@@ -35,6 +35,9 @@ struct VCDRiOSApp: App {
                     //       The synchronous accessor blocks for tens of seconds
                     //       on first launch after install while iOS resolves
                     //       Apple Intelligence state.
+                    //   0c. Read the Transcription Model Library off disk, so
+                    //       which models are installed — and which of them this
+                    //       phone can install — is known before Settings asks.
                     //   1. Migrate pre-split legacy keys (idempotent).
                     //   2. Drop any leftover session overrides so the run
                     //      starts from the user's configured defaults.
@@ -43,6 +46,7 @@ struct VCDRiOSApp: App {
                     async let historyReady: Void = coordinator.bootstrapHistory()
                     async let substitutionsReady: Void = coordinator.bootstrapSubstitutions()
                     async let afmReady: Bool = AFMAvailabilityCache.shared.refresh()
+                    async let libraryReady: Void = coordinator.transcriptionLibrary.refresh()
                     // Let the shell render before automatic model
                     // specialization begins. History bootstrap still overlaps
                     // model loading after that short grace period.
@@ -65,6 +69,8 @@ struct VCDRiOSApp: App {
                     Logger.app.info("[LaunchProbe] historyReady awaited")
                     await substitutionsReady
                     Logger.app.info("[LaunchProbe] substitutionsReady awaited")
+                    await libraryReady
+                    Logger.app.info("[LaunchProbe] libraryReady awaited")
                     await modelReady
                     Logger.app.info("[LaunchProbe] initializeModel returned")
                     _ = await afmReady

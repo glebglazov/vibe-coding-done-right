@@ -64,6 +64,16 @@ enum TranscriptionModelState: Equatable {
         }
     }
 
+    /// Whether the model's files are not on this device. These are the states
+    /// the Model Installability answer decides between, so an absent model is
+    /// the one the Library has a reason to ask the backend about again.
+    var isAbsent: Bool {
+        switch self {
+        case .installabilityUnknown, .unsupported, .notInstalled: true
+        default: false
+        }
+    }
+
     /// What the install button says, or nil when there is nothing to install. A
     /// retry is the same install run again, worded as what it is.
     var installTitle: String? {

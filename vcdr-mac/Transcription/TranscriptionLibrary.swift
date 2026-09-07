@@ -31,9 +31,10 @@ final class TranscriptionLibrary {
     private let settings: AppSettings
 
     private var states: [TranscriptionModel: TranscriptionModelState] = [:]
-    /// Whether this Mac can install a model, once the backend has been asked.
-    /// Absent until the answer arrives, which is what the unknown state renders.
-    private var installability: [TranscriptionModel: Bool] = [:]
+    /// Whether this Mac can install a model, as far as the backend has
+    /// said — this launch or an earlier one. Absent until an answer arrives,
+    /// which is what the unknown state renders.
+    private var installability: ModelInstallabilityCache
     /// One clock per model, so the Preparation Heartbeat a row shows measures
     /// that model's own wait rather than whichever model asked last.
     @ObservationIgnored private var narrators: [TranscriptionModel: ModelPreparationNarrator] = [:]
@@ -42,11 +43,13 @@ final class TranscriptionLibrary {
     init(
         models: [TranscriptionModel],
         provider: @escaping (TranscriptionModel) -> any TranscriptionProvider,
-        settings: AppSettings
+        settings: AppSettings,
+        installability: ModelInstallabilityCache = ModelInstallabilityCache()
     ) {
         self.models = models
         self.provider = provider
         self.settings = settings
+        self.installability = installability
     }
 
     /// Keeps the Library telling the truth for as long as a screen is showing
@@ -64,17 +67,20 @@ final class TranscriptionLibrary {
     }
 
     /// Reads every model's state, then asks the backends whose model is not
-    /// here whether this Mac could run it. Cheap to run on each visit to the
-    /// screen — and that visit is also how an answer that never arrived, on a
-    /// device that was offline, gets asked for a second time.
+    /// here whether this Mac could run it. Cheap to run at launch and on each
+    /// visit to the screen — and either is how an answer that never arrived, on
+    /// a device that was offline, gets asked for a second time.
     func refresh() async {
         for model in models {
             await refreshState(of: model)
         }
         // Only a model that is absent needs the network answer: one already on
         // disk is installable by the fact of being installed, and a screen
-        // opened with everything installed asks nothing of the network.
-        for model in models where states[model] == .installabilityUnknown {
+        // opened with everything installed asks nothing of the network. An
+        // absent model is asked even when its answer is remembered, because the
+        // backend can publish a build for this Mac between two launches — which
+        // is what leaves a remembered answer needing no expiry.
+        for model in models where states[model]?.isAbsent == true {
             await askInstallability(of: model)
             await refreshState(of: model)
         }
@@ -186,7 +192,7 @@ final class TranscriptionLibrary {
             guard provider.isInstalled else { return uninstalledState(of: model) }
             // Being installed answers whether this Mac can install it, so a
             // removal later never asks the network for what is already known.
-            installability[model] = true
+            installability.remember(true, of: model)
             let bytes = TranscriptionModelFiles(directory: provider.installedDirectory).sizeOnDisk ?? 0
             return phase == .ready ? .ready(bytes: bytes) : .installed(bytes: bytes)
         }
@@ -202,7 +208,7 @@ final class TranscriptionLibrary {
 
     private func askInstallability(of model: TranscriptionModel) async {
         do {
-            installability[model] = try await provider(model).isInstallableOnThisDevice()
+            installability.remember(try await provider(model).isInstallableOnThisDevice(), of: model)
         } catch {
             // Left unknown on purpose: a lost connection means the Library does
             // not know what this Mac can run, which is not the same as knowing

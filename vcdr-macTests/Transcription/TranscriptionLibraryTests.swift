@@ -115,6 +115,53 @@ struct TranscriptionLibraryTests {
         #expect(env.state(of: .whisperLargeV3Turbo) == .unsupported)
     }
 
+    @Test("An installability answer survives a relaunch, and one that never arrived leaves nothing behind")
+    func remembersDefiniteAnswersAcrossLaunches() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        let offline = URLError(.notConnectedToInternet)
+        await env.whisper.setInstallability(supported: false)
+        await env.parakeet.setInstallability(error: offline)
+
+        await env.library.refresh()
+        #expect(env.state(of: .whisperLargeV3Turbo) == .unsupported)
+        #expect(env.state(of: .parakeetV3) == .installabilityUnknown)
+
+        // A second launch on a Mac that can no longer reach the backend: the
+        // answer it was given is drawn from what it already knows, and the one
+        // that never arrived is still the row honest about not knowing.
+        await env.whisper.setInstallability(error: offline)
+        let relaunched = env.relaunched()
+        await relaunched.refresh()
+
+        #expect(relaunched.entry(for: .whisperLargeV3Turbo).state == .unsupported)
+        #expect(relaunched.entry(for: .parakeetV3).state == .installabilityUnknown)
+    }
+
+    @Test("A remembered answer is asked again at the next launch, and a wrong one is replaced")
+    func asksAbsentModelsAgainAtLaunch() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        await env.whisper.setInstallability(supported: false)
+        await env.library.refresh()
+        #expect(env.state(of: .whisperLargeV3Turbo) == .unsupported)
+
+        // The backend now publishes a build this Mac can run. Nobody reopens
+        // the screen: the launch read alone turns the row into an offer.
+        await env.whisper.setInstallability(supported: true)
+        let corrected = env.relaunched()
+        await corrected.refresh()
+        #expect(corrected.entry(for: .whisperLargeV3Turbo).state == .notInstalled)
+        #expect(corrected.entry(for: .whisperLargeV3Turbo).state.installTitle == "Install")
+
+        // And a yes is remembered the way the no was: offline from here on, the
+        // Install button is still on the row.
+        await env.whisper.setInstallability(error: URLError(.notConnectedToInternet))
+        let offlineLaunch = env.relaunched()
+        await offlineLaunch.refresh()
+        #expect(offlineLaunch.entry(for: .whisperLargeV3Turbo).state == .notInstalled)
+    }
+
     @Test("A failed download is reported on its own model and can be retried")
     func failedDownloadRetries() async {
         let env = LibraryEnvironment()

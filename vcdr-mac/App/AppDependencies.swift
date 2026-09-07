@@ -207,6 +207,14 @@ final class AppDependencies {
         await bootstrapSubstitutions()
         await audioDeviceMonitor.start()
 
+        // Reading the Library is disk work — sizing every install — and nothing
+        // waits on it, so it runs beside the Default's preparation rather than
+        // in front of it. Which models are installed, and which of them this Mac
+        // can install, is then known before the Transcription tab is opened.
+        Task { [transcriptionLibrary] in
+            await transcriptionLibrary.refresh()
+        }
+
         await prepareTranscriptionModel(transcriptionProvider)
     }
 

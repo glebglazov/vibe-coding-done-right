@@ -7,6 +7,9 @@ import Foundation
 @MainActor
 struct LibraryEnvironment {
     let root = FileManager.default.temporaryDirectory.appending(path: "vcdr-library-\(UUID().uuidString)")
+    /// This Mac's own defaults, one suite per test: both what the app has been
+    /// configured with and what the Library remembers about installability.
+    let defaults = UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
     let settings: AppSettings
     let parakeet: MockTranscriptionProvider
     let whisper: MockTranscriptionProvider
@@ -16,11 +19,14 @@ struct LibraryEnvironment {
     /// provider it hands out — so a test sees the sequencing the app has.
     let preparationQueue = ModelPreparationQueue()
 
+    /// Builds the Library the way the app builds it, so a test can ask for a
+    /// second one over the same Mac.
+    private let makeLibrary: @MainActor () -> TranscriptionLibrary
+
     init() {
-        settings = AppSettings(
-            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!,
-            secretStore: InMemorySecretStore()
-        )
+        let defaults = defaults
+        let settings = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
+        self.settings = settings
         parakeet = MockTranscriptionProvider(
             model: .parakeetV3,
             isReady: false,
@@ -38,11 +44,22 @@ struct LibraryEnvironment {
             preparationQueue: preparationQueue
         )
         let providers = [parakeet, whisper]
-        library = TranscriptionLibrary(
-            models: [.parakeetV3, .whisperLargeV3Turbo],
-            provider: { model in providers.first { $0.model == model }! },
-            settings: settings
-        )
+        let make: @MainActor () -> TranscriptionLibrary = {
+            TranscriptionLibrary(
+                models: [.parakeetV3, .whisperLargeV3Turbo],
+                provider: { model in providers.first { $0.model == model }! },
+                settings: settings,
+                installability: ModelInstallabilityCache(defaults: defaults)
+            )
+        }
+        makeLibrary = make
+        library = make()
+    }
+
+    /// The same Mac on a later launch: a new Library over the same providers and
+    /// the same defaults, holding nothing of what the first one read.
+    func relaunched() -> TranscriptionLibrary {
+        makeLibrary()
     }
 
     func installFiles(for provider: MockTranscriptionProvider, bytes: Int) {
