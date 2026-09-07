@@ -26,7 +26,7 @@ struct CaptureSessionTestEnvironment {
     /// the next recording reaches.
     let alternateProvider: MockTranscriptionProvider
     /// The models the session asked to have prepared. A Mode's Transcription
-    /// Override may name one nothing has loaded, and the run has to start that
+    /// Override may pin one nothing has loaded, and the run has to start that
     /// preparation rather than wait for one nobody began.
     let preparedModels: PreparedModels
     let audioRecorder: AudioRecorder
