@@ -59,4 +59,53 @@ struct TranscriptionSettingsTests {
         #expect(TranscriptionSettings.defaultModel == .whisperLargeV3Turbo)
         #expect(SharedConstants.sharedDefaults.object(forKey: key) == nil)
     }
+
+    /// The whole resolution a recording runs through: the mode's own model, the
+    /// one setting it adjusted, everything it left alone still following the
+    /// family — and the adjusted one handed back.
+    @Test("a mode records with the model it names, adjusts one setting and inherits the rest")
+    func aModeRecordsWithItsOwnModel() {
+        let standard = UserDefaults.standard
+        let keys = [
+            TranscriptionSettings.defaultModelKey,
+            TranscriptionSettings.modelSettingsKey,
+            TranscriptionSettings.modeOverrideKey(for: .dictation),
+            TranscriptionSettings.modeOverrideKey(for: .assistant)
+        ]
+        let originals = keys.map { ($0, standard.string(forKey: $0)) }
+        defer {
+            for (key, value) in originals {
+                if let value {
+                    standard.set(value, forKey: key)
+                } else {
+                    standard.removeObject(forKey: key)
+                }
+            }
+        }
+        for key in keys { standard.removeObject(forKey: key) }
+
+        var store = TranscriptionModelSettingsStore()
+        store[.whisper] = TranscriptionModelSettings(languageHint: .russian, freeTextPrompt: "VCDR")
+        standard.set(store.rawValue, forKey: TranscriptionSettings.modelSettingsKey)
+
+        var override = TranscriptionOverride.none
+        override.model = .whisperSmall
+        override[.whisper].languageHint = .english
+        standard.set(override.rawValue, forKey: TranscriptionSettings.modeOverrideKey(for: .dictation))
+
+        let dictation = TranscriptionSettings.effectiveTranscription(for: .dictation)
+        #expect(dictation.model == .whisperSmall)
+        #expect(dictation.settings.languageHint == .english)
+        #expect(dictation.settings.freeTextPrompt == "VCDR")
+
+        // A mode that names nothing takes the Default and the Default family's
+        // own settings, untouched by the mode next to it.
+        let assistant = TranscriptionSettings.effectiveTranscription(for: .assistant)
+        #expect(assistant.model == .parakeetV3)
+        #expect(assistant.settings == .default)
+
+        override[.whisper].clear(.languageHint)
+        standard.set(override.rawValue, forKey: TranscriptionSettings.modeOverrideKey(for: .dictation))
+        #expect(TranscriptionSettings.effectiveTranscription(for: .dictation).settings.languageHint == .russian)
+    }
 }

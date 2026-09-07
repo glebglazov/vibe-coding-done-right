@@ -292,7 +292,7 @@ struct SettingsView: View {
             }
 
             NavigationLink("Modes") {
-                ModesView()
+                ModesView(coordinator: coordinator)
             }
 
             NavigationLink("Providers") {

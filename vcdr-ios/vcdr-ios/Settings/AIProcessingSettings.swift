@@ -42,6 +42,36 @@ enum AIPromptMode: String, CaseIterable, Codable {
 
 }
 
+/// What a Prompt Mode can be told about AI processing — or, for a mode that
+/// processes nothing, why not. The two travel as one answer for the same
+/// reason `TranscriptionModelCapabilities` does: a screen built from the
+/// declaration can never render no controls and no explanation.
+enum AIProcessingCapabilities: Equatable {
+    /// This mode sends the transcript to an AI Provider, so it chooses one and
+    /// says whether Apple stands behind it.
+    case providerAndFallback
+    /// This mode sends the transcript nowhere, and this is what its screen says
+    /// instead.
+    case nothing(because: String)
+}
+
+extension AIPromptMode {
+    /// What this mode's screen offers for AI processing. Verbatim declares it
+    /// processes nothing rather than showing a Provider it would never call.
+    var aiProcessing: AIProcessingCapabilities {
+        switch self {
+        case .verbatim:
+            .nothing(because: """
+                Verbatim writes down what you said and sends it nowhere, so \
+                there is no AI Provider to choose. What it records with is \
+                below.
+                """)
+        case .dictation, .assistant:
+            .providerAndFallback
+        }
+    }
+}
+
 /// iOS AI provider selection. Cloud backends come from the shared seam; Apple
 /// remains an iOS-only backend registered when AFM is available.
 enum AIProvider: RawRepresentable, Codable, Hashable, Sendable {
@@ -167,15 +197,26 @@ enum AIProcessingSettings {
         provider(for: defaultMode)
     }
 
-    static func provider(for mode: AIPromptMode) -> AIProvider {
-        // Verbatim doesn't call AI, but capability checks read this; map it to
-        // the dictation provider since that's the natural first AI mode.
-        let key: String
+    /// Where `mode`'s AI Provider lives. Verbatim doesn't call AI, but
+    /// capability checks read this; map it to the dictation provider since
+    /// that's the natural first AI mode.
+    static func providerKey(for mode: AIPromptMode) -> String {
         switch mode {
-        case .verbatim, .dictation: key = dictationProviderKey
-        case .assistant: key = assistantProviderKey
+        case .verbatim, .dictation: dictationProviderKey
+        case .assistant: assistantProviderKey
         }
-        let raw = UserDefaults.standard.string(forKey: key) ?? ""
+    }
+
+    /// Where `mode`'s Apple fallback preference lives.
+    static func afmFallbackKey(for mode: AIPromptMode) -> String {
+        switch mode {
+        case .verbatim, .dictation: dictationAfmFallbackKey
+        case .assistant: assistantAfmFallbackKey
+        }
+    }
+
+    static func provider(for mode: AIPromptMode) -> AIProvider {
+        let raw = UserDefaults.standard.string(forKey: providerKey(for: mode)) ?? ""
         // Fall back to legacy global provider key for migration
         return AIProvider(rawValue: raw)
             ?? AIProvider(rawValue: UserDefaults.standard.string(forKey: providerKey) ?? "")
@@ -187,12 +228,7 @@ enum AIProcessingSettings {
     }
 
     static func afmFallbackEnabled(for mode: AIPromptMode) -> Bool {
-        let key: String
-        switch mode {
-        case .verbatim, .dictation: key = dictationAfmFallbackKey
-        case .assistant: key = assistantAfmFallbackKey
-        }
-        return UserDefaults.standard.bool(forKey: key)
+        UserDefaults.standard.bool(forKey: afmFallbackKey(for: mode))
     }
 
     /// Whether Apple Foundation Models are available on this device

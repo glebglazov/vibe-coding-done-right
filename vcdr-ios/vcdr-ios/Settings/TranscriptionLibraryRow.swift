@@ -16,7 +16,10 @@ struct TranscriptionLibraryRow: View {
     /// is read where the refusal is met.
     let removalRefusal: ModelRemovalRefusal?
     let install: () -> Void
-    let remove: () -> Void
+    /// How to remove this install, or nil on a screen that has nowhere to
+    /// remove a model from — a mode's screen shows the model it names, and the
+    /// Library is the one place a model goes away.
+    let remove: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Self.rowSpacing) {
@@ -44,7 +47,7 @@ struct TranscriptionLibraryRow: View {
             // tap anywhere in the row would install a model nobody asked for.
             Button(title, action: install)
                 .buttonStyle(.borderless)
-        } else if entry.state.offersRemoval {
+        } else if entry.state.offersRemoval, let remove {
             Button("Remove", action: remove)
                 .buttonStyle(.borderless)
                 .disabled(removalRefusal != nil)

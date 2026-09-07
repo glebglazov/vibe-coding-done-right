@@ -805,11 +805,15 @@ final class RecordingFlowCoordinator {
     }
 
     private func makeRecordingRun(deliversToKeyboard: Bool) -> RecordingRun {
-        let provider = defaultProvider
+        // The Prompt Mode as it stands now, because the model that transcribes
+        // has to be chosen before a word is spoken — a mode flipped mid-recording
+        // reaches the processing that follows, not the model already decoding.
+        resyncSettingsFromSharedDefaults()
+        let transcription = TranscriptionSettings.effectiveTranscription(for: selectedPromptMode)
         return RecordingRun(
             audioRecorder: recordingEngine,
-            streaming: makeStreamingSession?() ?? provider.makeLiveSession(
-                settings: TranscriptionSettings.settings(for: provider.model.family)
+            streaming: makeStreamingSession?() ?? providers.provider(for: transcription.model).makeLiveSession(
+                settings: transcription.settings
             ),
             transcriptProcessor: makeTranscriptProcessor(),
             completionAdapters: [

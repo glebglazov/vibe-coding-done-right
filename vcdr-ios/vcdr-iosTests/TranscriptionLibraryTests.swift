@@ -108,8 +108,10 @@ struct TranscriptionLibraryTests {
         defer { env.cleanup() }
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.library.refresh()
-        env.defaults.set(TranscriptionModel.whisperTiny.rawValue,
-                         forKey: TranscriptionSettings.modeModelKey(for: .dictation))
+        var override = TranscriptionOverride.none
+        override.model = .whisperTiny
+        env.defaults.set(override.rawValue,
+                         forKey: TranscriptionSettings.modeOverrideKey(for: .dictation))
 
         let refusal = await env.library.remove(.whisperTiny)
 
@@ -178,7 +180,7 @@ private struct LibraryEnvironment {
     }
 
     private static let namingKeys: [String] = [TranscriptionSettings.defaultModelKey]
-        + AIPromptMode.allCases.map(TranscriptionSettings.modeModelKey(for:))
+        + AIPromptMode.allCases.map(TranscriptionSettings.modeOverrideKey(for:))
 
     func installFiles(for provider: FakeInstallableProvider, bytes: Int) {
         let directory = provider.installedDirectory

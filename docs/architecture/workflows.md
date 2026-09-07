@@ -53,8 +53,8 @@
    Transcription screen and a Mode's own section render from that one view
 3. Add the field to `TranscriptionSettingsPatch` and to each of its per-field
    members — `applied(to:)`, `isSet`, `clear`, `record` — in
-   `Transcription/TranscriptionOverride.swift`, so a Mode can set it for itself
-   and give it back
+   `Shared/Transcription/TranscriptionOverride.swift`, so a Mode can set it for
+   itself and give it back
 
 ### Modifying the Global Hotkey
 1. Update `AppSettings` if new settings are needed

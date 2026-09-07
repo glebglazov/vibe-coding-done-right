@@ -103,6 +103,17 @@ final class TranscriptionLibrary {
         return namingModes.isEmpty ? nil : .namedByModes(namingModes)
     }
 
+    /// The Transcription Override a Prompt Mode gets when a model is named on
+    /// its screen. The model is installed there and then, so first use is warm
+    /// rather than a download that runs while the person is speaking; naming
+    /// nothing returns the mode to the Default and installs nothing.
+    func override(_ override: TranscriptionOverride, naming model: TranscriptionModel?) -> TranscriptionOverride {
+        if let model { install(model) }
+        var named = override
+        named.model = model
+        return named
+    }
+
     /// Deletes `model`'s files, or returns why it will not. Settings are
     /// untouched: a removed model keeps everything it was configured with, so
     /// installing it again finds its own answers waiting.

@@ -27,25 +27,46 @@ enum TranscriptionSettings {
             ?? .parakeetV3
     }
 
-    /// Where the Transcription Model a Prompt Mode names for itself lives —
-    /// one key per mode, because iOS has three fixed modes rather than modes a
-    /// person makes. Read through `@AppStorage` by the mode's own screen.
-    static func modeModelKey(for mode: AIPromptMode) -> String {
-        "transcription_mode_model_\(mode.rawValue)"
+    /// Where a Prompt Mode's Transcription Override lives — one key per mode,
+    /// because iOS has three fixed modes rather than modes a person makes.
+    /// Read and written through `@AppStorage` by that mode's own screen.
+    static func modeOverrideKey(for mode: AIPromptMode) -> String {
+        "transcription_mode_override_\(mode.rawValue)"
     }
 
-    /// The Transcription Model `mode` records with instead of the Default, or
-    /// nil when the mode names nothing and follows the Default.
-    static func modelNamed(by mode: AIPromptMode) -> TranscriptionModel? {
-        UserDefaults.standard.string(forKey: modeModelKey(for: mode))
-            .flatMap(TranscriptionModel.init(rawValue:))
+    /// What `mode` has said about transcription for itself: the model it
+    /// records with instead of the Default, and what it tells each family. A
+    /// mode that has never been opened has said nothing.
+    static func override(for mode: AIPromptMode) -> TranscriptionOverride {
+        UserDefaults.standard.string(forKey: modeOverrideKey(for: mode))
+            .flatMap(TranscriptionOverride.init(rawValue:))
+            ?? TranscriptionOverride.none
     }
 
     /// Every Prompt Mode that names `model`. The Library asks before it removes
     /// one: a model a mode records with is refused rather than deleted out from
     /// under that mode.
     static func promptModesNaming(_ model: TranscriptionModel) -> [AIPromptMode] {
-        AIPromptMode.allCases.filter { modelNamed(by: $0) == model }
+        AIPromptMode.allCases.filter { override(for: $0).model == model }
+    }
+
+    /// What `mode` transcribes with: its Transcription Override's model under
+    /// the mode's own patch, or the Default Transcription Model and the
+    /// Default's family's own settings when the mode names nothing.
+    ///
+    /// The whole resolution — mode's patch, else the family's own settings,
+    /// else the family's defaults — is this one function, because a bug in it
+    /// shows up as the wrong model being told the wrong thing, with nothing on
+    /// screen to say so.
+    static func effectiveTranscription(for mode: AIPromptMode) -> EffectiveTranscription {
+        let override = override(for: mode)
+        guard let model = override.model else {
+            return EffectiveTranscription(model: defaultModel, settings: settings(for: defaultModel.family))
+        }
+        return EffectiveTranscription(
+            model: model,
+            settings: override[model.family].applied(to: settings(for: model.family))
+        )
     }
 
     /// What `family` has been told on this device. Read at the point a
@@ -68,6 +89,25 @@ extension TranscriptionModelSettingsStore: RawRepresentable {
               let store = try? JSONDecoder().decode(Self.self, from: data)
         else { return nil }
         self = store
+    }
+
+    var rawValue: String {
+        guard let data = try? JSONEncoder().encode(self),
+              let json = String(data: data, encoding: .utf8)
+        else { return "" }
+        return json
+    }
+}
+
+/// Lets `@AppStorage` hold a Prompt Mode's whole Override, so its screen writes
+/// the model it names and its patches the way every other iOS setting is
+/// written. Follows `TranscriptionModelSettingsStore` above.
+extension TranscriptionOverride: RawRepresentable {
+    init?(rawValue: String) {
+        guard let data = rawValue.data(using: .utf8),
+              let override = try? JSONDecoder().decode(Self.self, from: data)
+        else { return nil }
+        self = override
     }
 
     var rawValue: String {

@@ -1,64 +1,25 @@
 import SwiftUI
 
+/// The three ways this phone handles a recording. Each opens its own screen,
+/// because a mode now says both what it does with the transcript and what
+/// records it — Verbatim included, which does nothing with the transcript and
+/// still has to record with something.
 struct ModesView: View {
-    @AppStorage(AIProcessingSettings.dictationProviderKey) private var dictationProviderRaw = AIProvider.anthropic.rawValue
-    @AppStorage(AIProcessingSettings.assistantProviderKey) private var assistantProviderRaw = AIProvider.anthropic.rawValue
-    @AppStorage(AIProcessingSettings.dictationAfmFallbackKey) private var dictationAfmFallback = false
-    @AppStorage(AIProcessingSettings.assistantAfmFallbackKey) private var assistantAfmFallback = false
+    let coordinator: RecordingFlowCoordinator
 
     var body: some View {
         Form {
-            modeSection(
-                mode: .dictation,
-                providerRaw: $dictationProviderRaw,
-                afmFallback: $dictationAfmFallback
-            )
-
-            modeSection(
-                mode: .assistant,
-                providerRaw: $assistantProviderRaw,
-                afmFallback: $assistantAfmFallback
-            )
+            Section {
+                ForEach(AIPromptMode.availableModes, id: \.self) { mode in
+                    NavigationLink(mode.displayName) {
+                        ModeSettingsView(mode: mode, coordinator: coordinator)
+                    }
+                }
+            } footer: {
+                Text("Each mode records with the Default Transcription Model unless it names its own.")
+            }
         }
         .navigationTitle("Modes")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: dictationProviderRaw) { _, _ in syncAIConfigured() }
-        .onChange(of: assistantProviderRaw) { _, _ in syncAIConfigured() }
-    }
-
-    private func modeSection(
-        mode: AIPromptMode,
-        providerRaw: Binding<String>,
-        afmFallback: Binding<Bool>
-    ) -> some View {
-        let configured = AIProvider.configuredProviders
-
-        return Section {
-            Picker("Provider", selection: Binding(
-                get: { AIProvider(rawValue: providerRaw.wrappedValue) ?? .anthropic },
-                set: { providerRaw.wrappedValue = $0.rawValue }
-            )) {
-                ForEach(configured, id: \.self) { provider in
-                    Text(provider.displayName).tag(provider)
-                }
-            }
-            .disabled(configured.isEmpty)
-
-            if AIProcessingSettings.isAFMAvailable {
-                let selectedProvider = AIProvider(rawValue: providerRaw.wrappedValue) ?? .anthropic
-                Toggle("Use Apple as Fallback", isOn: afmFallback)
-                    .disabled(selectedProvider == .apple)
-            }
-        } header: {
-            Text(mode.displayName)
-        } footer: {
-            if configured.isEmpty {
-                Text("Configure a provider first in \"Providers\".")
-            }
-        }
-    }
-
-    private func syncAIConfigured() {
-        DefaultSettings.setAIConfigured(AIProcessingSettings.hasAICapability)
     }
 }

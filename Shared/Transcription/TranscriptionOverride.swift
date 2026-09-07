@@ -71,6 +71,13 @@ struct TranscriptionOverride: Codable, Equatable, Sendable {
     /// What a Mode that has never touched transcription carries.
     static let none = TranscriptionOverride()
 
+    /// Written out, because this type reads and writes both sides of its own
+    /// Codable and Swift then synthesizes nothing.
+    private enum CodingKeys: String, CodingKey {
+        case model
+        case patches
+    }
+
     subscript(family: TranscriptionModelFamily) -> TranscriptionSettingsPatch {
         get { patches[family.rawValue] ?? TranscriptionSettingsPatch() }
         set { patches[family.rawValue] = newValue }
@@ -85,6 +92,18 @@ struct TranscriptionOverride: Codable, Equatable, Sendable {
             in: try container.decodeIfPresent([String: TranscriptionSettingsPatch].self, forKey: .patches) ?? [:]
         )
     }
+
+    /// Written out rather than synthesized, for the same reason
+    /// `TranscriptionModelSettingsStore` writes its own: iOS also makes this
+    /// type `RawRepresentable` so `@AppStorage` can hold a Prompt Mode's
+    /// Override, and Swift would otherwise satisfy `Encodable` with
+    /// `RawRepresentable`'s default — which encodes `rawValue`, which encodes
+    /// this, forever.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(model, forKey: .model)
+        try container.encode(patches, forKey: .patches)
+    }
 }
 
 /// What one recording run transcribes with: which Transcription Model, and what
@@ -94,25 +113,4 @@ struct TranscriptionOverride: Codable, Equatable, Sendable {
 struct EffectiveTranscription: Equatable, Sendable {
     let model: TranscriptionModel
     let settings: TranscriptionModelSettings
-}
-
-extension TranscriptionSettings {
-
-    /// What `mode` transcribes with: its Transcription Override's model under
-    /// the Mode's own patch, or the Default Transcription Model and the
-    /// Default's family's own settings when the Mode names nothing.
-    ///
-    /// The whole resolution — Mode's patch, else the family's own settings, else
-    /// the family's defaults — is this one function, because a bug in it shows up
-    /// as the wrong model being told the wrong thing, with nothing on screen to
-    /// say so.
-    func effectiveTranscription(for mode: Mode) -> EffectiveTranscription {
-        guard let model = mode.transcriptionOverride.model else {
-            return EffectiveTranscription(model: defaultModel, settings: modelSettings[defaultModel.family])
-        }
-        return EffectiveTranscription(
-            model: model,
-            settings: mode.transcriptionOverride[model.family].applied(to: modelSettings[model.family])
-        )
-    }
 }

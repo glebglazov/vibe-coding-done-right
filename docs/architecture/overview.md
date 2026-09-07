@@ -63,10 +63,13 @@ vcdr/
 │   ├── TranscriptionProviderRegistry.swift # The models macOS offers, one resident provider each
 │   ├── TranscriptionLibrary.swift        # What is installed, what it costs, install and remove
 │   ├── TranscriptionModelFiles.swift     # An install's size on disk, and its deletion
-│   ├── TranscriptionOverride.swift       # A Mode's own model and sparse settings patch, and the one place they are resolved
-│   │   # What a family accepts, what it has been told, and what a model is
-│   │   # doing live in Shared/Transcription/: TranscriptionModelFamily,
-│   │   # TranscriptionModelCapability, LanguageHint, TranscriptionModelSettings
+│   ├── EffectiveTranscription+Mode.swift # Resolves what a Mode records with, the one place that happens on macOS
+│   │   # What a family accepts, what it has been told, what a Mode has
+│   │   # overridden and what a model is doing live in Shared/Transcription/:
+│   │   # TranscriptionModelFamily, TranscriptionModelCapability, LanguageHint,
+│   │   # TranscriptionOverride (a mode's own model and sparse settings patch,
+│   │   # shared because iOS Prompt Modes override the same way),
+│   │   # TranscriptionSettingOrigin, TranscriptionModelSettings
 │   │   # (keyed by family, so every Whisper shares one set — docs/adr/0020),
 │   │   # TranscriptionModelState (a model's own state as a Library row shows
 │   │   # it, and why a removal is refused) and ModelReadiness with the

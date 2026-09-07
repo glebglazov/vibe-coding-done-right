@@ -13,6 +13,10 @@ struct TranscriptionModelSettingsView: View {
 
     let family: TranscriptionModelFamily
     @Binding var settings: TranscriptionModelSettings
+    /// Where each value came from. The Transcription section edits the family's
+    /// own settings and says nothing; a mode's screen edits a patch over them
+    /// and accounts for every control.
+    var origin: (TranscriptionModelCapability) -> TranscriptionSettingOrigin = { _ in .theFamilysOwn }
 
     var body: some View {
         switch family.capabilities {
@@ -23,6 +27,7 @@ struct TranscriptionModelSettingsView: View {
         case .kinds(let capabilities):
             ForEach(capabilities, id: \.self) { capability in
                 control(for: capability)
+                originRow(for: capability)
             }
         }
     }
@@ -32,6 +37,23 @@ struct TranscriptionModelSettingsView: View {
         switch capability {
         case .languageHint: languageHint
         case .freeTextPrompt: freeTextPrompt
+        }
+    }
+
+    @ViewBuilder
+    private func originRow(for capability: TranscriptionModelCapability) -> some View {
+        let origin = origin(capability)
+        if let label = origin.label {
+            LabeledContent {
+                if case .setByThisMode(let useInherited) = origin {
+                    Button("Use Inherited", action: useInherited)
+                        .buttonStyle(.borderless)
+                }
+            } label: {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
