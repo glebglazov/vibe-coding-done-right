@@ -20,8 +20,9 @@ final class TranscriptionLibrary {
         models.map(entry(for:))
     }
 
-    /// One model's row, for a screen that shows a single model rather than the
-    /// whole Library — a Mode's own screen shows the model it names.
+    /// One model's row. Every row goes through here, the whole Library's
+    /// included: no macOS screen asks for a single model now that a Mode's own
+    /// screen shows no Library row (`docs/adr/0023`).
     func entry(for model: TranscriptionModel) -> Entry {
         Entry(model: model, state: states[model] ?? .installabilityUnknown)
     }

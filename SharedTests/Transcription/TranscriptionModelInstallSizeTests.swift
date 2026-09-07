@@ -10,9 +10,9 @@ import Testing
 /// Shared, because the wording is one vocabulary and both products render it
 /// from the same state.
 struct TranscriptionModelInstallSizeTests {
-    @Test("every model declares what it will cost on disk")
+    @Test("every model this platform offers declares what it will cost on disk")
     func everyModelDeclaresASize() {
-        for model in TranscriptionModel.allCases {
+        for model in TranscriptionProviderRegistry.offeredModels {
             #expect(model.approximateSizeOnDisk > 0, "\(model.rawValue) declares no install size")
         }
     }
@@ -47,7 +47,7 @@ struct TranscriptionModelInstallSizeTests {
 
     @Test("a model select spends nothing, so the wording it renders carries no size")
     func selectWordingCarriesNoSize() {
-        for model in TranscriptionModel.allCases {
+        for model in TranscriptionProviderRegistry.offeredModels {
             let name = model.displayName
             #expect(!name.contains("≈"))
             #expect(!name.localizedCaseInsensitiveContains("GB"))

@@ -8,7 +8,7 @@ import Foundation
 ///
 /// The raw value is that key, and is written down rather than derived from the
 /// case name, because it outlives any rename of the case.
-enum TranscriptionModel: String, CaseIterable, Codable, Sendable {
+enum TranscriptionModel: String, Codable, Sendable {
     case parakeetV3 = "parakeet-v3"
     case whisperTiny = "whisper-tiny"
     case whisperBase = "whisper-base"

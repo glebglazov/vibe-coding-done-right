@@ -20,10 +20,11 @@ struct TranscriptionLibraryTests {
         #expect(env.state(of: .whisperTiny) == .notInstalled)
     }
 
-    /// The path a person takes when they choose a model they do not have yet:
-    /// the choice starts the download, the row narrates it while it runs, and
-    /// the model ends up installed and loaded without the screen being reopened.
-    @Test("A model chosen before it is downloaded downloads, narrates itself and reaches ready")
+    /// The path a person takes when they install a model from the Library: the
+    /// Install button starts the download, the row narrates it while it runs,
+    /// and the model ends up installed and loaded without the screen being
+    /// reopened.
+    @Test("A model installed from the Library downloads, narrates itself and reaches ready")
     func installNarratesAndReachesReady() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
