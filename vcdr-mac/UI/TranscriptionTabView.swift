@@ -5,8 +5,9 @@ struct TranscriptionTabView: View {
     let library: TranscriptionLibrary
     let readiness: ModelReadiness
     let retryPreparation: () -> Void
-    /// Makes a model the Default Transcription Model. One that is not
-    /// downloaded yet may be chosen — Status then narrates its preparation.
+    /// Makes a model the Default Transcription Model. Only an installed model
+    /// can be chosen, so this costs a load and never a download; Status
+    /// narrates that load.
     let selectDefaultModel: (TranscriptionModel) -> Void
 
     var body: some View {
@@ -16,7 +17,10 @@ struct TranscriptionTabView: View {
                     get: { settings.transcriptionSettings.defaultModel },
                     set: { selectDefaultModel($0) }
                 )) {
-                    ForEach(TranscriptionProviderRegistry.offeredModels, id: \.self) { model in
+                    // The Installed Models, plus the one this setting already
+                    // holds. Installing is the Library section below, where the
+                    // cost and the progress are (`docs/adr/0023`).
+                    ForEach(library.selectableModels(holding: runningModel), id: \.self) { model in
                         Text(model.displayName).tag(model)
                     }
                 }
@@ -81,10 +85,16 @@ struct TranscriptionTabView: View {
         }
     }
 
+    /// The Default Transcription Model — what the select holds and what the
+    /// rest of this screen is about.
+    private var runningModel: TranscriptionModel {
+        settings.transcriptionSettings.defaultModel
+    }
+
     /// The family the Default Transcription Model belongs to — the one whose
     /// settings this screen shows.
     private var runningFamily: TranscriptionModelFamily {
-        settings.transcriptionSettings.defaultModel.family
+        runningModel.family
     }
 }
 

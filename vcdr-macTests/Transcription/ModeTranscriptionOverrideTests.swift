@@ -76,24 +76,25 @@ struct ModeTranscriptionOverrideTests {
         #expect(settings.effectiveTranscription(for: mode).settings.languageHint == .german)
     }
 
-    @Test("Naming a model a Mode does not have downloads it there and then, with progress")
-    func namingAModelInstallsIt() async {
+    @Test("Naming a model on a Mode's screen moves a pointer and installs nothing")
+    func namingAModelInstallsNothing() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
-        // The Mode's screen is open, which is what keeps the row it shows fresh.
-        let watching = Task { await env.library.watch() }
-        defer { watching.cancel() }
-        #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .notInstalled })
+        // The only model this Mac has is the one the Mode is about to name —
+        // which is the only kind the select offers it.
+        env.installFiles(for: env.whisper, bytes: 1024)
+        await env.library.refresh()
+        let before = env.library.entries.map(\.state)
 
         let override = env.library.override(.none, naming: .whisperLargeV3Turbo)
 
         #expect(override.model == .whisperLargeV3Turbo)
-        await env.whisper.beginDownload(progress: 0.25)
-        #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .downloading(.fraction(0.25)) })
-
-        // The Library never cancels a download, so the held-open preparation is
-        // finished here rather than outliving the test.
-        await env.whisper.becomeReady()
+        // Two reads' worth of chances for an install to have started.
+        await env.library.refresh()
+        await env.library.refresh()
+        #expect(env.library.entries.map(\.state) == before)
+        #expect(await env.whisper.hasTakenItsTurn == false)
+        #expect(await env.parakeet.hasTakenItsTurn == false)
     }
 
     @Test("A Mode whose model is absent still records, waits and narrates — and never uses the Default")

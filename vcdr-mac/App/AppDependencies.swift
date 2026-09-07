@@ -213,6 +213,12 @@ final class AppDependencies {
         // can install, is then known before the Transcription tab is opened.
         Task { [transcriptionLibrary] in
             await transcriptionLibrary.refresh()
+            // Only the read above can say whether this Mac has anything
+            // installed, which is what decides whether the shipped Default is
+            // fetched unasked. On a fresh Mac this is the same preparation the
+            // line below awaits — the provider holds one attempt, so the two
+            // join rather than downloading twice.
+            transcriptionLibrary.installDefaultIfLibraryIsEmpty()
         }
 
         await prepareTranscriptionModel(transcriptionProvider)
@@ -227,9 +233,10 @@ final class AppDependencies {
         await prepareTranscriptionModel(transcriptionProvider)
     }
 
-    /// Makes `model` the Default Transcription Model and prepares it. The model
-    /// being left behind keeps everything it loaded, so choosing it again later
-    /// is not a second download or a second compile.
+    /// Makes `model` the Default Transcription Model and prepares it. Only an
+    /// installed model can be chosen (`docs/adr/0023`), so preparing it is the
+    /// load and never a download. The model being left behind keeps everything
+    /// it loaded, so choosing it again later is not a second compile either.
     func selectDefaultModel(_ model: TranscriptionModel) async {
         guard settings.transcriptionSettings.defaultModel != model else { return }
         settings.transcriptionSettings.defaultModel = model

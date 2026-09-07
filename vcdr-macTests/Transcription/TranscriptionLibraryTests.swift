@@ -64,6 +64,53 @@ struct TranscriptionLibraryTests {
         await env.parakeet.becomeReady()
     }
 
+    @Test("A model select offers what is installed, plus the value it already holds")
+    func selectOffersInstalledModelsAndItsOwnValue() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        env.installFiles(for: env.whisper, bytes: 1024)
+        await env.library.refresh()
+        // The Default names Parakeet, and this Mac does not have it.
+        #expect(env.settings.transcriptionSettings.defaultModel == .parakeetV3)
+        #expect(env.state(of: .parakeetV3) == .notInstalled)
+
+        // The Default Model select: what is here, and what it is already
+        // showing — dropping the latter would repoint the Default silently.
+        #expect(env.library.selectableModels(holding: .parakeetV3) == [.parakeetV3, .whisperLargeV3Turbo])
+
+        // A Mode's select, naming nothing of its own, offers only what is here.
+        #expect(env.library.selectableModels(holding: nil) == [.whisperLargeV3Turbo])
+    }
+
+    @Test("A Mac whose Library is empty installs the shipped Default, and one with a model installed does not")
+    func emptyLibraryInstallsTheDefaultOnce() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        let watching = Task { await env.library.watch() }
+        defer { watching.cancel() }
+
+        // A later launch on a Mac whose Default was deleted from under the app:
+        // it still has a model to record with, so nothing is fetched unasked.
+        env.installFiles(for: env.whisper, bytes: 1024)
+        #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .installed(bytes: 1024) })
+
+        env.library.installDefaultIfLibraryIsEmpty()
+
+        await env.library.refresh()
+        await env.library.refresh()
+        #expect(await env.parakeet.hasTakenItsTurn == false)
+
+        // The same Mac with nothing installed at all: the shipped Default is
+        // the one install the app makes on its own behalf.
+        #expect(await env.library.remove(.whisperLargeV3Turbo) == nil)
+        env.library.installDefaultIfLibraryIsEmpty()
+
+        #expect(await waitFor { await env.parakeet.hasTakenItsTurn })
+        env.installFiles(for: env.parakeet, bytes: 2048)
+        await env.parakeet.becomeReady()
+        #expect(await waitFor { env.state(of: .parakeetV3) == .ready(bytes: 2048) })
+    }
+
     @Test("A model that is not the Default can be removed, and its settings survive")
     func removesNonDefaultModel() async {
         let env = LibraryEnvironment()

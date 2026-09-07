@@ -89,14 +89,19 @@ enum TranscriptionModelState: Equatable {
         }
     }
 
-    /// Whether there are files to remove. A download or a load in flight is not
-    /// offered for removal: the run holding those files is still using them.
-    var offersRemoval: Bool {
+    /// Whether the model's files are on this device. This is what decides
+    /// whether a model select may offer it: a select spends nothing, so it
+    /// names only models that are already here (`docs/adr/0023`).
+    var isOnDisk: Bool {
         switch self {
         case .installed, .ready: true
         default: false
         }
     }
+
+    /// Whether there are files to remove. A download or a load in flight is not
+    /// offered for removal: the run holding those files is still using them.
+    var offersRemoval: Bool { isOnDisk }
 
     private static func formatted(_ bytes: Int64) -> String {
         bytes.formatted(.byteCount(style: .file))
@@ -141,6 +146,11 @@ enum DownloadProgress: Equatable {
 /// refusal carries the reason rather than repointing what named it at another
 /// model on the user's behalf, which would change what those runs transcribe
 /// with and therefore what they produce (`docs/adr/0018`).
+///
+/// Each message names the way past itself. Since a select can no longer install
+/// (`docs/adr/0023`), this refusal is the only thing standing between a person
+/// and the disk space a model holds, and a refusal that only states the wall
+/// leaves them with nowhere to go.
 enum ModelRemovalRefusal: Equatable {
     case isDefaultModel
     /// The Modes whose Transcription Override names this model, by name — a
@@ -150,10 +160,11 @@ enum ModelRemovalRefusal: Equatable {
     var message: String {
         switch self {
         case .isDefaultModel:
-            "The Default Model is always installed. Make another model the Default first, then remove this one."
+            "The Default Model is always installed. Install another model, make that one the Default, "
+                + "and then this one can go."
         case .namedByModes(let names):
             "Named by \(names.formatted(.list(type: .and))). "
-                + "Point every one of them at another model first, then remove this one."
+                + "Point every one of them at another model first, and then this one can go."
         }
     }
 }
