@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Chooses the Transcription Model that runs on this device, says what it is
-/// doing, offers whatever that model accepts being told, and lists the Library
-/// every model can be installed from and removed again.
-struct TranscriptionSettingsSection: View {
+/// The iPhone's own Transcription screen, matching the macOS Transcription tab
+/// in name and in content: chooses the Transcription Model that runs on this
+/// device, says what it is doing, offers whatever that model accepts being
+/// told, and lists the Library every model can be installed from and removed
+/// again.
+struct TranscriptionSettingsView: View {
     let coordinator: RecordingFlowCoordinator
     @AppStorage(TranscriptionSettings.modelSettingsKey)
     private var modelSettings = TranscriptionModelSettingsStore()
@@ -21,7 +23,7 @@ struct TranscriptionSettingsSection: View {
     }
 
     var body: some View {
-        Group {
+        Form {
             Section {
                 Picker("Default Model", selection: $storedModel) {
                     // The Installed Models, plus the one this setting already
@@ -40,7 +42,7 @@ struct TranscriptionSettingsSection: View {
                     )
                 )
             } header: {
-                Text("Transcription")
+                Text("Model")
             } footer: {
                 Text("Transcription runs on this device. Choose from the models you have installed — the Library below is where models are installed and removed. The model and everything it is told are this device's own — neither is shared with your other devices.")
             }
@@ -49,9 +51,11 @@ struct TranscriptionSettingsSection: View {
                 LibraryRows(library: library)
             }
         }
+        .navigationTitle("Transcription")
+        .navigationBarTitleDisplayMode(.inline)
         // Each visit re-reads the Library — which is also how a device that was
         // offline last time finally learns what it can install — and then keeps
-        // watching, so a model preparing while Settings is open moves and
+        // watching, so a model preparing while this screen is open moves and
         // reaches ready without the screen being closed and reopened.
         .task { await library.watch() }
     }
