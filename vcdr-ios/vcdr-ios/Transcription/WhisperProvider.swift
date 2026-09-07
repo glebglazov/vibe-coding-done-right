@@ -67,7 +67,6 @@ actor WhisperProvider: StreamingTranscriptionProvider {
     private(set) var downloadProgress: Double?
 
     private var whisper: WhisperKit?
-    private(set) var isReady = false
     private(set) var initPhase: ModelPreparationPhase = .preparing
 
     /// The attempt currently running. Recording never waits for a model to be
@@ -142,7 +141,6 @@ actor WhisperProvider: StreamingTranscriptionProvider {
             Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: loadStart))")
 
             self.whisper = whisper
-            self.isReady = true
             initPhase = .ready
             Logger.transcription.info("\(self.model.displayName) ready (total: \(self.elapsedMs(since: totalStart)))")
             return whisper

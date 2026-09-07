@@ -62,7 +62,6 @@ vcdr/
 │   ├── TranscriptionProvider.swift       # Protocol
 │   ├── TranscriptionProviderRegistry.swift # The models macOS offers, one resident provider each
 │   ├── TranscriptionLibrary.swift        # What is installed, what it costs, install and remove
-│   ├── TranscriptionModelFiles.swift     # An install's size on disk, and its deletion
 │   ├── EffectiveTranscription+Mode.swift # Resolves what a Mode records with, the one place that happens on macOS
 │   │   # What a family accepts, what it has been told, what a Mode has
 │   │   # overridden and what a model is doing live in Shared/Transcription/:
@@ -72,11 +71,13 @@ vcdr/
 │   │   # TranscriptionSettingOrigin, TranscriptionModelSettings
 │   │   # (keyed by family, so every Whisper shares one set — docs/adr/0020),
 │   │   # TranscriptionModelState (a model's own state as a Library row shows
-│   │   # it, and why a removal is refused) and ModelReadiness with the
-│   │   # narrator that words the Preparation Heartbeat — both products show
-│   │   # the same Library, so both read the same wording
+│   │   # it, and why a removal is refused), TranscriptionModelFiles (an
+│   │   # install's size on disk, and its deletion), WhisperCheckpoint (the
+│   │   # weights argmax publishes, and which model each one is) and
+│   │   # ModelReadiness with the narrator that words the Preparation
+│   │   # Heartbeat — both products show the same Library, so both read the
+│   │   # same wording
 │   ├── ParakeetProvider.swift            # FluidAudio Parakeet implementation (actor)
-│   ├── WhisperCheckpoint.swift           # The Whisper weights argmax publishes, and which model each one is
 │   └── WhisperProvider.swift             # WhisperKit implementation, one actor per checkpoint
 ├── Audio/AudioRecorder.swift             # AVFoundation 16kHz mono recording
 ├── Hotkeys/

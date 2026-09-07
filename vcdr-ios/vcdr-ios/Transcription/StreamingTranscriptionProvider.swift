@@ -45,7 +45,7 @@ protocol StreamingTranscriptionProvider: Sendable {
     /// Prepares the model at launch, running `beforeTheHeavyLoad` in whatever
     /// gap this backend's preparation leaves for it. The audio engine's HAL
     /// warm goes in that gap: it must finish before the load that competes with
-    /// it for the neural engine (`docs/adr/0002`).
+    /// it for the neural engine (`vcdr-ios/docs/adr/0001`).
     func prepareAtLaunch(
         priority: TaskPriority,
         predictedVerdict: LaunchVerdict,
