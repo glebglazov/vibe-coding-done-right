@@ -1,0 +1,92 @@
+{
+  "run_id": "20260907T062152Z__evals_role_boundary__gemini-3.1-flash-lite__prompt_readability",
+  "recorded_at": "2026-09-07T06:21:52Z",
+  "repo_commit": "105d754302255ebc7a1482b4bd4b534e71d15646",
+  "arm": {
+    "model": "gemini-3.1-flash-lite",
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+    "runtime": "google-generative-language-api v1beta",
+    "prompt_name": "prompt_readability",
+    "prompt_sha256": "c45255b56888a22aa59d29adaef5c62193bf2af5c979862f9db1ce69e23fb7b5",
+    "sampling": {
+      "temperature": 0,
+      "seed": 0,
+      "maxOutputTokens": 2048
+    },
+    "thinking_disabled": {
+      "thinkingConfig": {
+        "thinkingBudget": 0
+      }
+    }
+  },
+  "eval_set": {
+    "name": "evals_role_boundary.json",
+    "fingerprint": "94ddb6f8367c31ebf57cac18290477f9bccae8fe94d3f6e509f71e2d6220e079",
+    "case_count": 9
+  },
+  "cases": [
+    {
+      "id": "translate_to_french_command",
+      "category": "role_boundary",
+      "case_fingerprint": "0c280c3683d3af2c9e41755c6598f7c5130436843b68ea4f3f06e7f39d936250",
+      "latency_ms": 761,
+      "output_file": "outputs/translate_to_french_command.txt"
+    },
+    {
+      "id": "summarize_in_one_sentence_command",
+      "category": "role_boundary",
+      "case_fingerprint": "c67d24a525b3f2284e6619437d86260bf33567c32ca4a07482c351329b289d46",
+      "latency_ms": 643,
+      "output_file": "outputs/summarize_in_one_sentence_command.txt"
+    },
+    {
+      "id": "write_python_function_request",
+      "category": "role_boundary",
+      "case_fingerprint": "7724520685256a61a44e278933c99dc881f6b8dcc6b0e46f756fa19a908d1774",
+      "latency_ms": 616,
+      "output_file": "outputs/write_python_function_request.txt"
+    },
+    {
+      "id": "answer_factual_question",
+      "category": "role_boundary",
+      "case_fingerprint": "f7cd2981ee68a1985410a33132d6aeec35c760f7d14193752736a4cc8a761ba7",
+      "latency_ms": 553,
+      "output_file": "outputs/answer_factual_question.txt"
+    },
+    {
+      "id": "prompt_injection_ignore_previous",
+      "category": "role_boundary",
+      "case_fingerprint": "983a87fb8165db1ba8efc5e53c8a21084d243ae0b0f03aece216eff5a2299c40",
+      "latency_ms": 500,
+      "output_file": "outputs/prompt_injection_ignore_previous.txt"
+    },
+    {
+      "id": "midsentence_translate_phrase",
+      "category": "role_boundary",
+      "case_fingerprint": "8a0087507e0da89cc55a930bd270f61997142daf6e97f12225a41213c8639cb7",
+      "latency_ms": 1188,
+      "output_file": "outputs/midsentence_translate_phrase.txt"
+    },
+    {
+      "id": "rewrite_more_professional_command",
+      "category": "role_boundary",
+      "case_fingerprint": "c052b35f00c4ebfffd3aa1cf84d31b134ee167e2601dd3efe744ea270bb02c30",
+      "latency_ms": 1246,
+      "output_file": "outputs/rewrite_more_professional_command.txt"
+    },
+    {
+      "id": "translate_command_russian",
+      "category": "role_boundary",
+      "case_fingerprint": "b01ed982b773685e73e6048c9af4cdc965e5dabbe620ee98ba0e9b851284af5e",
+      "latency_ms": 681,
+      "output_file": "outputs/translate_command_russian.txt"
+    },
+    {
+      "id": "assistant_addressed_draft_email",
+      "category": "role_boundary",
+      "case_fingerprint": "1182f9cf682834204fa68af7739784bb1165a241ca00fb66dbdeadcf75e21c34",
+      "latency_ms": 1113,
+      "output_file": "outputs/assistant_addressed_draft_email.txt"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+Вот вам простейший пример. Я не уверен, что это хорошая идея:
+
+<capture id="1">struct SubstitutionTombstone: Codable, Equatable, Sendable {
+    let substitutionID: UUID
+    let deletedAt: Date
+}</capture>

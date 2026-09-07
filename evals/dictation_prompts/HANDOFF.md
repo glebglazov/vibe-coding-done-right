@@ -744,6 +744,60 @@ the run answered must still fingerprint to what it answered — which is the sam
 guarantee stated the way the comparison already states it, and is what lets the set
 grow without stranding the runs recorded before it.
 
+## The role-boundary paragraph, measured (2026-09-07)
+
+Until this date three artefacts were all called "the dictation prompt" and only one
+of them held the `ROLE BOUNDARY — read first:` paragraph: the iOS bundled default
+matched `prompts/prompt_readability.txt`, while the macOS bundled default and the
+served prompt in `vcdr-server/prompts.go` both matched
+`prompts/prompt_readability_baseline.txt` byte for byte. Because
+`BuiltInPrompts.dictation` prefers the served prompt over the bundled one, the
+paragraph reached nobody: an iOS device lost it the first time it had network.
+
+`prompt_readability_baseline` had never been recorded against, so the paragraph had
+never been A/B'd. Eight runs settle it — four on `gemini-3.1-flash-lite`, which is
+what `GeminiAdapter.defaultModel` sends and the model actually in daily use, and
+four on `claude-haiku-4-5-20251001`, which is `vcdr-server`'s `defaultModel`. Judge
+`claude-opus-5`. (`gemini-3.1-flash` is not a model id — the endpoint 404s. Only the
+`-lite` variant exists.)
+
+| model | set | prompt | word | blind | anchored |
+|---|---|---|---|---|---|
+| gemini-3.1-flash-lite | evals_role_boundary (9) | prompt_readability | **0.993** | **0.993** | 0.975 |
+| gemini-3.1-flash-lite | evals_role_boundary (9) | baseline | 0.735 | 0.828 | 0.737 |
+| gemini-3.1-flash-lite | evals (28) | prompt_readability | 0.975 | 0.983 | — |
+| gemini-3.1-flash-lite | evals (28) | baseline | 0.969 | 0.984 | — |
+| claude-haiku-4-5 | evals_role_boundary (9) | prompt_readability | 0.779 | 0.851 | 0.791 |
+| claude-haiku-4-5 | evals_role_boundary (9) | baseline | 0.676 | 0.679 | 0.671 |
+| claude-haiku-4-5 | evals (28) | prompt_readability | 0.953 | 0.961 | — |
+| claude-haiku-4-5 | evals (28) | baseline | 0.964 | 0.967 | — |
+
+The paragraph wins the role-boundary set on both models and on every axis, including
+the blind reading that does not share those references' fit toward
+`prompt_readability`. On Gemini the win is the larger one and the arm is nearly
+clean: 9 of 9 cases transcribed, zero FAIL, zero invented words, against 1 FAIL, 1
+language drift and 14 invented words for the baseline. On ordinary dictation it costs
+nothing measurable on either model — 0.983 vs 0.984 blind on Gemini, 0.961 vs 0.967
+on Haiku, both inside noise. It is therefore the text all three artefacts now carry.
+
+Note that which provider processes the text does not change this decision. Every
+provider — `AnthropicAdapter`, `OpenAIAdapter`, `GeminiAdapter` — is handed its
+system prompt from `BuiltInPrompts`, which prefers the served prompt over the
+bundled one. Running Gemini with your own key bypasses `vcdr-server` for
+*processing* but not for *prompt text*, so `prompts.go` is still where the decision
+lands.
+
+What the paragraph does *not* fix, and what the next prompt edit should aim at: on Haiku both
+arms fail by **talking to the user instead of emitting a transcript**. The baseline
+refuses two cases out loud ("I can't rewrite this in a more professional tone…");
+the arm with the paragraph fails one case by reciting the paragraph back and
+reasoning aloud before answering. Neither prompt states that the output is only the
+cleaned transcript, with no commentary — that is the missing rule, not more
+role-boundary prose. The paragraph also pulls toward English: on Haiku's
+`translate_command_russian` it executed the translation, the one case there where it
+is worse than the baseline. Gemini keeps Russian on that case with the paragraph and
+drifts to English without it, so this is a Haiku fault rather than the paragraph's.
+
 ## What to report back
 
 **Headline**: A exact / B exact / A-wins / B-wins / ties.
@@ -775,7 +829,11 @@ Include:
 
 - `evals.json` — 28 test cases (fresh set; old set was overwritten), the named subsets an arm may be asked instead of all of them, each multilingual case's `reference_source`, and the `reference_provenance` record every case names.
 - `evals_role_boundary.json` — 9 role-boundary cases, scored on the same axis, with their own provenance record.
-- `prompts/prompt_readability.txt` — A (current live).
+- `prompts/prompt_readability.txt` — the shipped dictation prompt. Since 2026-09-07
+  the iOS bundled default, the macOS bundled default and `vcdr-server/prompts.go`
+  all hold this text byte for byte (`af3d467fc723`); keep them that way.
+- `prompts/prompt_readability_baseline.txt` — the same text without the role-boundary
+  paragraph. No longer anything's live text; retained as the recorded control arm.
 - `prompts/prompt_lean.txt` — B (candidate).
 - `prompts/prompt_current.txt` — legacy strict prompt, retained as historical baseline.
 - `prompts/s1_mini.txt` — S1-mini's required system prompt, verbatim; not a candidate prompt.

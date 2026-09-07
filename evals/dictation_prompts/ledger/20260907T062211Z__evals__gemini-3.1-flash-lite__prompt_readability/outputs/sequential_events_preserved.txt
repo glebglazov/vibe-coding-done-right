@@ -1,0 +1,1 @@
+We pushed the build, waited for the smoke tests, everything passed, Sarah approved it, and we deployed to staging.

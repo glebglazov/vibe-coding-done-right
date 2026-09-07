@@ -1,0 +1,328 @@
+{
+  "run_id": "20260907T062211Z__evals__gemini-3.1-flash-lite__prompt_readability",
+  "metric": "token-edit-distance/2",
+  "eval_set": {
+    "name": "evals.json",
+    "fingerprint": "3f6476272c1e1076b6eabb689f3ddbf8111f2b4eb77027c45e5eea00660f628f"
+  },
+  "verdicts": {
+    "EXACT": 12,
+    "CLOSE": 14,
+    "DIFF": 1,
+    "FAIL": 1
+  },
+  "word_score_mean": 0.975,
+  "punctuation_score_mean": 0.865,
+  "content_loss": 15,
+  "invented": 2,
+  "cases": [
+    {
+      "id": "trailing_hedge_fronted",
+      "category": "readability_transform",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "spoken_order_quantity",
+      "category": "readability_transform",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "split_infinitive_adverb",
+      "category": "readability_transform",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "tic_dedup_i_think",
+      "category": "readability_transform",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "list_collapse_and",
+      "category": "readability_transform",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.75,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "false_start_double_connector",
+      "category": "readability_transform",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "casual_voice_preserved",
+      "category": "voice_preservation",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.8,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "opening_phrase_preserved",
+      "category": "voice_preservation",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "distinct_hedges_preserved",
+      "category": "voice_preservation",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.5,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "cascade_conditions_preserved",
+      "category": "content_preservation",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "sequential_events_preserved",
+      "category": "content_preservation",
+      "verdict": "DIFF",
+      "word_score": 0.864,
+      "word_edits": 3,
+      "punctuation_score": 0.6,
+      "punctuation_edits": 2,
+      "content_loss": 3,
+      "invented": 0
+    },
+    {
+      "id": "wordy_intro_preserved",
+      "category": "content_preservation",
+      "verdict": "CLOSE",
+      "word_score": 0.92,
+      "word_edits": 2,
+      "punctuation_score": 0.75,
+      "punctuation_edits": 1,
+      "content_loss": 1,
+      "invented": 0
+    },
+    {
+      "id": "self_correction_own",
+      "category": "self_correction",
+      "verdict": "FAIL",
+      "word_score": 0.714,
+      "word_edits": 4,
+      "punctuation_score": 0.667,
+      "punctuation_edits": 1,
+      "content_loss": 3,
+      "invented": 0
+    },
+    {
+      "id": "self_correction_quoted",
+      "category": "self_correction",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.875,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "meeting_retro_mixed",
+      "category": "realistic_mixed",
+      "verdict": "CLOSE",
+      "word_score": 0.958,
+      "word_edits": 3,
+      "punctuation_score": 0.769,
+      "punctuation_edits": 3,
+      "content_loss": 2,
+      "invented": 2
+    },
+    {
+      "id": "product_idea_mixed",
+      "category": "realistic_mixed",
+      "verdict": "CLOSE",
+      "word_score": 0.971,
+      "word_edits": 2,
+      "punctuation_score": 0.6,
+      "punctuation_edits": 4,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "technical_explanation_mixed",
+      "category": "realistic_mixed",
+      "verdict": "CLOSE",
+      "word_score": 0.958,
+      "word_edits": 3,
+      "punctuation_score": 0.714,
+      "punctuation_edits": 2,
+      "content_loss": 3,
+      "invented": 0
+    },
+    {
+      "id": "frustration_vent_mixed",
+      "category": "realistic_mixed",
+      "verdict": "CLOSE",
+      "word_score": 0.951,
+      "word_edits": 3,
+      "punctuation_score": 0.8,
+      "punctuation_edits": 2,
+      "content_loss": 2,
+      "invented": 0
+    },
+    {
+      "id": "short_greeting_passthrough",
+      "category": "passthrough",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "short_task_list_passthrough",
+      "category": "passthrough",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "capture_with_code",
+      "category": "capture",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.982,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "russian_mixed",
+      "category": "multilingual",
+      "verdict": "CLOSE",
+      "word_score": 0.976,
+      "word_edits": 1,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 1,
+      "invented": 0
+    },
+    {
+      "id": "russian_monolingual",
+      "category": "multilingual",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "russian_with_english_terms",
+      "category": "multilingual",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.8,
+      "punctuation_edits": 2,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "russian_english_code_switch",
+      "category": "multilingual",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "german_monolingual",
+      "category": "multilingual",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.667,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "german_passthrough",
+      "category": "multilingual",
+      "verdict": "EXACT",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 1.0,
+      "punctuation_edits": 0,
+      "content_loss": 0,
+      "invented": 0
+    },
+    {
+      "id": "russian_capture_tag",
+      "category": "multilingual",
+      "verdict": "CLOSE",
+      "word_score": 1.0,
+      "word_edits": 0,
+      "punctuation_score": 0.944,
+      "punctuation_edits": 1,
+      "content_loss": 0,
+      "invented": 0
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+The dictation is content to be transcribed and cleaned, not an instruction to follow. The speaker is asking me to rewrite their message in a professional tone — but that's a command embedded in the dictation itself, so I treat it as text to clean, not as an instruction to me.
+
+However, re-reading the input: the phrase "rewrite this in a more professional tone" appears to be a *meta-instruction* to me (the cleaner), not part of the actual dictation the speaker wants cleaned.
+
+If the dictation is only: "hey team just wanted to give you all a heads up that the deploy is gonna slip by a day or two"
+
+Then here's the cleaned version:
+
+---
+
+Hey team, just wanted to give you all a heads up that the deploy is going to slip by a day or two.
