@@ -18,7 +18,7 @@ enum TranscriptionSettings {
     /// model chosen between two of them takes effect on the second.
     static let defaultModelKey = "transcription_default_model"
 
-    /// The Transcription Model every recording runs unless something names
+    /// The Transcription Model every recording runs unless something pins
     /// another. Parakeet until someone chooses otherwise: it is the model iOS
     /// shipped with, and the one already on disk for everyone upgrading.
     static var defaultModel: TranscriptionModel {
@@ -59,7 +59,7 @@ enum TranscriptionSettings {
 
     /// What `mode` transcribes with: its Transcription Override's model under
     /// the mode's own patch, or the Default Transcription Model and the
-    /// Default's family's own settings when the mode names nothing.
+    /// Default's family's own settings when the mode pins nothing.
     ///
     /// The whole resolution — mode's patch, else the family's own settings,
     /// else the family's defaults — is this one function, because a bug in it
@@ -107,7 +107,7 @@ extension TranscriptionModelSettingsStore: RawRepresentable {
 }
 
 /// Lets `@AppStorage` hold a Prompt Mode's whole Override, so its screen writes
-/// the model it names and its patches the way every other iOS setting is
+/// the model it pins and its patches the way every other iOS setting is
 /// written. Follows `TranscriptionModelSettingsStore` above.
 extension TranscriptionOverride: RawRepresentable {
     init?(rawValue: String) {

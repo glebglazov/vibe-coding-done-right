@@ -3,7 +3,7 @@ import OSLog
 
 /// The Transcription Model Library: which models this phone has installed, what
 /// each install costs on disk, and the two things a person can do about it —
-/// add one, remove one that nothing names.
+/// add one, remove one that is not the Default.
 @Observable
 final class TranscriptionLibrary {
 

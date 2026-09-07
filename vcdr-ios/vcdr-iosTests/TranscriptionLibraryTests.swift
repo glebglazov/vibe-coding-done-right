@@ -144,8 +144,8 @@ struct TranscriptionLibraryTests {
         #expect(await env.parakeet.preparationsBegun == 1)
     }
 
-    @Test("A model nothing names can be removed, and what it was told survives")
-    func removesAModelNothingNames() async {
+    @Test("A model that is not the Default can be removed, and what it was told survives")
+    func removesNonDefaultModel() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
         env.installFiles(for: env.parakeet, bytes: 1024)

@@ -8,7 +8,7 @@ struct ModeTranscriptionOverrideTests {
 
     private static let testRecordingDuration: Duration = .milliseconds(100)
 
-    @Test("A Mode records with the model it names, told its family's settings under its own patch")
+    @Test("A Mode records with the model it pins, told its family's settings under its own patch")
     func overrideDecidesTheModelAndWhatItIsTold() async {
         let env = CaptureSessionTestEnvironment(
             mockProvider: MockTranscriptionProvider(result: "from parakeet"),
@@ -21,7 +21,7 @@ struct ModeTranscriptionOverrideTests {
         env.settings.transcriptionSettings.modelSettings[.whisper] =
             TranscriptionModelSettings(languageHint: .detect, freeTextPrompt: "Parakeet")
 
-        // The Mode names Whisper and sets one setting for itself; the Default is
+        // The Mode pins Whisper and sets one setting for itself; the Default is
         // untouched and stays Parakeet.
         env.overrideActiveMode(with: .whisperLargeV3Turbo) { $0.languageHint = .russian }
 
@@ -193,7 +193,7 @@ struct ModeTranscriptionOverrideTests {
         #expect(rewritten.contains("canary"))
     }
 
-    @Test("A Mode persisted before Modes could name a model records with the Default")
+    @Test("A Mode persisted before Modes could pin a model records with the Default")
     func modesWrittenBeforeThisDecodeToTheDefault() throws {
         let legacy = Data("""
         {"id":"\(UUID().uuidString)","name":"Legacy","isDisabled":false,\
