@@ -131,15 +131,27 @@ final class TranscriptionLibrary {
         }
     }
 
-    /// Why removing `model` is refused, or nil when it can go. A model may be
-    /// removed whenever nothing names it: not the Default Transcription Model,
-    /// and not any Mode's Transcription Override.
+    /// Why removing `model` is refused, or nil when it can go. Only the Default
+    /// Transcription Model is refused; a model Modes pin is offered and
+    /// disclosed instead (`docs/adr/0024`).
     func removalRefusal(for model: TranscriptionModel) -> ModelRemovalRefusal? {
-        if model == settings.transcriptionSettings.defaultModel { return .isDefaultModel }
+        model == settings.transcriptionSettings.defaultModel ? .isDefaultModel : nil
+    }
+
+    /// What removing `model` costs the Modes that pin it, or nil when nothing
+    /// pins it and removal has nothing to disclose. Asking changes nothing: this
+    /// is what a screen reads to know a confirmation is owed before it calls
+    /// `remove(_:)`.
+    func pinnedModelRemoval(for model: TranscriptionModel) -> PinnedModelRemoval? {
         let pinningModes = settings.modes
             .filter { $0.transcriptionOverride.model == model }
             .map(\.name)
-        return pinningModes.isEmpty ? nil : .pinnedBy(pinningModes)
+        guard pinningModes.isEmpty == false else { return nil }
+        return PinnedModelRemoval(
+            model: model,
+            pinningModes: pinningModes,
+            defaultModel: settings.transcriptionSettings.defaultModel
+        )
     }
 
     /// The Transcription Override a Mode gets when a model is pinned on its
@@ -153,12 +165,17 @@ final class TranscriptionLibrary {
         return pinned
     }
 
-    /// Deletes `model`'s files, or returns why it will not. Settings are
-    /// untouched: a removed model keeps everything it was configured with, so
-    /// installing it again finds its own answers waiting.
+    /// Deletes `model`'s files and unpins every Mode that pinned it, or returns
+    /// why it will not. Consent for the unpin is the caller's to have gathered —
+    /// `pinnedModelRemoval(for:)` is what it discloses to gather it.
+    ///
+    /// What the model was told is untouched: a removed model keeps everything it
+    /// was configured with, so installing it again finds its own answers
+    /// waiting.
     @discardableResult
     func remove(_ model: TranscriptionModel) async -> ModelRemovalRefusal? {
         if let refusal = removalRefusal(for: model) { return refusal }
+        unpin(model)
 
         let provider = provider(model)
         do {
@@ -169,6 +186,19 @@ final class TranscriptionLibrary {
         }
         await refreshState(of: model)
         return nil
+    }
+
+    /// Clears `model` from every Mode's Transcription Override, leaving the rest
+    /// of what each Override carries in place — the same pointer move a Mode's
+    /// own screen makes when it pins nothing, so those Modes follow the Default
+    /// from here on.
+    private func unpin(_ model: TranscriptionModel) {
+        settings.modes = settings.modes.map { mode in
+            guard mode.transcriptionOverride.model == model else { return mode }
+            var unpinned = mode
+            unpinned.transcriptionOverride = override(mode.transcriptionOverride, pinnedTo: nil)
+            return unpinned
+        }
     }
 
     // MARK: - Constants

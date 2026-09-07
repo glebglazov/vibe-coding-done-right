@@ -83,7 +83,7 @@ private struct LibraryRows: View {
         ForEach(library.entries) { entry in
             TranscriptionLibraryRow(
                 entry: entry,
-                removalRefusal: library.removalRefusal(for: entry.model),
+                removalObjection: library.removalObjection(for: entry.model),
                 install: { library.install(entry.model) },
                 remove: { Task { await library.remove(entry.model) } }
             )

@@ -141,30 +141,43 @@ enum DownloadProgress: Equatable {
     }
 }
 
-/// Why the Library will not remove a Transcription Model: something holds it.
-/// The Default names it, or a Mode's Transcription Override pins it. Either way
-/// the refusal carries the reason rather than repointing what held it at another
-/// model on the user's behalf, which would change what those runs transcribe
-/// with and therefore what they produce (`docs/adr/0018`).
+/// Why the Library will not remove a Transcription Model: it is the Default
+/// Transcription Model, and that refusal is what guarantees a model select
+/// always has something to offer (`docs/adr/0023`).
 ///
-/// Each message names the way past itself. Since a select can no longer install
-/// (`docs/adr/0023`), this refusal is the only thing standing between a person
-/// and the disk space a model holds, and a refusal that only states the wall
-/// leaves them with nowhere to go.
+/// The message names the way past itself. Since a select can no longer install,
+/// this refusal is the only thing standing between a person and the disk space
+/// a model holds, and a refusal that only states the wall leaves them with
+/// nowhere to go.
 enum ModelRemovalRefusal: Equatable {
     case isDefaultModel
-    /// The Modes whose Transcription Override pins this model, by name — a
-    /// refusal that does not say which Modes leaves the user hunting for them.
-    case pinnedBy([String])
 
     var message: String {
         switch self {
         case .isDefaultModel:
             "The Default Model is always installed. Install another model, make that one the Default, "
                 + "and then this one can go."
-        case .pinnedBy(let names):
-            "Pinned by \(names.formatted(.list(type: .and))). "
-                + "Point every one of them at another model first, and then this one can go."
         }
+    }
+}
+
+/// What removing a Transcription Model that Modes pin will cost: each of those
+/// Modes loses its pin and follows the Default Transcription Model from then on,
+/// moving with it if the Default later changes (`docs/adr/0024`). A pinned model
+/// is not refused, it is disclosed and waited on — so this carries both ends of
+/// the change a person is being asked to agree to.
+struct PinnedModelRemoval: Equatable {
+    let model: TranscriptionModel
+    /// The Modes whose Transcription Override pins the model, by name — a
+    /// disclosure that does not say which Modes leaves the user guessing at what
+    /// they are agreeing to.
+    let pinningModes: [String]
+    let defaultModel: TranscriptionModel
+
+    /// "Email and Notes pin Whisper Large V3 Turbo. Remove it and they will use
+    /// Parakeet (the Default Model)."
+    var disclosure: String {
+        "\(pinningModes.formatted(.list(type: .and))) pin \(model.displayName). "
+            + "Remove it and they will use \(defaultModel.displayName) (the Default Model)."
     }
 }

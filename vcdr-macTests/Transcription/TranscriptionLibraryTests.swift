@@ -120,6 +120,9 @@ struct TranscriptionLibraryTests {
         await env.library.refresh()
         let settingsBefore = env.settings.transcriptionSettings
 
+        // Nothing pins it, so there is nothing to disclose and no consent to
+        // gather: the press removes it.
+        #expect(env.library.pinnedModelRemoval(for: .whisperLargeV3Turbo) == nil)
         #expect(await env.library.remove(.whisperLargeV3Turbo) == nil)
 
         #expect(env.state(of: .whisperLargeV3Turbo) == .notInstalled)

@@ -10,6 +10,11 @@ struct TranscriptionTabView: View {
     /// narrates that load.
     let selectDefaultModel: (TranscriptionModel) -> Void
 
+    /// The pinned removal awaiting consent, or nil when none is. A removal with
+    /// nothing to disclose never lands here: it happens on the press
+    /// (`docs/adr/0024`).
+    @State private var pendingRemoval: PinnedModelRemoval?
+
     var body: some View {
         Form {
             Section("Model") {
@@ -45,7 +50,7 @@ struct TranscriptionTabView: View {
                         entry: entry,
                         removalRefusal: library.removalRefusal(for: entry.model),
                         install: { library.install(entry.model, urgency: .unawaited) },
-                        remove: { Task { await library.remove(entry.model) } }
+                        remove: { remove(entry.model) }
                     )
                 }
             }
@@ -78,10 +83,36 @@ struct TranscriptionTabView: View {
         // keeps watching, so a model preparing while this screen is open moves
         // and reaches ready without the screen being closed and reopened.
         .task { await library.watch() }
+        .confirmationDialog(
+            "Remove this model?",
+            isPresented: Binding(
+                get: { pendingRemoval != nil },
+                set: { if $0 == false { pendingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingRemoval
+        ) { removal in
+            Button("Remove and Unpin", role: .destructive) {
+                Task { await library.remove(removal.model) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { removal in
+            Text(removal.disclosure)
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Color.clear.frame(width: 0, height: 0)
             }
+        }
+    }
+
+    /// Presses Remove: a model Modes pin discloses what agreeing costs them and
+    /// waits, and a model nothing pins goes now.
+    private func remove(_ model: TranscriptionModel) {
+        if let removal = library.pinnedModelRemoval(for: model) {
+            pendingRemoval = removal
+        } else {
+            Task { await library.remove(model) }
         }
     }
 

@@ -129,28 +129,52 @@ struct ModeTranscriptionOverrideTests {
         #expect(await env.mockProvider.transcribeCallCount == 0)
     }
 
-    @Test("Removing a model a Mode pins is refused, and the refusal names the Modes")
-    func removalNamesThePinningModes() async {
+    @Test("Removing a model Modes pin discloses those Modes, the model and what they will use instead — and until it is agreed to, removes nothing")
+    func pinnedRemovalDisclosesBothEndsAndWaits() async {
         let env = LibraryEnvironment()
         defer { env.cleanup() }
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.library.refresh()
-        env.settings.modes = [
+        let modes = [
             pinningMode("Email", .whisperLargeV3Turbo),
             pinningMode("Notes", .whisperLargeV3Turbo),
             pinningMode("Shell", nil)
         ]
+        env.settings.modes = modes
 
-        let refusal = await env.library.remove(.whisperLargeV3Turbo)
+        let removal = env.library.pinnedModelRemoval(for: .whisperLargeV3Turbo)
 
-        #expect(refusal == .pinnedBy(["Email", "Notes"]))
-        #expect(refusal?.message.contains("Email and Notes") == true)
+        #expect(removal?.pinningModes == ["Email", "Notes"])
+        #expect(removal?.disclosure == "Email and Notes pin Whisper Large v3 Turbo. "
+            + "Remove it and they will use Parakeet Multilingual v3 (the Default Model).")
+        // Declining is having read it and stopped here: nothing has moved.
         #expect(await env.whisper.isInstalled)
+        #expect(env.settings.modes == modes)
+    }
 
-        // Nothing pins it once those Modes are pointed elsewhere.
-        env.settings.modes = [pinningMode("Shell", nil)]
+    @Test("Agreeing to a pinned removal deletes the model and unpins those Modes, which then follow the Default")
+    func agreeingUnpinsAndLeavesTheModesOnTheDefault() async {
+        let env = LibraryEnvironment()
+        defer { env.cleanup() }
+        env.installFiles(for: env.whisper, bytes: 1024)
+        await env.library.refresh()
+        var email = pinningMode("Email", .whisperLargeV3Turbo)
+        email.transcriptionOverride[.whisper].languageHint = .russian
+        env.settings.modes = [email, pinningMode("Notes", .whisperLargeV3Turbo), pinningMode("Shell", nil)]
+
         #expect(await env.library.remove(.whisperLargeV3Turbo) == nil)
+
         #expect(await env.whisper.isInstalled == false)
+        #expect(env.settings.modes.allSatisfy { $0.transcriptionOverride.model == nil })
+        // The unpin cleared the model and nothing else it carried.
+        #expect(env.settings.modes[0].transcriptionOverride[.whisper].languageHint == .russian)
+
+        // Those Modes follow the Default now, and move with it.
+        let unpinned = env.settings.modes[0]
+        #expect(env.settings.transcriptionSettings.effectiveTranscription(for: unpinned).model == .parakeetV3)
+        env.settings.transcriptionSettings.defaultModel = .whisperLargeV3Turbo
+        #expect(env.settings.transcriptionSettings.effectiveTranscription(for: unpinned).model
+            == .whisperLargeV3Turbo)
     }
 
     @Test("A Mode's patch written against Whisper Large v3 Turbo is the Whisper family's after upgrading")

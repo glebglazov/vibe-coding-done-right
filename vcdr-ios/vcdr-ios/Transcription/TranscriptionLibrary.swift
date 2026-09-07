@@ -1,6 +1,24 @@
 import Foundation
 import OSLog
 
+/// Why this phone will not remove a Transcription Model. Transitional: the Mac
+/// asks for consent to unpin a pinned model (`docs/adr/0024`), and this phone
+/// gets that dialog in its own slice. Until then both answers are still met the
+/// old way, with a disabled button and the reason under it.
+enum ModelRemovalObjection: Equatable {
+    case refused(ModelRemovalRefusal)
+    case pinned(PinnedModelRemoval)
+
+    var message: String {
+        switch self {
+        case .refused(let refusal): refusal.message
+        case .pinned(let removal):
+            "Pinned by \(removal.pinningModes.formatted(.list(type: .and))). "
+                + "Point every one of them at another model first, and then this one can go."
+        }
+    }
+}
+
 /// The Transcription Model Library: which models this phone has installed, what
 /// each install costs on disk, and the two things a person can do about it —
 /// add one, remove one that nothing names.
@@ -131,10 +149,15 @@ final class TranscriptionLibrary {
     /// Why removing `model` is refused, or nil when it can go. A model may be
     /// removed whenever nothing names it: not the Default Transcription Model,
     /// and not any Prompt Mode's Transcription Override.
-    func removalRefusal(for model: TranscriptionModel) -> ModelRemovalRefusal? {
-        if model == TranscriptionSettings.defaultModel { return .isDefaultModel }
+    func removalObjection(for model: TranscriptionModel) -> ModelRemovalObjection? {
+        if model == TranscriptionSettings.defaultModel { return .refused(.isDefaultModel) }
         let pinningModes = TranscriptionSettings.promptModesPinning(model).map(\.displayName)
-        return pinningModes.isEmpty ? nil : .pinnedBy(pinningModes)
+        guard pinningModes.isEmpty == false else { return nil }
+        return .pinned(PinnedModelRemoval(
+            model: model,
+            pinningModes: pinningModes,
+            defaultModel: TranscriptionSettings.defaultModel
+        ))
     }
 
     /// The Transcription Override a Prompt Mode gets when a model is pinned on
@@ -152,8 +175,8 @@ final class TranscriptionLibrary {
     /// untouched: a removed model keeps everything it was configured with, so
     /// installing it again finds its own answers waiting.
     @discardableResult
-    func remove(_ model: TranscriptionModel) async -> ModelRemovalRefusal? {
-        if let refusal = removalRefusal(for: model) { return refusal }
+    func remove(_ model: TranscriptionModel) async -> ModelRemovalObjection? {
+        if let objection = removalObjection(for: model) { return objection }
 
         let provider = provider(model)
         do {

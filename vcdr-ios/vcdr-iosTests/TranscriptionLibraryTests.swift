@@ -169,10 +169,10 @@ struct TranscriptionLibraryTests {
         await env.library.refresh()
         #expect(TranscriptionSettings.defaultModel == .parakeetV3)
 
-        let refusal = await env.library.remove(.parakeetV3)
+        let objection = await env.library.remove(.parakeetV3)
 
-        #expect(refusal == .isDefaultModel)
-        #expect(refusal?.message.contains("Default Model") == true)
+        #expect(objection == .refused(.isDefaultModel))
+        #expect(objection?.message.contains("Default Model") == true)
         #expect(await env.parakeet.isInstalled)
         #expect(env.state(of: .parakeetV3) == .installed(bytes: 1024))
     }
@@ -188,10 +188,14 @@ struct TranscriptionLibraryTests {
         env.defaults.set(override.rawValue,
                          forKey: TranscriptionSettings.modeOverrideKey(for: .dictation))
 
-        let refusal = await env.library.remove(.whisperTiny)
+        let objection = await env.library.remove(.whisperTiny)
 
-        #expect(refusal == .pinnedBy([AIPromptMode.dictation.displayName]))
-        #expect(refusal?.message.contains("Dictation") == true)
+        #expect(objection == .pinned(PinnedModelRemoval(
+            model: .whisperTiny,
+            pinningModes: [AIPromptMode.dictation.displayName],
+            defaultModel: .parakeetV3
+        )))
+        #expect(objection?.message.contains("Dictation") == true)
         #expect(await env.whisper.isInstalled)
     }
 
