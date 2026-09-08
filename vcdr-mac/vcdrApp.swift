@@ -59,6 +59,7 @@ struct vcdrApp: App {
         } label: {
             MenuBarLabel(
                 iconName: dependencies.session.status.menuBarIcon,
+                phase: dependencies.session.status.phase,
                 appDelegate: appDelegate
             )
         }
@@ -81,11 +82,26 @@ struct vcdrApp: App {
 /// (dock clicks, launch).
 private struct MenuBarLabel: View {
     let iconName: String
+    let phase: CaptureSession.Status.Phase
     let appDelegate: AppDelegate
     @Environment(\.openWindow) private var openWindow
 
+    private var image: Image {
+        switch phase {
+        case .idle:
+            Image("MenuBarCassette").renderingMode(.template)
+        case .recording:
+            Image("MenuBarCassetteRecording").renderingMode(.original)
+        case .preparingToRecord, .transcribing, .executing:
+            Image("MenuBarCassetteProcessing").renderingMode(.template)
+        case .awaitingPreview, .error:
+            Image(systemName: iconName)
+        }
+    }
+
     var body: some View {
-        Image(systemName: iconName)
+        image
+            .accessibilityLabel("VCDR")
             .onAppear {
                 appDelegate.openMainWindow = { [openWindow] in
                     openWindow(id: "main")
