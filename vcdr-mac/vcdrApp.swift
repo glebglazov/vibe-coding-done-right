@@ -88,11 +88,11 @@ private struct MenuBarLabel: View {
 
     private var image: Image {
         switch phase {
-        case .idle:
+        case .idle, .preparingToRecord:
             Image("MenuBarCassette").renderingMode(.template)
         case .recording:
             Image("MenuBarCassetteRecording").renderingMode(.original)
-        case .preparingToRecord, .transcribing, .executing:
+        case .transcribing, .executing:
             Image("MenuBarCassetteProcessing").renderingMode(.template)
         case .awaitingPreview, .error:
             Image(systemName: iconName)
