@@ -119,6 +119,24 @@ struct IntentRecordingRemoteTests {
         }
     }
 
+    @Test("a copy the pasteboard does not take shows Failed on the card, not Copied")
+    func refusedCopyShowsFailed() async {
+        SessionSettings.setAIMode(.verbatim)
+        defer { SessionSettings.clearAll() }
+        let env = Env()
+        env.pasteboard.takesWrites = false
+
+        #expect(await toggle(env) == nil)
+        #expect(await toggle(env) == nil)
+        await waitUntil { env.coordinator.activeRunPhase == nil }
+
+        #expect(env.pasteboard.writes.count == 1)
+        guard case .concluded(.failed, _)? = env.card.runs.last else {
+            Issue.record("Expected a Failed outcome, got \(String(describing: env.card.runs.last))")
+            return
+        }
+    }
+
     @Test("the card's Stop button never starts a run")
     func stopFromCardWithoutRun() async {
         let env = Env()

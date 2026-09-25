@@ -5,6 +5,9 @@ import UIKit
 struct ActiveRecordingRun {
     let origin: RecordingRunOrigin
     let run: RecordingRun
+    /// Clipboard Delivery for an origin that delivers there. The card reports
+    /// whether the copy took effect, so the coordinator keeps the destination.
+    let clipboard: ClipboardRecordingRunCompletionAdapter?
     var phase: RecordingRunPhase
 }
 
@@ -58,8 +61,9 @@ extension RecordingFlowCoordinator {
 
         hotMicSession.recordIntentStarted()
 
-        let run = makeRecordingRun(origin: origin)
-        setActiveRun(ActiveRecordingRun(origin: origin, run: run, phase: .arming))
+        let clipboard = origin.deliversToClipboard ? ClipboardRecordingRunCompletionAdapter(pasteboard: pasteboard) : nil
+        let run = makeRecordingRun(origin: origin, clipboard: clipboard)
+        setActiveRun(ActiveRecordingRun(origin: origin, run: run, clipboard: clipboard, phase: .arming))
         Logger.app.info("[RecordTiming] recording run created at +\(ContinuousClock.now - recordStart)")
 
         let started = await run.start()
@@ -80,7 +84,7 @@ extension RecordingFlowCoordinator {
             return
         }
 
-        setActiveRun(ActiveRecordingRun(origin: origin, run: run, phase: .capturing(since: .now)))
+        setActiveRun(ActiveRecordingRun(origin: origin, run: run, clipboard: clipboard, phase: .capturing(since: .now)))
         state = .recording
         hotMicSession.recordingStarted()
         if isModelReady { recordHaptic.impactOccurred() }
@@ -137,14 +141,13 @@ extension RecordingFlowCoordinator {
         }
     }
 
-    func completionAdapters(for origin: RecordingRunOrigin) -> [any RecordingRunCompletionAdapter] {
+    func completionAdapters(
+        for origin: RecordingRunOrigin,
+        clipboard: ClipboardRecordingRunCompletionAdapter?
+    ) -> [any RecordingRunCompletionAdapter] {
         let keyboard = KeyboardChannelRecordingRunCompletionAdapter(keyboardChannel: keyboardChannel, origin: origin)
-        switch origin {
-        case .app, .keyboard:
-            return [keyboard, historyCompletionAdapter]
-        case .shortcut:
-            return [ClipboardRecordingRunCompletionAdapter(pasteboard: pasteboard), keyboard, historyCompletionAdapter]
-        }
+        let adapters: [(any RecordingRunCompletionAdapter)?] = [clipboard, keyboard, historyCompletionAdapter]
+        return adapters.compactMap { $0 }
     }
 
     private func finalize(_ active: ActiveRecordingRun) async -> RecordingRunTerminalState {
@@ -162,7 +165,9 @@ extension RecordingFlowCoordinator {
             keyboardChannel.clearCaptures()
         }
 
-        setActiveRun(ActiveRecordingRun(origin: active.origin, run: active.run, phase: .finalizing))
+        var finalizing = active
+        finalizing.phase = .finalizing
+        setActiveRun(finalizing)
         state = .transcribing
         writeState(.transcribing)
 
@@ -171,16 +176,16 @@ extension RecordingFlowCoordinator {
         }
         guard activeRun?.run === active.run else { return terminalState }
         applyTerminalStateToUI(terminalState)
-        endActiveRun(announcing: RunCardOutcome(terminalState, origin: active.origin))
+        endActiveRun(announcing: RunCardOutcome(terminalState, clipboard: active.clipboard))
         return terminalState
     }
 }
 
 extension RunCardOutcome {
-    init?(_ terminal: RecordingRunTerminalState, origin: RecordingRunOrigin) {
-        guard origin.deliversToClipboard else { return nil }
+    init?(_ terminal: RecordingRunTerminalState, clipboard: ClipboardRecordingRunCompletionAdapter?) {
+        guard let clipboard else { return nil }
         switch terminal {
-        case .success: self = .copied
+        case .success: self = clipboard.copied ? .copied : .failed
         case .emptyResult: self = .noSpeech
         case .processingFailure: self = .failed
         case .cancellation: return nil

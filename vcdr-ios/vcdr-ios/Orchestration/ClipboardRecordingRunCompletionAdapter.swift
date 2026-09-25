@@ -3,19 +3,24 @@ import UIKit
 
 @MainActor
 protocol PasteboardWriting {
-    func write(_ text: String)
+    /// Reports whether the pasteboard took the text.
+    func write(_ text: String) -> Bool
 }
 
 @MainActor
 struct GeneralPasteboard: PasteboardWriting {
-    func write(_ text: String) {
-        UIPasteboard.general.string = text
+    func write(_ text: String) -> Bool {
+        let pasteboard = UIPasteboard.general
+        let changeCount = pasteboard.changeCount
+        pasteboard.string = text
+        return pasteboard.changeCount != changeCount
     }
 }
 
 @MainActor
 final class ClipboardRecordingRunCompletionAdapter: RecordingRunCompletionAdapter {
     private let pasteboard: any PasteboardWriting
+    private(set) var copied = false
 
     init(pasteboard: any PasteboardWriting) {
         self.pasteboard = pasteboard
@@ -26,7 +31,13 @@ final class ClipboardRecordingRunCompletionAdapter: RecordingRunCompletionAdapte
             Logger.recording.info("Clipboard completion: \(terminalState.logName) → nothing copied")
             return
         }
-        Logger.recording.info("Clipboard completion: success → copied (\(success.finalText.count) chars)")
-        pasteboard.write(success.finalText)
+        copied = pasteboard.write(success.finalText)
+        if copied {
+            Logger.recording.info("Clipboard completion: success → copied (\(success.finalText.count) chars)")
+        } else {
+            Logger.recording.error(
+                "Clipboard completion: success → the pasteboard did not take the text (\(success.finalText.count) chars)"
+            )
+        }
     }
 }

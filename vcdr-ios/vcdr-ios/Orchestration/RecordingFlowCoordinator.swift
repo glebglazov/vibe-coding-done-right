@@ -598,7 +598,7 @@ final class RecordingFlowCoordinator {
         }
 
         state = .error(failure.message)
-        endActiveRun(announcing: RunCardOutcome(terminal, origin: active.origin))
+        endActiveRun(announcing: RunCardOutcome(terminal, clipboard: active.clipboard))
         setIdleTimerDisabled(false)
         if wasStillArming {
             hotMicSession.recordIntentCancelledBeforeCapture()
@@ -608,7 +608,10 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    func makeRecordingRun(origin: RecordingRunOrigin) -> RecordingRun {
+    func makeRecordingRun(
+        origin: RecordingRunOrigin,
+        clipboard: ClipboardRecordingRunCompletionAdapter?
+    ) -> RecordingRun {
         // The Prompt Mode as it stands now, because the model that transcribes
         // has to be chosen before a word is spoken — a mode flipped mid-recording
         // reaches the processing that follows, not the model already decoding.
@@ -620,7 +623,7 @@ final class RecordingFlowCoordinator {
                 settings: transcription.settings
             ),
             transcriptProcessor: makeTranscriptProcessor(),
-            completionAdapters: completionAdapters(for: origin),
+            completionAdapters: completionAdapters(for: origin, clipboard: clipboard),
             currentSettings: { [weak self] in
                 guard let self else {
                     return RecordingRun.Settings(

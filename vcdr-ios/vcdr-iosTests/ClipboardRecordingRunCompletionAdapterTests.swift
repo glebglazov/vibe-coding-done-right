@@ -19,6 +19,26 @@ struct ClipboardRecordingRunCompletionAdapterTests {
         )))
 
         #expect(pasteboard.writes == ["Hello, world."])
+        #expect(adapter.copied)
+    }
+
+    @Test("a write the pasteboard does not take is not reported as copied")
+    func refusedWriteIsNotCopied() async {
+        let pasteboard = SpyPasteboard()
+        pasteboard.takesWrites = false
+        let adapter = ClipboardRecordingRunCompletionAdapter(pasteboard: pasteboard)
+
+        await adapter.complete(.success(RecordingRunSuccess(
+            conversationID: UUID(),
+            transcript: "hello world",
+            processed: nil,
+            finalText: "hello world",
+            captures: [],
+            historyLabel: nil
+        )))
+
+        #expect(pasteboard.writes == ["hello world"])
+        #expect(!adapter.copied)
     }
 
     @Test("an empty result, a cancellation and a failure leave the clipboard alone")
@@ -37,8 +57,12 @@ struct ClipboardRecordingRunCompletionAdapterTests {
 @MainActor
 final class SpyPasteboard: PasteboardWriting {
     private(set) var writes: [String] = []
+    /// When false, every write is recorded but reported as not taken, the way
+    /// `UIPasteboard.general.changeCount` stays put when iOS drops a write.
+    var takesWrites = true
 
-    func write(_ text: String) {
+    func write(_ text: String) -> Bool {
         writes.append(text)
+        return takesWrites
     }
 }
