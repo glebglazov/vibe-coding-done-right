@@ -54,15 +54,12 @@ final class IntentRecordingRemote: RecordingRunRemote {
         // No await separates the toggle read from this call, so a second
         // press already sees Arming and cancels.
         await coordinator.startRecording(origin: .shortcut)
-        guard coordinator.activeRunPhase != nil else { return }
-        guard await card.isShowingCard() else {
-            if requiresCardToRecord {
-                Logger.recording.error("Toggle Recording discarded: ActivityKit refused the card")
-                await coordinator.discardRecording()
-                throw .cardUnavailable
-            }
-            Logger.recording.warning("Toggle Recording goes on without a card")
-            return
+        guard coordinator.activeRunPhase != nil, !(await card.isShowingCard()) else { return }
+        guard !requiresCardToRecord else {
+            Logger.recording.error("Toggle Recording discarded: ActivityKit refused the card")
+            await coordinator.discardRecording()
+            throw .cardUnavailable
         }
+        Logger.recording.warning("Toggle Recording goes on without a card")
     }
 }

@@ -17,8 +17,8 @@ final class KeyboardChannelRecordingRunCompletionAdapter: RecordingRunCompletion
     /// A run that does not deliver to the keyboard still publishes `.idle`, and
     /// that is the only remaining publisher of it: the run was driven from the
     /// app surface or a Shortcut, which show the outcome themselves, so the
-    /// keyboard has genuinely nothing to render — and the channel must still come off the
-    /// `.recording`/`.transcribing` it was left on.
+    /// keyboard has genuinely nothing to render — and the channel must still
+    /// come off the `.recording`/`.transcribing` it was left on.
     func complete(_ terminalState: RecordingRunTerminalState) async {
         guard origin.deliversToKeyboard else {
             log(terminalState, publishes: KeyboardChannel.RecordingState.idle.rawValue)

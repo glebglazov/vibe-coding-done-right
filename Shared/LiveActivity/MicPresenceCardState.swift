@@ -10,7 +10,6 @@ nonisolated enum MicPresenceCardState: Codable, Hashable, Sendable {
     case arming
     /// Capturing, with a timer that runs from `since`.
     case capturing(since: Date)
-    /// Finalizing.
     case finalizing
     /// A short outcome face for a run whose result has no other surface.
     case concluded(RunCardOutcome)

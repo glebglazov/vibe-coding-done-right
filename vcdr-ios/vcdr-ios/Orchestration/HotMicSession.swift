@@ -153,9 +153,9 @@ final class HotMicSession {
     }
 
     /// Brings the full session up per policy: warms the engine, lights the
-    /// heartbeat, and arms the inactivity timer. Idempotent — safe
-    /// to call on every scene-active. Under `.never` it ensures nothing stays
-    /// warm (tearing down if a prior policy left the engine hot).
+    /// heartbeat, and arms the inactivity timer. Idempotent — safe to call on
+    /// every scene-active. Under `.never` it ensures nothing stays warm
+    /// (tearing down if a prior policy left the engine hot).
     func start() async {
         let timeout = policy()
         guard timeout != .never else {

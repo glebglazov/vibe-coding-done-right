@@ -119,10 +119,10 @@ final class RecordingFlowCoordinator {
 
     let recordingEngine: any RecordingEngine
     /// Owns the *Hot Mic Session* lifecycle — warm engine, heartbeat, and the
-    /// inactivity-timeout state machine. This
-    /// coordinator drives it via lifecycle notifications (`prewarm`, `start`,
-    /// `recordingStarted` / `recordingStopped`, `policyChanged`) and never
-    /// touches the engine's warmth directly.
+    /// inactivity-timeout state machine. This coordinator drives it via
+    /// lifecycle notifications (`prewarm`, `start`, `recordingStarted` /
+    /// `recordingStopped`, `policyChanged`) and never touches the engine's
+    /// warmth directly.
     let hotMicSession: HotMicSession
     /// Every Transcription Model this device can run, each provider kept once
     /// it has been handed out so switching the Default away and back does not
