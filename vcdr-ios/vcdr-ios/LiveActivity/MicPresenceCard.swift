@@ -10,6 +10,8 @@ protocol RecordingRunPresence: AnyObject {
     var areActivitiesEnabled: Bool { get }
     func runChanged(_ run: MicPresenceRun?)
     func sceneChanged(foreground: Bool)
+    /// Waits for every enqueued render.
+    func settled() async
     /// Waits for every enqueued render, then reports whether ActivityKit holds
     /// a live card.
     func isShowingCard() async -> Bool
@@ -57,8 +59,12 @@ final class MicPresenceCard: MicPresence, RecordingRunPresence {
         reconcile()
     }
 
-    func isShowingCard() async -> Bool {
+    func settled() async {
         await controller.settled()
+    }
+
+    func isShowingCard() async -> Bool {
+        await settled()
         return controller.holdsLiveCard
     }
 

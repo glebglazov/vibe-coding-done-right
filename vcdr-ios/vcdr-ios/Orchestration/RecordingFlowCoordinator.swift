@@ -171,7 +171,7 @@ final class RecordingFlowCoordinator {
     private var isSubstitutionBootstrapRunning = false
     let historyCompletionAdapter = HistoryRecordingRunCompletionAdapter()
     private(set) var activeRun: ActiveRecordingRun?
-    private let runPresence: any RecordingRunPresence
+    let runPresence: any RecordingRunPresence
     let backgroundTasks: any BackgroundTaskRunner
     let pasteboard: any PasteboardWriting
     /// Text sent to AI processing — retained for the existing Done-page retry action.

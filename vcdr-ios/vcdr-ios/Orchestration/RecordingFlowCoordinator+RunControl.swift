@@ -187,13 +187,14 @@ extension RecordingFlowCoordinator {
         state = .transcribing
         writeState(.transcribing)
 
-        let terminalState = await backgroundTasks.run(named: Self.finalizingTaskName) {
-            await active.run.stop()
+        return await backgroundTasks.run(named: Self.finalizingTaskName) {
+            let terminalState = await active.run.stop()
+            guard activeRun?.run === active.run else { return terminalState }
+            applyTerminalStateToUI(terminalState)
+            endActiveRun(announcing: RunCardOutcome(terminalState, clipboard: active.clipboard))
+            await runPresence.settled()
+            return terminalState
         }
-        guard activeRun?.run === active.run else { return terminalState }
-        applyTerminalStateToUI(terminalState)
-        endActiveRun(announcing: RunCardOutcome(terminalState, clipboard: active.clipboard))
-        return terminalState
     }
 }
 

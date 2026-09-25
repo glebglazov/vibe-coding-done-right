@@ -10,6 +10,7 @@ struct RecordingFlowCoordinatorRunControlTests {
 
     private func makeCoordinator(
         channel: FakeKeyboardChannel = FakeKeyboardChannel(),
+        card: SpyMicPresenceCard? = nil,
         engine: SpyWarmRecordingEngine? = nil,
         hotMicSession: HotMicSession? = nil,
         backgroundTasks: SpyBackgroundTaskRunner? = nil,
@@ -18,7 +19,7 @@ struct RecordingFlowCoordinatorRunControlTests {
         let engine = engine ?? SpyWarmRecordingEngine()
         engine.hasMicrophonePermission = true
         return RecordingFlowCoordinator(
-            presence: SpyMicPresenceCard(),
+            presence: card ?? SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
             hotMicSession: hotMicSession,
@@ -152,6 +153,34 @@ struct RecordingFlowCoordinatorRunControlTests {
         }
         #expect(backgroundTasks.names == ["Finalizing"])
         #expect(backgroundTasks.running == 0)
+    }
+
+    @Test("the Finalizing background task lasts until the concluded card face has rendered")
+    func finalizingTaskOutlivesTheConcludedFace() async {
+        SessionSettings.setAIMode(.verbatim)
+        defer { SessionSettings.clearAll() }
+        let backgroundTasks = SpyBackgroundTaskRunner()
+        let card = SpyMicPresenceCard()
+        var runningWhenConcluded: Int?
+        var runningWhenSettled: Int?
+        card.onRunChanged = { run in
+            if case .concluded? = run { runningWhenConcluded = backgroundTasks.running }
+        }
+        card.onSettled = { runningWhenSettled = backgroundTasks.running }
+        let coordinator = makeCoordinator(card: card, backgroundTasks: backgroundTasks) {
+            FakeRecordingStreamingSession(result: .success("hello world"))
+        }
+
+        await coordinator.startRecording(origin: .shortcut)
+        await coordinator.stopActiveRun()
+
+        #expect(runningWhenConcluded == 1)
+        #expect(runningWhenSettled == 1)
+        #expect(backgroundTasks.running == 0)
+        guard case .complete(let text) = coordinator.state, text.localizedCaseInsensitiveContains("hello world") else {
+            Issue.record("Expected the Done state, got \(coordinator.state)")
+            return
+        }
     }
 
     @Test("a stop during Arming cancels, and a second stop is ignored until the engine returns")
