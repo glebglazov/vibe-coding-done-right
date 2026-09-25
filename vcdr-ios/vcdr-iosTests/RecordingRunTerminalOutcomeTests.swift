@@ -19,7 +19,7 @@ struct RecordingRunTerminalOutcomeTests {
         )
 
         #expect(await run.start())
-        _ = await run.stop(deliversToKeyboard: false)
+        _ = await run.stop()
 
         guard case .success(let success) = await run.waitForIdle(timeout: .seconds(1)) else {
             Issue.record("Expected success outcome")
@@ -45,7 +45,7 @@ struct RecordingRunTerminalOutcomeTests {
         )
 
         #expect(await run.start())
-        _ = await run.stop(deliversToKeyboard: true)
+        _ = await run.stop()
 
         guard case .success(let success) = await run.waitForIdle(timeout: .seconds(1)) else {
             Issue.record("Expected success outcome")
@@ -69,7 +69,7 @@ struct RecordingRunTerminalOutcomeTests {
         )
 
         #expect(await run.start())
-        _ = await run.stop(deliversToKeyboard: false)
+        _ = await run.stop()
 
         #expect(await run.waitForIdle(timeout: .seconds(1)) == .emptyResult)
         #expect(keyboard.interactions == [.publish(.emptyResult)])
@@ -97,7 +97,7 @@ struct RecordingRunTerminalOutcomeTests {
         )
 
         #expect(await run.start())
-        _ = await run.stop(deliversToKeyboard: false)
+        _ = await run.stop()
 
         let expected = RecordingRunTerminalState.processingFailure(
             RecordingRunFailure(message: "Transcription failed: forced failure")
@@ -144,7 +144,7 @@ struct RecordingRunTerminalOutcomeTests {
             completionAdapters: [
                 KeyboardChannelRecordingRunCompletionAdapter(
                     keyboardChannel: keyboard,
-                    deliversToKeyboard: true
+                    origin: .keyboard
                 )
             ],
             currentSettings: { settings },

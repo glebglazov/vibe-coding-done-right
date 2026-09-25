@@ -50,7 +50,7 @@ struct RecordingRunTests {
         let channel = KeyboardChannel(defaults: defaults)
         let adapter = KeyboardChannelRecordingRunCompletionAdapter(
             keyboardChannel: channel,
-            deliversToKeyboard: true
+            origin: .keyboard
         )
 
         await adapter.complete(.success(success(finalText: "hello ")))
@@ -76,7 +76,7 @@ struct RecordingRunTests {
         let channel = KeyboardChannel(defaults: defaults)
         let adapter = KeyboardChannelRecordingRunCompletionAdapter(
             keyboardChannel: channel,
-            deliversToKeyboard: false
+            origin: .app
         )
 
         // Driven from the app surface, which already shows the outcome: the
@@ -253,7 +253,7 @@ struct RecordingRunTests {
         let channel = KeyboardChannel(defaults: defaults)
         let keyboardAdapter = KeyboardChannelRecordingRunCompletionAdapter(
             keyboardChannel: channel,
-            deliversToKeyboard: true
+            origin: .keyboard
         )
         let run = makeRun(
             audioRecorder: capture,

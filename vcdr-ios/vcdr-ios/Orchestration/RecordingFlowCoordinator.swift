@@ -33,6 +33,8 @@ private final class PrewarmBarrierContinuation: @unchecked Sendable {
 ///   settings listeners.
 /// - `RecordingFlowCoordinator+AIProcessing` — AI processing + retry.
 /// - `RecordingFlowCoordinator+StatePublishing` — recording-state publishing.
+/// - `RecordingFlowCoordinator+RunControl` — starting, stopping and
+///   discarding the active Recording Run.
 ///
 /// Members shared across those files are `internal` (or `private(set)`) rather
 /// than `private` because Swift scopes `private` to a single file; the
@@ -78,8 +80,8 @@ final class RecordingFlowCoordinator {
     private(set) var liveTranscript: String = ""
     /// Shown in the transcribing state — describes what the app is waiting on
     var transcribingMessage: String = ""
-    /// When true, the current recording was started via deep link from keyboard.
-    /// Exposed for the view to show/hide the back button.
+    /// True while the current Recording Run came from the keyboard. Exposed for
+    /// the view to show or hide the back button.
     var launchedViaDeepLink = false
     /// When true, the app was foregrounded by the keyboard's stop-deep-link
     /// fallback (`vcdr-ios://stop`). Drives the Done-page "Swipe to paste"
@@ -115,13 +117,13 @@ final class RecordingFlowCoordinator {
         SessionSettings.setTextStyle(currentTextStyle)
     }
 
-    private let recordingEngine: any RecordingEngine
+    let recordingEngine: any RecordingEngine
     /// Owns the *Hot Mic Session* lifecycle — warm engine, heartbeat, Live
     /// Activity presence, and the inactivity-timeout state machine. This
     /// coordinator drives it via lifecycle notifications (`prewarm`, `start`,
     /// `recordingStarted` / `recordingStopped`, `policyChanged`) and never
     /// touches the engine's warmth directly.
-    private let hotMicSession: HotMicSession
+    let hotMicSession: HotMicSession
     /// Every Transcription Model this device can run, each provider kept once
     /// it has been handed out so switching the Default away and back does not
     /// pay the cold load twice.
@@ -144,11 +146,11 @@ final class RecordingFlowCoordinator {
     /// the record tap and starved every other main-actor task. Prewarmed via
     /// `prepare()` once the model is ready (system idle); the record/stop paths
     /// skip it until then.
-    private let recordHaptic = UIImpactFeedbackGenerator(style: .medium)
+    let recordHaptic = UIImpactFeedbackGenerator(style: .medium)
     /// Cached transcription-model readiness for synchronous checks on the hot
     /// path (the authoritative phase lives in the provider actor).
     /// Gates the haptic so a cold first-use connect never blocks recording.
-    private var isModelReady = false
+    private(set) var isModelReady = false
     let keyboardChannel: any KeyboardChannelProtocol
     /// Populated asynchronously by `bootstrapHistory()` — the scene construction
     /// path can't block on it, because `FileManager.url(forUbiquityContainerIdentifier:)`
@@ -174,20 +176,18 @@ final class RecordingFlowCoordinator {
     /// `AppDependencies.substitutionStore` shell-first pattern.
     let substitutionStore = SubstitutionStoreProxy()
     private var isSubstitutionBootstrapRunning = false
-    private let historyCompletionAdapter = HistoryRecordingRunCompletionAdapter()
-    private var recordingRun: RecordingRun?
-    /// Set to true while `startRecording` is between its UI flip and
-    /// `audioRecorder.startCapture` returning. A second tap arriving in that
-    /// window would otherwise pass the `!audioRecorder.isRecording` guard
-    /// (which is only set inside `startCapture`'s tail) and spawn a duplicate
-    /// session + buffer handler — the second tap stomps the first's closure,
-    /// leaving the first stream subscribed to no audio.
-    private var isStartingRecording = false
+    let historyCompletionAdapter = HistoryRecordingRunCompletionAdapter()
+    /// The one Recording Run in flight, from the record intent until its
+    /// terminal state. Written only through `setActiveRun(_:)`.
+    private(set) var activeRun: ActiveRecordingRun?
+    /// Holds every Finalizing, so the process keeps running until Completion
+    /// Delivery ends even when VCDR is not on screen.
+    let backgroundTasks: any BackgroundTaskRunner
     /// Text sent to AI processing — retained for the existing Done-page retry action.
     var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
     /// Populated from captures published through the Keyboard Channel.
-    private(set) var capturedTexts: [String] = []
+    var capturedTexts: [String] = []
     /// Tracks the in-flight AI retry so rapid taps cancel the previous attempt.
     var aiRetryTask: Task<Void, Never>?
     /// Token for the keyboard command NotificationCenter observer, stored so we can
@@ -200,6 +200,7 @@ final class RecordingFlowCoordinator {
         recordingEngine: (any RecordingEngine)? = nil,
         transcriptionProvider: (any StreamingTranscriptionProvider)? = nil,
         hotMicSession: HotMicSession? = nil,
+        backgroundTasks: (any BackgroundTaskRunner)? = nil,
         makeStreamingSession: (() -> any RecordingStreamingSession)? = nil
     ) {
         let engine = recordingEngine ?? AudioRecorder()
@@ -216,6 +217,7 @@ final class RecordingFlowCoordinator {
         )
         self.keyboardChannel = keyboardChannel
         self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, keyboard: keyboardChannel)
+        self.backgroundTasks = backgroundTasks ?? UIKitBackgroundTaskRunner()
         self.makeStreamingSession = makeStreamingSession
     }
 
@@ -536,203 +538,10 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Recording State Machine
 
-    /// Starts recording with real-time streaming transcription.
-    /// Audio capture begins immediately; model initialization and streaming setup
-    /// proceed in the background. Buffers queue in StreamingAsrManager's AsyncStream
-    /// until the recognition task starts consuming them.
-    /// - Parameter fromDeepLink: When true, transcription result will be sent to the keyboard extension.
-    func startRecording(fromDeepLink: Bool = false) async {
-        // Prevent double-start from rapid button taps or duplicate deep links.
-        // Check audioRecorder.isRecording (not state) because the deep link flow
-        // sets state = .recording synchronously in prepareForDeepLinkRecording()
-        // before this method runs — blocking on state would prevent actual startup.
-        // `isStartingRecording` covers the window between the UI flip and
-        // `startCapture` returning, when `isRecording` is still false but a
-        // setup is already in progress.
-        guard !recordingEngine.isRecording, !isStartingRecording, recordingRun == nil else {
-            Logger.app.info("[RecordTiming] startRecording bailed — session already active or starting")
-            return
-        }
-        isStartingRecording = true
-        let recordStart = ContinuousClock.now
-        Logger.app.info("[RecordTiming] startRecording entered")
-
-        // UI flip FIRST — nothing blocks it. Everything perceptually slow
-        // (haptics, UserDefaults reads, disk flushes, engine start) runs after.
-        launchedViaDeepLink = fromDeepLink
-        stoppedViaDeepLink = false
-        aiProcessingStatus = .idle
-        // Arming, not Capturing: the tap is acknowledged instantly, but the
-        // audio engine isn't up yet. The UI shows "STARTING…" with no timer or
-        // waveform until audio actually flows (see the `.arming` guard below).
-        state = .arming
-        setIdleTimerDisabled(true)
-        Logger.app.info("[RecordTiming] state=arming set at +\(ContinuousClock.now - recordStart)")
-
-        // Session snapshot from shared defaults — fields are only consumed on stop /
-        // AI processing, so schedule them after the audio start rather than blocking
-        // the hot path. UserDefaults reads + JSON decode can cost 5-50ms on MainActor
-        // under I/O contention; the stop-time re-read catches anything the keyboard
-        // writes while recording.
-        capturedTexts = []
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.selectedPromptMode = SessionSettings.effectiveAIMode()
-            self.currentTextStyle = SessionSettings.effectiveTextStyle()
-            let texts = self.keyboardChannel.readCaptures()
-            if !texts.isEmpty {
-                self.capturedTexts = texts
-                Logger.ai.info("Initial captures on start: \(texts.count) item(s)")
-            }
-            self.keyboardChannel.clearLegacySelectedText()
-        }
-
-        // Shared-defaults write + Darwin post — off the critical path.
-        // Keyboard extension reads this asynchronously anyway.
-        Task.detached { [weak self] in
-            await self?.writeStateAsync(.recording)
-        }
-
-        // We're about to record: protect any already-alive Hot Mic Session
-        // while Arming, without creating fresh Mic Presence for a cold engine.
-        hotMicSession.recordIntentStarted()
-
-        let run = makeRecordingRun(deliversToKeyboard: fromDeepLink)
-        recordingRun = run
-        Logger.app.info("[RecordTiming] recording run created at +\(ContinuousClock.now - recordStart)")
-
-        let started = await run.start()
-        Logger.app.info("[RecordTiming] audioRecorder.startCapture returned (Capturing) at +\(ContinuousClock.now - recordStart)")
-
-        guard started else {
-            // Engine warmup failed, or the Arming Deadline fired while
-            // `startCapture` was still hanging. `onTerminal` may already have
-            // surfaced the Processing Failure reason — only apply a fallback
-            // when the UI is still showing Arming/Capturing.
-            if state == .arming || state == .recording {
-                state = .error("Microphone unavailable — couldn't start recording")
-                hotMicSession.recordIntentCancelledBeforeCapture()
-            }
-            recordingRun = nil
-            isStartingRecording = false
-            return
-        }
-
-        // Stop landed while we were Arming: the stop handler flipped state off
-        // `.arming` (to `.idle`). The engine is up now, but the user already
-        // cancelled — tear the run down instead of entering Capturing.
-        guard state == .arming else {
-            _ = await run.cancel()
-            recordingRun = nil
-            hotMicSession.recordIntentCancelledBeforeCapture()
-            isStartingRecording = false
-            return
-        }
-
-        // Capturing: audio is flowing. Flip to the truthful recording UI (timer
-        // + waveform) and fire the "go" haptic — the auto-start signal. Skipped
-        // while the model is cold so a first-use haptic-daemon connect can't
-        // block the main thread under the concurrent ANE compile.
-        state = .recording
-        hotMicSession.recordingStarted()
-        if isModelReady { recordHaptic.impactOccurred() }
-        isStartingRecording = false
-    }
-
-    /// Stops recording and shows the result immediately from the live transcript.
-    /// Finalizes streaming in the background and updates the result if it differs.
-    /// - Parameter sendToKeyboard: When true, the transcription result is delivered to the keyboard extension via state bundling.
-    func stopAndTranscribe(sendToKeyboard: Bool = false) async {
-        if isStartingRecording {
-            // Stop landed during Arming — no audio ever flowed. Flip to idle
-            // instantly (responsiveness-first); the in-flight start sees state
-            // is no longer `.arming` and tears the run down. This is a
-            // cancellation, not an Empty Result, and the wire now says so.
-            Logger.app.info("[RecordTiming] stopAndTranscribe during Arming — cancelling")
-            abortArming()
-            return
-        }
-
-        // Haptic only when the model is warm — a cold first-use connect blocks
-        // the main thread for seconds under ANE-compile load (see startRecording).
-        if isModelReady { recordHaptic.impactOccurred() }
-
-        hotMicSession.recordingStopped()
-        setIdleTimerDisabled(false)
-
-        // Re-read the captures array — the keyboard may have added more during recording.
-        if sendToKeyboard {
-            let texts = keyboardChannel.readCaptures()
-            if !texts.isEmpty {
-                capturedTexts = texts
-                Logger.ai.info("Final captures on stop: \(texts.count) item(s)")
-            }
-            keyboardChannel.clearCaptures()
-        }
-
-        guard let run = recordingRun else {
-            // No run means no completion adapter to publish for us, so this is
-            // the one Processing Failure the coordinator puts on the wire
-            // itself — and only when the keyboard is the one waiting for it.
-            let reason = "Recording was interrupted before audio started"
-            Logger.recording.error("Publishing failure: stop found no Recording Run — \(reason)")
-            state = .error(reason)
-            if sendToKeyboard {
-                writeFailure(reason: reason)
-            } else {
-                writeState(.idle)
-            }
-            return
-        }
-
-        state = .transcribing
-        writeState(.transcribing)
-
-        let terminalState = await run.stop(deliversToKeyboard: sendToKeyboard)
-        applyTerminalStateToUI(terminalState)
-        recordingRun = nil
-    }
-
-    /// Ends the active Recording Run without producing text (Discard,
-    /// ADR-0003). Scoped to Arming and Capturing:
-    /// - Arming reuses the exact path a stop landing mid-Arming already takes
-    ///   (`abortArming`) — the in-flight `startRecording` tears the run down
-    ///   once it observes `state` is no longer `.arming`.
-    /// - Capturing cancels the run directly, terminating in `.cancellation`
-    ///   (no Bundled Result, no Conversation — see `RecordingRunCompletion`
-    ///   adapters) while leaving the Hot Mic Session warm exactly as a normal
-    ///   stop does.
-    /// - Any other state (notably Finalizing / `.transcribing`) is ignored —
-    ///   a model load or AI call already in flight is not abortable.
-    func discardRecording() async {
-        if isStartingRecording {
-            Logger.app.info("[RecordTiming] discardRecording during Arming — cancelling")
-            clearCapturedTexts()
-            abortArming()
-            flashCancelled(revertingTo: .idle)
-            return
-        }
-
-        guard state == .recording, let run = recordingRun else { return }
-
-        hotMicSession.recordingStopped()
-        setIdleTimerDisabled(false)
-        clearCapturedTexts()
-
-        let terminalState = await run.cancel()
-        recordingRun = nil
-        switch terminalState {
-        case .cancellation:
-            flashCancelled(revertingTo: .ready)
-        default:
-            applyTerminalStateToUI(terminalState)
-        }
-    }
-
     /// Surfaces the optimistic "CANCELLED" flash for ~1s, then returns to the
     /// given steady state. Discard always shows this on the app surface; the
     /// keyboard shows its own optimistic flash (ADR-0003).
-    private func flashCancelled(revertingTo target: State) {
+    func flashCancelled(revertingTo target: State) {
         state = .cancelled
         Task {
             try? await Task.sleep(for: .seconds(HoldToDiscardController.cancelledFlashDuration))
@@ -742,32 +551,39 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    /// Shared by `stopAndTranscribe` and `discardRecording`: a stop or
-    /// Discard landing while `isStartingRecording` is true means no audio
-    /// ever flowed. Flips to idle instantly (responsiveness-first); the
-    /// in-flight `startRecording` observes `state` is no longer `.arming`
-    /// and tears the run down itself.
+    /// Shared by `stopActiveRun` and `discardRecording`: a stop or Discard
+    /// landing during Arming means no audio ever flowed. Flips to idle
+    /// instantly (responsiveness-first); the in-flight `startRecording` sees
+    /// the run is now `.cancellingArming` and tears it down itself.
     ///
     /// Publishes cancellation — never Empty Result, never idle — because that
     /// is what the run will terminate in once the in-flight start tears it
     /// down. Publishing here rather than waiting for that teardown is what
     /// keeps a keyboard stop poll from timing out into a deep-link bounce
     /// while the engine finishes coming up.
-    private func abortArming() {
+    func abortArming() {
         Logger.recording.info(
             "Publishing cancelled: stop or Discard landed during Arming — no audio was captured"
         )
+        if var active = activeRun {
+            active.phase = .cancellingArming
+            setActiveRun(active)
+        }
         state = .idle
         writeState(.cancelled)
         setIdleTimerDisabled(false)
     }
 
-    private func clearCapturedTexts() {
-        keyboardChannel.clearCaptures()
+    /// Drops the run's Captures. Only a run that uses keyboard Captures clears
+    /// the Keyboard Channel's copy.
+    func clearCapturedTexts(for origin: RecordingRunOrigin) {
+        if origin.usesKeyboardCaptures {
+            keyboardChannel.clearCaptures()
+        }
         capturedTexts = []
     }
 
-    private func applyTerminalStateToUI(_ terminalState: RecordingRunTerminalState) {
+    func applyTerminalStateToUI(_ terminalState: RecordingRunTerminalState) {
         switch terminalState {
         case .success(let success):
             state = .complete(success.finalText)
@@ -785,17 +601,19 @@ final class RecordingFlowCoordinator {
     /// Surfaces a Processing Failure that lands while the run is still Arming
     /// or Capturing — including the Arming Deadline firing while
     /// `startCapture` is hung and `startRecording` has not returned yet.
-    /// Finalizing failures are left to `stopAndTranscribe`'s
-    /// `applyTerminalStateToUI` path.
+    /// Finalizing failures are left to `stopActiveRun`'s
+    /// `applyTerminalStateToUI` path, and a cancelled Arming to the start path.
     private func handleRecordingRunTerminal(_ terminal: RecordingRunTerminalState) {
-        guard case .processingFailure(let failure) = terminal else { return }
-        let phase = state
-        guard phase == .arming || phase == .recording else { return }
+        guard case .processingFailure(let failure) = terminal, let phase = activeRun?.phase else { return }
+        let wasStillArming: Bool
+        switch phase {
+        case .arming: wasStillArming = true
+        case .capturing: wasStillArming = false
+        case .cancellingArming, .finalizing: return
+        }
 
         state = .error(failure.message)
-        recordingRun = nil
-        let wasStillArming = isStartingRecording || phase == .arming
-        isStartingRecording = false
+        setActiveRun(nil)
         setIdleTimerDisabled(false)
         if wasStillArming {
             hotMicSession.recordIntentCancelledBeforeCapture()
@@ -804,7 +622,7 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    private func makeRecordingRun(deliversToKeyboard: Bool) -> RecordingRun {
+    func makeRecordingRun(origin: RecordingRunOrigin) -> RecordingRun {
         // The Prompt Mode as it stands now, because the model that transcribes
         // has to be chosen before a word is spoken — a mode flipped mid-recording
         // reaches the processing that follows, not the model already decoding.
@@ -816,13 +634,7 @@ final class RecordingFlowCoordinator {
                 settings: transcription.settings
             ),
             transcriptProcessor: makeTranscriptProcessor(),
-            completionAdapters: [
-                KeyboardChannelRecordingRunCompletionAdapter(
-                    keyboardChannel: keyboardChannel,
-                    deliversToKeyboard: deliversToKeyboard
-                ),
-                historyCompletionAdapter
-            ],
+            completionAdapters: completionAdapters(for: origin),
             currentSettings: { [weak self] in
                 guard let self else {
                     return RecordingRun.Settings(
@@ -884,20 +696,23 @@ final class RecordingFlowCoordinator {
         selectedPromptMode = SessionSettings.effectiveAIMode()
         currentTextStyle = SessionSettings.effectiveTextStyle()
         capturedTexts = []
-        let run = recordingRun
-        recordingRun = nil
+        let run = activeRun?.run
+        setActiveRun(nil)
         Task { await run?.cancel() }
-        isStartingRecording = false
         aiRetryTask?.cancel()
         aiRetryTask = nil
         hotMicSession.reset()
+    }
+
+    func setActiveRun(_ run: ActiveRecordingRun?) {
+        activeRun = run
     }
 
     // MARK: - Idle Timer
 
     /// Prevents the screen from auto-locking while recording is active.
     /// Must be re-applied after scene phase transitions (iOS can reset it).
-    private func setIdleTimerDisabled(_ disabled: Bool) {
+    func setIdleTimerDisabled(_ disabled: Bool) {
         UIApplication.shared.isIdleTimerDisabled = disabled
         Logger.app.info("Idle timer \(disabled ? "disabled" : "enabled")")
     }

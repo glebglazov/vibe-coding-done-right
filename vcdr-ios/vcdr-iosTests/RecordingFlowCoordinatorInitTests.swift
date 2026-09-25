@@ -83,7 +83,7 @@ struct RecordingFlowCoordinatorInitTests {
         let readyBeforeTap = await provider.isReady
         #expect(!readyBeforeTap)
 
-        await coordinator.startRecording()
+        await coordinator.startRecording(origin: .app)
 
         let readyAfterTap = await provider.isReady
         #expect(!readyAfterTap)
@@ -262,7 +262,7 @@ struct RecordingFlowCoordinatorInitTests {
         }
         #expect(encoderEntered.value)
 
-        await coordinator.startRecording()
+        await coordinator.startRecording(origin: .app)
 
         #expect(engine.prepareSessionCalls == 1)
         #expect(engine.prepareEngineCalls == 1)
@@ -368,7 +368,7 @@ struct RecordingFlowCoordinatorInitTests {
             hotMicSession: hotMicSession
         )
 
-        await coordinator.startRecording()
+        await coordinator.startRecording(origin: .app)
         await settleMainActor()
 
         #expect(engine.startHotSessionCalls == 1)

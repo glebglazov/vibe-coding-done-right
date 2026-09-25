@@ -28,26 +28,24 @@ extension RecordingFlowCoordinator {
         case .transcribing:
             break
         default:
-            await startRecording(fromDeepLink: true)
+            await startRecording(origin: .keyboard)
         }
     }
 
     /// Called when the keyboard's stop fallback opens `vcdr-ios://stop`. Drives
-    /// the same `stopAndTranscribe(sendToKeyboard:)` path the Darwin command
-    /// would have, plus flags the run as deep-linked so the Done page shows
-    /// the swipe-to-paste hint. The `sendToKeyboard: true` write is what flips
-    /// the keyboard's stuck "transcribing" pill to the run's terminal state —
-    /// bundled text (auto-pasted on next viewWillAppear), an empty-result
-    /// flash, a cancelled flash or a FAILED pill.
+    /// the same `stopActiveRun()` path the Darwin command would have, plus
+    /// flags the stop as deep-linked so the Done page shows the swipe-to-paste
+    /// hint. A keyboard run's completion adapter then flips the keyboard's
+    /// stuck "transcribing" pill to the run's terminal state — bundled text
+    /// (auto-pasted on next viewWillAppear), an empty-result flash, a
+    /// cancelled flash or a FAILED pill.
     func handleStopDeepLink() async {
-        // Arming (engine not up yet, so `audioRecorder.isRecording` is still
-        // false) or actively Capturing → drive the normal stop path. It cancels
-        // during Arming (no audio ever flowed → cancellation on the wire) and
-        // finalizes during Capturing.
-        if state == .arming || isRecording {
+        // It cancels during Arming (no audio ever flowed → cancellation on the
+        // wire) and finalizes during Capturing.
+        if RecordingToggle.stopCommand(for: activeRunPhase) == .stop {
             launchedViaDeepLink = true
             stoppedViaDeepLink = true
-            await stopAndTranscribe(sendToKeyboard: true)
+            await stopActiveRun()
             return
         }
         // Truly orphaned cold-launch / stale stop: nothing was recording and

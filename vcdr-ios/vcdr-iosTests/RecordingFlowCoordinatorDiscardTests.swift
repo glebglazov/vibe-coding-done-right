@@ -32,7 +32,7 @@ struct RecordingFlowCoordinatorDiscardTests {
             transcriptionProvider: ParakeetProvider()
         )
 
-        let startTask = Task { await coordinator.startRecording() }
+        let startTask = Task { await coordinator.startRecording(origin: .app) }
         await waitUntil { coordinator.state == .arming }
         // Let the fire-and-forget captures-read Task inside `startRecording`
         // land before discarding, so clearing is asserted against a non-empty
@@ -84,7 +84,7 @@ struct RecordingFlowCoordinatorDiscardTests {
             hotMicSession: hotMicSession
         )
 
-        await coordinator.startRecording()
+        await coordinator.startRecording(origin: .app)
         await settleMainActor()
         #expect(coordinator.state == .recording)
         #expect(coordinator.capturedTexts == ["captured while recording"])
@@ -130,10 +130,10 @@ struct RecordingFlowCoordinatorDiscardTests {
             makeStreamingSession: { GatedStreamingSession(gate: gate, finishText: "hello world") }
         )
 
-        await coordinator.startRecording()
+        await coordinator.startRecording(origin: .app)
         #expect(coordinator.state == .recording)
 
-        let stopTask = Task { await coordinator.stopAndTranscribe(sendToKeyboard: true) }
+        let stopTask = Task { await coordinator.stopActiveRun() }
         await waitUntil { coordinator.state == .transcribing }
 
         await coordinator.discardRecording()

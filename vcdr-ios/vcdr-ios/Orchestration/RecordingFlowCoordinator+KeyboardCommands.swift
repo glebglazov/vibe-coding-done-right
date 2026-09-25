@@ -70,10 +70,10 @@ extension RecordingFlowCoordinator {
         switch command {
         case .startRecording:
             Logger.app.info("Received start command from keyboard")
-            await startRecording(fromDeepLink: true)
+            await startRecording(origin: .keyboard)
         case .stopRecording:
             Logger.app.info("Received stop command from keyboard")
-            await stopAndTranscribe(sendToKeyboard: true)
+            await stopFromKeyboard()
         case .cancelRecording:
             // Fail-closed on staleness (ADR-0003): a cancel that sat queued
             // across a suspend must never be applied to a later Recording Run,

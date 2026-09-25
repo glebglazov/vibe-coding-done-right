@@ -2,7 +2,6 @@ import AVFoundation
 import FluidAudio
 import Foundation
 import OSLog
-import UIKit
 
 @MainActor
 protocol RecordingAudioCapturing: AnyObject {
@@ -28,11 +27,6 @@ protocol RecordingStreamingSession: Sendable {
 @MainActor
 final class RecordingRun {
     typealias Settings = TranscriptProcessor.Settings
-
-    private struct TerminalContext {
-        let cleanedLiveTranscript: String
-        let backgroundTaskID: UIBackgroundTaskIdentifier
-    }
 
     private let conversationID = UUID()
     let audioRecorder: any RecordingAudioCapturing
@@ -121,7 +115,7 @@ final class RecordingRun {
         return true
     }
 
-    func stop(deliversToKeyboard: Bool) async -> RecordingRunTerminalState {
+    func stop() async -> RecordingRunTerminalState {
         guard terminalState == nil else {
             return terminalState ?? .cancellation
         }
@@ -157,21 +151,12 @@ final class RecordingRun {
             onTranscribingMessage(usesAI ? "Enhancing with AI..." : "")
         }
 
-        let backgroundTaskID = deliversToKeyboard
-            ? UIApplication.shared.beginBackgroundTask()
-            : .invalid
-        let context = TerminalContext(
-            cleanedLiveTranscript: cleanedLive,
-            backgroundTaskID: backgroundTaskID
-        )
-
         do {
-            return try await finishStreaming(context: context)
+            return try await finishStreaming()
         } catch {
-            let terminal = RecordingRunTerminalState.processingFailure(
+            return await finish(.processingFailure(
                 RecordingRunFailure(message: "Transcription failed: \(error.localizedDescription)")
-            )
-            return await finish(terminal, backgroundTaskID: backgroundTaskID)
+            ))
         }
     }
 
@@ -196,7 +181,7 @@ final class RecordingRun {
         return nil
     }
 
-    private func finishStreaming(context: TerminalContext) async throws -> RecordingRunTerminalState {
+    private func finishStreaming() async throws -> RecordingRunTerminalState {
         let rawText = try await streaming.finish()
         // Substitution — first pre-processing step, before filler removal, on
         // the dictated transcript only, in every AI Prompt Mode (Verbatim
@@ -212,7 +197,7 @@ final class RecordingRun {
         Logger.app.info("Streaming transcription complete: \(cleanedText.prefix(50))...")
 
         guard !cleanedText.isEmpty else {
-            return await finish(.emptyResult, backgroundTaskID: context.backgroundTaskID)
+            return await finish(.emptyResult)
         }
 
         let captures = currentCaptures()
@@ -230,13 +215,10 @@ final class RecordingRun {
             captures: captures,
             historyLabel: output.historyLabel
         ))
-        return await finish(terminal, backgroundTaskID: context.backgroundTaskID)
+        return await finish(terminal)
     }
 
-    func finish(
-        _ terminal: RecordingRunTerminalState,
-        backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
-    ) async -> RecordingRunTerminalState {
+    func finish(_ terminal: RecordingRunTerminalState) async -> RecordingRunTerminalState {
         cancelArmingDeadline()
         terminalState = terminal
         logTerminal(terminal)
@@ -245,9 +227,6 @@ final class RecordingRun {
             await adapter.complete(terminal)
         }
         onTerminal(terminal)
-        if backgroundTaskID != .invalid {
-            UIApplication.shared.endBackgroundTask(backgroundTaskID)
-        }
         return terminal
     }
 

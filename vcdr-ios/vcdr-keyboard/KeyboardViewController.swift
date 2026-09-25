@@ -483,7 +483,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
             // App didn't ack — heartbeat lied (suspended between our read and the
             // command firing) or Darwin was dropped. Wake it via URL; the command
             // + captures we already wrote will be overwritten by the deep-link
-            // path, which calls its own `startRecording(fromDeepLink:)`.
+            // path, which calls its own `startRecording(origin: .keyboard)`.
             self.openDeepLinkFallback(
                 KeyboardChannel.recordDeepLinkURL,
                 command: "start",

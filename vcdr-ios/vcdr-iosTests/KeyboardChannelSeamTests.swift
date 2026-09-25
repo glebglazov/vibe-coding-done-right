@@ -73,7 +73,7 @@ struct KeyboardChannelSeamTests {
         // adapter will report for it. The keyboard is mid-poll waiting for a
         // terminal state — it must get the failure, not an idle it would have
         // to interpret (ADR-0004).
-        await coordinator.stopAndTranscribe(sendToKeyboard: true)
+        await coordinator.stopFromKeyboard()
 
         let publishedFailures = fake.interactions.compactMap { interaction -> String? in
             guard case .publishFailure(let reason) = interaction else { return nil }

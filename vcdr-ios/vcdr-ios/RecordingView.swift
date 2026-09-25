@@ -147,7 +147,7 @@ struct RecordingView: View {
                     icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
                     label: "RECORD"
                 ) {
-                    Task { await coordinator.startRecording() }
+                    Task { await coordinator.startRecording(origin: .app) }
                 }
                 // The recording flow already supports starting before init
                 // completes — audio buffers queue in StreamingAsrManager and
@@ -175,7 +175,7 @@ struct RecordingView: View {
                 icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
                 label: "RECORD"
             ) {
-                Task { await coordinator.startRecording() }
+                Task { await coordinator.startRecording(origin: .app) }
             }
         }
     }
@@ -223,7 +223,7 @@ struct RecordingView: View {
                         .frame(width: Self.stopIconSize, height: Self.stopIconSize)
                 },
                 label: "STOP",
-                onStop: { Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) } },
+                onStop: { Task { await coordinator.stopActiveRun() } },
                 onDiscard: {
                     beginDiscardUnwind()
                     Task { await coordinator.discardRecording() }
@@ -310,7 +310,7 @@ struct RecordingView: View {
                             .frame(width: Self.stopIconSize, height: Self.stopIconSize)
                     },
                     label: "STOP",
-                    onStop: { Task { await coordinator.stopAndTranscribe(sendToKeyboard: false) } },
+                    onStop: { Task { await coordinator.stopActiveRun() } },
                     onDiscard: {
                         beginDiscardUnwind()
                         Task { await coordinator.discardRecording() }
@@ -441,7 +441,7 @@ struct RecordingView: View {
                         }
                     }
                     brutalistButton("NEW") {
-                        Task { await coordinator.startRecording() }
+                        Task { await coordinator.startRecording(origin: .app) }
                     }
                 }
 
@@ -629,7 +629,7 @@ struct RecordingView: View {
                 .padding(.horizontal, 32)
             brutalistButton("TRY AGAIN") {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                Task { await coordinator.startRecording() }
+                Task { await coordinator.startRecording(origin: .app) }
             }
         }
     }
