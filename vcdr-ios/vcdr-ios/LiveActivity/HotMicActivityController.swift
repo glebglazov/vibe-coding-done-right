@@ -1,27 +1,20 @@
 import Foundation
 import OSLog
 
-/// Surfaces a Live Activity while the mic engine is running. Used purely as a
-/// visible "this is VCDR using the mic" signal on the lock screen and Dynamic
-/// Island — the system orange mic dot cannot be suppressed, this gives it
-/// identity instead. Lifecycle is tied to the hot audio engine, not to the
-/// recording flag — the flag only picks which face the card shows, ready or
-/// recording, because from another app those are the only two things a user can
-/// be looking at and they are not interchangeable.
+/// Holds the Mic Presence card in ActivityKit: one card at a time, on the face
+/// `MicPresenceCard` decides. The system orange mic dot cannot be suppressed,
+/// and this card gives it identity.
 ///
-/// The card is kept *live* and re-stamped on every Heartbeat tick with a stale
-/// horizon one freshness window wide (ADR-0006). It is never ended with a
-/// scheduled dismissal: ending freezes a card on screen, and a frozen card goes
-/// on claiming readiness after a force quit, a jetsam or a teardown while
-/// suspended. Letting the horizon lapse instead hands the correction to iOS,
-/// the one thing that still happens with no app code running.
+/// A live card is re-stamped on every render with a stale horizon one Heartbeat
+/// freshness window wide (ADR-0006). Only an outcome face is ended with a
+/// scheduled dismissal: ending freezes a card on screen, which is honest for
+/// "Copied" and dishonest for a readiness claim.
 ///
-/// Every operation is serialized: show, refresh and hide each run to completion
-/// before the next starts. Callers fan in from several places at once (recording
-/// start, idle re-arm, policy change, heartbeat) and the ActivityKit request
-/// suspends for as long as seconds, so without ordering two overlapping shows
-/// each saw an empty slot and requested their own card — leaving an orphan that
-/// outlived teardown and kept advertising readiness with the engine down.
+/// Every render is serialized and runs to completion before the next starts.
+/// The ActivityKit request suspends for as long as seconds, so without
+/// ordering two overlapping renders each saw an empty slot and requested their
+/// own card — leaving an orphan that outlived teardown and kept advertising
+/// readiness with the engine down.
 @MainActor
 final class HotMicActivityController {
     private let store: any HotMicActivityStore
@@ -44,35 +37,33 @@ final class HotMicActivityController {
     init(store: (any HotMicActivityStore)? = nil, now: @escaping () -> Date = Date.init) {
         self.store = store ?? ActivityKitPresenceStore()
         self.now = now
-        // End any activity that survived a previous app kill. If the engine
-        // comes back up via `start()`, a fresh one is requested — and because
-        // the sweep is the first link in the chain, that request cannot be
-        // swept away by it.
+        // End any activity that survived a previous app kill. The sweep is the
+        // first link in the chain, so no render's request can be swept away
+        // by it.
         enqueue(.sweepStrays)
     }
 
-    func start(recording: Bool) async {
-        guard store.areActivitiesEnabled else {
-            Logger.app.info("Live Activities disabled in Settings")
-            return
-        }
-        await enqueue(.show(recording: recording)).value
+    var areActivitiesEnabled: Bool { store.areActivitiesEnabled }
+
+    /// True while this controller holds a card it can still update.
+    var holdsLiveCard: Bool { activityID != nil }
+
+    /// Enqueues a reconcile toward `decision` and returns at once. Renders run
+    /// in order, so the last one wins.
+    @discardableResult
+    func render(_ decision: MicPresenceCardDecision) -> Task<Void, Never> {
+        enqueue(.render(decision))
     }
 
-    func refresh(recording: Bool) async {
-        await enqueue(.refreshHorizon(recording: recording)).value
-    }
-
-    func stop() async {
-        await enqueue(.hide).value
+    /// Waits for every render enqueued so far.
+    func settled() async {
+        await lastOperation?.value
     }
 
     // MARK: - Serialization
 
     private enum PresenceOperation {
-        case show(recording: Bool)
-        case refreshHorizon(recording: Bool)
-        case hide
+        case render(MicPresenceCardDecision)
         case sweepStrays
     }
 
@@ -92,12 +83,12 @@ final class HotMicActivityController {
 
     private func perform(_ operation: PresenceOperation) async {
         switch operation {
-        case .show(let recording):
-            await show(recording: recording)
-        case .refreshHorizon(let recording):
-            await refreshHorizon(recording: recording)
-        case .hide:
+        case .render(.hidden):
             await hide()
+        case .render(.live(let state)):
+            await show(state)
+        case .render(.concluding(let state, let dismissAt)):
+            await conclude(state, dismissAt: dismissAt)
         case .sweepStrays:
             await endEveryActivity()
         }
@@ -105,28 +96,36 @@ final class HotMicActivityController {
 
     // MARK: - Operations
 
-    private func show(recording: Bool) async {
+    /// Renews the card this controller holds. With none, it ends any card
+    /// frozen on an outcome before it requests a new one.
+    private func show(_ state: MicPresenceCardState) async {
         if let activityID {
-            await store.update(id: activityID, recording: recording, staleDate: staleDate())
+            await store.update(id: activityID, state: state, staleDate: staleDate())
             return
         }
-        activityID = await store.request(recording: recording, staleDate: staleDate())
+        guard store.areActivitiesEnabled else {
+            Logger.app.info("Live Activities disabled in Settings")
+            return
+        }
+        await endEveryActivity()
+        activityID = await store.request(state: state, staleDate: staleDate())
         guard activityID != nil else { return }
-        Logger.app.info("Hot mic Live Activity started")
+        Logger.app.info("Mic Presence Live Activity started")
     }
 
-    /// Carries an on-screen card's claim one window further. Requests nothing
-    /// when there is no card: a beat renews readiness that presence already
-    /// asserts, it never asserts readiness of its own.
-    private func refreshHorizon(recording: Bool) async {
+    /// Freezes the held card on its outcome and forgets it, so the next live
+    /// render ends it and starts fresh. With no card held there is nothing to
+    /// announce the outcome on.
+    private func conclude(_ state: MicPresenceCardState, dismissAt: Date) async {
         guard let activityID else { return }
-        await store.update(id: activityID, recording: recording, staleDate: staleDate())
+        await store.conclude(id: activityID, state: state, dismissAt: dismissAt)
+        self.activityID = nil
     }
 
     private func hide() async {
         let endedAnything = await endEveryActivity()
         guard endedAnything else { return }
-        Logger.app.info("Hot mic Live Activity ended")
+        Logger.app.info("Mic Presence Live Activity ended")
     }
 
     private func staleDate() -> Date {

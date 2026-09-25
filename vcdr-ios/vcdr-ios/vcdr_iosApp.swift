@@ -33,7 +33,7 @@ struct VCDRiOSApp: App {
                         // Requested here rather than once suspended: the app is
                         // still executing at this transition, so a warm session
                         // can put its card back on the way out.
-                        Task { await coordinator.handleBackgroundTransition() }
+                        coordinator.handleBackgroundTransition()
                         // Intentionally NOT tearing down the hot session:
                         // UIBackgroundModes=audio keeps the engine alive, so
                         // the keyboard extension can drive recording via the

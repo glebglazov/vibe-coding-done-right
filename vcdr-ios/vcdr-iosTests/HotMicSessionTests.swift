@@ -467,7 +467,7 @@ struct HotMicSessionTests {
         #expect(!env.presence.isShown)
     }
 
-    @Test("finite policy keeps the Presence Deadline to itself and shows a live card")
+    @Test("finite policy keeps the Presence Deadline to itself and reports reachability")
     func finitePolicyKeepsDeadlineOutOfPresence() async {
         let fixedNow = Date(timeIntervalSince1970: 1000)
         let beat = TestClock()
@@ -480,88 +480,15 @@ struct HotMicSessionTests {
         // deadline it could surrender its ability to correct the card for.
         #expect(env.session.idleDeadline == fixedNow.addingTimeInterval(TimeInterval(HotSessionTimeout.fiveMinutes.rawValue)))
         #expect(env.presence.isShown)
-        #expect(env.presence.isRenewable)
 
-        // And it stays renewable for the whole window, not just its first tick.
+        // A beat renews the Heartbeat and leaves reachability as it was.
         beat.advance()
         await settle()
-        #expect(env.presence.refreshCalls == 1)
-        #expect(env.presence.isRenewable)
+        #expect(env.presence.isShown)
+        #expect(env.presence.startCalls == 1)
 
         // Cleanup: drain the parked idle and heartbeat sleepers.
         env.clock.advance()
-        beat.advance()
-        await settle()
-    }
-
-    @Test("every heartbeat tick renews Mic Presence alongside the Heartbeat")
-    func heartbeatTickRenewsPresence() async {
-        let beat = TestClock()
-        let env = makeEnv(policy: .always, heartbeatClock: beat)
-
-        await env.session.start()
-        await settle()
-
-        #expect(env.presence.isShown)
-        #expect(env.presence.refreshCalls == 0)
-
-        beat.advance()
-        await settle()
-        #expect(env.presence.refreshCalls == 1)
-        #expect(env.channel.isAppLikelyAlive())
-
-        beat.advance()
-        await settle()
-        #expect(env.presence.refreshCalls == 2)
-
-        // Teardown stops the beat, so nothing renews the card again — iOS lets
-        // its horizon lapse on its own.
-        env.session.reset()
-        await waitUntil { env.presence.stopCalls == 1 }
-        beat.advance()
-        await settle()
-        #expect(env.presence.refreshCalls == 2)
-    }
-
-    @Test("the card's face follows the Recording Run, and beats carry the current one")
-    func presenceFaceFollowsRecordingRun() async {
-        let beat = TestClock()
-        let env = makeEnv(policy: .always, heartbeatClock: beat)
-
-        await env.session.start()
-        await settle()
-        // Warm and idle: the card claims readiness, not a recording in progress.
-        #expect(env.presence.recordingFaces == [false])
-
-        beat.advance()
-        await settle()
-        #expect(env.presence.recordingFaces == [false, false])
-
-        env.engine.isRecording = true
-        env.session.recordingStarted()
-        await settle()
-        #expect(env.presence.recordingFaces.last == true)
-
-        // A beat mid-recording renews the recording face rather than reverting
-        // the card to "ready" behind the user's back.
-        beat.advance()
-        await settle()
-        #expect(env.presence.recordingFaces.last == true)
-
-        // Stop is announced before the run is torn down, so the engine still
-        // says "recording" here — the face has to follow the transition, not the
-        // engine.
-        env.session.recordingStopped()
-        await settle()
-        #expect(env.presence.recordingFaces.last == false)
-        env.engine.isRecording = false
-
-        beat.advance()
-        await settle()
-        #expect(env.presence.recordingFaces.last == false)
-
-        env.session.reset()
-        await waitUntil { env.presence.stopCalls == 1 }
         beat.advance()
         await settle()
     }
@@ -574,104 +501,24 @@ struct HotMicSessionTests {
         await settle()
 
         #expect(env.presence.isShown)
-        #expect(env.presence.isRenewable)
         // Reachability contract is unweakened: heartbeat still signals alive.
         #expect(env.channel.isAppLikelyAlive())
     }
 
-    @Test("recording keeps presence renewable so readiness can't expire mid-capture")
-    func recordingKeepsPresenceRenewable() async {
+    @Test("recording keeps reachability up so readiness can't expire mid-capture")
+    func recordingKeepsReachability() async {
         let env = makeEnv(policy: .fiveMinutes)
 
         await env.session.start()
         await settle()
-        #expect(env.presence.isRenewable)
+        #expect(env.presence.isShown)
 
         env.engine.isRecording = true
         env.session.recordingStarted()
         await settle()
 
         #expect(env.presence.isShown)
-        #expect(env.presence.isRenewable)
-    }
-
-    // MARK: - Foreground suppression
-
-    @Test("the app coming to the front takes the card down and keeps it down")
-    func foregroundSuppressesPresence() async {
-        let beat = TestClock()
-        let env = makeEnv(policy: .fiveMinutes, heartbeatClock: beat)
-
-        await env.session.start()
-        await settle()
-        #expect(env.presence.isShown)
-
-        await env.session.appEnteredForeground()
-        await settle()
-        #expect(!env.presence.isShown)
-
-        // Nothing the live session does while VCDR is on screen puts it back:
-        // not a renewal (the Deep-Link Fallback's scene activation), not a beat.
-        await env.session.renewIfAlive()
-        await settle()
-        beat.advance()
-        await settle()
-
-        #expect(!env.presence.isShown)
-        #expect(env.presence.startCalls == 1) // only the pre-foreground one
-        #expect(env.channel.isAppLikelyAlive()) // reachability is untouched
-
-        env.session.reset()
-        await settle()
-        beat.advance()
-        await settle()
-    }
-
-    @Test("leaving the app with a warm session brings the card back")
-    func leavingForegroundRestoresPresence() async {
-        let env = makeEnv(policy: .fiveMinutes)
-
-        await env.session.start()
-        await env.session.appEnteredForeground()
-        await settle()
-        #expect(!env.presence.isShown)
-
-        await env.session.appLeftForeground()
-        await settle()
-
-        #expect(env.presence.isShown)
-        #expect(env.presence.recordingFaces.last == false)
-    }
-
-    @Test("leaving the app with no warm session shows nothing")
-    func leavingForegroundWithoutSessionShowsNothing() async {
-        let env = makeEnv(policy: .never)
-
-        await env.session.appEnteredForeground()
-        await env.session.appLeftForeground()
-        await settle()
-
-        #expect(!env.engine.isHot)
-        #expect(!env.presence.isShown)
-        #expect(env.presence.startCalls == 0)
-    }
-
-    @Test("a recording that outlives the app's foreground shows the recording face")
-    func recordingStartedInAppShowsOnLeaving() async {
-        let env = makeEnv(policy: .fiveMinutes)
-
-        await env.session.appEnteredForeground()
-        await env.session.start()
-        env.engine.isRecording = true
-        env.session.recordingStarted()
-        await settle()
-        #expect(!env.presence.isShown)
-
-        await env.session.appLeftForeground()
-        await settle()
-
-        #expect(env.presence.isShown)
-        #expect(env.presence.recordingFaces.last == true)
+        #expect(env.presence.stopCalls == 0)
     }
 
     // MARK: - Environment
@@ -791,42 +638,23 @@ final class FakeWarmEngine: WarmEngine {
 /// refusing to deactivate) surfaced by `endHotSession`.
 struct FakeAudioReleaseError: Error {}
 
-/// Spy `MicPresence` that mirrors `HotMicActivityController`'s serialized
-/// contract: these bodies never suspend, so no two operations can interleave,
-/// and a repeated `start()` for a presence that is already shown renews it
-/// rather than counting as a second presentation.
+/// Spy `MicPresence` that records In-Place Reachability as the session
+/// reports it. `startCalls` and `stopCalls` count transitions, so reporting the
+/// same fact twice is not a second presentation.
 @MainActor
 final class SpyPresence: MicPresence {
     private(set) var startCalls = 0
     private(set) var stopCalls = 0
-    private(set) var refreshCalls = 0
     private(set) var isShown = false
-    /// The face every call asked for, in order — how the session's Recording Run
-    /// transitions reach the card.
-    private(set) var recordingFaces: [Bool] = []
 
-    /// Whether a card is on screen that a beat can still carry forward. A real
-    /// card only stops being renewable by being removed — nothing the session
-    /// does freezes it in place.
-    var isRenewable: Bool { isShown }
-
-    func start(recording: Bool) async {
-        recordingFaces.append(recording)
-        guard !isShown else { return }
-        isShown = true
-        startCalls += 1
-    }
-
-    func refresh(recording: Bool) async {
-        guard isShown else { return }
-        recordingFaces.append(recording)
-        refreshCalls += 1
-    }
-
-    func stop() async {
-        guard isShown else { return }
-        stopCalls += 1
-        isShown = false
+    func reachabilityChanged(_ reachable: Bool) {
+        guard reachable != isShown else { return }
+        isShown = reachable
+        if reachable {
+            startCalls += 1
+        } else {
+            stopCalls += 1
+        }
     }
 }
 

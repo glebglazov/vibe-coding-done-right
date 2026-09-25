@@ -32,31 +32,6 @@ protocol RecordingEngine: AnyObject, WarmEngine, RecordingAudioCapturing {
 
 extension AudioRecorder: RecordingEngine {}
 
-/// The lock-screen / Dynamic Island presence shown while the engine is warm,
-/// giving the un-suppressable system mic indicator app identity.
-/// `HotMicActivityController` is the production adapter; tests use a spy.
-///
-/// Presence carries no deadline of its own. It is a live rendering of the
-/// Heartbeat: shown while the session is warm, renewed on every beat, removed
-/// at teardown — and, when the app dies without reaching teardown, left to go
-/// not-ready on its own (ADR-0006). The Presence Deadline stays where the
-/// policy lives, in the Hot Mic Session.
-///
-/// Presence holds no recording state of its own: the session drives the
-/// Recording Run, so it says which face to show on every call rather than
-/// leaving the renderer to track transitions in parallel.
-@MainActor
-protocol MicPresence {
-    /// Shows the presence, or renews the one already on screen, on the given
-    /// face.
-    func start(recording: Bool) async
-    /// Renews presence that is already shown, carrying its claim one freshness
-    /// window further on the given face. Shows nothing when presence is down —
-    /// a beat renews readiness, it never asserts it.
-    func refresh(recording: Bool) async
-    func stop() async
-}
-
 /// Suspends for a duration unless cancelled. Production sleeps on the real
 /// clock; tests advance virtual time so idle-timeout transitions and heartbeat
 /// ticks are deterministic without real waits. The session keeps the two on
@@ -72,13 +47,11 @@ struct SystemHotMicClock: HotMicClock {
     }
 }
 
-extension HotMicActivityController: MicPresence {}
-
 // MARK: - HotMicSession
 
 /// The *Hot Mic Session*: the lifecycle of the app's warm audio engine. Owns the
-/// heartbeat that tells the Keyboard Channel the app is reachable, the Live
-/// Activity presence beside the system mic indicator, and the inactivity-timeout
+/// heartbeat that tells the Keyboard Channel the app is reachable, reports the
+/// same In-Place Reachability to Mic Presence, and owns the inactivity-timeout
 /// state machine that tears the session down. It is a policy driver — it brings
 /// the engine up and down through the `WarmEngine` seam but does not own the
 /// engine itself.
@@ -89,7 +62,7 @@ extension HotMicActivityController: MicPresence {}
 @MainActor
 final class HotMicSession {
     private let engine: WarmEngine
-    private let presence: MicPresence
+    private let presence: any MicPresence
     private let keyboard: any KeyboardChannelProtocol
     private let clock: HotMicClock
     private let heartbeatClock: HotMicClock
@@ -125,17 +98,6 @@ final class HotMicSession {
     /// the engine before it is cancelled; that must be released, not converted
     /// into post-capture warmth.
     private var armingProtectedPriorSession = false
-    /// True between `recordingStarted()` and `recordingStopped()` — the two
-    /// existing Recording Run transitions. Mic Presence reads it to choose
-    /// between its recording and ready faces. It is not `engine.isRecording`:
-    /// the stop transition is announced before the run is actually torn down, so
-    /// asking the engine at that moment still answers "recording".
-    private var isCapturing = false
-    /// True while the VCDR app itself is the app on screen. Mic Presence exists
-    /// to answer "is the mic warm?" from *outside* VCDR — on the lock screen and
-    /// over the keyboard — so it is withdrawn while the app that is the answer is
-    /// already in front of the user, and restored when the app steps aside.
-    private var isForegrounded = false
 
     /// Cadence for the app-alive heartbeat. Small enough that the keyboard's
     /// freshness threshold can be ~3x this without false negatives, large
@@ -159,7 +121,7 @@ final class HotMicSession {
     /// can't construct main-actor-isolated values directly.
     init(
         engine: WarmEngine,
-        presence: MicPresence? = nil,
+        presence: any MicPresence,
         keyboard: (any KeyboardChannelProtocol)? = nil,
         clock: HotMicClock? = nil,
         heartbeatClock: HotMicClock? = nil,
@@ -167,7 +129,7 @@ final class HotMicSession {
         now: (() -> Date)? = nil
     ) {
         self.engine = engine
-        self.presence = presence ?? HotMicActivityController()
+        self.presence = presence
         self.keyboard = keyboard ?? KeyboardChannel.live
         self.clock = clock ?? SystemHotMicClock()
         self.heartbeatClock = heartbeatClock ?? SystemHotMicClock()
@@ -191,7 +153,7 @@ final class HotMicSession {
     }
 
     /// Brings the full session up per policy: warms the engine, lights the
-    /// heartbeat and presence, and arms the inactivity timer. Idempotent — safe
+    /// heartbeat, and arms the inactivity timer. Idempotent — safe
     /// to call on every scene-active. Under `.never` it ensures nothing stays
     /// warm (tearing down if a prior policy left the engine hot).
     func start() async {
@@ -229,7 +191,7 @@ final class HotMicSession {
 
     /// Record intent has been acknowledged and the Recording Run is Arming.
     /// Protect an existing Hot Mic Session from expiring while the engine is
-    /// starting, but do not create fresh Mic Presence for a cold engine.
+    /// starting, but do not start a Heartbeat for a cold engine.
     func recordIntentStarted() {
         guard engine.isHot else {
             armingProtectedPriorSession = false
@@ -253,23 +215,20 @@ final class HotMicSession {
     }
 
     /// Capturing has begun. Cancel the inactivity teardown so long recordings
-    /// never time out, and make sure heartbeat and presence are lit — the cold
-    /// record path warmed the engine via `startCapture` without going through
+    /// never time out, and make sure the heartbeat is lit — the cold record
+    /// path warmed the engine via `startCapture` without going through
     /// `start()`.
     func recordingStarted() {
         guard engine.isHot else { return }
-        isCapturing = true
         armingProtectedPriorSession = false
         idleTask?.cancel()
         idleTask = nil
         idleDeadline = nil
         startHeartbeat()
-        showPresence()
     }
 
     /// A recording has ended. Re-arm the inactivity timer per policy.
     func recordingStopped() {
-        isCapturing = false
         armingProtectedPriorSession = false
         idleDeadline = nil  // fresh countdown from when recording actually stopped
         armIdleTimer(policy(), allowWhileRecording: true)
@@ -296,24 +255,6 @@ final class HotMicSession {
         armIdleTimer(timeout)
     }
 
-    /// The VCDR app came to the front. Withdraw Mic Presence: the card would sit
-    /// on top of the app it describes, including when the keyboard opened the app
-    /// through the Deep-Link Fallback.
-    func appEnteredForeground() async {
-        isForegrounded = true
-        await presence.stop()
-    }
-
-    /// The VCDR app left the front. The card is worth showing again, so restore
-    /// it on whichever face is true right now — but only if there is still a warm
-    /// session to advertise. Requesting it at this transition (rather than once
-    /// suspended) is deliberate: the app is still executing here.
-    func appLeftForeground() async {
-        isForegrounded = false
-        guard engine.isHot else { return }
-        await presence.start(recording: isCapturing)
-    }
-
     // MARK: - Idle-timeout state machine
 
     /// Starts, restarts, or clears the inactivity timer to match the current
@@ -334,7 +275,7 @@ final class HotMicSession {
     /// is honoured.
     ///
     /// If the engine isn't actually hot there is nothing to keep alive, so the
-    /// heartbeat and presence are torn down too rather than left orphaned.
+    /// heartbeat is torn down too rather than left orphaned.
     private func armIdleTimer(_ timeout: HotSessionTimeout, allowWhileRecording: Bool = false) {
         idleTask?.cancel()
         idleTask = nil
@@ -355,7 +296,6 @@ final class HotMicSession {
             // the app keeps beating.
             idleDeadline = nil
             idleStartedAt = nil
-            showPresence()
             return
         default:
             break
@@ -379,12 +319,10 @@ final class HotMicSession {
             return
         }
 
-        // The presence gets no deadline: the sleeper below removes the card when
-        // the window expires with the app alive, and an app that was suspended
-        // instead had already stopped beating, so its card has already gone
-        // not-ready on its own.
-        showPresence()
-
+        // Mic Presence gets no deadline: the sleeper below withdraws
+        // reachability when the window expires with the app alive, and an app
+        // that was suspended instead had already stopped beating, so its card
+        // has already gone not-ready on its own.
         idleTask = Task { [weak self, clock] in
             await clock.sleep(for: .seconds(remaining))
             guard !Task.isCancelled, let self else { return }
@@ -396,9 +334,9 @@ final class HotMicSession {
         }
     }
 
-    /// Brings the whole session down atomically: stops the engine, clears the
-    /// heartbeat (so the keyboard falls back to its Deep-Link Fallback path), and
-    /// ends the presence. Idempotent.
+    /// Brings the whole session down atomically: stops the engine and clears the
+    /// heartbeat, which withdraws reachability from the keyboard (Deep-Link
+    /// Fallback) and from Mic Presence together. Idempotent.
     ///
     /// Readiness Fail-Closed: audio release can report a partial failure (e.g.
     /// the audio session refuses to deactivate), but the user-visible readiness
@@ -412,7 +350,6 @@ final class HotMicSession {
         idleDeadline = nil
         idleStartedAt = nil
         armingProtectedPriorSession = false
-        isCapturing = false
         do {
             try engine.endHotSession()
         } catch {
@@ -421,50 +358,26 @@ final class HotMicSession {
             )
         }
         stopHeartbeat()
-        Task { [presence] in await presence.stop() }
-    }
-
-    /// Shows Mic Presence, or renews the card already on screen, on the face the
-    /// session's Recording Run says is true. Every warm-session path routes its
-    /// presence through here, so foreground suppression has a single gate.
-    /// The foreground check is repeated inside the task: the show is enqueued,
-    /// so an activation landing between arming and the body must win rather than
-    /// be overwritten by a card that was decided on a moment earlier.
-    private func showPresence() {
-        guard !isForegrounded else { return }
-        Task { [weak self] in
-            guard let self, !self.isForegrounded else { return }
-            await self.presence.start(recording: self.isCapturing)
-        }
     }
 
     // MARK: - Heartbeat
 
     /// Writes the current timestamp to the shared heartbeat key and starts a
     /// background loop refreshing it every `heartbeatInterval`. Safe to call
-    /// repeatedly — only one loop runs at a time.
+    /// repeatedly — only one loop runs at a time. Mic Presence learns of
+    /// reachability here and in `stopHeartbeat()`, so the card and the keyboard
+    /// cannot disagree about it (ADR-0006).
     private func startHeartbeat() {
         keyboard.writeHeartbeat(alive: true)
+        presence.reachabilityChanged(true)
         guard heartbeatTask == nil else { return }
         heartbeatTask = Task { [weak self, heartbeatClock] in
             while !Task.isCancelled {
                 await heartbeatClock.sleep(for: Self.heartbeatInterval)
                 guard !Task.isCancelled, let self else { return }
-                await self.beat()
+                self.keyboard.writeHeartbeat(alive: true)
             }
         }
-    }
-
-    /// One beat of In-Place Reachability. Mic Presence renders the same fact the
-    /// keyboard reads, so the two are renewed in the same breath: the card's
-    /// readiness claim is carried one freshness window further every time the
-    /// timestamp is. Stop beating and the claim lapses on its own.
-    private func beat() async {
-        keyboard.writeHeartbeat(alive: true)
-        // A beat while the app is on screen renews reachability only: there is
-        // no card to carry forward, and it must not put one back.
-        guard !isForegrounded else { return }
-        await presence.refresh(recording: isCapturing)
     }
 
     /// Cancels the periodic heartbeat and clears the shared timestamp so the
@@ -473,6 +386,7 @@ final class HotMicSession {
         heartbeatTask?.cancel()
         heartbeatTask = nil
         keyboard.writeHeartbeat(alive: false)
+        presence.reachabilityChanged(false)
     }
 
     // MARK: - Policy observer

@@ -51,7 +51,7 @@ struct KeyboardChannelSeamTests {
     @Test("coordinator publishes through injected channel")
     func coordinatorUsesInjectedChannel() {
         let fake = FakeKeyboardChannel()
-        let coordinator = RecordingFlowCoordinator(keyboardChannel: fake)
+        let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard(), keyboardChannel: fake)
 
         coordinator.writeState(.recording)
         coordinator.cleanupStaleResults()
@@ -67,7 +67,7 @@ struct KeyboardChannelSeamTests {
     @Test("a keyboard stop with no Recording Run publishes the failure, never idle")
     func stopWithoutRunPublishesFailure() async {
         let fake = FakeKeyboardChannel()
-        let coordinator = RecordingFlowCoordinator(keyboardChannel: fake)
+        let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard(), keyboardChannel: fake)
 
         // Interrupted before audio started: no run exists, so no completion
         // adapter will report for it. The keyboard is mid-poll waiting for a

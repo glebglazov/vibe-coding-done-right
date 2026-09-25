@@ -215,7 +215,22 @@ extension RecordingFlowCoordinator {
         }
         guard activeRun?.run === active.run else { return terminalState }
         applyTerminalStateToUI(terminalState)
-        setActiveRun(nil)
+        endActiveRun(announcing: RunCardOutcome(terminalState, origin: active.origin))
         return terminalState
+    }
+}
+
+extension RunCardOutcome {
+    /// Only a run that delivers to the clipboard announces its outcome on the
+    /// card: the app and the keyboard show theirs, and a cancellation has
+    /// nothing to report.
+    init?(_ terminal: RecordingRunTerminalState, origin: RecordingRunOrigin) {
+        guard origin.deliversToClipboard else { return nil }
+        switch terminal {
+        case .success: self = .copied
+        case .emptyResult: self = .noSpeech
+        case .processingFailure: self = .failed
+        case .cancellation: return nil
+        }
     }
 }

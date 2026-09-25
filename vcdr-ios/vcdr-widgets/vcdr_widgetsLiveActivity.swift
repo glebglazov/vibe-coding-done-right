@@ -2,26 +2,26 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-/// Which of the three things the readiness card can say. Two of them come from
-/// the app's own content state; the third is the system's, and it wins — once
-/// the stale horizon has passed nothing the card claimed is still true.
+/// What the Mic Presence card can say. Every face but one comes from the app's
+/// content state; the not-ready face is the system's, and it wins — once the
+/// stale horizon has passed nothing the card claimed is still true.
 private enum PresenceFace {
-    case ready
-    case recording
+    case live(MicPresenceCardState)
     case notReady
 
-    init(isStale: Bool, isRecording: Bool) {
-        if isStale {
-            self = .notReady
-        } else {
-            self = isRecording ? .recording : .ready
-        }
+    init(isStale: Bool, state: MicPresenceCardState) {
+        self = isStale ? .notReady : .live(state)
     }
 
     var title: String {
         switch self {
-        case .ready: "Ready to record"
-        case .recording: "Recording…"
+        case .live(.ready): "Ready to record"
+        case .live(.arming): "Starting…"
+        case .live(.capturing): "Recording"
+        case .live(.finalizing): "Transcribing…"
+        case .live(.concluded(.copied)): "Copied"
+        case .live(.concluded(.noSpeech)): "No speech detected"
+        case .live(.concluded(.failed)): "Couldn't transcribe"
         /// VCDR is no longer reachable in place, so the card must claim nothing:
         /// the next keyboard tap opens the app instead of recording where the
         /// user is typing (ADR-0006).
@@ -30,42 +30,63 @@ private enum PresenceFace {
     }
 
     /// The compact trailing slot is a few characters wide, so each face gets a
-    /// word the other two cannot be mistaken for.
+    /// word the others cannot be mistaken for. Capturing shows its timer there
+    /// instead.
     var tag: String {
         switch self {
-        case .ready: "Ready"
-        case .recording: "REC"
+        case .live(.ready): "Ready"
+        case .live(.arming), .live(.finalizing): "…"
+        case .live(.capturing): "REC"
+        case .live(.concluded(.copied)): "Copied"
+        case .live(.concluded(.noSpeech)), .live(.concluded(.failed)): "None"
         case .notReady: "Off"
         }
     }
 
     var symbol: String {
         switch self {
-        case .ready: "waveform"
-        case .recording: "mic.fill"
+        case .live(.ready): "waveform"
+        case .live(.arming), .live(.capturing): "mic.fill"
+        case .live(.finalizing): "text.bubble"
+        case .live(.concluded(.copied)): "doc.on.clipboard"
+        case .live(.concluded(.noSpeech)): "speaker.slash"
+        case .live(.concluded(.failed)): "exclamationmark.triangle"
         case .notReady: "waveform.slash"
         }
     }
 
-    /// Recording is the state a user must be able to catch from the corner of an
-    /// eye, so it is the only face that is red; ready is calm, not-ready is
-    /// drained of colour altogether.
+    /// Capturing is the state a user must be able to catch from the corner of
+    /// an eye, so it is the only red face; not-ready is drained of colour.
     var accent: Color {
         switch self {
-        case .ready: .primary
-        case .recording: Color(red: 0.90, green: 0.22, blue: 0.27)
+        case .live(.capturing): Color(red: 0.90, green: 0.22, blue: 0.27)
         case .notReady: .secondary
+        case .live: .primary
         }
     }
 
-    var isNotReady: Bool { self == .notReady }
-    var isRecording: Bool { self == .recording }
+    /// The timer runs from the first captured audio, never from the tap.
+    var capturingSince: Date? {
+        guard case .live(.capturing(let since)) = self else { return nil }
+        return since
+    }
+
+    var isNotReady: Bool {
+        guard case .notReady = self else { return false }
+        return true
+    }
+
+    var isCapturing: Bool { capturingSince != nil }
 }
 
 struct HotMicLiveActivity: Widget {
+    /// Wide enough for "0:00:00" in the compact trailing slot, which otherwise
+    /// gives a timer the whole island.
+    private static let compactTimerWidth: CGFloat = 44
+
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: HotMicActivityAttributes.self) { context in
-            let face = PresenceFace(isStale: context.isStale, isRecording: context.state.isRecording)
+            let face = PresenceFace(isStale: context.isStale, state: context.state)
             HStack(spacing: 12) {
                 iconBadge(size: 40, face: face)
                 caption(face: face, titleFont: .body.weight(.medium))
@@ -75,16 +96,16 @@ struct HotMicLiveActivity: Widget {
             .activityBackgroundTint(Color.black.opacity(0.6))
             .activitySystemActionForegroundColor(Color.white)
         } dynamicIsland: { context in
-            let face = PresenceFace(isStale: context.isStale, isRecording: context.state.isRecording)
+            let face = PresenceFace(isStale: context.isStale, state: context.state)
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     iconBadge(size: 32, face: face)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    // Only recording earns the trailing slot: a live dot beside
+                    // Only capturing earns the trailing slot: a live dot beside
                     // the wording, so the expanded island reads as in-progress
                     // rather than merely available.
-                    if face.isRecording {
+                    if face.isCapturing {
                         Circle()
                             .fill(face.accent)
                             .frame(width: 10, height: 10)
@@ -101,9 +122,17 @@ struct HotMicLiveActivity: Widget {
             } compactLeading: {
                 iconBadge(size: 20, face: face)
             } compactTrailing: {
-                Text(face.tag)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(face.accent)
+                if let since = face.capturingSince {
+                    Text(timerInterval: since...Date.distantFuture, countsDown: false)
+                        .monospacedDigit()
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(face.accent)
+                        .frame(width: Self.compactTimerWidth)
+                } else {
+                    Text(face.tag)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(face.accent)
+                }
             } minimal: {
                 iconBadge(size: 20, face: face)
             }
@@ -116,9 +145,15 @@ struct HotMicLiveActivity: Widget {
             Text("VCDR")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text(face.title)
-                .font(titleFont)
-                .foregroundStyle(face.accent)
+            HStack(spacing: 6) {
+                Text(face.title)
+                if let since = face.capturingSince {
+                    Text(timerInterval: since...Date.distantFuture, countsDown: false)
+                        .monospacedDigit()
+                }
+            }
+            .font(titleFont)
+            .foregroundStyle(face.accent)
         }
     }
 
@@ -128,7 +163,7 @@ struct HotMicLiveActivity: Widget {
     @ViewBuilder
     private func iconBadge(size: CGFloat, face: PresenceFace) -> some View {
         ZStack {
-            if face.isRecording {
+            if face.isCapturing {
                 face.accent
             } else {
                 LinearGradient(

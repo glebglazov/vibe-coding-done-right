@@ -27,6 +27,7 @@ struct RecordingFlowCoordinatorDiscardTests {
         channel.replaceCaptures(["mid-arming capture"])
 
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
             transcriptionProvider: ParakeetProvider()
@@ -78,6 +79,7 @@ struct RecordingFlowCoordinatorDiscardTests {
         )
 
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
             transcriptionProvider: ParakeetProvider(),
@@ -124,6 +126,7 @@ struct RecordingFlowCoordinatorDiscardTests {
 
         let gate = FinalizingGate()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
             transcriptionProvider: ParakeetProvider(),
@@ -140,7 +143,7 @@ struct RecordingFlowCoordinatorDiscardTests {
         #expect(coordinator.state == .transcribing)
 
         await gate.release()
-        await stopTask.value
+        _ = await stopTask.value
 
         guard case .complete(let text) = coordinator.state else {
             Issue.record("Expected the run to complete normally despite the Discard; got \(coordinator.state)")

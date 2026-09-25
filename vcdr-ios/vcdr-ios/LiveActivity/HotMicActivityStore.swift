@@ -16,17 +16,18 @@ protocol HotMicActivityStore {
     /// Every Hot Mic Live Activity the system currently holds for this app —
     /// including cards this process never requested, left by a previous run.
     var liveActivityIDs: [String] { get }
-    /// Requests a new activity showing the recording or ready face, whose claim
-    /// expires at `staleDate`, answering its identifier, or `nil` when the
-    /// system refuses.
-    func request(recording: Bool, staleDate: Date) async -> String?
+    /// Requests a new activity showing `state`, whose claim expires at
+    /// `staleDate`, answering its identifier, or `nil` when the system refuses.
+    func request(state: MicPresenceCardState, staleDate: Date) async -> String?
     /// Re-stamps an on-screen card: which face it shows, and how far its claim
     /// now reaches.
-    func update(id: String, recording: Bool, staleDate: Date) async
-    /// Removes a card now. The card is never ended with a scheduled dismissal:
-    /// ending freezes an activity, and a frozen card cannot be corrected when
-    /// readiness dies early (ADR-0006).
+    func update(id: String, state: MicPresenceCardState, staleDate: Date) async
+    /// Removes a card now.
     func end(id: String) async
+    /// Freezes a card on an outcome face and lets iOS dismiss it at
+    /// `dismissAt`. Only an outcome is ended this way: it cannot become false
+    /// later, and a readiness claim can (ADR-0006).
+    func conclude(id: String, state: MicPresenceCardState, dismissAt: Date) async
 }
 
 /// Production adapter over ActivityKit.
@@ -36,7 +37,7 @@ struct ActivityKitPresenceStore: HotMicActivityStore {
 
     var liveActivityIDs: [String] { Activity<HotMicActivityAttributes>.activities.map(\.id) }
 
-    func request(recording: Bool, staleDate: Date) async -> String? {
+    func request(state: MicPresenceCardState, staleDate: Date) async -> String? {
         do {
             let attrs = HotMicActivityAttributes()
             // `Activity.request` is synchronous and talks to the ActivityKit
@@ -50,7 +51,7 @@ struct ActivityKitPresenceStore: HotMicActivityStore {
             let activity = try await withThrowingBlockingTask(qos: .userInitiated) {
                 try Activity.request(
                     attributes: attrs,
-                    content: Self.content(recording: recording, staleDate: staleDate)
+                    content: ActivityContent(state: state, staleDate: staleDate)
                 )
             }
             return activity.id
@@ -60,29 +61,24 @@ struct ActivityKitPresenceStore: HotMicActivityStore {
         }
     }
 
-    func update(id: String, recording: Bool, staleDate: Date) async {
-        await activity(id)?.update(Self.content(recording: recording, staleDate: staleDate))
+    /// Past `staleDate`, iOS renders the not-ready face on its own — the only
+    /// correction that still happens once this process is gone.
+    func update(id: String, state: MicPresenceCardState, staleDate: Date) async {
+        await activity(id)?.update(ActivityContent(state: state, staleDate: staleDate))
     }
 
     func end(id: String) async {
         await activity(id)?.end(nil, dismissalPolicy: .immediate)
     }
 
-    private func activity(_ id: String) -> Activity<HotMicActivityAttributes>? {
-        Activity<HotMicActivityAttributes>.activities.first { $0.id == id }
+    func conclude(id: String, state: MicPresenceCardState, dismissAt: Date) async {
+        await activity(id)?.end(
+            ActivityContent(state: state, staleDate: nil),
+            dismissalPolicy: .after(dismissAt)
+        )
     }
 
-    /// The state says which of ready and recording the card shows; the
-    /// `staleDate` around it says how long that claim holds. Past it, iOS renders
-    /// the not-ready face on its own — the only correction that still happens
-    /// once this process is gone.
-    nonisolated private static func content(
-        recording: Bool,
-        staleDate: Date
-    ) -> ActivityContent<HotMicActivityAttributes.ContentState> {
-        ActivityContent(
-            state: HotMicActivityAttributes.ContentState(isRecording: recording),
-            staleDate: staleDate
-        )
+    private func activity(_ id: String) -> Activity<HotMicActivityAttributes>? {
+        Activity<HotMicActivityAttributes>.activities.first { $0.id == id }
     }
 }

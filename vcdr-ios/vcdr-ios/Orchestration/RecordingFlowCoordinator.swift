@@ -118,8 +118,8 @@ final class RecordingFlowCoordinator {
     }
 
     let recordingEngine: any RecordingEngine
-    /// Owns the *Hot Mic Session* lifecycle — warm engine, heartbeat, Live
-    /// Activity presence, and the inactivity-timeout state machine. This
+    /// Owns the *Hot Mic Session* lifecycle — warm engine, heartbeat, and the
+    /// inactivity-timeout state machine. This
     /// coordinator drives it via lifecycle notifications (`prewarm`, `start`,
     /// `recordingStarted` / `recordingStopped`, `policyChanged`) and never
     /// touches the engine's warmth directly.
@@ -178,8 +178,12 @@ final class RecordingFlowCoordinator {
     private var isSubstitutionBootstrapRunning = false
     let historyCompletionAdapter = HistoryRecordingRunCompletionAdapter()
     /// The one Recording Run in flight, from the record intent until its
-    /// terminal state. Written only through `setActiveRun(_:)`.
+    /// terminal state. Written only through `setActiveRun(_:)` and
+    /// `endActiveRun(announcing:)`, the only places that tell Mic Presence.
     private(set) var activeRun: ActiveRecordingRun?
+    /// Mic Presence as the Recording Run and the scene see it. The Hot Mic
+    /// Session reports reachability to the same card.
+    private let runPresence: any RecordingRunPresence
     /// Holds every Finalizing, so the process keeps running until Completion
     /// Delivery ends even when VCDR is not on screen.
     let backgroundTasks: any BackgroundTaskRunner
@@ -195,7 +199,11 @@ final class RecordingFlowCoordinator {
     var commandObserverToken: (any NSObjectProtocol)?
     var settingsObserverToken: (any NSObjectProtocol)?
 
+    /// `presence` is the one Mic Presence card: the coordinator tells it about
+    /// the run and the scene, and a Hot Mic Session built here reports
+    /// reachability to it.
     init(
+        presence: any MicPresence & RecordingRunPresence,
         keyboardChannel: (any KeyboardChannelProtocol)? = nil,
         recordingEngine: (any RecordingEngine)? = nil,
         transcriptionProvider: (any StreamingTranscriptionProvider)? = nil,
@@ -216,7 +224,8 @@ final class RecordingFlowCoordinator {
             provider: { providers.provider(for: $0) }
         )
         self.keyboardChannel = keyboardChannel
-        self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, keyboard: keyboardChannel)
+        self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, presence: presence, keyboard: keyboardChannel)
+        self.runPresence = presence
         self.backgroundTasks = backgroundTasks ?? UIKitBackgroundTaskRunner()
         self.makeStreamingSession = makeStreamingSession
     }
@@ -257,15 +266,14 @@ final class RecordingFlowCoordinator {
     /// another app, so it comes down while VCDR itself is on screen — then the
     /// live session gets its heartbeat and idle deadline renewed.
     func handleForegroundActivation() async {
-        await hotMicSession.appEnteredForeground()
+        runPresence.sceneChanged(foreground: true)
         await hotMicSession.renewIfAlive()
     }
 
-    /// Scene-background hook. Mic Presence goes back up if the Hot Mic Session
-    /// is still warm — including a recording that started in the app and carries
-    /// on after leaving it.
-    func handleBackgroundTransition() async {
-        await hotMicSession.appLeftForeground()
+    /// Scene-background hook. Requested here rather than once suspended: the
+    /// app is still executing at this transition, so the card can go back up.
+    func handleBackgroundTransition() {
+        runPresence.sceneChanged(foreground: false)
     }
 
     /// Opens the Local Store off the main actor and installs the `@Observable`
@@ -604,16 +612,16 @@ final class RecordingFlowCoordinator {
     /// Finalizing failures are left to `stopActiveRun`'s
     /// `applyTerminalStateToUI` path, and a cancelled Arming to the start path.
     private func handleRecordingRunTerminal(_ terminal: RecordingRunTerminalState) {
-        guard case .processingFailure(let failure) = terminal, let phase = activeRun?.phase else { return }
+        guard case .processingFailure(let failure) = terminal, let active = activeRun else { return }
         let wasStillArming: Bool
-        switch phase {
+        switch active.phase {
         case .arming: wasStillArming = true
         case .capturing: wasStillArming = false
         case .cancellingArming, .finalizing: return
         }
 
         state = .error(failure.message)
-        setActiveRun(nil)
+        endActiveRun(announcing: RunCardOutcome(terminal, origin: active.origin))
         setIdleTimerDisabled(false)
         if wasStillArming {
             hotMicSession.recordIntentCancelledBeforeCapture()
@@ -706,6 +714,16 @@ final class RecordingFlowCoordinator {
 
     func setActiveRun(_ run: ActiveRecordingRun?) {
         activeRun = run
+        runPresence.runChanged(run.map { .active(origin: $0.origin, phase: $0.phase) })
+    }
+
+    /// Clears the run in the same call that hands Mic Presence its outcome,
+    /// so the card goes from Transcribing to the outcome with no idle face
+    /// between.
+    func endActiveRun(announcing outcome: RunCardOutcome?) {
+        activeRun = nil
+        let until = Date.now.addingTimeInterval(MicPresenceCardPolicy.concludedDwell)
+        runPresence.runChanged(outcome.map { .concluded($0, until: until) })
     }
 
     // MARK: - Idle Timer

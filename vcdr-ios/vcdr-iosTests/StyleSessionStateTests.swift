@@ -13,7 +13,7 @@ struct StyleSessionStateTests {
             DefaultSettings.setTextStyle(.formal)
             SessionSettings.clearAll()
 
-            let coordinator = RecordingFlowCoordinator()
+            let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard())
             #expect(coordinator.currentTextStyle == .formal)
         }
     }
@@ -25,7 +25,7 @@ struct StyleSessionStateTests {
             SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.defaultTextStyleKey)
             SessionSettings.clearAll()
 
-            let coordinator = RecordingFlowCoordinator()
+            let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard())
             #expect(coordinator.currentTextStyle == .casual)
         }
     }
@@ -53,7 +53,7 @@ struct StyleSessionStateTests {
     @Test("Can toggle style during session")
     @MainActor
     func canToggleStyleDuringSession() async throws {
-        let coordinator = RecordingFlowCoordinator()
+        let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard())
         
         // Start with casual
         coordinator.currentTextStyle = .casual

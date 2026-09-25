@@ -15,6 +15,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: SpyWarmRecordingEngine(),
             transcriptionProvider: provider
         )
@@ -40,6 +41,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: SpyWarmRecordingEngine(),
             transcriptionProvider: provider
         )
@@ -71,6 +73,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: engine,
             transcriptionProvider: provider
         )
@@ -104,6 +107,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: SpyWarmRecordingEngine(),
             transcriptionProvider: provider
         )
@@ -140,6 +144,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: engine,
             transcriptionProvider: provider
         )
@@ -176,6 +181,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: engine,
             transcriptionProvider: provider
         )
@@ -218,6 +224,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: engine,
             transcriptionProvider: provider
         )
@@ -250,6 +257,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: engine,
             transcriptionProvider: provider
         )
@@ -284,6 +292,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             recordingEngine: engine,
             transcriptionProvider: provider
         )
@@ -319,6 +328,7 @@ struct RecordingFlowCoordinatorInitTests {
 
         let provider = ParakeetProvider()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
             transcriptionProvider: provider,
@@ -362,6 +372,7 @@ struct RecordingFlowCoordinatorInitTests {
         )
 
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
             transcriptionProvider: ParakeetProvider(),

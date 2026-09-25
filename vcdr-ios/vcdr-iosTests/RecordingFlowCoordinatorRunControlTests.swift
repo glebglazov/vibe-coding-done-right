@@ -18,6 +18,7 @@ struct RecordingFlowCoordinatorRunControlTests {
         let engine = SpyWarmRecordingEngine()
         engine.hasMicrophonePermission = true
         return RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
             backgroundTasks: backgroundTasks ?? SpyBackgroundTaskRunner(),
@@ -123,6 +124,7 @@ struct RecordingFlowCoordinatorRunControlTests {
         engine.startCaptureDelay = .milliseconds(200)
         let channel = FakeKeyboardChannel()
         let coordinator = RecordingFlowCoordinator(
+            presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
             backgroundTasks: SpyBackgroundTaskRunner(),

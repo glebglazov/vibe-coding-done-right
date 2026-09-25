@@ -11,8 +11,14 @@ final class AppDependencies {
     init() {
         let engine = AudioRecorder()
         let keyboard = KeyboardChannel.live
-        let hotMicSession = HotMicSession(engine: engine, presence: HotMicActivityController(), keyboard: keyboard)
+        let card = MicPresenceCard(
+            controller: HotMicActivityController(),
+            clock: SystemHotMicClock(),
+            now: Date.init
+        )
+        let hotMicSession = HotMicSession(engine: engine, presence: card, keyboard: keyboard)
         coordinator = RecordingFlowCoordinator(
+            presence: card,
             keyboardChannel: keyboard,
             recordingEngine: engine,
             hotMicSession: hotMicSession,

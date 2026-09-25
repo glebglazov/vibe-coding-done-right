@@ -8,46 +8,50 @@ struct HotMicActivityControllerTests {
 
     /// The horizon every card is stamped with, in seconds.
     private let freshnessWindow = KeyboardChannel.heartbeatFreshnessWindow
+    private let since = Date(timeIntervalSince1970: 500)
 
     // MARK: - Tests
 
-    @Test("two overlapping shows produce exactly one Live Activity")
-    func overlappingShowsRequestOneActivity() async {
+    @Test("two overlapping live renders produce exactly one Live Activity")
+    func overlappingRendersRequestOneActivity() async {
         let store = FakeActivityStore()
         store.parkRequests = true
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        async let first: Void = controller.start(recording: false)
-        async let second: Void = controller.start(recording: false)
-        // Park inside the ActivityKit request, then give the second caller every
+        let first = controller.render(.live(.ready))
+        let second = controller.render(.live(.ready))
+        // Park inside the ActivityKit request, then give the second render every
         // chance to slip into the window the old ad-hoc guards left open.
         await waitUntil { store.parkedRequests == 1 }
         await settle()
 
         store.releaseRequests()
-        _ = await (first, second)
+        await first.value
+        await second.value
 
         #expect(store.requestCalls == 1)
         #expect(store.liveActivityIDs.count == 1)
     }
 
-    @Test("a hide that lands mid-show leaves no activity behind")
+    @Test("a hidden render that lands mid-request leaves no activity behind")
     func hideDuringShowLeavesNoOrphan() async {
         let store = FakeActivityStore()
         store.parkRequests = true
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        async let show: Void = controller.start(recording: false)
+        let show = controller.render(.live(.ready))
         await waitUntil { store.parkedRequests == 1 }
-        async let hide: Void = controller.stop()
+        let hide = controller.render(.hidden)
         await settle()
 
         store.releaseRequests()
-        _ = await (show, hide)
+        await show.value
+        await hide.value
 
         #expect(store.liveActivityIDs.isEmpty)
+        #expect(!controller.holdsLiveCard)
     }
 
     @Test("hiding ends strays the controller never requested")
@@ -56,10 +60,10 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.start(recording: false)
+        await controller.render(.live(.ready)).value
         store.injectStray("stray-from-a-crashed-session")
 
-        await controller.stop()
+        await controller.render(.hidden).value
 
         #expect(store.liveActivityIDs.isEmpty)
         #expect(store.endedIDs.contains("stray-from-a-crashed-session"))
@@ -71,21 +75,20 @@ struct HotMicActivityControllerTests {
         store.injectStray("survivor-of-the-last-launch")
         let controller = HotMicActivityController(store: store)
 
-        await settle()
+        await controller.settled()
 
         #expect(store.liveActivityIDs.isEmpty)
         #expect(store.endedIDs == ["survivor-of-the-last-launch"])
-        _ = controller
     }
 
-    @Test("a shown card claims readiness exactly one heartbeat freshness window ahead")
+    @Test("a live card claims its face exactly one heartbeat freshness window ahead")
     func staleHorizonIsTheHeartbeatFreshnessWindow() async {
         let store = FakeActivityStore()
         let shownAt = Date(timeIntervalSince1970: 1_000)
         let controller = HotMicActivityController(store: store, now: { shownAt })
         await settle()
 
-        await controller.start(recording: false)
+        await controller.render(.live(.ready)).value
 
         // Same window the keyboard reads to choose between recording in place
         // and the deep-link bounce — one constant, so the card and the record
@@ -94,69 +97,81 @@ struct HotMicActivityControllerTests {
         #expect(store.liveActivityIDs.count == 1)
     }
 
-    @Test("each refresh carries the horizon a full window past the beat that sent it")
-    func refreshTracksTheHeartbeat() async {
+    @Test("each re-render carries the horizon a full window past the moment it was sent")
+    func rerenderRenewsTheHorizon() async {
         let store = FakeActivityStore()
         var fakeNow = Date(timeIntervalSince1970: 0)
         let controller = HotMicActivityController(store: store, now: { fakeNow })
         await settle()
 
-        await controller.start(recording: false)
-
+        await controller.render(.live(.ready)).value
         fakeNow = Date(timeIntervalSince1970: 5)
-        await controller.refresh(recording: false)
+        await controller.render(.live(.ready)).value
         fakeNow = Date(timeIntervalSince1970: 10)
-        await controller.refresh(recording: false)
+        await controller.render(.live(.ready)).value
 
         #expect(store.updatedStaleDates == [
             Date(timeIntervalSince1970: 5 + freshnessWindow),
             Date(timeIntervalSince1970: 10 + freshnessWindow)
         ])
-        // The card stays the one that was requested — refreshing never trades it.
         #expect(store.requestCalls == 1)
         #expect(store.liveActivityIDs.count == 1)
     }
 
-    @Test("a refresh with no card on screen claims nothing")
-    func refreshWithoutPresenceRequestsNothing() async {
+    @Test("a run's faces change on the one card already on screen")
+    func facesChangeOnTheCardAlreadyShown() async {
         let store = FakeActivityStore()
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.refresh(recording: false)
+        await controller.render(.live(.arming)).value
+        await controller.render(.live(.capturing(since: since))).value
+        await controller.render(.live(.finalizing)).value
+
+        #expect(store.requestedFaces == [.arming])
+        #expect(store.updatedFaces == [.capturing(since: since), .finalizing])
+        #expect(store.liveActivityIDs.count == 1)
+    }
+
+    @Test("a concluding render freezes the held card on its outcome until its dismissal")
+    func concludingFreezesTheCard() async {
+        let store = FakeActivityStore()
+        let controller = HotMicActivityController(store: store)
+        let dismissAt = Date(timeIntervalSince1970: 2_000)
+        await settle()
+
+        await controller.render(.live(.finalizing)).value
+        await controller.render(.concluding(.concluded(.copied), dismissAt: dismissAt)).value
+
+        #expect(store.concluded == [.init(id: "activity-1", state: .concluded(.copied), dismissAt: dismissAt)])
+        #expect(!controller.holdsLiveCard)
+    }
+
+    @Test("a live render after a concluded card ends it before requesting a new one")
+    func liveAfterConcludingReplacesTheFrozenCard() async {
+        let store = FakeActivityStore()
+        let controller = HotMicActivityController(store: store)
+        await settle()
+
+        await controller.render(.live(.finalizing)).value
+        await controller.render(.concluding(.concluded(.copied), dismissAt: .distantFuture)).value
+        await controller.render(.live(.arming)).value
+
+        #expect(store.endedIDs == ["activity-1"])
+        #expect(store.liveActivityIDs == ["activity-2"])
+        #expect(controller.holdsLiveCard)
+    }
+
+    @Test("a concluding render with no card on screen requests nothing")
+    func concludingWithoutACardRequestsNothing() async {
+        let store = FakeActivityStore()
+        let controller = HotMicActivityController(store: store)
+        await settle()
+
+        await controller.render(.concluding(.concluded(.failed), dismissAt: .distantFuture)).value
 
         #expect(store.requestCalls == 0)
-        #expect(store.updatedStaleDates.isEmpty)
-        #expect(store.liveActivityIDs.isEmpty)
-    }
-
-    @Test("the requested card carries the face it was shown with")
-    func showCarriesTheRecordingFace() async {
-        let store = FakeActivityStore()
-        let controller = HotMicActivityController(store: store)
-        await settle()
-
-        await controller.start(recording: true)
-
-        #expect(store.requestedFaces == [true])
-    }
-
-    @Test("an on-screen card is re-stamped when the run starts and stops")
-    func faceSwitchesOnTheCardAlreadyShown() async {
-        let store = FakeActivityStore()
-        let controller = HotMicActivityController(store: store)
-        await settle()
-
-        await controller.start(recording: false)
-        await controller.start(recording: true)
-        await controller.refresh(recording: true)
-        await controller.start(recording: false)
-
-        // One card throughout — the face changes on it rather than by trading it
-        // for a second one.
-        #expect(store.requestCalls == 1)
-        #expect(store.liveActivityIDs.count == 1)
-        #expect(store.updatedFaces == [true, true, false])
+        #expect(store.concluded.isEmpty)
     }
 
     @Test("presence stays silent when the user has disabled Live Activities")
@@ -166,9 +181,10 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.start(recording: false)
+        await controller.render(.live(.ready)).value
 
         #expect(store.requestCalls == 0)
+        #expect(!controller.holdsLiveCard)
     }
 
     // MARK: - Helpers
@@ -196,19 +212,26 @@ struct HotMicActivityControllerTests {
 /// to let two Live Activities exist at once.
 @MainActor
 final class FakeActivityStore: HotMicActivityStore {
+    struct Conclusion: Equatable {
+        let id: String
+        let state: MicPresenceCardState
+        let dismissAt: Date
+    }
+
     var areActivitiesEnabled = true
     /// When true, `request()` suspends until `releaseRequests()`.
     var parkRequests = false
 
     private(set) var requestCalls = 0
     private(set) var endedIDs: [String] = []
-    /// Stale horizons stamped on cards as they were requested and refreshed —
-    /// how far into the future each call let the readiness claim reach.
+    /// Stale horizons stamped on cards as they were requested and renewed —
+    /// how far into the future each call let the claim reach.
     private(set) var requestedStaleDates: [Date] = []
     private(set) var updatedStaleDates: [Date] = []
     /// The face each request and update carried, in order.
-    private(set) var requestedFaces: [Bool] = []
-    private(set) var updatedFaces: [Bool] = []
+    private(set) var requestedFaces: [MicPresenceCardState] = []
+    private(set) var updatedFaces: [MicPresenceCardState] = []
+    private(set) var concluded: [Conclusion] = []
 
     private var live: [String] = []
     private var parked: [CheckedContinuation<Void, Never>] = []
@@ -226,10 +249,10 @@ final class FakeActivityStore: HotMicActivityStore {
         waiting.forEach { $0.resume() }
     }
 
-    func request(recording: Bool, staleDate: Date) async -> String? {
+    func request(state: MicPresenceCardState, staleDate: Date) async -> String? {
         requestCalls += 1
         requestedStaleDates.append(staleDate)
-        requestedFaces.append(recording)
+        requestedFaces.append(state)
         let id = "activity-\(requestCalls)"
         if parkRequests {
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -240,13 +263,19 @@ final class FakeActivityStore: HotMicActivityStore {
         return id
     }
 
-    func update(id: String, recording: Bool, staleDate: Date) async {
+    func update(id: String, state: MicPresenceCardState, staleDate: Date) async {
         updatedStaleDates.append(staleDate)
-        updatedFaces.append(recording)
+        updatedFaces.append(state)
     }
 
     func end(id: String) async {
         endedIDs.append(id)
         live.removeAll { $0 == id }
+    }
+
+    /// A concluded card stays in the system's list until its dismissal, as a
+    /// frozen activity does.
+    func conclude(id: String, state: MicPresenceCardState, dismissAt: Date) async {
+        concluded.append(Conclusion(id: id, state: state, dismissAt: dismissAt))
     }
 }
