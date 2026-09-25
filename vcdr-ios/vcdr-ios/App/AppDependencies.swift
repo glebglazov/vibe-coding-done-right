@@ -1,4 +1,5 @@
-import Foundation
+import AppIntents
+import UIKit
 
 /// The iOS composition root: it builds the one object graph, so a scene and a
 /// scene-less intent launch reach the same instances. `AppDelegate` owns it,
@@ -7,6 +8,7 @@ import Foundation
 final class AppDependencies {
     let coordinator: RecordingFlowCoordinator
     let boot: AppBoot
+    private let remote: IntentRecordingRemote
 
     init() {
         let engine = AudioRecorder()
@@ -22,8 +24,22 @@ final class AppDependencies {
             keyboardChannel: keyboard,
             recordingEngine: engine,
             hotMicSession: hotMicSession,
-            backgroundTasks: UIKitBackgroundTaskRunner()
+            backgroundTasks: UIKitBackgroundTaskRunner(),
+            pasteboard: GeneralPasteboard()
         )
         boot = AppBoot(steps: .coldLaunch(of: coordinator))
+        remote = IntentRecordingRemote(
+            boot: boot,
+            coordinator: coordinator,
+            card: card,
+            requiresCardToRecord: UIDevice.current.userInterfaceIdiom == .phone
+        )
+    }
+
+    /// Makes the remote what `@AppDependency` resolves to in both intents.
+    /// Runs from `AppDelegate.init`, before any intent can perform.
+    func registerForAppIntents() {
+        let remote = remote
+        AppDependencyManager.shared.add(dependency: remote as any RecordingRunRemote)
     }
 }

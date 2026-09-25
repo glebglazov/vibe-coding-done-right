@@ -1,4 +1,5 @@
 import ActivityKit
+import AppIntents
 import WidgetKit
 import SwiftUI
 
@@ -71,6 +72,16 @@ private enum PresenceFace {
         return since
     }
 
+    /// A stale card offers no button: the app behind it is not running.
+    var stopTitle: String? {
+        guard case .live(let state) = self else { return nil }
+        switch state.stopControl {
+        case .cancel?: return "Cancel"
+        case .stop?: return "Stop"
+        case nil: return nil
+        }
+    }
+
     var isNotReady: Bool {
         guard case .notReady = self else { return false }
         return true
@@ -91,6 +102,7 @@ struct HotMicLiveActivity: Widget {
                 iconBadge(size: 40, face: face)
                 caption(face: face, titleFont: .body.weight(.medium))
                 Spacer()
+                stopButton(face: face)
             }
             .padding()
             .activityBackgroundTint(Color.black.opacity(0.6))
@@ -118,7 +130,9 @@ struct HotMicLiveActivity: Widget {
                     caption(face: face, titleFont: .callout.weight(.medium))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                DynamicIslandExpandedRegion(.bottom) { EmptyView() }
+                DynamicIslandExpandedRegion(.bottom) {
+                    stopButton(face: face)
+                }
             } compactLeading: {
                 iconBadge(size: 20, face: face)
             } compactTrailing: {
@@ -154,6 +168,16 @@ struct HotMicLiveActivity: Widget {
             }
             .font(titleFont)
             .foregroundStyle(face.accent)
+        }
+    }
+
+    @ViewBuilder
+    private func stopButton(face: PresenceFace) -> some View {
+        if let title = face.stopTitle {
+            Button(intent: StopRecordingIntent()) {
+                Label(title, systemImage: "stop.fill")
+            }
+            .tint(face.accent)
         }
     }
 

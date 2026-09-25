@@ -3,6 +3,11 @@ import UIKit
 final class AppDelegate: NSObject, UIApplicationDelegate {
     let dependencies = AppDependencies()
 
+    override init() {
+        super.init()
+        dependencies.registerForAppIntents()
+    }
+
     /// Runs during `UIApplicationMain`, before the SwiftUI scene exists, so a
     /// cold launch from the keyboard's record URL shows Arming on the first
     /// frame instead of racing `.task` and `.onOpenURL`.

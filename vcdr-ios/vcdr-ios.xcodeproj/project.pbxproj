@@ -88,6 +88,14 @@
 			);
 			target = AA0000062F74750000000001 /* vcdr-keyboard */;
 		};
+		BB0000032F74750000000001 /* Exceptions for "Shared" folder in "vcdr-keyboard" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				LiveActivity/RecordingRunRemote.swift,
+				LiveActivity/StopRecordingIntent.swift,
+			);
+			target = AA0000062F74750000000001 /* vcdr-keyboard */;
+		};
 		E5157E072F982544004CFE53 /* Exceptions for "vcdr-widgets" folder in "vcdr-widgetsExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -145,6 +153,9 @@
 		};
 		E57289AB2F74745900E1C61C /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB0000032F74750000000001 /* Exceptions for "Shared" folder in "vcdr-keyboard" target */,
+			);
 			name = Shared;
 			path = ../Shared;
 			sourceTree = "<group>";

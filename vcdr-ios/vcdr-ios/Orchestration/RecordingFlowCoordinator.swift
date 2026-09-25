@@ -187,6 +187,8 @@ final class RecordingFlowCoordinator {
     /// Holds every Finalizing, so the process keeps running until Completion
     /// Delivery ends even when VCDR is not on screen.
     let backgroundTasks: any BackgroundTaskRunner
+    /// Where a Shortcut run's final text goes.
+    let pasteboard: any PasteboardWriting
     /// Text sent to AI processing — retained for the existing Done-page retry action.
     var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
@@ -209,6 +211,7 @@ final class RecordingFlowCoordinator {
         transcriptionProvider: (any StreamingTranscriptionProvider)? = nil,
         hotMicSession: HotMicSession? = nil,
         backgroundTasks: (any BackgroundTaskRunner)? = nil,
+        pasteboard: (any PasteboardWriting)? = nil,
         makeStreamingSession: (() -> any RecordingStreamingSession)? = nil
     ) {
         let engine = recordingEngine ?? AudioRecorder()
@@ -227,6 +230,7 @@ final class RecordingFlowCoordinator {
         self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, presence: presence, keyboard: keyboardChannel)
         self.runPresence = presence
         self.backgroundTasks = backgroundTasks ?? UIKitBackgroundTaskRunner()
+        self.pasteboard = pasteboard ?? GeneralPasteboard()
         self.makeStreamingSession = makeStreamingSession
     }
 

@@ -27,6 +27,8 @@ extension RecordingFlowCoordinator {
 
     var activeRunPhase: RecordingRunPhase? { activeRun?.phase }
 
+    var hasMicrophonePermission: Bool { recordingEngine.hasMicrophonePermission }
+
     /// Starts recording with real-time streaming transcription.
     /// Audio capture begins immediately; model initialization and streaming setup
     /// proceed in the background. Buffers queue in StreamingAsrManager's AsyncStream
@@ -183,12 +185,16 @@ extension RecordingFlowCoordinator {
     }
 
     /// Completion Delivery by origin. Every run takes the Keyboard Channel off
-    /// `.recording`, and every success reaches history.
+    /// `.recording`, and every success reaches history. The clipboard write
+    /// comes first, so the text is there before the card says Copied.
     func completionAdapters(for origin: RecordingRunOrigin) -> [any RecordingRunCompletionAdapter] {
-        [
-            KeyboardChannelRecordingRunCompletionAdapter(keyboardChannel: keyboardChannel, origin: origin),
-            historyCompletionAdapter
-        ]
+        let keyboard = KeyboardChannelRecordingRunCompletionAdapter(keyboardChannel: keyboardChannel, origin: origin)
+        switch origin {
+        case .app, .keyboard:
+            return [keyboard, historyCompletionAdapter]
+        case .shortcut:
+            return [ClipboardRecordingRunCompletionAdapter(pasteboard: pasteboard), keyboard, historyCompletionAdapter]
+        }
     }
 
     private func finalize(_ active: ActiveRecordingRun) async -> RecordingRunTerminalState {
