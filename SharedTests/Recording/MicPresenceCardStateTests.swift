@@ -6,7 +6,6 @@ import Testing
 @testable import vcdr_ios
 #endif
 
-/// Pins the wire state the widget decodes and the one button each face offers.
 struct MicPresenceCardStateTests {
     private static let everyFace: [MicPresenceCardState] = [
         .ready,

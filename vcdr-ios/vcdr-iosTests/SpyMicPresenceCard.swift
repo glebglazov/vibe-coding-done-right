@@ -1,7 +1,6 @@
 import Foundation
 @testable import vcdr_ios
 
-/// Records what the coordinator and the Hot Mic Session tell Mic Presence.
 @MainActor
 final class SpyMicPresenceCard: MicPresence, RecordingRunPresence {
     var areActivitiesEnabled = true

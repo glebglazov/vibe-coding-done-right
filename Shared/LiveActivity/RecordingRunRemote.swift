@@ -13,7 +13,6 @@ protocol RecordingRunRemote: AnyObject, Sendable {
     func stopFromCard() async
 }
 
-/// Why a Shortcut did not start a recording. Shortcuts shows the message.
 nonisolated enum RecordingRemoteRefusal: Error, CustomLocalizedStringResourceConvertible {
     /// The permission prompt cannot appear while VCDR is in the background.
     case microphoneNotAllowed

@@ -14,7 +14,7 @@ extension RecordingFlowCoordinator {
     func prepareForDeepLinkRecording() {
         guard state != .arming && state != .recording && state != .transcribing else { return }
         state = .arming
-        launchedViaDeepLink = true
+        isKeyboardRun = true
         stoppedViaDeepLink = false
     }
 
@@ -32,18 +32,9 @@ extension RecordingFlowCoordinator {
         }
     }
 
-    /// Called when the keyboard's stop fallback opens `vcdr-ios://stop`. Drives
-    /// the same `stopActiveRun()` path the Darwin command would have, plus
-    /// flags the stop as deep-linked so the Done page shows the swipe-to-paste
-    /// hint. A keyboard run's completion adapter then flips the keyboard's
-    /// stuck "transcribing" pill to the run's terminal state — bundled text
-    /// (auto-pasted on next viewWillAppear), an empty-result flash, a
-    /// cancelled flash or a FAILED pill.
     func handleStopDeepLink() async {
-        // It cancels during Arming (no audio ever flowed → cancellation on the
-        // wire) and finalizes during Capturing.
         if RecordingToggle.stopCommand(for: activeRunPhase) == .stop {
-            launchedViaDeepLink = true
+            isKeyboardRun = true
             stoppedViaDeepLink = true
             await stopActiveRun()
             return

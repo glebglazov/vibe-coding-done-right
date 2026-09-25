@@ -289,7 +289,7 @@ struct RecordingView: View {
             // Top overlay — the return hint
             VStack(spacing: 0) {
                 HStack {
-                    if coordinator.launchedViaDeepLink {
+                    if coordinator.isKeyboardRun {
                         returnHint
                             .padding(.leading, 20)
                     }
@@ -318,7 +318,7 @@ struct RecordingView: View {
                 )
                 .padding(.bottom, 16)
 
-                if coordinator.launchedViaDeepLink {
+                if coordinator.isKeyboardRun {
                     swipeBackHint
                         .padding(.bottom, 16)
                 }

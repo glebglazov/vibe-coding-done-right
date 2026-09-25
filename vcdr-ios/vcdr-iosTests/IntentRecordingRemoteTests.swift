@@ -2,8 +2,6 @@ import Foundation
 import Testing
 @testable import vcdr_ios
 
-/// What a Shortcut or the card's Stop button does to VCDR, through the remote
-/// the intents resolve.
 @MainActor
 @Suite("IntentRecordingRemote", .serialized)
 struct IntentRecordingRemoteTests {
@@ -35,7 +33,6 @@ struct IntentRecordingRemoteTests {
         }
     }
 
-    /// Toggles once and answers the refusal, or nil when the toggle went ahead.
     private func toggle(_ env: Env) async -> RecordingRemoteRefusal? {
         do {
             try await env.remote.toggleFromShortcut()

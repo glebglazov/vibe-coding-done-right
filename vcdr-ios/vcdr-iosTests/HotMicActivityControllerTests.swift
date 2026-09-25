@@ -21,8 +21,6 @@ struct HotMicActivityControllerTests {
 
         let first = controller.render(.live(.ready))
         let second = controller.render(.live(.ready))
-        // Park inside the ActivityKit request, then give the second render every
-        // chance to slip into the window the old ad-hoc guards left open.
         await waitUntil { store.parkedRequests == 1 }
         await settle()
 
@@ -224,8 +222,6 @@ final class FakeActivityStore: HotMicActivityStore {
 
     private(set) var requestCalls = 0
     private(set) var endedIDs: [String] = []
-    /// Stale horizons stamped on cards as they were requested and renewed —
-    /// how far into the future each call let the claim reach.
     private(set) var requestedStaleDates: [Date] = []
     private(set) var updatedStaleDates: [Date] = []
     /// The face each request and update carried, in order.

@@ -57,9 +57,6 @@ extension RecordingFlowCoordinator {
         currentTextStyle = SessionSettings.effectiveTextStyle()
     }
 
-    /// Re-reads session/default state from shared storage. Called after the
-    /// cold-launch boot sequence runs (migration + session clear) so any state
-    /// that landed after `AppDependencies` built the coordinator is picked up.
     func refreshSettingsFromStorage() {
         handleSettingsChanged()
     }

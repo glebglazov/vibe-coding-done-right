@@ -6,7 +6,6 @@ import AppIntents
 /// type to build the button.
 struct StopRecordingIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "Stop Recording"
-    /// A card control, not a Shortcuts action.
     static let isDiscoverable = false
 
     @AppDependency private var remote: any RecordingRunRemote

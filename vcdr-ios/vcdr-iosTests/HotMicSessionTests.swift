@@ -481,7 +481,6 @@ struct HotMicSessionTests {
         #expect(env.session.idleDeadline == fixedNow.addingTimeInterval(TimeInterval(HotSessionTimeout.fiveMinutes.rawValue)))
         #expect(env.presence.isShown)
 
-        // A beat renews the Heartbeat and leaves reachability as it was.
         beat.advance()
         await settle()
         #expect(env.presence.isShown)
@@ -638,9 +637,6 @@ final class FakeWarmEngine: WarmEngine {
 /// refusing to deactivate) surfaced by `endHotSession`.
 struct FakeAudioReleaseError: Error {}
 
-/// Spy `MicPresence` that records In-Place Reachability as the session
-/// reports it. `startCalls` and `stopCalls` count transitions, so reporting the
-/// same fact twice is not a second presentation.
 @MainActor
 final class SpyPresence: MicPresence {
     private(set) var startCalls = 0

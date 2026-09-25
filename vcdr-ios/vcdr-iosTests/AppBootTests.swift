@@ -2,7 +2,6 @@ import Foundation
 import Testing
 @testable import vcdr_ios
 
-/// A scene reconnect or a second intent must not run the launch sequence again.
 @MainActor
 struct AppBootTests {
     @Test("launching twice runs the prefix once and the deferred boot once")

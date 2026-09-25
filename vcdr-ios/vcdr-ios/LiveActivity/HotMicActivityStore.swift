@@ -22,11 +22,9 @@ protocol HotMicActivityStore {
     /// Re-stamps an on-screen card: which face it shows, and how far its claim
     /// now reaches.
     func update(id: String, state: MicPresenceCardState, staleDate: Date) async
-    /// Removes a card now.
     func end(id: String) async
     /// Freezes a card on an outcome face and lets iOS dismiss it at
-    /// `dismissAt`. Only an outcome is ended this way: it cannot become false
-    /// later, and a readiness claim can (ADR-0006).
+    /// `dismissAt`.
     func conclude(id: String, state: MicPresenceCardState, dismissAt: Date) async
 }
 

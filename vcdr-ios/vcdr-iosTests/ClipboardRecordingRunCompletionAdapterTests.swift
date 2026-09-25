@@ -2,7 +2,6 @@ import Foundation
 import Testing
 @testable import vcdr_ios
 
-/// Only a success reaches the clipboard, as its final text.
 @MainActor
 struct ClipboardRecordingRunCompletionAdapterTests {
     @Test("a success copies the final text")

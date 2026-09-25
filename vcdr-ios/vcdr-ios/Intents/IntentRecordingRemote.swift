@@ -1,10 +1,6 @@
 import Foundation
 import OSLog
 
-/// The app's `RecordingRunRemote`: the policy between "an intent fired" and
-/// "the coordinator acts". It boots a process that launched without a scene,
-/// refuses a start the system would stop, and returns a stop at once while
-/// Finalizing goes on under its background task.
 @MainActor
 final class IntentRecordingRemote: RecordingRunRemote {
     private let boot: AppBoot
@@ -51,8 +47,6 @@ final class IntentRecordingRemote: RecordingRunRemote {
             Logger.recording.warning("Toggle Recording starts without a card: Live Activities are off")
         }
 
-        // No await separates the toggle read from this call, so a second
-        // press already sees Arming and cancels.
         await coordinator.startRecording(origin: .shortcut)
         guard coordinator.activeRunPhase != nil, !(await card.isShowingCard()) else { return }
         guard !requiresCardToRecord else {

@@ -5,7 +5,6 @@ import Testing
 @testable import vcdr_ios
 #endif
 
-/// Pins which destinations and Captures each Run Origin reaches.
 struct RecordingRunOriginTests {
     @Test("only a Shortcut run leaves keyboard Captures alone")
     func captures() {

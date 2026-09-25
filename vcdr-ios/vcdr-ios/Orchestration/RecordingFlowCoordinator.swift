@@ -80,9 +80,7 @@ final class RecordingFlowCoordinator {
     private(set) var liveTranscript: String = ""
     /// Shown in the transcribing state — describes what the app is waiting on
     var transcribingMessage: String = ""
-    /// True while the current Recording Run came from the keyboard. Exposed for
-    /// the view to show or hide the back button.
-    var launchedViaDeepLink = false
+    var isKeyboardRun = false
     /// When true, the app was foregrounded by the keyboard's stop-deep-link
     /// fallback (`vcdr-ios://stop`). Drives the Done-page "Swipe to paste"
     /// hint, which is only meaningful in that path — every other way of
@@ -118,11 +116,6 @@ final class RecordingFlowCoordinator {
     }
 
     let recordingEngine: any RecordingEngine
-    /// Owns the *Hot Mic Session* lifecycle — warm engine, heartbeat, and the
-    /// inactivity-timeout state machine. This coordinator drives it via
-    /// lifecycle notifications (`prewarm`, `start`, `recordingStarted` /
-    /// `recordingStopped`, `policyChanged`) and never touches the engine's
-    /// warmth directly.
     let hotMicSession: HotMicSession
     /// Every Transcription Model this device can run, each provider kept once
     /// it has been handed out so switching the Default away and back does not
@@ -177,17 +170,9 @@ final class RecordingFlowCoordinator {
     let substitutionStore = SubstitutionStoreProxy()
     private var isSubstitutionBootstrapRunning = false
     let historyCompletionAdapter = HistoryRecordingRunCompletionAdapter()
-    /// The one Recording Run in flight, from the record intent until its
-    /// terminal state. Written only through `setActiveRun(_:)` and
-    /// `endActiveRun(announcing:)`, the only places that tell Mic Presence.
     private(set) var activeRun: ActiveRecordingRun?
-    /// Mic Presence as the Recording Run and the scene see it. The Hot Mic
-    /// Session reports reachability to the same card.
     private let runPresence: any RecordingRunPresence
-    /// Holds every Finalizing, so the process keeps running until Completion
-    /// Delivery ends even when VCDR is not on screen.
     let backgroundTasks: any BackgroundTaskRunner
-    /// Where a Shortcut run's final text goes.
     let pasteboard: any PasteboardWriting
     /// Text sent to AI processing — retained for the existing Done-page retry action.
     var aiInputText: String = ""
@@ -201,9 +186,6 @@ final class RecordingFlowCoordinator {
     var commandObserverToken: (any NSObjectProtocol)?
     var settingsObserverToken: (any NSObjectProtocol)?
 
-    /// `presence` is the one Mic Presence card: the coordinator tells it about
-    /// the run and the scene, and a Hot Mic Session built here reports
-    /// reachability to it.
     init(
         presence: any MicPresence & RecordingRunPresence,
         keyboardChannel: (any KeyboardChannelProtocol)? = nil,
@@ -563,11 +545,6 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    /// Shared by `stopActiveRun` and `discardRecording`: a stop or Discard
-    /// landing during Arming means no audio ever flowed. Flips to idle
-    /// instantly (responsiveness-first); the in-flight `startRecording` sees
-    /// the run is now `.cancellingArming` and tears it down itself.
-    ///
     /// Publishes cancellation — never Empty Result, never idle — because that
     /// is what the run will terminate in once the in-flight start tears it
     /// down. Publishing here rather than waiting for that teardown is what
@@ -586,8 +563,6 @@ final class RecordingFlowCoordinator {
         setIdleTimerDisabled(false)
     }
 
-    /// Drops the run's Captures. Only a run that uses keyboard Captures clears
-    /// the Keyboard Channel's copy.
     func clearCapturedTexts(for origin: RecordingRunOrigin) {
         if origin.usesKeyboardCaptures {
             keyboardChannel.clearCaptures()
@@ -613,8 +588,6 @@ final class RecordingFlowCoordinator {
     /// Surfaces a Processing Failure that lands while the run is still Arming
     /// or Capturing — including the Arming Deadline firing while
     /// `startCapture` is hung and `startRecording` has not returned yet.
-    /// Finalizing failures are left to `stopActiveRun`'s
-    /// `applyTerminalStateToUI` path, and a cancelled Arming to the start path.
     private func handleRecordingRunTerminal(_ terminal: RecordingRunTerminalState) {
         guard case .processingFailure(let failure) = terminal, let active = activeRun else { return }
         let wasStillArming: Bool
@@ -702,7 +675,7 @@ final class RecordingFlowCoordinator {
         writeState(.idle)
         setIdleTimerDisabled(false)
         liveTranscript = ""
-        launchedViaDeepLink = false
+        isKeyboardRun = false
         stoppedViaDeepLink = false
         aiProcessingStatus = .idle
         selectedPromptMode = SessionSettings.effectiveAIMode()
@@ -721,9 +694,6 @@ final class RecordingFlowCoordinator {
         runPresence.runChanged(run.map { .active(origin: $0.origin, phase: $0.phase) })
     }
 
-    /// Clears the run in the same call that hands Mic Presence its outcome,
-    /// so the card goes from Transcribing to the outcome with no idle face
-    /// between.
     func endActiveRun(announcing outcome: RunCardOutcome?) {
         activeRun = nil
         let until = Date.now.addingTimeInterval(MicPresenceCardPolicy.concludedDwell)

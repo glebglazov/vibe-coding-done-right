@@ -1,9 +1,6 @@
 import OSLog
 import UIKit
 
-/// Keeps the process running while `work` runs, even when VCDR is not on
-/// screen. Every Finalizing runs inside one, so a stop from the keyboard, the
-/// card or a Shortcut still reaches its Completion Delivery.
 @MainActor
 protocol BackgroundTaskRunner {
     func run<T>(named name: String, _ work: () async -> T) async -> T

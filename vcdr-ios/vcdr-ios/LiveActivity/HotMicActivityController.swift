@@ -5,16 +5,8 @@ import OSLog
 /// `MicPresenceCard` decides. The system orange mic dot cannot be suppressed,
 /// and this card gives it identity.
 ///
-/// A live card is re-stamped on every render with a stale horizon one Heartbeat
-/// freshness window wide (ADR-0006). Only an outcome face is ended with a
-/// scheduled dismissal: ending freezes a card on screen, which is honest for
-/// "Copied" and dishonest for a readiness claim.
-///
 /// Every render is serialized and runs to completion before the next starts.
-/// The ActivityKit request suspends for as long as seconds, so without
-/// ordering two overlapping renders each saw an empty slot and requested their
-/// own card — leaving an orphan that outlived teardown and kept advertising
-/// readiness with the engine down.
+/// The ActivityKit request can suspend for seconds.
 @MainActor
 final class HotMicActivityController {
     private let store: any HotMicActivityStore
@@ -37,25 +29,18 @@ final class HotMicActivityController {
     init(store: (any HotMicActivityStore)? = nil, now: @escaping () -> Date = Date.init) {
         self.store = store ?? ActivityKitPresenceStore()
         self.now = now
-        // End any activity that survived a previous app kill. The sweep is the
-        // first link in the chain, so no render's request can be swept away
-        // by it.
         enqueue(.sweepStrays)
     }
 
     var areActivitiesEnabled: Bool { store.areActivitiesEnabled }
 
-    /// True while this controller holds a card it can still update.
     var holdsLiveCard: Bool { activityID != nil }
 
-    /// Enqueues a reconcile toward `decision` and returns at once. Renders run
-    /// in order, so the last one wins.
     @discardableResult
     func render(_ decision: MicPresenceCardDecision) -> Task<Void, Never> {
         enqueue(.render(decision))
     }
 
-    /// Waits for every render enqueued so far.
     func settled() async {
         await lastOperation?.value
     }
@@ -96,8 +81,6 @@ final class HotMicActivityController {
 
     // MARK: - Operations
 
-    /// Renews the card this controller holds. With none, it ends any card
-    /// frozen on an outcome before it requests a new one.
     private func show(_ state: MicPresenceCardState) async {
         if let activityID {
             await store.update(id: activityID, state: state, staleDate: staleDate())
@@ -113,9 +96,6 @@ final class HotMicActivityController {
         Logger.app.info("Mic Presence Live Activity started")
     }
 
-    /// Freezes the held card on its outcome and forgets it, so the next live
-    /// render ends it and starts fresh. With no card held there is nothing to
-    /// announce the outcome on.
     private func conclude(_ state: MicPresenceCardState, dismissAt: Date) async {
         guard let activityID else { return }
         await store.conclude(id: activityID, state: state, dismissAt: dismissAt)

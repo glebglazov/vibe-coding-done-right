@@ -2,7 +2,6 @@ import Foundation
 import Testing
 @testable import vcdr_ios
 
-/// Mic Presence through the real controller over an in-memory ActivityKit.
 @MainActor
 @Suite("MicPresenceCard")
 struct MicPresenceCardTests {

@@ -13,9 +13,6 @@ struct GeneralPasteboard: PasteboardWriting {
     }
 }
 
-/// Clipboard Completion Delivery for a Shortcut run: the same final text the
-/// keyboard would get. Every other terminal state writes nothing, so what the
-/// user copied before survives an empty or failed run.
 @MainActor
 final class ClipboardRecordingRunCompletionAdapter: RecordingRunCompletionAdapter {
     private let pasteboard: any PasteboardWriting

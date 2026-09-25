@@ -3,9 +3,6 @@ import AppIntents
 import WidgetKit
 import SwiftUI
 
-/// What the Mic Presence card can say. Every face but one comes from the app's
-/// content state; the not-ready face is the system's, and it wins — once the
-/// stale horizon has passed nothing the card claimed is still true.
 private enum PresenceFace {
     case live(MicPresenceCardState)
     case notReady
@@ -30,9 +27,6 @@ private enum PresenceFace {
         }
     }
 
-    /// The compact trailing slot is a few characters wide, so each face gets a
-    /// word the others cannot be mistaken for. Capturing shows its timer there
-    /// instead.
     var tag: String {
         switch self {
         case .live(.ready): "Ready"
@@ -56,8 +50,6 @@ private enum PresenceFace {
         }
     }
 
-    /// Capturing is the state a user must be able to catch from the corner of
-    /// an eye, so it is the only red face; not-ready is drained of colour.
     var accent: Color {
         switch self {
         case .live(.capturing): Color(red: 0.90, green: 0.22, blue: 0.27)
@@ -66,13 +58,11 @@ private enum PresenceFace {
         }
     }
 
-    /// The timer runs from the first captured audio, never from the tap.
     var capturingSince: Date? {
         guard case .live(.capturing(let since)) = self else { return nil }
         return since
     }
 
-    /// A stale card offers no button: the app behind it is not running.
     var stopTitle: String? {
         guard case .live(let state) = self else { return nil }
         switch state.stopControl {
@@ -114,9 +104,6 @@ struct HotMicLiveActivity: Widget {
                     iconBadge(size: 32, face: face)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    // Only capturing earns the trailing slot: a live dot beside
-                    // the wording, so the expanded island reads as in-progress
-                    // rather than merely available.
                     if face.isCapturing {
                         Circle()
                             .fill(face.accent)

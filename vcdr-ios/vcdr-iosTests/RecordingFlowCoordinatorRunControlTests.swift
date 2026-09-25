@@ -3,8 +3,6 @@ import Foundation
 import Testing
 @testable import vcdr_ios
 
-/// The run's origin decides Captures and delivery, a stop during Finalizing
-/// is ignored, and every Finalizing holds a background task.
 @MainActor
 @Suite("RecordingFlowCoordinator run control", .serialized)
 struct RecordingFlowCoordinatorRunControlTests {
@@ -175,8 +173,6 @@ private func settleMainActor() async {
     for _ in 0..<10 { await Task.yield() }
 }
 
-/// Holds `RecordingRun.stop()` inside its wait for the model, so a test can
-/// act while the run is genuinely Finalizing.
 private actor RunControlGate {
     private var continuation: CheckedContinuation<Void, Never>?
     private var released = false

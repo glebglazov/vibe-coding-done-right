@@ -6,7 +6,6 @@ import Testing
 @testable import vcdr_ios
 #endif
 
-/// Pins what every trigger does to the active Recording Run in each phase.
 struct RecordingToggleTests {
     private static let capturing = RecordingRunPhase.capturing(since: Date(timeIntervalSince1970: 0))
 

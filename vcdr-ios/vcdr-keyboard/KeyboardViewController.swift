@@ -481,9 +481,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 "Start Command Acknowledgement timed out after \(Self.startCommandAckTimeout)s; state=\(Self.wireStateName(state))"
             )
             // App didn't ack — heartbeat lied (suspended between our read and the
-            // command firing) or Darwin was dropped. Wake it via URL; the command
-            // + captures we already wrote will be overwritten by the deep-link
-            // path, which calls its own `startRecording(origin: .keyboard)`.
+            // command firing) or Darwin was dropped.
             self.openDeepLinkFallback(
                 KeyboardChannel.recordDeepLinkURL,
                 command: "start",

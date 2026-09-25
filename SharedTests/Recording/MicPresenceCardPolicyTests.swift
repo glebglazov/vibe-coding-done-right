@@ -6,8 +6,6 @@ import Testing
 @testable import vcdr_ios
 #endif
 
-/// Pins what the Mic Presence card shows for each combination of In-Place
-/// Reachability, scene, and Recording Run.
 struct MicPresenceCardPolicyTests {
     private static let now = Date(timeIntervalSince1970: 10_000)
     private static let since = now.addingTimeInterval(-7)
