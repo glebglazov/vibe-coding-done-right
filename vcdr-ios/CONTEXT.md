@@ -14,6 +14,10 @@ _Avoid_: keyboard transport, IPC layer, shared defaults protocol
 The app-alive signal written by the main app while the Hot Mic Session is alive and reachable. The keyboard uses the heartbeat to choose whether to attempt an in-place command; command acknowledgement is still required to prove the path is working right now.
 _Avoid_: ping, liveness flag, alive bit
 
+**In-Place Reachability**:
+Whether the next keyboard start will record where the user is typing, rather than need the Deep-Link Fallback. One predicate decides it: a Heartbeat younger than the keyboard's freshness window. The keyboard and Mic Presence both render that one predicate.
+_Avoid_: app alive, warm, connected
+
 **Deep-Link Fallback**:
 The keyboard's recovery path when the heartbeat is stale or a command is not acknowledged quickly enough. It opens the main app to start or stop recording when the in-keyboard command path cannot be trusted.
 _Avoid_: URL workaround, app bounce, launch fallback
@@ -29,11 +33,11 @@ Selected host-app text intentionally included as assistant context during a reco
 _Avoid_: selection blob, selected text payload
 
 **Hot Mic Session**:
-The app-level warm-microphone lifecycle that makes keyboard-driven recording start quickly. It owns app reachability, mic presence, and the user's hot-session timeout policy.
+The app-level warm-microphone lifecycle that makes keyboard-driven recording start quickly. It owns In-Place Reachability (through the Heartbeat) and the user's Hot-Session Timeout policy, and reports that reachability to Mic Presence.
 _Avoid_: warm engine, background mic mode
 
 **Mic Presence**:
-The user-visible indication that VCDR is responsible for the active microphone while the Hot Mic Session is warm and reachable for keyboard-driven recording. If Mic Presence says VCDR is ready, a keyboard start should be expected to record in place rather than require Deep-Link Fallback. For a finite Hot-Session Timeout, Mic Presence should end around the timeout deadline rather than remain visible as a stale readiness signal.
+The user-visible card that says, from outside the app, what VCDR is doing with the microphone. It renders In-Place Reachability and the progress of the active Recording Run: ready while the Hot Mic Session is warm and reachable, then Arming, Capturing with a running timer, and Finalizing. For a Run Origin with no surface of its own, it also shows a short outcome (copied, no speech, failed). If Mic Presence says VCDR is ready, a keyboard start should be expected to record in place rather than require Deep-Link Fallback. It never makes a claim it cannot withdraw: when the app stops renewing it, iOS shows it as not ready. It is absent while VCDR is in the foreground, except while a Shortcut run is Arming or Capturing, because the system stops a Shortcut recording that has no card. For a finite Hot-Session Timeout, Mic Presence should end around the timeout deadline rather than remain visible as a stale readiness signal.
 _Avoid_: live activity implementation, orange-dot label, mic badge
 
 **Readiness Fail-Closed**:
@@ -57,6 +61,10 @@ The lifecycle of one user-initiated recording from start through finalization an
 A Recording Run begins at the user's record intent — the tap — not when audio starts, and moves through three phases: **Arming**, **Capturing**, **Finalizing** (below). A run cancelled while still Arming (the user stops before audio ever flows) terminates in cancellation, having captured nothing.
 _Avoid_: recording service, transcription pipeline, coordinator helper
 
+**Run Origin**:
+Where a Recording Run's record intent came from: the app, the keyboard, or a Shortcut. The start fixes it, and the trigger that stops the run never changes it. It alone decides the run's Completion Delivery destinations and whether the run reads and clears Captures. A keyboard stop can end a Shortcut run, and the run still delivers as a Shortcut run.
+_Avoid_: fromDeepLink, sendToKeyboard, stop origin, trigger
+
 **Arming**:
 The first phase of a Recording Run: the record intent has been acknowledged and the audio engine is warming, but no audio is being captured yet. Arming is about the audio engine, never the transcription model — it is unrelated to Transcription Readiness. The UI shows the tap was registered (pressed, "preparing") but must not show a running timer or live waveform, because nothing is being captured.
 _Avoid_: PREPARING (that is reserved against Transcription Readiness), warming, engine init state
@@ -70,8 +78,12 @@ The Recording Run phase after the user stops: capture has ended and the buffered
 _Avoid_: post-processing, finishing, transcribing state
 
 **Completion Delivery**:
-The handoff that applies a Recording Run terminal state to outside destinations such as the Keyboard Channel and conversation history. Completion Delivery must preserve the run result without making the Recording Run know which destinations are active. When History Bootstrap has not finished yet, a successful run's Conversation may be held and written once the history store is ready.
+The handoff that applies a Recording Run terminal state to outside destinations such as the Keyboard Channel, the clipboard, and conversation history. The Run Origin chooses the destinations. Completion Delivery must preserve the run result without making the Recording Run know which destinations are active. When History Bootstrap has not finished yet, a successful run's Conversation may be held and written once the history store is ready.
 _Avoid_: callback, post-processing hook, output side effect
+
+**Clipboard Delivery**:
+Completion Delivery for a Shortcut run: a success's final text goes to the system clipboard, and Mic Presence shows that it was copied. An Empty Result, a cancellation, or a processing failure leaves the clipboard as it was. A Shortcut run never reads or clears Captures, so it cannot consume Captures meant for a later keyboard run.
+_Avoid_: paste, copy action, shortcut output
 
 **Empty Result**:
 A completed recording that produced no usable speech. Empty Result is distinct from cancellation and processing failure because the keyboard can surface it as a short no-speech state rather than a delivered transcript.
@@ -167,3 +179,7 @@ Domain expert: "That is a Session Setting. It wins for this Recording Run, but i
 Dev: "The Recording Run ended with an Empty Result."
 
 Domain expert: "Publish Empty Result to the keyboard if it was keyboard-driven; do not create a Conversation."
+
+Dev: "The user started recording from the Toggle Recording shortcut and stopped it from the keyboard."
+
+Domain expert: "The Run Origin is still Shortcut. The text goes to the clipboard, Mic Presence shows it was copied, and the keyboard only goes back to idle."

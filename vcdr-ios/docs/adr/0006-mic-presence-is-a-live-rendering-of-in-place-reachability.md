@@ -1,5 +1,7 @@
 # Mic Presence is a live, staleness-tracked rendering of In-Place Reachability
 
+> **Amended by [ADR-0007](0007-mic-presence-renders-recording-run-progress.md):** Mic Presence also renders the progress of the active Recording Run, and `MicPresenceCard`, not the Heartbeat, renews its `staleDate`. The stale horizon, the serialization and the foreground rule stand, with one exception for a Shortcut run that is Arming or Capturing.
+
 Mic Presence is kept **live and periodically refreshed**, with `staleDate` set to the same freshness window the keyboard uses to decide between an in-place Darwin command and a Deep-Link Fallback. When VCDR stops being reachable, iOS flips the activity to a not-ready rendering on its own, with no app code running. This replaces the frozen `end(_, dismissalPolicy: .after(deadline))` activity chosen in [ADR-0002](0002-mic-presence-dismissal-at-deadline.md), trading autonomous *dismissal* for autonomous *honesty*.
 
 ## Context
