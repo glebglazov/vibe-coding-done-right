@@ -46,6 +46,7 @@ final class RecordingRun {
     private var updateTask: Task<Void, Never>?
     var armingDeadlineTask: Task<Void, Never>?
     private var terminalState: RecordingRunTerminalState?
+    private var captureEnded = false
     private var latestLiveTranscript = ""
     var hasReceivedFirstAudioBuffer = false
 
@@ -115,13 +116,21 @@ final class RecordingRun {
         return true
     }
 
+    /// Ends Capturing on its own so the caller can tell the Hot Mic Session
+    /// of the stop once the engine is really idle, before Finalizing begins.
+    func endCapture() {
+        guard !captureEnded else { return }
+        captureEnded = true
+        cancelArmingDeadline()
+        audioRecorder.stopCapture()
+    }
+
     func stop() async -> RecordingRunTerminalState {
         guard terminalState == nil else {
             return terminalState ?? .cancellation
         }
 
-        cancelArmingDeadline()
-        audioRecorder.stopCapture()
+        endCapture()
         updateTask?.cancel()
 
         let waitStart = ContinuousClock.now
@@ -161,8 +170,7 @@ final class RecordingRun {
     }
 
     func cancel() async -> RecordingRunTerminalState {
-        cancelArmingDeadline()
-        audioRecorder.stopCapture()
+        endCapture()
         cancelSetup()
         await streaming.cancel()
         return await finish(.cancellation)

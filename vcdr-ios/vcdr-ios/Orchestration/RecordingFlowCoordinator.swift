@@ -603,6 +603,7 @@ final class RecordingFlowCoordinator {
         if wasStillArming {
             hotMicSession.recordIntentCancelledBeforeCapture()
         } else {
+            active.run.endCapture()
             hotMicSession.recordingStopped()
         }
     }

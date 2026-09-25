@@ -10,18 +10,57 @@ struct RecordingFlowCoordinatorRunControlTests {
 
     private func makeCoordinator(
         channel: FakeKeyboardChannel = FakeKeyboardChannel(),
+        engine: SpyWarmRecordingEngine? = nil,
+        hotMicSession: HotMicSession? = nil,
         backgroundTasks: SpyBackgroundTaskRunner? = nil,
         session: @escaping () -> any RecordingStreamingSession
     ) -> RecordingFlowCoordinator {
-        let engine = SpyWarmRecordingEngine()
+        let engine = engine ?? SpyWarmRecordingEngine()
         engine.hasMicrophonePermission = true
         return RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
+            hotMicSession: hotMicSession,
             backgroundTasks: backgroundTasks ?? SpyBackgroundTaskRunner(),
             makeStreamingSession: session
         )
+    }
+
+    @Test("under the Never timeout a Shortcut run releases the mic when Capturing ends, before Finalizing")
+    func neverTimeoutReleasesMicAtEndOfCapturing() async {
+        SessionSettings.setAIMode(.verbatim)
+        defer { SessionSettings.clearAll() }
+        let engine = SpyWarmRecordingEngine()
+        let presence = SpyPresence()
+        let hotMicSession = HotMicSession(
+            engine: engine,
+            presence: presence,
+            keyboard: FakeKeyboardChannel(),
+            clock: TestClock(),
+            policy: { .never }
+        )
+        let gate = RunControlGate()
+        let coordinator = makeCoordinator(engine: engine, hotMicSession: hotMicSession) {
+            GatedSession(gate: gate)
+        }
+
+        await coordinator.startRecording(origin: .shortcut)
+        #expect(presence.isShown)
+        let stop = Task { await coordinator.stopActiveRun() }
+        await waitUntil { coordinator.activeRunPhase == .finalizing }
+
+        #expect(engine.endHotSessionCalls == 1)
+        #expect(!engine.isHot)
+        #expect(!presence.isShown)
+
+        await gate.release()
+        guard case .finalized(.success) = await stop.value else {
+            Issue.record("Expected the run to finalize after the mic was released")
+            return
+        }
+        #expect(engine.endHotSessionCalls == 1)
+        #expect(!hotMicSession.isAlive)
     }
 
     @Test("a Shortcut run never reads or clears keyboard Captures and sends the keyboard idle")

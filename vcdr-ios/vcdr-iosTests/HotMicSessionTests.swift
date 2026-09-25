@@ -162,6 +162,29 @@ struct HotMicSessionTests {
         #expect(env.presence.startCalls == 0)
     }
 
+    @Test(".never releases the engine as soon as it hears that capture has ended")
+    func neverPolicyTearsDownOnStop() async {
+        let env = makeEnv(policy: .never)
+        env.engine.isHot = true
+        env.engine.isRecording = true
+        env.session.recordingStarted()
+        await settle()
+        #expect(env.presence.isShown)
+
+        env.session.recordingStopped()
+        await settle()
+        #expect(env.engine.endHotSessionCalls == 0)
+
+        env.engine.isRecording = false
+        env.session.recordingStopped()
+        await waitUntil { env.engine.endHotSessionCalls == 1 }
+
+        #expect(!env.engine.isHot)
+        #expect(!env.channel.isAppLikelyAlive())
+        #expect(!env.presence.isShown)
+        #expect(env.clock.sleepCount == 0)
+    }
+
     @Test(".always keeps the session alive indefinitely")
     func alwaysNeverTearsDown() async {
         let env = makeEnv(policy: .always)

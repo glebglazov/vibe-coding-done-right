@@ -118,6 +118,7 @@ extension RecordingFlowCoordinator {
             abortArming()
             flashCancelled(revertingTo: .idle)
         case .capturing:
+            active.run.endCapture()
             hotMicSession.recordingStopped()
             setIdleTimerDisabled(false)
             clearCapturedTexts(for: active.origin)
@@ -148,6 +149,7 @@ extension RecordingFlowCoordinator {
 
     private func finalize(_ active: ActiveRecordingRun) async -> RecordingRunTerminalState {
         if isModelReady { recordHaptic.impactOccurred() }
+        active.run.endCapture()
         hotMicSession.recordingStopped()
         setIdleTimerDisabled(false)
 
