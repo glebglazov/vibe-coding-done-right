@@ -13,7 +13,7 @@ protocol RecordingRunRemote: AnyObject, Sendable {
     func stopFromCard() async
 }
 
-nonisolated enum RecordingRemoteRefusal: Error, CustomLocalizedStringResourceConvertible {
+nonisolated enum RecordingRemoteRefusal: Error, Equatable, CustomLocalizedStringResourceConvertible {
     /// The permission prompt cannot appear while VCDR is in the background.
     case microphoneNotAllowed
     /// The system stops a background recording that has no Live Activity.
@@ -21,12 +21,15 @@ nonisolated enum RecordingRemoteRefusal: Error, CustomLocalizedStringResourceCon
     /// ActivityKit refused the card, so the run was discarded before the
     /// system could stop it halfway.
     case cardUnavailable
+    /// The run ended in a processing failure before it reached Capturing.
+    case runFailed(String)
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .microphoneNotAllowed: "Open VCDR once to allow microphone access."
         case .liveActivitiesOff: "Turn on Live Activities for VCDR in Settings."
         case .cardUnavailable: "VCDR couldn't show its recording card. Try again."
+        case .runFailed(let message): "\(message)"
         }
     }
 }

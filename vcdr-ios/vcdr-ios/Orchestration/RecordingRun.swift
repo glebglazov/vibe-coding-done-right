@@ -45,7 +45,7 @@ final class RecordingRun {
     private var setupTask: Task<Void, Error>?
     private var updateTask: Task<Void, Never>?
     var armingDeadlineTask: Task<Void, Never>?
-    private var terminalState: RecordingRunTerminalState?
+    private(set) var terminalState: RecordingRunTerminalState?
     private var captureEnded = false
     private var latestLiveTranscript = ""
     var hasReceivedFirstAudioBuffer = false

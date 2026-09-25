@@ -85,6 +85,43 @@ struct IntentRecordingRemoteTests {
         #expect(env.pasteboard.writes.isEmpty)
     }
 
+    @Test("a start the engine refuses reports the failure to Shortcuts")
+    func engineStartFailureIsReported() async {
+        let env = Env()
+        env.engine.startSucceeds = false
+
+        guard case .runFailed(let message)? = await toggle(env) else {
+            Issue.record("Expected a runFailed refusal")
+            return
+        }
+        #expect(message.contains("Failed to start recording"))
+        #expect(env.coordinator.activeRunPhase == nil)
+        guard case .concluded(.failed, _)? = env.card.runs.last else {
+            Issue.record("Expected a Failed outcome on the card, got \(String(describing: env.card.runs.last))")
+            return
+        }
+    }
+
+    @Test("a missing card only discards the run the check was made for")
+    func missingCardDoesNotDiscardALaterRun() async {
+        SessionSettings.setAIMode(.verbatim)
+        defer { SessionSettings.clearAll() }
+        let env = Env()
+        env.card.showsCard = false
+        env.card.whileCheckingCard = {
+            await env.coordinator.stopActiveRun()
+            await env.coordinator.startRecording(origin: .keyboard)
+        }
+
+        #expect(await toggle(env) == nil)
+
+        guard case .capturing? = env.coordinator.activeRunPhase else {
+            Issue.record("Expected the keyboard run to keep Capturing, got \(String(describing: env.coordinator.activeRunPhase))")
+            return
+        }
+        #expect(env.pasteboard.writes.count == 1)
+    }
+
     @Test("a second toggle during Arming cancels the run and copies nothing")
     func doublePressCancels() async {
         let env = Env(startCaptureDelay: .milliseconds(200))

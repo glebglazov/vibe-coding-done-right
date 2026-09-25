@@ -47,8 +47,17 @@ final class IntentRecordingRemote: RecordingRunRemote {
             Logger.recording.warning("Toggle Recording starts without a card: Live Activities are off")
         }
 
-        await coordinator.startRecording(origin: .shortcut)
-        guard coordinator.activeRunPhase != nil, !(await card.isShowingCard()) else { return }
+        switch await coordinator.startRecording(origin: .shortcut) {
+        case .failed(let message): throw .runFailed(message)
+        case .cancelledArming, .ignored: return
+        case .capturing: break
+        }
+
+        let run = coordinator.activeRun?.run
+        guard !(await card.isShowingCard()) else { return }
+        // The card check suspends; the run it was made for may have ended, and
+        // another may have started, by the time it answers.
+        guard let active = coordinator.activeRun, active.run === run, case .capturing = active.phase else { return }
         guard !requiresCardToRecord else {
             Logger.recording.error("Toggle Recording discarded: ActivityKit refused the card")
             await coordinator.discardRecording()

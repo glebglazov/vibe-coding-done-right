@@ -11,6 +11,13 @@ struct ActiveRecordingRun {
     var phase: RecordingRunPhase
 }
 
+enum RecordingStartResult: Equatable {
+    case capturing
+    case cancelledArming
+    case failed(String)
+    case ignored
+}
+
 enum RecordingStopResult: Equatable {
     case cancelledArming
     case finalized(RecordingRunTerminalState)
@@ -26,10 +33,11 @@ extension RecordingFlowCoordinator {
 
     var hasMicrophonePermission: Bool { recordingEngine.hasMicrophonePermission }
 
-    func startRecording(origin: RecordingRunOrigin) async {
+    @discardableResult
+    func startRecording(origin: RecordingRunOrigin) async -> RecordingStartResult {
         guard !recordingEngine.isRecording, activeRun == nil else {
             Logger.app.info("[RecordTiming] startRecording bailed — session already active or starting")
-            return
+            return .ignored
         }
         let recordStart = ContinuousClock.now
         Logger.app.info("[RecordTiming] startRecording entered origin=\(String(describing: origin))")
@@ -69,25 +77,33 @@ extension RecordingFlowCoordinator {
         let started = await run.start()
         Logger.app.info("[RecordTiming] audioRecorder.startCapture returned (Capturing) at +\(ContinuousClock.now - recordStart)")
 
-        guard let active = activeRun, active.run === run else { return }
+        guard let active = activeRun, active.run === run else { return Self.endedBeforeCapturing(run) }
 
         guard started else {
             hotMicSession.recordIntentCancelledBeforeCapture()
             setActiveRun(nil)
-            return
+            return Self.endedBeforeCapturing(run)
         }
 
         guard active.phase == .arming else {
             _ = await run.cancel()
             if activeRun?.run === run { setActiveRun(nil) }
             hotMicSession.recordIntentCancelledBeforeCapture()
-            return
+            return .cancelledArming
         }
 
         setActiveRun(ActiveRecordingRun(origin: origin, run: run, clipboard: clipboard, phase: .capturing(since: .now)))
         state = .recording
         hotMicSession.recordingStarted()
         if isModelReady { recordHaptic.impactOccurred() }
+        return .capturing
+    }
+
+    /// A run that ended while Arming was either cancelled by the user or
+    /// failed to process; only the failure has a message the caller can show.
+    private static func endedBeforeCapturing(_ run: RecordingRun) -> RecordingStartResult {
+        if case .processingFailure(let failure)? = run.terminalState { return .failed(failure.message) }
+        return .cancelledArming
     }
 
     @discardableResult
