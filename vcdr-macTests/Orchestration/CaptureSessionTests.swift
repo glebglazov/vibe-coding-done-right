@@ -418,3 +418,49 @@ struct CaptureSessionStressTests {
         }
     }
 }
+
+@Suite("CaptureSession — Capture Use")
+struct CaptureSessionCaptureUseTests {
+
+    private static let testRecordingDuration: Duration = .milliseconds(100)
+
+    @MainActor
+    private func runWithClipboardCapture(captureUse: CaptureUse) async -> (String?, [InputSegment]) {
+        let env = CaptureSessionTestEnvironment(
+            mockProvider: MockTranscriptionProvider(result: "Hello world")
+        )
+        defer { env.cleanup() }
+        var mode = env.settings.activeMode
+        mode.templateID = nil
+        mode.captureUse = captureUse
+        if let index = env.settings.modes.firstIndex(where: { $0.id == mode.id }) {
+            env.settings.modes[index] = mode
+        }
+
+        env.session.toggle()
+        #expect(await env.waitForPhase { $0 == .recording })
+        env.session.accumulatedClipboardCaptures.append(CapturedContext(text: "copied", source: .clipboard))
+        try? await Task.sleep(for: Self.testRecordingDuration)
+        env.session.toggle()
+        #expect(await env.waitForRest())
+
+        let outcome = await env.session.waitForNextIdle(timeout: .seconds(2))
+        return (outcome?.finalText, env.history.conversations.first?.inputSegments ?? [])
+    }
+
+    @Test("A Mode that sends captures quotes them below the dictation and keeps them in history")
+    @MainActor
+    func sentCapturesReachOutputAndHistory() async {
+        let (finalText, segments) = await runWithClipboardCapture(captureUse: .sentAsInput)
+        #expect(finalText?.contains("> copied") == true)
+        #expect(segments.contains { $0.capture?.text == "copied" })
+    }
+
+    @Test("A Mode that ignores captures leaves them out of output and history")
+    @MainActor
+    func ignoredCapturesAreDropped() async {
+        let (finalText, segments) = await runWithClipboardCapture(captureUse: .ignored)
+        #expect(finalText == "hello world ")
+        #expect(!segments.contains { $0.capture != nil })
+    }
+}

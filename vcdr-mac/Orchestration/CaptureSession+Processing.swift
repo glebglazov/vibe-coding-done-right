@@ -325,12 +325,13 @@ extension CaptureSession {
     ) -> TranscriptionInput {
         let destinationID = overrides.resolvedDestinationID(for: mode)
         let destination = settings.outputDestination(for: destinationID)
-        let segments = Self.makeSegments(text: text, captures: runState.captures)
+        let captures = mode.usesCaptures ? runState.captures : []
+        let segments = Self.makeSegments(text: text, captures: captures)
         let effectiveStyle = styleProvider()
         return TranscriptionInput(
             text: text,
             mode: mode,
-            captures: runState.captures,
+            captures: captures,
             conversationID: runState.conversationID,
             destination: destination,
             targetAppPID: runState.previousActiveApp?.processIdentifier,

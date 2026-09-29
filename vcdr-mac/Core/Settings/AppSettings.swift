@@ -624,10 +624,11 @@ final class AppSettings {
     func refreshTemplateAvailability() async {
         modeConfig.availableTemplateIDs = await ToolAvailabilityChecker.checkAll()
 
-        // Migrate legacy "dictation" template to "plain"
-        for i in modeConfig.modes.indices where modeConfig.modes[i].templateID == "dictation" {
-            modeConfig.modes[i].templateID = "plain"
-            Logger.settings.info("Migrated dictation template mode to plain")
+        for i in modeConfig.modes.indices {
+            guard let legacyID = modeConfig.modes[i].templateID,
+                  let currentID = ModeTemplate.legacyTemplateIDs[legacyID] else { continue }
+            modeConfig.modes[i].templateID = currentID
+            Logger.settings.info("Migrated \(legacyID) template mode to \(currentID)")
         }
 
         // Align plain-template mode names with the current default ("Verbatim").

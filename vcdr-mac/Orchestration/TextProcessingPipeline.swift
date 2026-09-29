@@ -69,10 +69,8 @@ enum TextProcessingPipeline {
         }
 
         // MARK: External processing — content processing
-        // When `appendCapturesToOutput` is on (and there's actual external processing happening),
-        // captures bypass the prompt entirely and are re-attached to the result after style transform.
-        // This avoids the LLM mutating or dropping `<capture>` tags.
-        let appendCapturesAfterProcessing = mode.appendCapturesToOutput
+        // Appended captures bypass the prompt because the LLM mutates or drops `<capture>` tags.
+        let appendCapturesAfterProcessing = mode.captureUse == .appendedToOutput
             && mode.processingType != .none
             && !captures.isEmpty
         let capturesForPrompt = appendCapturesAfterProcessing ? [] : captures
@@ -160,7 +158,6 @@ enum TextProcessingPipeline {
             Logger.textTransform.debug("Style transform: skipped (mode.appliesStyles=false)")
         }
 
-        // MARK: Append captures (when appendCapturesToOutput is on)
         // Captures are appended verbatim after style transform so the AI text is styled
         // but capture content stays byte-exact. Sentinel result is returned untouched above.
         // Skip when external processing didn't happen — the AI-failure fallback already

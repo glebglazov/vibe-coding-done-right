@@ -151,11 +151,18 @@ struct Mode: Identifiable, Codable, Equatable {
     /// When true, cursor context (text before/after the cursor) is used for context-aware
     /// formatting: separator insertion, leading-edge capitalization, and AI context XML.
     var contextAware: Bool
-    /// When true, captures are stripped from the LLM prompt and appended verbatim to the
-    /// processed output. When false (default), captures are included in the prompt as
-    /// `<capture id="N">` tags. Has no effect when `processingType == .none`, which
-    /// always appends captures using its own plaintext format.
-    var appendCapturesToOutput: Bool
+    private var chosenCaptureUse: CaptureUse
+
+    var capturePolicy: CapturePolicy {
+        templateID.flatMap(ModeTemplate.template(for:))?.capturePolicy ?? .editable(default: .sentAsInput)
+    }
+
+    var captureUse: CaptureUse {
+        get { capturePolicy.captureUse(choosing: chosenCaptureUse) }
+        set { chosenCaptureUse = newValue }
+    }
+
+    var usesCaptures: Bool { captureUse != .ignored }
 
     /// Joined labels from the first option of each parameter (the defaults, without overrides).
     /// Used in static UI contexts (settings, menu bar, quick actions) where there's no active session.
@@ -228,7 +235,7 @@ struct Mode: Identifiable, Codable, Equatable {
         saveResultToClipboard: Bool = false,
         appliesStyles: Bool = true,
         contextAware: Bool = false,
-        appendCapturesToOutput: Bool = false
+        chosenCaptureUse: CaptureUse = .sentAsInput
     ) {
         self.id = id
         self.name = name
@@ -249,7 +256,7 @@ struct Mode: Identifiable, Codable, Equatable {
         self.saveResultToClipboard = saveResultToClipboard
         self.appliesStyles = appliesStyles
         self.contextAware = contextAware
-        self.appendCapturesToOutput = appendCapturesToOutput
+        self.chosenCaptureUse = chosenCaptureUse
     }
 
     // MARK: - Codable (backward-compatible)
@@ -269,11 +276,11 @@ struct Mode: Identifiable, Codable, Equatable {
         case saveResultToClipboard
         case appliesStyles
         case contextAware
-        case appendCapturesToOutput
+        case captureUse
         // Legacy key for migration (quickAction was inverted: true = skip preview)
         case quickAction
         // Legacy keys (read-only, for migration)
-        case actionType, bashCommand, pasteScriptOutput
+        case actionType, bashCommand, pasteScriptOutput, appendCapturesToOutput
         case companionIntegrationMode // legacy, read-only for migration
     }
 
@@ -298,7 +305,7 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
         try container.encode(appliesStyles, forKey: .appliesStyles)
         try container.encode(contextAware, forKey: .contextAware)
-        try container.encode(appendCapturesToOutput, forKey: .appendCapturesToOutput)
+        try container.encode(chosenCaptureUse, forKey: .captureUse)
         // Legacy keys (actionType, bashCommand, pasteScriptOutput) are NOT written.
         // Once saved in new format, old keys are gone (one-way migration).
     }
@@ -330,7 +337,12 @@ struct Mode: Identifiable, Codable, Equatable {
         saveResultToClipboard = try container.decodeIfPresent(Bool.self, forKey: .saveResultToClipboard) ?? false
         appliesStyles = try container.decodeIfPresent(Bool.self, forKey: .appliesStyles) ?? true
         contextAware = try container.decodeIfPresent(Bool.self, forKey: .contextAware) ?? false
-        appendCapturesToOutput = try container.decodeIfPresent(Bool.self, forKey: .appendCapturesToOutput) ?? false
+        if let rawUse = try container.decodeIfPresent(String.self, forKey: .captureUse) {
+            chosenCaptureUse = CaptureUse(rawValue: rawUse) ?? .sentAsInput
+        } else {
+            let appended = try container.decodeIfPresent(Bool.self, forKey: .appendCapturesToOutput) ?? false
+            chosenCaptureUse = appended ? .appendedToOutput : .sentAsInput
+        }
 
         // New fields — with companion/aiProcessing → cloudAI migration
         if let rawType = try container.decodeIfPresent(String.self, forKey: .processingType) {

@@ -126,7 +126,7 @@ extension CaptureSession {
             guard let self else { return }
             let captured = await self.run?.captureTask?.value
             guard !Task.isCancelled else { return }
-            if captured != nil {
+            if captured != nil, self.settings.activeMode.usesCaptures {
                 self.panel.signalClipboardCapture()
             }
             // Start clipboard monitor with a fresh baseline after SelectionCapturer finishes.
@@ -137,7 +137,9 @@ extension CaptureSession {
                 // A stale monitor (e.g. race with stop) must not pollute captures when
                 // the session is transcribing, executing, or idle.
                 guard case .recording = self.status.phase else { return }
-                self.panel.signalClipboardCapture()
+                if self.settings.activeMode.usesCaptures {
+                    self.panel.signalClipboardCapture()
+                }
                 self.accumulatedClipboardCaptures.append(CapturedContext(text: text, source: .clipboard))
             }
         }

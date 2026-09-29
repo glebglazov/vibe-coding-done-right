@@ -18,7 +18,7 @@ struct ModeTemplate {
     let showPreview: Bool
     let appliesStyles: Bool
     let contextAware: Bool
-    let appendCapturesToOutput: Bool
+    let capturePolicy: CapturePolicy
 
     func makeMode() -> Mode {
         Mode(
@@ -39,7 +39,7 @@ struct ModeTemplate {
             showPreview: showPreview,
             appliesStyles: appliesStyles,
             contextAware: contextAware,
-            appendCapturesToOutput: appendCapturesToOutput
+            chosenCaptureUse: capturePolicy.initialUse
         )
     }
 
@@ -59,12 +59,14 @@ struct ModeTemplate {
         mode.showPreview = showPreview
         mode.appliesStyles = appliesStyles
         mode.contextAware = contextAware
-        mode.appendCapturesToOutput = appendCapturesToOutput
+        mode.captureUse = capturePolicy.initialUse
     }
 
-    /// Finds the template definition for a given template ID.
+    static let legacyTemplateIDs: [String: String] = ["dictation": "plain"]
+
     static func template(for id: String) -> ModeTemplate? {
-        all.first(where: { $0.id == id })
+        let currentID = legacyTemplateIDs[id] ?? id
+        return all.first(where: { $0.id == currentID })
     }
 }
 
@@ -101,7 +103,7 @@ extension ModeTemplate {
         showPreview: false,
         appliesStyles: true,
         contextAware: false,
-        appendCapturesToOutput: false
+        capturePolicy: .fixed(.ignored)
     )
 
     static let aiDictation = ModeTemplate(
@@ -121,7 +123,7 @@ extension ModeTemplate {
         showPreview: false,
         appliesStyles: true,
         contextAware: false,
-        appendCapturesToOutput: true
+        capturePolicy: .fixed(.ignored)
     )
 
     static let claudeCode = ModeTemplate(
@@ -147,7 +149,7 @@ extension ModeTemplate {
         showPreview: false,
         appliesStyles: false,
         contextAware: false,
-        appendCapturesToOutput: false
+        capturePolicy: .editable(default: .sentAsInput)
     )
 
     static let ollama = ModeTemplate(
@@ -172,7 +174,7 @@ extension ModeTemplate {
         showPreview: false,
         appliesStyles: false,
         contextAware: false,
-        appendCapturesToOutput: false
+        capturePolicy: .editable(default: .sentAsInput)
     )
 
     static let all: [ModeTemplate] = [.plain, .aiDictation, .claudeCode, .ollama]

@@ -166,9 +166,20 @@ struct ModeDetailView: View {
                 Toggle("Save result to clipboard", isOn: $mode.saveResultToClipboard)
                     .help("When enabled, the result is saved to your clipboard after the output action completes.")
 
-                if mode.processingType != .none {
-                    Toggle("Append captures to output", isOn: $mode.appendCapturesToOutput)
-                        .help("When on, captures are appended after the AI response instead of being sent as input.")
+            }
+
+            Section {
+                Picker("Captures", selection: $mode.captureUse) {
+                    ForEach(CaptureUse.allCases, id: \.self) { use in
+                        Text(use.displayName).tag(use)
+                    }
+                }
+                .disabled(mode.capturePolicy.isFixed)
+            } header: {
+                Text("Captures")
+            } footer: {
+                if mode.capturePolicy.isFixed && !mode.usesCaptures {
+                    Text("This built-in mode does not process captures. Selected text and text you copy during recording are not included.")
                 }
             }
         }

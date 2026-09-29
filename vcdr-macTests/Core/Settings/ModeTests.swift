@@ -146,3 +146,83 @@ struct ModeCodableTests {
         #expect(decoded.appliesStyles == false)
     }
 }
+
+@Suite("Mode.captureUse")
+struct ModeCaptureUseTests {
+
+    private func savedModeJSON(templateID: String?, captureField: String) -> String {
+        let template = templateID.map { "\"templateID\":\"\($0)\"," } ?? ""
+        return """
+        {"id":"\(UUID().uuidString)","name":"Saved",\(template)\
+        "processingType":"cloudAI","promptType":"dictation",\(captureField)}
+        """
+    }
+
+    private func decodeSavedMode(templateID: String?, captureField: String) throws -> Mode {
+        let json = Data(savedModeJSON(templateID: templateID, captureField: captureField).utf8)
+        return try JSONDecoder().decode(Mode.self, from: json)
+    }
+
+    @Test("A saved Verbatim or Dictation Mode ignores captures whatever it stored", arguments: [
+        "plain", "ai-dictation",
+    ])
+    func fixedTemplateModeIgnoresStoredCaptureUse(templateID: String) throws {
+        for stored in CaptureUse.allCases {
+            let mode = try decodeSavedMode(templateID: templateID, captureField: "\"captureUse\":\"\(stored.rawValue)\"")
+            #expect(mode.captureUse == .ignored)
+            #expect(!mode.usesCaptures)
+        }
+        let legacy = try decodeSavedMode(templateID: templateID, captureField: "\"appendCapturesToOutput\":true")
+        #expect(legacy.captureUse == .ignored)
+    }
+
+    @Test("A saved Mode with the legacy dictation template ID ignores captures before it is migrated")
+    func legacyDictationTemplateIgnoresCaptures() throws {
+        let mode = try decodeSavedMode(templateID: "dictation", captureField: "\"captureUse\":\"sentAsInput\"")
+        #expect(mode.captureUse == .ignored)
+    }
+
+    @Test("A user-created Mode keeps what its legacy append flag meant")
+    func userModeKeepsLegacyCaptureUse() throws {
+        let appending = try decodeSavedMode(templateID: nil, captureField: "\"appendCapturesToOutput\":true")
+        let sending = try decodeSavedMode(templateID: nil, captureField: "\"appendCapturesToOutput\":false")
+        #expect(appending.captureUse == .appendedToOutput)
+        #expect(sending.captureUse == .sentAsInput)
+    }
+
+    @Test("An Assistant Mode with the legacy append flag appends captures to output")
+    func assistantModeKeepsLegacyAppend() throws {
+        let mode = try decodeSavedMode(templateID: "claude-code", captureField: "\"appendCapturesToOutput\":true")
+        #expect(mode.captureUse == .appendedToOutput)
+    }
+
+    @Test("An unknown stored capture use does not drop the saved Modes")
+    @MainActor
+    func unknownCaptureUseKeepsModes() throws {
+        let defaults = try #require(UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)"))
+        let unknown = savedModeJSON(templateID: nil, captureField: "\"captureUse\":\"futureValue\"")
+        let known = savedModeJSON(templateID: nil, captureField: "\"captureUse\":\"appendedToOutput\"")
+        defaults.set(Data("[\(unknown),\(known)]".utf8), forKey: "modes")
+
+        let settings = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
+
+        #expect(settings.modes.map(\.name) == ["Saved", "Saved"])
+        #expect(settings.modes.map(\.captureUse) == [.sentAsInput, .appendedToOutput])
+    }
+
+    @Test("Assistant templates send captures as input and let the user change it")
+    func assistantTemplatesSendCaptures() {
+        var mode = ModeTemplate.claudeCode.makeMode()
+        #expect(mode.captureUse == .sentAsInput)
+        mode.captureUse = .appendedToOutput
+        #expect(mode.captureUse == .appendedToOutput)
+    }
+
+    @Test("A user-created Mode round-trips its capture use")
+    func captureUseRoundTrips() throws {
+        var mode = Mode(id: UUID(), name: "Custom")
+        mode.captureUse = .ignored
+        let decoded = try JSONDecoder().decode(Mode.self, from: JSONEncoder().encode(mode))
+        #expect(decoded.captureUse == .ignored)
+    }
+}
