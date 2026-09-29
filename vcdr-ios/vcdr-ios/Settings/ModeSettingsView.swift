@@ -27,6 +27,7 @@ struct ModeSettingsView: View {
     var body: some View {
         Form {
             aiProcessingSection
+            capturesSection
             ModeTranscriptionSection(override: $override, library: coordinator.transcriptionLibrary)
         }
         .navigationTitle(mode.displayName)
@@ -47,6 +48,19 @@ struct ModeSettingsView: View {
             }
         case .providerAndFallback:
             providerSection
+        }
+    }
+
+    private var capturesSection: some View {
+        Section {
+            Toggle("Use Captures", isOn: .constant(mode.usesCaptures))
+                .disabled(true)
+        } header: {
+            Text("Captures")
+        } footer: {
+            Text(mode.usesCaptures
+                ? "Text you capture from the keyboard while recording goes to the AI Provider with your dictation."
+                : "\(mode.displayName) does not process captures. The keyboard does not show the Capture button in this mode.")
         }
     }
 

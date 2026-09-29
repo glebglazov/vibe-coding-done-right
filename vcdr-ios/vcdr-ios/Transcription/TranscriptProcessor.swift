@@ -91,7 +91,7 @@ struct TranscriptProcessor {
 
     static func buildAIInput(_ localText: String, mode: AIPromptMode, captures: [String]) -> String {
         var wrapped = "<dictation>\(localText)</dictation>"
-        guard mode != .verbatim else { return wrapped }
+        guard mode.usesCaptures else { return wrapped }
         for (index, capture) in captures.enumerated() where !capture.isEmpty {
             wrapped += "\n\n<capture id=\"\(index + 1)\">\(capture)</capture>"
         }
@@ -112,7 +112,7 @@ struct TranscriptProcessor {
 
         Logger.ai.info("AI input [mode=\(mode.rawValue), provider=\(provider.displayName)]: \(input)")
         Logger.ai.debug("AI system prompt: \(systemPrompt.prefix(100))...")
-        if mode != .verbatim {
+        if mode.usesCaptures {
             for (index, capture) in captures.enumerated() where !capture.isEmpty {
                 Logger.ai.info("Capture \(index + 1) included in AI input (\(capture.count) chars)")
             }

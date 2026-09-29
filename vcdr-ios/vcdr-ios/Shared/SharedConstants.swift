@@ -87,31 +87,6 @@ enum RecordingState: String {
     case failed
 }
 
-/// AI prompt mode — keyboard-safe mirror of AIPromptMode.
-/// Raw values must match AIPromptMode in the main app.
-enum SharedAIMode: String {
-    case verbatim
-    case dictation
-    case assistant
-
-    var displayName: String {
-        switch self {
-        case .verbatim: "Verbatim"
-        case .dictation: "Dictation"
-        case .assistant: "Assistant"
-        }
-    }
-
-    /// Cycles verbatim → dictation → assistant → verbatim.
-    var next: SharedAIMode {
-        switch self {
-        case .verbatim: .dictation
-        case .dictation: .assistant
-        case .assistant: .verbatim
-        }
-    }
-}
-
 /// Text style — keyboard-safe mirror of TextStyle.
 /// Raw values must match TextStyle in the main app.
 enum SharedTextStyle: String, CaseIterable {

@@ -21,21 +21,15 @@ struct TranscriptProcessorTests {
         """)
     }
 
-    @Test("dictation AI input includes numbered capture tags")
-    func dictationAIInputIncludesCaptures() {
+    @Test("dictation AI input leaves captures out")
+    func dictationAIInputOmitsCaptures() {
         let input = TranscriptProcessor.buildAIInput(
             "clean this up",
             mode: .dictation,
             captures: ["first", "", "third"]
         )
 
-        #expect(input == """
-        <dictation>clean this up</dictation>
-
-        <capture id="1">first</capture>
-
-        <capture id="3">third</capture>
-        """)
+        #expect(input == "<dictation>clean this up</dictation>")
     }
 
     @Test("verbatim AI input excludes captures")

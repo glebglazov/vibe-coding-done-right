@@ -52,7 +52,7 @@ struct CompactKeyboardView: View {
             DictateActionButton(
                 dictationState: controller.dictationState,
                 recordsInPlace: reachability.recordsInPlace,
-                showCapture: true,
+                showCapture: controller.aiMode.usesCaptures,
                 captureCount: controller.captureCount,
                 onStart: { controller.startRecordingFromKeyboard() },
                 onStop: { controller.stopAndWaitForResult() },

@@ -42,7 +42,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     // MARK: - Shared Settings (keyboard ↔ app)
     @Published var aiConfigured: Bool = false
     /// Source of truth for the AI/Verbatim pill. `.verbatim` ↔ "AI off".
-    @Published var aiMode: SharedAIMode = .verbatim
+    @Published var aiMode: AIPromptMode = .verbatim
     @Published var textStyle: SharedTextStyle = .casual
 
     /// True when the text field has a non-empty selection and assistant mode is active.
@@ -451,7 +451,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         keyboardChannel.clearLegacySelectedText()
         // Initialize captures array — include current selection as first capture if available
         var captures: [String] = []
-        if aiMode == .assistant,
+        if aiMode.usesCaptures,
            let selected = textDocumentProxy.selectedText, !selected.isEmpty {
             captures.append(selected)
         }
@@ -491,7 +491,6 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     }
 
     /// Captures the currently selected text and appends it to the captures array.
-    /// Called via the Capture button during recording in any AI mode.
     func captureSelectedText() {
         guard let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
         keyboardChannel.appendCapture(selected)
@@ -501,7 +500,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     /// Refreshes the `hasSelectedText` flag based on current proxy state and mode.
     func refreshSelectedTextIndicator() {
-        let selected = aiMode == .assistant
+        let selected = aiMode.usesCaptures
             && !(textDocumentProxy.selectedText ?? "").isEmpty
         if hasSelectedText != selected {
             hasSelectedText = selected

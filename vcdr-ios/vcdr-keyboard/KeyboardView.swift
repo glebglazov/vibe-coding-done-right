@@ -87,11 +87,10 @@ struct FullKeyboardToolbar: View {
 
             Spacer()
 
-            // Right: capture button (during recording in any AI mode) + action button
             DictateActionButton(
                 dictationState: controller.dictationState,
                 recordsInPlace: reachability.recordsInPlace,
-                showCapture: true,
+                showCapture: controller.aiMode.usesCaptures,
                 captureCount: controller.captureCount,
                 onStart: { controller.startRecordingFromKeyboard() },
                 onStop: { controller.stopAndWaitForResult() },

@@ -208,10 +208,11 @@ final class RecordingRun {
             return await finish(.emptyResult)
         }
 
-        let captures = currentCaptures()
+        let initialSettings = currentSettings()
+        let captures = initialSettings.promptMode.usesCaptures ? currentCaptures() : []
         let output = await transcriptProcessor.processFinalTranscript(
             cleanedText,
-            initialSettings: currentSettings(),
+            initialSettings: initialSettings,
             finalSettings: currentSettings,
             captures: captures
         )

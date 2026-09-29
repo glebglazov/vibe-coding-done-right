@@ -79,31 +79,6 @@ enum RecordingState: String {
     case failed
 }
 
-/// AI prompt mode — keyboard-safe mirror of AIPromptMode.
-/// Raw values must match AIPromptMode in the main app.
-enum SharedAIMode: String {
-    case verbatim
-    case dictation
-    case assistant
-
-    var displayName: String {
-        switch self {
-        case .verbatim: "Verbatim"
-        case .dictation: "Dictation"
-        case .assistant: "Assistant"
-        }
-    }
-
-    /// Cycles verbatim → dictation → assistant → verbatim.
-    var next: SharedAIMode {
-        switch self {
-        case .verbatim: .dictation
-        case .dictation: .assistant
-        case .assistant: .verbatim
-        }
-    }
-}
-
 /// Text style — keyboard-safe mirror of TextStyle.
 /// Raw values must match TextStyle in the main app.
 enum SharedTextStyle: String, CaseIterable {
@@ -166,7 +141,7 @@ enum SessionSettings {
         write { $0.set(value.rawValue, forKey: SharedConstants.sessionTextStyleKey) }
     }
 
-    static func setAIMode(_ value: SharedAIMode) {
+    static func setAIMode(_ value: AIPromptMode) {
         write { $0.set(value.rawValue, forKey: SharedConstants.sessionAIModeKey) }
     }
 
@@ -180,12 +155,12 @@ enum SessionSettings {
         return SharedTextStyle(rawValue: raw) ?? .casual
     }
 
-    static func effectiveAIMode() -> SharedAIMode {
+    static func effectiveAIMode() -> AIPromptMode {
         let sd = SharedConstants.sharedDefaults
         let raw = sd.string(forKey: SharedConstants.sessionAIModeKey)
             ?? sd.string(forKey: SharedConstants.defaultAIModeKey)
             ?? ""
-        return SharedAIMode(rawValue: raw) ?? .verbatim
+        return AIPromptMode(rawValue: raw) ?? .verbatim
     }
 
     /// Default-only setting (no session override). Absent key → treat as enabled.
