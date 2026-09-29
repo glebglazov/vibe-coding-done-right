@@ -54,18 +54,9 @@ extension CaptureSession {
                 }
                 runState.captureTask = nil
             }
-            // Fully drain the clipboard monitor before merging. `stopRecordingAndTranscribe`
-            // cancelled the start task, but any in-flight start must be awaited here so
-            // `stop()` actually cancels a running poll loop rather than no-op'ing before
-            // it existed. Without this, PasteAction's own clipboard writes during the
-            // subsequent `.execute` phase — and idle-phase pasteboard changes from other
-            // apps — would leak into the next session's captures.
             await runState.clipboardMonitorStartTask?.value
             runState.clipboardMonitorStartTask = nil
             _ = await clipboardMonitor.stop()
-            // Merge accumulated clipboard captures from the clipboard monitor.
-            runState.captures.append(contentsOf: accumulatedClipboardCaptures)
-            accumulatedClipboardCaptures = []
             Logger.recording.info("Captures: \(runState.captures.count) items")
 
             // Consume a destination override smuggled in by the destination hotkey.
@@ -95,7 +86,7 @@ extension CaptureSession {
             Logger.app.info("Processing task cancelled")
         } catch {
             processingTask = nil
-            run = nil
+            endRun()
             setStatus(.error(error.localizedDescription))
             panel.setError(error.localizedDescription)
             scheduleAutoDismiss(after: Self.pillErrorDisplayDuration)

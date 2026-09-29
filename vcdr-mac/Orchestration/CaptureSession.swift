@@ -233,7 +233,6 @@ final class CaptureSession {
     }
 
     @ObservationIgnored var run: RunState?
-    @ObservationIgnored var accumulatedClipboardCaptures: [CapturedContext] = []
 
     /// Opaque handle from TextProcessor — stored while awaiting preview confirmation.
     @ObservationIgnored var pendingPreview: PreviewHandle?

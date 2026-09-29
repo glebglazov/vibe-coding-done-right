@@ -439,7 +439,7 @@ struct CaptureSessionCaptureUseTests {
 
         env.session.toggle()
         #expect(await env.waitForPhase { $0 == .recording })
-        env.session.accumulatedClipboardCaptures.append(CapturedContext(text: "copied", source: .clipboard))
+        env.session.run?.captures.append(CapturedContext(text: "copied", source: .clipboard))
         try? await Task.sleep(for: Self.testRecordingDuration)
         env.session.toggle()
         #expect(await env.waitForRest())
@@ -454,6 +454,45 @@ struct CaptureSessionCaptureUseTests {
         let (finalText, segments) = await runWithClipboardCapture(captureUse: .sentAsInput)
         #expect(finalText?.contains("> copied") == true)
         #expect(segments.contains { $0.capture?.text == "copied" })
+    }
+
+    @Test("A run that follows a failed transcription sees none of the failed run's Captures")
+    @MainActor
+    func failedRunCapturesDoNotLeakIntoNextRun() async {
+        let provider = MockTranscriptionProvider(
+            error: TranscriptionError.transcriptionFailed("test error")
+        )
+        let env = CaptureSessionTestEnvironment(mockProvider: provider)
+        defer { env.cleanup() }
+        var mode = env.settings.activeMode
+        mode.templateID = nil
+        mode.captureUse = .sentAsInput
+        if let index = env.settings.modes.firstIndex(where: { $0.id == mode.id }) {
+            env.settings.modes[index] = mode
+        }
+
+        env.session.toggle()
+        #expect(await env.waitForPhase { $0 == .recording })
+        env.session.run?.captures.append(CapturedContext(text: "from failed run", source: .clipboard))
+        try? await Task.sleep(for: Self.testRecordingDuration)
+        env.session.toggle()
+        #expect(await env.waitForPhase { phase in
+            if case .error = phase { return true }
+            return false
+        })
+
+        await provider.stopFailing()
+        env.session.toggle()
+        #expect(await env.waitForPhase { $0 == .recording })
+        try? await Task.sleep(for: Self.testRecordingDuration)
+        env.session.toggle()
+        #expect(await env.waitForRest())
+
+        let outcome = await env.session.waitForNextIdle(timeout: .seconds(2))
+        #expect(outcome?.kind == .executed)
+        #expect(outcome?.finalText?.contains("from failed run") == false)
+        let segments = env.history.conversations.flatMap(\.inputSegments)
+        #expect(!segments.contains { $0.capture != nil })
     }
 
     @Test("A Mode that ignores captures leaves them out of output and history")

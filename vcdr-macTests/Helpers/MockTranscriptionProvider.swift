@@ -83,6 +83,10 @@ actor MockTranscriptionProvider: TranscriptionProvider {
         initPhase = .failed(failure)
     }
 
+    func stopFailing() {
+        mockTranscribeError = nil
+    }
+
     /// Enters the download phase the way the real provider does, reporting the
     /// progress its backend would — a fraction, or nothing at all.
     func beginDownload(progress: Double? = nil) {

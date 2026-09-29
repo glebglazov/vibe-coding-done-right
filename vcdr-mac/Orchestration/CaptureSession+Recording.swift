@@ -140,7 +140,7 @@ extension CaptureSession {
                 if self.settings.activeMode.usesCaptures {
                     self.panel.signalClipboardCapture()
                 }
-                self.accumulatedClipboardCaptures.append(CapturedContext(text: text, source: .clipboard))
+                self.run?.captures.append(CapturedContext(text: text, source: .clipboard))
             }
         }
 
@@ -228,17 +228,7 @@ extension CaptureSession {
         }
 
         Task { await media.resumeIfNeeded() }
-        run?.clipboardMonitorStartTask?.cancel()
-        let startTask = run?.clipboardMonitorStartTask
-        Task { [clipboardMonitor] in
-            // Await the start task first so any in-flight `start()` finishes before
-            // we call `stop()`; otherwise a racing start after stop re-leaks the monitor.
-            await startTask?.value
-            _ = await clipboardMonitor.stop()
-        }
-        accumulatedClipboardCaptures = []
-
-        run = nil
+        endRun()
         recordingStartInstant = nil
         overrides.clearAll()
 
@@ -263,12 +253,6 @@ extension CaptureSession {
     /// Tear down the capture UI without cancelling recording. Used when the panel
     /// loses focus or the user dismisses the preview. Saves preview history if present.
     func dismissOverlay(saveToHistory: Bool = true) {
-        run?.clipboardMonitorStartTask?.cancel()
-        let startTask = run?.clipboardMonitorStartTask
-        Task { [clipboardMonitor] in
-            await startTask?.value
-            _ = await clipboardMonitor.stop()
-        }
         autoDismissTask?.cancel()
         autoDismissTask = nil
         immediateActionTask?.cancel()
@@ -281,8 +265,7 @@ extension CaptureSession {
         pendingPreview = nil
         panel.dismiss()
         indicator.showDismissed()
-        run = nil
-        accumulatedClipboardCaptures = []
+        endRun()
         overrides.clearAll()
         if case .awaitingPreview = status.phase {
             setStatus(.idle)
@@ -312,6 +295,17 @@ extension CaptureSession {
     }
 
     // MARK: - Helpers
+
+    func endRun() {
+        let startTask = run?.clipboardMonitorStartTask
+        startTask?.cancel()
+        run = nil
+        Task { [clipboardMonitor] in
+            // A start() that lands after stop() would begin polling again.
+            await startTask?.value
+            _ = await clipboardMonitor.stop()
+        }
+    }
 
     func scheduleAutoDismiss(after duration: Duration) {
         autoDismissTask?.cancel()
