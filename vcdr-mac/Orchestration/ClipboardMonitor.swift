@@ -1,21 +1,30 @@
 import AppKit
 import OSLog
 
-/// Monitors clipboard changes during recording to capture additional text selections.
-/// Callers are responsible for starting the monitor only after any clipboard-manipulating
-/// operations (e.g. SelectionCapturer) have finished, and passing a fresh baseline.
 actor ClipboardMonitor {
     // MARK: - Constants
 
     /// How often to check the monitored pasteboard's changeCount.
     private static let pollInterval: Duration = .milliseconds(250)
 
+    private enum Phase {
+        case idle
+        case monitoring(Task<Void, Never>)
+        case stopped
+    }
+
     private let pasteboardName: String
-    private var pollingTask: Task<Void, Never>?
-    private var captures: [String] = []
+    private var phase: Phase = .idle
 
     init(pasteboardName: String = NSPasteboard.Name.general.rawValue) {
         self.pasteboardName = pasteboardName
+    }
+
+    // A run that ends without a stop, such as "No audio recorded", drops its monitor here.
+    deinit {
+        if case .monitoring(let pollingTask) = phase {
+            pollingTask.cancel()
+        }
     }
 
     /// Starts monitoring clipboard changes. Calls `onCapture` on each new capture.
@@ -25,10 +34,10 @@ actor ClipboardMonitor {
     ///   changeCount value. Pass the pasteboard's `changeCount` captured **after**
     ///   any clipboard-manipulating operations (e.g. SelectionCapturer) have finished.
     func start(baselineChangeCount: Int? = nil, onCapture: @MainActor @Sendable @escaping (String) -> Void) {
-        stop()
+        guard case .idle = phase else { return }
 
         let pasteboardName = self.pasteboardName
-        pollingTask = Task<Void, Never> { [weak self] in
+        phase = .monitoring(Task<Void, Never> {
             var lastChangeCount: Int
             if let baselineChangeCount {
                 lastChangeCount = baselineChangeCount
@@ -51,27 +60,19 @@ actor ClipboardMonitor {
                 guard let newContent = currentContent,
                       !newContent.isEmpty else { continue }
 
-                await self?.appendCapture(newContent)
                 await MainActor.run {
                     Logger.recording.info("ClipboardMonitor: captured \(newContent.count) chars: \"\(newContent.prefix(80))\"")
                 }
 
                 await onCapture(newContent)
             }
+        })
+    }
+
+    func stop() {
+        if case .monitoring(let pollingTask) = phase {
+            pollingTask.cancel()
         }
-    }
-
-    /// Stops monitoring and returns all captured texts.
-    @discardableResult
-    func stop() -> [String] {
-        pollingTask?.cancel()
-        pollingTask = nil
-        let result = captures
-        captures = []
-        return result
-    }
-
-    private func appendCapture(_ text: String) {
-        captures.append(text)
+        phase = .stopped
     }
 }

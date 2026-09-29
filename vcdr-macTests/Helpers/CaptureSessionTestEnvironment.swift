@@ -131,7 +131,7 @@ struct CaptureSessionTestEnvironment {
                 audio: audioRecorder,
                 media: MediaPlaybackController(),
                 selectionCapturer: SelectionCapturer(),
-                clipboardMonitor: ClipboardMonitor(),
+                makeClipboardMonitor: { ClipboardMonitor() },
                 indicator: recordingIndicator,
                 panel: fakePanel,
                 textProcessor: textProcessor,

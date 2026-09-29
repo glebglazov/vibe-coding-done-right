@@ -125,7 +125,7 @@ final class CaptureSession {
         let audio: AudioRecorder
         let media: MediaPlaybackController
         let selectionCapturer: SelectionCapturer
-        let clipboardMonitor: ClipboardMonitor
+        let makeClipboardMonitor: @MainActor @Sendable () -> ClipboardMonitor
         let indicator: RecordingIndicatorPanel
         let panel: any CapturePanelSurface
         let textProcessor: TextProcessor
@@ -177,7 +177,7 @@ final class CaptureSession {
     let audio: AudioRecorder
     let media: MediaPlaybackController
     let selectionCapturer: SelectionCapturer
-    let clipboardMonitor: ClipboardMonitor
+    let makeClipboardMonitor: @MainActor @Sendable () -> ClipboardMonitor
     let indicator: RecordingIndicatorPanel
     let panel: any CapturePanelSurface
     let textProcessor: TextProcessor
@@ -217,6 +217,7 @@ final class CaptureSession {
     // MARK: - Per-run state (cleared on terminal transitions)
 
     struct RunState {
+        let clipboardMonitor: ClipboardMonitor
         var previousActiveApp: NSRunningApplication?
         var captureTask: Task<CapturedContext?, Never>?
         var cursorContext: CursorContext?
@@ -226,10 +227,6 @@ final class CaptureSession {
         var conversationID: UUID = UUID()
         /// Observer for app activation changes during recording
         var appSwitchObserver: NSObjectProtocol?
-        /// Task that starts the clipboard monitor after selection capture finishes.
-        /// Tracked so stop paths can cancel it before it calls `monitor.start()` —
-        /// prevents the monitor from being started after recording has already stopped.
-        var clipboardMonitorStartTask: Task<Void, Never>?
     }
 
     @ObservationIgnored var run: RunState?
@@ -273,7 +270,7 @@ final class CaptureSession {
         self.audio = deps.audio
         self.media = deps.media
         self.selectionCapturer = deps.selectionCapturer
-        self.clipboardMonitor = deps.clipboardMonitor
+        self.makeClipboardMonitor = deps.makeClipboardMonitor
         self.indicator = deps.indicator
         self.panel = deps.panel
         self.textProcessor = deps.textProcessor

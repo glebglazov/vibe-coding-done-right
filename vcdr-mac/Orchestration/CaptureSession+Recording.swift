@@ -45,7 +45,8 @@ extension CaptureSession {
             }
         }
 
-        run = RunState()
+        let clipboardMonitor = makeClipboardMonitor()
+        run = RunState(clipboardMonitor: clipboardMonitor)
 
         // ADR-0006: the hotkey is never refused for an unready model. Audio
         // starts now and the model catches up in the background; if it hasn't
@@ -113,36 +114,7 @@ extension CaptureSession {
             return CapturedContext(text: text, source: .selection)
         }
 
-        // When the selection capture finishes we flash the clipboard-capture badge and
-        // start the clipboard monitor with a fresh baseline. Must happen AFTER selection
-        // capture (which mutates the clipboard) — enforced sequentially by awaiting the
-        // capture task BEFORE starting the monitor.
-        //
-        // The task is stored on `run` so stop paths can cancel it before it reaches
-        // `monitor.start()` — otherwise a short recording can stop while this task is
-        // still awaiting `captureTask.value`, and `start()` would run after `stop()`,
-        // leaving the monitor polling indefinitely across session boundaries.
-        run?.clipboardMonitorStartTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            let captured = await self.run?.captureTask?.value
-            guard !Task.isCancelled else { return }
-            if captured != nil, self.settings.activeMode.usesCaptures {
-                self.panel.signalClipboardCapture()
-            }
-            // Start clipboard monitor with a fresh baseline after SelectionCapturer finishes.
-            let freshBaseline = NSPasteboard.general.changeCount
-            await self.clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] text in
-                guard let self else { return }
-                // Defense in depth: only accept captures while we're actually recording.
-                // A stale monitor (e.g. race with stop) must not pollute captures when
-                // the session is transcribing, executing, or idle.
-                guard case .recording = self.status.phase else { return }
-                if self.settings.activeMode.usesCaptures {
-                    self.panel.signalClipboardCapture()
-                }
-                self.run?.captures.append(CapturedContext(text: text, source: .clipboard))
-            }
-        }
+        startClipboardMonitor(clipboardMonitor, afterSelectionCapture: run?.captureTask)
 
         // Pause media in the background now that audio is capturing. The
         // controller stores the in-flight task and resumeIfNeeded awaits it,
@@ -182,15 +154,6 @@ extension CaptureSession {
 
         // Notify delegate that recording stopped (before transcription begins)
         delegate?.captureSessionDidStopRecording(self)
-
-        // Stop clipboard monitor before transcription. Cancel the pending start task
-        // first so it can't race us and call `start()` after our `stop()` — previously
-        // this leaked the monitor across sessions, causing PasteAction's own clipboard
-        // writes and idle-phase pasteboard changes to be captured into the next run.
-        // The actual `await stop()` happens at the top of `processTranscription` where
-        // we're already on an async context; doing it here would require making this
-        // function async.
-        run?.clipboardMonitorStartTask?.cancel()
 
         Logger.app.info("Recording stopped, transcribing...")
 
@@ -297,14 +260,34 @@ extension CaptureSession {
     // MARK: - Helpers
 
     func endRun() {
-        let startTask = run?.clipboardMonitorStartTask
-        startTask?.cancel()
+        let clipboardMonitor = run?.clipboardMonitor
         run = nil
-        Task { [clipboardMonitor] in
-            // A start() that lands after stop() would begin polling again.
-            await startTask?.value
-            _ = await clipboardMonitor.stop()
+        Task { await clipboardMonitor?.stop() }
+    }
+
+    func startClipboardMonitor(
+        _ clipboardMonitor: ClipboardMonitor,
+        afterSelectionCapture captureTask: Task<CapturedContext?, Never>?
+    ) {
+        Task { @MainActor [weak self] in
+            let captured = await captureTask?.value
+            guard let self, self.isRecording(monitoredBy: clipboardMonitor) else { return }
+            if captured != nil, self.settings.activeMode.usesCaptures {
+                self.panel.signalClipboardCapture()
+            }
+            let freshBaseline = NSPasteboard.general.changeCount
+            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] text in
+                guard let self, self.isRecording(monitoredBy: clipboardMonitor) else { return }
+                if self.settings.activeMode.usesCaptures {
+                    self.panel.signalClipboardCapture()
+                }
+                self.run?.captures.append(CapturedContext(text: text, source: .clipboard))
+            }
         }
+    }
+
+    func isRecording(monitoredBy clipboardMonitor: ClipboardMonitor) -> Bool {
+        status.phase == .recording && run?.clipboardMonitor === clipboardMonitor
     }
 
     func scheduleAutoDismiss(after duration: Duration) {

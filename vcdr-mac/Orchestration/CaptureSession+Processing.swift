@@ -47,16 +47,14 @@ extension CaptureSession {
             try? FileManager.default.removeItem(at: audioURL)
 
             // Absorb the selection capture task's result into the run's captures list.
-            var runState = run ?? RunState()
+            var runState = run ?? RunState(clipboardMonitor: makeClipboardMonitor())
             if let captureTask = runState.captureTask {
                 if let captured = await captureTask.value {
                     runState.captures.insert(captured, at: 0)
                 }
                 runState.captureTask = nil
             }
-            await runState.clipboardMonitorStartTask?.value
-            runState.clipboardMonitorStartTask = nil
-            _ = await clipboardMonitor.stop()
+            await runState.clipboardMonitor.stop()
             Logger.recording.info("Captures: \(runState.captures.count) items")
 
             // Consume a destination override smuggled in by the destination hotkey.

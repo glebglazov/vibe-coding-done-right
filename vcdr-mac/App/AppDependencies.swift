@@ -99,7 +99,6 @@ final class AppDependencies {
             audioRecorder: audioRecorder
         )
         let selectionCapturer = SelectionCapturer()
-        let clipboardMonitor = ClipboardMonitor()
         self.audioDeviceMonitor = AudioDeviceMonitor(settings: settings, skipHardware: vcdrApp.isTestHost)
         self.inputLevelMonitor = InputLevelMonitor()
 
@@ -149,7 +148,7 @@ final class AppDependencies {
                 audio: audioRecorder,
                 media: mediaPlayback,
                 selectionCapturer: selectionCapturer,
-                clipboardMonitor: clipboardMonitor,
+                makeClipboardMonitor: { ClipboardMonitor() },
                 indicator: recordingIndicator,
                 panel: CapturePanelAdapter(capturePanel),
                 textProcessor: textProcessor,
