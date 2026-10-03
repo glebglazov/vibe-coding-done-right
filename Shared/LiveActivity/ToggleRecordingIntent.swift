@@ -1,3 +1,4 @@
+#if os(iOS)
 import AppIntents
 
 /// "Toggle Recording". As an `AudioRecordingIntent` it starts audio while VCDR
@@ -18,3 +19,4 @@ struct ToggleRecordingIntent: AudioRecordingIntent {
         return .result()
     }
 }
+#endif
