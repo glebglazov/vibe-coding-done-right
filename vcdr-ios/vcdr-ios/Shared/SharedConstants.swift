@@ -20,7 +20,8 @@ enum SharedConstants {
     //   default_*  — user-configured defaults. Written by Settings UI only via
     //                DefaultSettings. Survive across launches.
     //   session_*  — per-session cycle overrides. Written by cycle paths via
-    //                SessionSettings. Cleared on cold launch.
+    //                SessionSettings. Survive across launches;
+    //                cleared when the matching default changes.
     //
     // Consumers always read the effective value (session ?? default ?? fallback)
     // via SessionSettings.effective…(). There is intentionally no API that can
@@ -163,8 +164,8 @@ enum SessionSettings {
         write { $0.set(value.rawValue, forKey: SharedConstants.sessionAIModeKey) }
     }
 
-    /// Drops every per-session override. Call on cold launch so a new run
-    /// starts from configured defaults rather than the last run's overrides.
+    /// Drops every per-session override, so every reader falls back to the
+    /// configured defaults.
     static func clearAll() {
         write { sd in
             sd.removeObject(forKey: SharedConstants.sessionTextStyleKey)

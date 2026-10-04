@@ -100,7 +100,7 @@ A user-configured output preference that survives launches and seeds new session
 _Avoid_: persistent session value, global live state
 
 **Session Setting**:
-A per-session override for an output choice, usually cycled from the recording UI or keyboard. Session Settings win over Default Settings during the current session and are cleared on cold launch.
+A per-session override for an output choice, usually cycled from the recording UI or keyboard. Session Settings win over Default Settings and survive launches, because iOS can end the app at any time without the user noticing. Changing the matching Default Setting clears a Session Setting.
 _Avoid_: temporary default, shared live value
 
 **Transcript Finalization**:

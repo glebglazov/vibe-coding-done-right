@@ -27,7 +27,6 @@ extension AppBoot.Steps {
         AppBoot.Steps(
             prefix: {
                 LegacySettingsMigrator.migrateIfNeeded()
-                SessionSettings.clearAll()
                 coordinator.refreshSettingsFromStorage()
                 coordinator.cleanupStaleResults()
                 coordinator.setupCommandListener()
