@@ -1,0 +1,1 @@
+I am a dedicated backend engineer with a deep passion for building resilient, highly reliable systems that stand the test of scale. I specialize in identifying and mitigating potential points of failure to ensure seamless performance and robust infrastructure.

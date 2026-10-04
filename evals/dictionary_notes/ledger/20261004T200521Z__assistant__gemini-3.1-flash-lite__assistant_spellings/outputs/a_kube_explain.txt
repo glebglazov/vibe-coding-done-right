@@ -1,0 +1,1 @@
+Cube is a headless BI platform that simplifies data modeling and provides a consistent API layer for delivering metrics across your applications. It enables developers to focus on building features by abstracting away the complexities of complex SQL queries and data caching.

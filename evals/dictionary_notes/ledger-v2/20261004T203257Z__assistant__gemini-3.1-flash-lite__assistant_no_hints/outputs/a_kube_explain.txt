@@ -1,0 +1,1 @@
+Cube acts as a headless BI layer that simplifies data modeling by providing a consistent semantic layer across various databases and applications. By abstracting away complex SQL and infrastructure management, it allows new developers to quickly expose data through APIs without needing to become experts in data engineering.

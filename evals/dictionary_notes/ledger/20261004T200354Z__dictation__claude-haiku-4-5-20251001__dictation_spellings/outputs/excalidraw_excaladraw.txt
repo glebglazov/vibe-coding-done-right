@@ -1,0 +1,1 @@
+export it from Excalidraw as a PNG and put it in the doc

@@ -1,0 +1,7 @@
+I don't have enough context to explain what "cube" and "eighties" do. These could be:
+
+- Internal tools or libraries at your organization
+- Code repositories or modules
+- Services or platforms you use
+
+Could you provide more details, such as what codebase or project they're part of, or share documentation/code samples that show how they're used?

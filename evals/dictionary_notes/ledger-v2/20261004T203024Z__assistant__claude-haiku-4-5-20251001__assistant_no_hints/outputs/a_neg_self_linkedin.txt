@@ -1,0 +1,1 @@
+I'm a backend engineer passionate about building reliable, scalable systems that teams can depend on. I focus on designing resilient architectures, improving system stability, and ensuring seamless performance at scale.

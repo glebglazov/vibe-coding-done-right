@@ -1,0 +1,1 @@
+Container orchestration is the automated management of the deployment, scaling, and networking of containerized applications across a cluster of servers. It simplifies the complex task of running many containers by ensuring they are healthy, balanced, and communicate correctly without manual intervention.

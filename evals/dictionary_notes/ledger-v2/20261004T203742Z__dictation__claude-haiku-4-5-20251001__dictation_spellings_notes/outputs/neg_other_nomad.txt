@@ -1,0 +1,1 @@
+We picked Nomad over the bigger orchestrators because it's simpler to run.

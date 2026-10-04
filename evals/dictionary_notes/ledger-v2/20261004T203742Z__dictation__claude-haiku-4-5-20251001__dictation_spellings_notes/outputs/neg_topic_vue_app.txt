@@ -1,0 +1,1 @@
+We're building a small Vue app with server-side rendering for the docs site.

@@ -1,0 +1,1 @@
+The Nuxt config file has the wrong base URL for the Vue app.

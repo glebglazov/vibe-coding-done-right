@@ -1,0 +1,1 @@
+Docker Swarm is a container orchestration tool that allows you to manage a cluster of Docker hosts as a single virtual system. It simplifies the deployment and scaling of applications by automatically handling load balancing and container distribution across your available machines.

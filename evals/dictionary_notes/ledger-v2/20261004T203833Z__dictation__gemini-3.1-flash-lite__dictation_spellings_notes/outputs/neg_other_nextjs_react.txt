@@ -1,0 +1,1 @@
+We migrated the React site to Next.js last month, and the build got way faster.

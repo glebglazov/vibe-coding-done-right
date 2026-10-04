@@ -1,0 +1,1 @@
+We compared a few container orchestration options, but decided to stay on plain virtual machines.

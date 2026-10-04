@@ -1,0 +1,1 @@
+Cube is a semantic layer that acts as a bridge between your database and frontend, allowing you to define metrics and data models in one central place. It simplifies the development process for new users by providing a consistent API for data access, caching, and security across all your applications.

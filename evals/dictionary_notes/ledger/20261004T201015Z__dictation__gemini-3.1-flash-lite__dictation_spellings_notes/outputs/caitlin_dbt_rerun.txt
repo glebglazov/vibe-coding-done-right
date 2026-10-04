@@ -1,0 +1,1 @@
+Can you ask Caitlin to rerun the dbt models once the load finishes?

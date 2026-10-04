@@ -1,0 +1,1 @@
+I am a backend engineer dedicated to building high-performance systems with a primary focus on architectural reliability and fault tolerance. I thrive on solving complex infrastructure challenges to ensure seamless, scalable user experiences.

@@ -1,0 +1,1 @@
+Upgrade pydantic to version 2 in API service

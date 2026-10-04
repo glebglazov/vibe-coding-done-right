@@ -1,0 +1,6 @@
+I don't have context about what "cube" and "eighties" refer to. Could you provide more details, such as:
+- Are these tools, libraries, or frameworks?
+- What tech stack or project are they part of?
+- Any documentation or code samples?
+
+With that information, I can write a two-sentence explanation for a new developer.

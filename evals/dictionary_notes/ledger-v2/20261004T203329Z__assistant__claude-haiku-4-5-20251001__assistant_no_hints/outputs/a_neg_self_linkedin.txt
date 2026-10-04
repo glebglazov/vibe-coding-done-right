@@ -1,0 +1,1 @@
+I'm a backend engineer focused on building reliable, scalable systems that serve as the foundation for user-facing products. I'm passionate about solving complex infrastructure challenges and ensuring systems are resilient, well-monitored, and built to last.

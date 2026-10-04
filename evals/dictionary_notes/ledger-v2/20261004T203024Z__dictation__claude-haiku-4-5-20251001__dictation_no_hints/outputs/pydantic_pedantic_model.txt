@@ -1,0 +1,1 @@
+The pedantic model rejects the null field, so the request fails validation.

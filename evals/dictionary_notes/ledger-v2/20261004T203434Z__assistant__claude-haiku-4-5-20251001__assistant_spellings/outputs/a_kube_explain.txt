@@ -1,0 +1,8 @@
+I need clarification: "cube" and "eighties" aren't standard developer tools or concepts I can identify with certainty. Could you provide more context, such as:
+
+- Are these internal tools at your company?
+- Are they libraries, frameworks, or services?
+- What language or ecosystem do they belong to?
+- Can you spell them or provide aliases they're known by?
+
+With that information, I can give you a concise two-sentence explanation for a new developer.

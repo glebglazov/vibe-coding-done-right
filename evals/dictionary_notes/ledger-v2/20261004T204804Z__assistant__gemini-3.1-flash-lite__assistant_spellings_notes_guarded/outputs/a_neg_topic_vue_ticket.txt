@@ -1,0 +1,1 @@
+Implement Dark Mode for Nuxt application

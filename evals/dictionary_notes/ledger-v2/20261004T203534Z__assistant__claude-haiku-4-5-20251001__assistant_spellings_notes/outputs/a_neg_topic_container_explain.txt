@@ -1,0 +1,1 @@
+Container orchestration automates the deployment, scaling, and management of containerized applications across multiple machines, so you don't have to manually handle each container. It ensures your apps run reliably, can grow or shrink based on demand, and automatically recovers from failures.

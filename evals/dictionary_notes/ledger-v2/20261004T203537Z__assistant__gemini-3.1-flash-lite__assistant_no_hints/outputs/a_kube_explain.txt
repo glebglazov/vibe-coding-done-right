@@ -1,0 +1,1 @@
+Cube provides a semantic layer that abstracts complex database structures, allowing new developers to consistently define and query data models across any application. It simplifies data access by handling caching, security, and integration with modern frontend frameworks, enabling developers to focus on building features rather than writing intricate SQL.

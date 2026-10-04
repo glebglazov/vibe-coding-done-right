@@ -1,0 +1,20 @@
+{
+  "why": "One Dictionary shared by every arm and every run. The order is the order the hints are listed in, most recently edited first in the app. Two entries (Katelyn, Caitlin) sound the same on purpose: only the context and a note tell them apart.",
+  "entries": [
+    {"spelling": "Kubernetes", "note": "container orchestration tool"},
+    {"spelling": "Anya", "note": "my sister"},
+    {"spelling": "Gleb", "note": "my own name"},
+    {"spelling": "Katelyn", "note": "my dentist"},
+    {"spelling": "Grafana", "note": "monitoring dashboards"},
+    {"spelling": "Pydantic", "note": "Python data validation library"},
+    {"spelling": "Nuxt", "note": "Vue web framework"},
+    {"spelling": "Zettle", "note": "card reader we take payments with at the café"},
+    {"spelling": "Excalidraw", "note": "whiteboard sketching app"},
+    {"spelling": "Caitlin", "note": "colleague on the data team"},
+    {"spelling": "Leominster", "note": "town where our office is"},
+    {"spelling": "Tbilisi", "note": "city where my parents live"},
+    {"spelling": "Saoirse", "note": "my niece"},
+    {"spelling": "Joaquín", "note": "my running partner"},
+    {"spelling": "Siobhan", "note": "our landlord"}
+  ]
+}

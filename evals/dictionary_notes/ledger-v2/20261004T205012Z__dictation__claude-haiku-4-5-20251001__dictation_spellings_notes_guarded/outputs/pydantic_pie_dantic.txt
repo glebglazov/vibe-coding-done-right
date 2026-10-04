@@ -1,0 +1,1 @@
+We should upgrade Pydantic to version two before we touch the schemas.

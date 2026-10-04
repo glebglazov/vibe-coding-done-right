@@ -1,0 +1,1 @@
+Can you ask Katelin to rerun the dbt models once the load finishes?

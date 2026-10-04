@@ -1,0 +1,1 @@
+I'll add a panel to Granada for the error rates of the payment service.

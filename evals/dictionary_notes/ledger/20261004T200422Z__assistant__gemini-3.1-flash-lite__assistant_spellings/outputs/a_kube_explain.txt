@@ -1,0 +1,1 @@
+Cube serves as a semantic layer that centralizes your data definitions, allowing developers to model metrics consistently across different applications. It simplifies the data access process by providing a unified API that handles caching, security, and query optimization, ensuring that complex data is easily accessible and performant.

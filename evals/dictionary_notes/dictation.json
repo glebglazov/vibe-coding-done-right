@@ -1,0 +1,744 @@
+{
+ "why": "Raw transcripts where the transcription engine got a Dictionary word wrong (misheard: expected_output is the Dictionary spelling that must appear), and transcripts where no Dictionary word was said but one sounds alike (sounds_alike: no Dictionary spelling may appear that the input does not hold). Run with a Dictation mode system prompt.",
+ "evals": [
+  {
+   "id": "kube_split_eighties",
+   "category": "misheard",
+   "input": "so we moved the whole thing onto cube and eighties last month and the pods keep restarting every couple of hours",
+   "expected_output": "Kubernetes"
+  },
+  {
+   "id": "kube_cooper_netties",
+   "category": "misheard",
+   "input": "I need to read up on cooper netties before the interview because apparently they run everything on it",
+   "expected_output": "Kubernetes"
+  },
+  {
+   "id": "kube_cubanetes",
+   "category": "misheard",
+   "input": "the cubanetes cluster ran out of memory again so I scaled the node pool up",
+   "expected_output": "Kubernetes"
+  },
+  {
+   "id": "anya_anja_sister",
+   "category": "misheard",
+   "input": "my sister Anja is coming over on Saturday so I'll be offline most of the day",
+   "expected_output": "Anya"
+  },
+  {
+   "id": "anya_on_your",
+   "category": "misheard",
+   "input": "I promised on your I'd call her tonight about her visa appointment, she's my sister so I can't skip it",
+   "expected_output": "Anya"
+  },
+  {
+   "id": "anya_ania_birthday",
+   "category": "misheard",
+   "input": "texted Ania about mum's birthday present, she thinks we should split a weekend trip",
+   "expected_output": "Anya"
+  },
+  {
+   "id": "gleb_glep_intro",
+   "category": "misheard",
+   "input": "hi everyone this is Glep from the platform team, I'll be covering the on-call rota this week",
+   "expected_output": "Gleb"
+  },
+  {
+   "id": "gleb_glib_signoff",
+   "category": "misheard",
+   "input": "thanks for the quick review, talk soon, Glib",
+   "expected_output": "Gleb"
+  },
+  {
+   "id": "gleb_glebe_name",
+   "category": "misheard",
+   "input": "you can put the booking under my name, it's Glebe, and the table is for four people",
+   "expected_output": "Gleb"
+  },
+  {
+   "id": "katelyn_cleaning",
+   "category": "misheard",
+   "input": "I've got a cleaning with Kaitlyn at nine so I'll miss standup",
+   "expected_output": "Katelyn"
+  },
+  {
+   "id": "caitlin_warehouse",
+   "category": "misheard",
+   "input": "Kaitlyn from the data team says the warehouse export is broken again",
+   "expected_output": "Caitlin"
+  },
+  {
+   "id": "katelyn_wisdom_tooth",
+   "category": "misheard",
+   "input": "Kaitlin said my wisdom tooth has to come out before Christmas",
+   "expected_output": "Katelyn"
+  },
+  {
+   "id": "caitlin_dbt_rerun",
+   "category": "misheard",
+   "input": "can you ask Katelin to rerun the dbt models once the load finishes",
+   "expected_output": "Caitlin"
+  },
+  {
+   "id": "katelyn_split_xray",
+   "category": "misheard",
+   "input": "Kate Lynn wants another x-ray of my molars next month",
+   "expected_output": "Katelyn"
+  },
+  {
+   "id": "caitlin_split_report",
+   "category": "misheard",
+   "input": "ping Kate Lin about the numbers for the quarterly data report",
+   "expected_output": "Caitlin"
+  },
+  {
+   "id": "grafana_graph_anna",
+   "category": "misheard",
+   "input": "the graph Anna dashboard shows latency spiking at midnight every night",
+   "expected_output": "Grafana"
+  },
+  {
+   "id": "grafana_double_n",
+   "category": "misheard",
+   "input": "set up an alert in Grafanna for disk usage over ninety percent",
+   "expected_output": "Grafana"
+  },
+  {
+   "id": "grafana_granada_panel",
+   "category": "misheard",
+   "input": "I'll add a panel to Granada for the error rates of the payment service",
+   "expected_output": "Grafana"
+  },
+  {
+   "id": "pydantic_pedantic_model",
+   "category": "misheard",
+   "input": "the pedantic model rejects the null field so the request fails validation",
+   "expected_output": "Pydantic"
+  },
+  {
+   "id": "pydantic_pie_dantic",
+   "category": "misheard",
+   "input": "we should upgrade pie dantic to version two before we touch the schemas",
+   "expected_output": "Pydantic"
+  },
+  {
+   "id": "pydantic_pedantic_schemas",
+   "category": "misheard",
+   "input": "the API layer uses pedantic for all the request schemas and the settings class",
+   "expected_output": "Pydantic"
+  },
+  {
+   "id": "nuxt_nukes_app",
+   "category": "misheard",
+   "input": "the frontend is a nukes app so server side rendering comes built in",
+   "expected_output": "Nuxt"
+  },
+  {
+   "id": "nuxt_next_vue",
+   "category": "misheard",
+   "input": "we migrated the Vue site to next three last month and the build got way faster",
+   "expected_output": "Nuxt"
+  },
+  {
+   "id": "nuxt_knucks_config",
+   "category": "misheard",
+   "input": "the knucks config file has the wrong base URL for the Vue app",
+   "expected_output": "Nuxt"
+  },
+  {
+   "id": "zettle_settle_reader",
+   "category": "misheard",
+   "input": "the settle reader dropped two card payments at the café today",
+   "expected_output": "Zettle"
+  },
+  {
+   "id": "zettle_zetel_charge",
+   "category": "misheard",
+   "input": "I need to charge the Zetel before we open the café tomorrow",
+   "expected_output": "Zettle"
+  },
+  {
+   "id": "zettle_settle_payout",
+   "category": "misheard",
+   "input": "customers paid by card through Settle so the money lands on Thursday",
+   "expected_output": "Zettle"
+  },
+  {
+   "id": "excalidraw_excalibur",
+   "category": "misheard",
+   "input": "I sketched the architecture in excalibur draw, I'll share the link in the channel",
+   "expected_output": "Excalidraw"
+  },
+  {
+   "id": "excalidraw_split",
+   "category": "misheard",
+   "input": "drop the diagram in Excali draw so everyone can edit the boxes",
+   "expected_output": "Excalidraw"
+  },
+  {
+   "id": "excalidraw_excaladraw",
+   "category": "misheard",
+   "input": "export it from Excaladraw as a PNG and put it in the doc",
+   "expected_output": "Excalidraw"
+  },
+  {
+   "id": "leominster_lemster",
+   "category": "misheard",
+   "input": "I'm driving to Lemster tomorrow because the office needs the keys back",
+   "expected_output": "Leominster"
+  },
+  {
+   "id": "leominster_lemminster",
+   "category": "misheard",
+   "input": "the train to Lemminster was cancelled so I'm working from home today",
+   "expected_output": "Leominster"
+  },
+  {
+   "id": "leominster_leominister",
+   "category": "misheard",
+   "input": "our Leominister office has a broken heater again",
+   "expected_output": "Leominster"
+  },
+  {
+   "id": "tbilisi_tiblisi",
+   "category": "misheard",
+   "input": "I'm flying to Tiblisi to see my parents in May",
+   "expected_output": "Tbilisi"
+  },
+  {
+   "id": "tbilisi_split",
+   "category": "misheard",
+   "input": "my parents in to be Lisi sent a parcel with churchkhela and wine",
+   "expected_output": "Tbilisi"
+  },
+  {
+   "id": "tbilisi_tbilissi",
+   "category": "misheard",
+   "input": "the flight to Tbilissi has a six hour layover in Istanbul",
+   "expected_output": "Tbilisi"
+  },
+  {
+   "id": "saoirse_seersha",
+   "category": "misheard",
+   "input": "Seersha turns five on Sunday so we'll be at my brother's place",
+   "expected_output": "Saoirse"
+  },
+  {
+   "id": "saoirse_sersha",
+   "category": "misheard",
+   "input": "I got Sersha a Lego set for her birthday, she's my favourite niece",
+   "expected_output": "Saoirse"
+  },
+  {
+   "id": "saoirse_sorcha_niece",
+   "category": "misheard",
+   "input": "my niece Sorcha drew a picture of our cat and it's on the fridge now",
+   "expected_output": "Saoirse"
+  },
+  {
+   "id": "joaquin_walking",
+   "category": "misheard",
+   "input": "going for a run with walking on Sunday morning, we're doing the river loop",
+   "expected_output": "Joaquín"
+  },
+  {
+   "id": "joaquin_no_accent",
+   "category": "misheard",
+   "input": "Joaquin and I did ten k this morning, my running pace is finally improving",
+   "expected_output": "Joaquín"
+  },
+  {
+   "id": "joaquin_wakeen",
+   "category": "misheard",
+   "input": "Wakeen said the half marathon route changed, we start at the park now",
+   "expected_output": "Joaquín"
+  },
+  {
+   "id": "siobhan_shivon",
+   "category": "misheard",
+   "input": "Shivon says the boiler will be fixed on Monday",
+   "expected_output": "Siobhan"
+  },
+  {
+   "id": "siobhan_chevonne_rent",
+   "category": "misheard",
+   "input": "I paid Chevonne the rent for October and she sent the receipt",
+   "expected_output": "Siobhan"
+  },
+  {
+   "id": "siobhan_shevaun_leak",
+   "category": "misheard",
+   "input": "texted Shevaun about the leak in the bathroom, she's sending a plumber",
+   "expected_output": "Siobhan"
+  },
+  {
+   "id": "neg_settle_invoice",
+   "category": "sounds_alike",
+   "input": "we finally have to settle the invoice with the supplier this week",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_next_week",
+   "category": "sounds_alike",
+   "input": "let's push the release to next week, the next build isn't ready",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_pedantic_commas",
+   "category": "sounds_alike",
+   "input": "don't be so pedantic about the commas, nobody reads the footnotes",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_granada_trip",
+   "category": "sounds_alike",
+   "input": "we're flying to Granada for the conference and staying near the Alhambra",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_excalibur_book",
+   "category": "sounds_alike",
+   "input": "I'm reading a book about King Arthur and Excalibur with my son",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_sorcha_accounts",
+   "category": "sounds_alike",
+   "input": "Sorcha from accounts sent the invoices, she's new on the finance team",
+   "expected_output": "",
+   "trap": "other_person"
+  },
+  {
+   "id": "neg_anja_cousin",
+   "category": "sounds_alike",
+   "input": "my cousin Anja from Berlin is visiting, she's my aunt's daughter",
+   "expected_output": "",
+   "trap": "other_person"
+  },
+  {
+   "id": "neg_cooper_eddie",
+   "category": "sounds_alike",
+   "input": "Cooper and Eddie are joining the call to talk about the budget",
+   "expected_output": "",
+   "trap": "other_person"
+  },
+  {
+   "id": "neg_glen_finance",
+   "category": "sounds_alike",
+   "input": "Glen from finance approved the budget for the new laptops",
+   "expected_output": "",
+   "trap": "other_person"
+  },
+  {
+   "id": "neg_glebe_church",
+   "category": "sounds_alike",
+   "input": "we walked across the glebe land behind the old church",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_kate_and_lynn",
+   "category": "sounds_alike",
+   "input": "Kate and Lynn are coming to dinner on Friday, can you get wine",
+   "expected_output": "",
+   "trap": "other_person"
+  },
+  {
+   "id": "neg_kathleen_hr",
+   "category": "sounds_alike",
+   "input": "Kathleen from HR called about the new holiday policy",
+   "expected_output": "",
+   "trap": "other_person"
+  },
+  {
+   "id": "neg_leicester_match",
+   "category": "sounds_alike",
+   "input": "Leicester is playing at home on Saturday so the roads will be busy",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_joaquin_phoenix",
+   "category": "sounds_alike",
+   "input": "Joaquin Phoenix was great in that film we watched last night",
+   "expected_output": "",
+   "trap": "other_person"
+  },
+  {
+   "id": "neg_chevron_fuel",
+   "category": "sounds_alike",
+   "input": "Chevron raised fuel prices again, so the drive costs more",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_graph_and_table",
+   "category": "sounds_alike",
+   "input": "add a graph and a table to the appendix of the report",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_tivoli",
+   "category": "sounds_alike",
+   "input": "we spent the afternoon at Tivoli Gardens in Copenhagen",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_cuban_eighties",
+   "category": "sounds_alike",
+   "input": "she collects Cuban records from the eighties",
+   "expected_output": "",
+   "trap": "common_word"
+  },
+  {
+   "id": "neg_self_i_me_myself",
+   "category": "sounds_alike",
+   "trap": "self_name",
+   "input": "I told myself I'd finish the slides before lunch but honestly I just kept rewriting my own intro, so it's on me",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_self_my_name_badge",
+   "category": "sounds_alike",
+   "trap": "self_name",
+   "input": "can you make sure my name is spelled right on the badge this time, they got it wrong last year",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_self_team_signoff",
+   "category": "sounds_alike",
+   "trap": "self_name",
+   "input": "thanks everyone for a great sprint, cheers, the platform team",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_self_own_desk",
+   "category": "sounds_alike",
+   "trap": "self_name",
+   "input": "I'm working from my own desk at home today so ping me if you need anything",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_self_oncall_intro",
+   "category": "sounds_alike",
+   "trap": "self_name",
+   "input": "hi everyone I'm the new on-call engineer from the platform team, I'll be covering the rota this week",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_self_booking_surname",
+   "category": "sounds_alike",
+   "trap": "self_name",
+   "input": "you can put the booking under my surname, and the table is for four people",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_self_note_to_self",
+   "category": "sounds_alike",
+   "trap": "self_name",
+   "input": "note to self, renew my passport before the trip and call the bank about my card",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_self_sign_sam",
+   "category": "sounds_alike",
+   "trap": "self_name",
+   "input": "thanks for your patience with the outage, best wishes, Sam and the whole support team",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_glenn_legal",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "Glenn Matthews from legal needs the signed contract back by Thursday",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_glen_neighbour",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "our neighbour Glen lent us his ladder so I can clear the gutters",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_glen_here_intro",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "hi all, Glen here from the finance team, I'll be covering expense approvals this week",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_kathleen_neighbour",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "Kathleen next door is watering the plants while we're away",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_sean_letting_agent",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "Sean from the letting agency is coming to do the inspection on Tuesday",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_anna_designer",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "Anna the designer sent over the new logo files and they look great",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_anja_schmidt_berlin",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "Anja Schmidt from the Berlin office is joining the call to walk us through the contract",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_kaitlyn_gym",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "Kaitlyn from the gym asked if I want to join the Thursday spin class",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_kate_lin_agency",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "Kate Lin from the design agency sent the mockups for the landing page",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_joaquin_torres_sales",
+   "category": "sounds_alike",
+   "trap": "other_person",
+   "input": "Joaquin Torres from the sales team closed the big deal yesterday",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_sisters_dentist",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "my sister's dentist recommended an electric toothbrush so I ordered one too",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_data_team_lead",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "the data team lead wants the warehouse export moved to Monday mornings",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_vue_app",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "we're building a small Vue app with server side rendering for the docs site",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_container_orchestration",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "we compared a few container orchestration options but decided to stay on plain virtual machines",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_card_reader",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "the card reader at the café ran out of battery so we took cash all morning",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_monitoring_dashboards",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "we need better monitoring dashboards for the payment service, the current ones are useless",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_whiteboard",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "I sketched the flow on the whiteboard in the meeting room, take a photo before someone wipes it",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_python_validation",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "we validate the request data by hand in Python with a few if statements",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_parents_city",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "my parents live in a small city near the mountains and I visit them every summer",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_running_partner",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "my running partner moved away so I'm doing the long runs on my own now",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_landlord_selling",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "our landlord is selling the flat so we have to move out by March",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_office_town",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "the town where our office is has exactly one decent coffee place",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_niece_puppy",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "my niece wants a puppy for her birthday and my brother is not happy about it",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_topic_nephew",
+   "category": "sounds_alike",
+   "trap": "note_topic",
+   "input": "my nephew Seamus turns seven next week so we're baking a cake",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_ice_cube_tray",
+   "category": "sounds_alike",
+   "trap": "common_word",
+   "input": "the ice cube tray is cracked so we need a new one before the party",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_settle_in_school",
+   "category": "sounds_alike",
+   "trap": "common_word",
+   "input": "the kids are still trying to settle in at the new school",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_next_door_party",
+   "category": "sounds_alike",
+   "trap": "common_word",
+   "input": "the people next door are having a party again tonight",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_westminster_train",
+   "category": "sounds_alike",
+   "trap": "common_word",
+   "input": "the train to Westminster was packed so I stood the whole way",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_knuckles_climbing",
+   "category": "sounds_alike",
+   "trap": "common_word",
+   "input": "I grazed my knuckles on the wall at the climbing gym",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_nukes_documentary",
+   "category": "sounds_alike",
+   "trap": "common_word",
+   "input": "that documentary about cold war nukes was really good, you should watch it",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_walking_to_work",
+   "category": "sounds_alike",
+   "trap": "common_word",
+   "input": "I'm walking to work tomorrow because the trains are on strike",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_on_your_desk",
+   "category": "sounds_alike",
+   "trap": "common_word",
+   "input": "I'll leave the keys on your desk before I go home",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_docker_swarm",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "we're running everything on Docker Swarm for now because the team is tiny",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_nomad",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "we picked Nomad over the bigger orchestrators because it's simpler to run",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_kibana",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "the Kibana dashboard shows the error logs spiking at midnight every night",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_datadog",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "set up a Datadog monitor for disk usage over ninety percent",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_nextjs_react",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "we migrated the React site to Next.js last month and the build got way faster",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_marshmallow",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "the API layer uses marshmallow for all the request schemas",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_sumup",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "the SumUp reader dropped two card payments at the café today",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_miro",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "drop the diagram in Miro so everyone can edit the boxes",
+   "expected_output": ""
+  },
+  {
+   "id": "neg_other_batumi",
+   "category": "sounds_alike",
+   "trap": "topic_other_thing",
+   "input": "my parents in Batumi sent a parcel with churchkhela and wine",
+   "expected_output": ""
+  }
+ ]
+}

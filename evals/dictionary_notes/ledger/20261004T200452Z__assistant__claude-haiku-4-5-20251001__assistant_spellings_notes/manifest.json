@@ -1,0 +1,169 @@
+{
+  "run_id": "20261004T200452Z__assistant__claude-haiku-4-5-20251001__assistant_spellings_notes",
+  "recorded_at": "2026-10-04T20:04:52Z",
+  "repo_commit": "a9243b8aa652a52eb6823cdf2a0f80bb46ea2ea7",
+  "arm": {
+    "model": "claude-haiku-4-5-20251001",
+    "endpoint": "https://api.anthropic.com/v1/messages",
+    "runtime": "anthropic-messages-api 2023-06-01",
+    "prompt_name": "assistant_spellings_notes",
+    "prompt_sha256": "f342227eb5d6582c01c96e88e7f36a6e9f3636a17ee49adc89e1a5876fdc77ed",
+    "sampling": {
+      "max_tokens": 1024
+    }
+  },
+  "eval_set": {
+    "name": "assistant.json",
+    "fingerprint": "f83cecf53d8d9aef3f993278a202cfafc9c75a0de95263eee35834314be71751",
+    "case_count": 21
+  },
+  "cases": [
+    {
+      "id": "a_anya_message",
+      "category": "misheard",
+      "case_fingerprint": "53e1f134410ac771f054fc950deb886b8de75ff1f74cca876ef76c8fcd8b8466",
+      "latency_ms": 1034,
+      "output_file": "outputs/a_anya_message.txt"
+    },
+    {
+      "id": "a_caitlin_slack",
+      "category": "misheard",
+      "case_fingerprint": "855db0be64f321d553d3c985985ba2fdc1939ff0f2623c3017405fff6065af53",
+      "latency_ms": 1301,
+      "output_file": "outputs/a_caitlin_slack.txt"
+    },
+    {
+      "id": "a_katelyn_reschedule",
+      "category": "misheard",
+      "case_fingerprint": "5e2497cacb1d2cd9a0eb352656194347661f611b255f93d6ec2e959cd90fb015",
+      "latency_ms": 1676,
+      "output_file": "outputs/a_katelyn_reschedule.txt"
+    },
+    {
+      "id": "a_kube_explain",
+      "category": "misheard",
+      "case_fingerprint": "ff52f0a2e370dae554747f6be3bb907eb36a928d9351012106d083edbe33b08b",
+      "latency_ms": 1218,
+      "output_file": "outputs/a_kube_explain.txt"
+    },
+    {
+      "id": "a_grafana_alert",
+      "category": "misheard",
+      "case_fingerprint": "64dfd356b0bcebb62692366b500d2ac8f068a1902014a977a5aa3623ac343db9",
+      "latency_ms": 643,
+      "output_file": "outputs/a_grafana_alert.txt"
+    },
+    {
+      "id": "a_pydantic_ticket",
+      "category": "misheard",
+      "case_fingerprint": "a92b98f36f912d6313eb57cbfbec7640d9b6c7bb3373d7ac58b1f46f57316cf1",
+      "latency_ms": 849,
+      "output_file": "outputs/a_pydantic_ticket.txt"
+    },
+    {
+      "id": "a_nuxt_ticket",
+      "category": "misheard",
+      "case_fingerprint": "9b72cb022d5ef7980a740d51fab899972f290b2a0464a01ec5ddb3bd32178d9e",
+      "latency_ms": 759,
+      "output_file": "outputs/a_nuxt_ticket.txt"
+    },
+    {
+      "id": "a_zettle_note",
+      "category": "misheard",
+      "case_fingerprint": "16832d33ad515f1bdb9781e3c8afc944c2ea0762ccec76c12beb127dc42dc984",
+      "latency_ms": 774,
+      "output_file": "outputs/a_zettle_note.txt"
+    },
+    {
+      "id": "a_excalidraw_invite",
+      "category": "misheard",
+      "case_fingerprint": "76700d57711384aeda45d66556311c7ff1d569e5d46fe87a0fe906e7d4107b3e",
+      "latency_ms": 769,
+      "output_file": "outputs/a_excalidraw_invite.txt"
+    },
+    {
+      "id": "a_leominster_email",
+      "category": "misheard",
+      "case_fingerprint": "c8e27bac7d1d189a418f8f4819e4048eeec77507e45171f290459eba934da072",
+      "latency_ms": 935,
+      "output_file": "outputs/a_leominster_email.txt"
+    },
+    {
+      "id": "a_tbilisi_ooo",
+      "category": "misheard",
+      "case_fingerprint": "659f0f2d3904e18a7b70b89ddc744fbd15fa19e278426b9d1bd2763288529a5a",
+      "latency_ms": 857,
+      "output_file": "outputs/a_tbilisi_ooo.txt"
+    },
+    {
+      "id": "a_saoirse_card",
+      "category": "misheard",
+      "case_fingerprint": "ba3e50d44a3240e2ecfb972d1a7125ad80509bb01ae2ff3f00d9527945fd8f19",
+      "latency_ms": 1114,
+      "output_file": "outputs/a_saoirse_card.txt"
+    },
+    {
+      "id": "a_joaquin_text",
+      "category": "misheard",
+      "case_fingerprint": "b5b02c091eef5f13e95e5b19e98a41505bf5675020eca21efcbf935bec19d5b3",
+      "latency_ms": 784,
+      "output_file": "outputs/a_joaquin_text.txt"
+    },
+    {
+      "id": "a_siobhan_leak",
+      "category": "misheard",
+      "case_fingerprint": "145cb0197dbafe055eeae75980b8f3e6c182291ca72424cd9594c5f548ab4d1a",
+      "latency_ms": 1037,
+      "output_file": "outputs/a_siobhan_leak.txt"
+    },
+    {
+      "id": "a_gleb_signoff",
+      "category": "misheard",
+      "case_fingerprint": "e06f7b121a13c63eb0411efe1c798510d9983930d3eee81147ccdcfdaafa6e4f",
+      "latency_ms": 1139,
+      "output_file": "outputs/a_gleb_signoff.txt"
+    },
+    {
+      "id": "a_neg_settle",
+      "category": "sounds_alike",
+      "case_fingerprint": "838eec91b125445de24d50407d0eb521a0401bc3810eae58c11a41b3a433370f",
+      "latency_ms": 788,
+      "output_file": "outputs/a_neg_settle.txt"
+    },
+    {
+      "id": "a_neg_pedantic",
+      "category": "sounds_alike",
+      "case_fingerprint": "f36af55b1886aac6ec82e399c5c06c05625f40556e5b31593739f4e7355d145f",
+      "latency_ms": 1329,
+      "output_file": "outputs/a_neg_pedantic.txt"
+    },
+    {
+      "id": "a_neg_granada",
+      "category": "sounds_alike",
+      "case_fingerprint": "0bad86fa72d1ab918322115c89ab1f42e2027d162ee252c704f1c1066125da05",
+      "latency_ms": 935,
+      "output_file": "outputs/a_neg_granada.txt"
+    },
+    {
+      "id": "a_neg_kathleen",
+      "category": "sounds_alike",
+      "case_fingerprint": "1d6800a334e091d02d96ac31539268c88215819d36fe18a30c1e474573527f5a",
+      "latency_ms": 1660,
+      "output_file": "outputs/a_neg_kathleen.txt"
+    },
+    {
+      "id": "a_neg_joaquin_phoenix",
+      "category": "sounds_alike",
+      "case_fingerprint": "29c52833f390b0b7b18f43f2c09c3d3d804ce8a0a4b64bb37da9b0793a7e939c",
+      "latency_ms": 941,
+      "output_file": "outputs/a_neg_joaquin_phoenix.txt"
+    },
+    {
+      "id": "a_neg_next_week",
+      "category": "sounds_alike",
+      "case_fingerprint": "928610ddc974ca10ac3559901c119368242096b2f1d9d8bc9abd7d589f0d05a1",
+      "latency_ms": 1396,
+      "output_file": "outputs/a_neg_next_week.txt"
+    }
+  ]
+}

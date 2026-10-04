@@ -1,0 +1,1 @@
+Upgrade Pedantic to v2 in API Service

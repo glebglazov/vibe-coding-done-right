@@ -1,0 +1,1 @@
+[API] Upgrade Pydantic to version 2

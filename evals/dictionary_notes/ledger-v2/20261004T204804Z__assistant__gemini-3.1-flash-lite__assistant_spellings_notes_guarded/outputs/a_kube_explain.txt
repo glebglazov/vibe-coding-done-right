@@ -1,0 +1,1 @@
+Cube acts as a semantic layer that sits between your data sources and your application to provide consistent data modeling and high-performance caching. It enables developers to easily define metrics and expose them via standard APIs, ensuring data consistency across different front-end tools and services.

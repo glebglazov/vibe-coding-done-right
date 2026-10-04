@@ -1,0 +1,1 @@
+Cube is a semantic layer that acts as a single source of truth for your data, allowing developers to define metrics once and expose them consistently across any application. It simplifies data modeling by providing a unified interface to query and cache complex datasets, making it significantly easier to integrate analytics into your projects.

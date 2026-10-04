@@ -1,0 +1,1 @@
+The API layer uses Pydantic for all the request schemas and the settings class.

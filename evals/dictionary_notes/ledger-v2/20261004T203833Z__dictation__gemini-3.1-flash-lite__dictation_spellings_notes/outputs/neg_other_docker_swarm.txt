@@ -1,0 +1,1 @@
+We're running everything on Docker Swarm for now because the team is tiny.

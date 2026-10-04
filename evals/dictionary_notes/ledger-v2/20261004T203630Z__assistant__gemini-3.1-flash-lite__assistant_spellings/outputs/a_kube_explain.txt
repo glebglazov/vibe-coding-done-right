@@ -1,0 +1,1 @@
+Cube provides a semantic layer that allows developers to model data once and access it consistently across any application via APIs. This approach streamlines data infrastructure and accelerates development by abstracting away the complexities of underlying database query logic.

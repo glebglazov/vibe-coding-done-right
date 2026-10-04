@@ -1,5 +1,8 @@
 # Substitutions converge on their Replacement, and a deleted phrase stays deleted
 
+> **Amended by [ADR-0026](0026-a-dictionary-note-reaches-only-modes-that-rewrite-what-was-said.md):** the survivor keeps its
+> own Note. If it has none, it takes the Note of the most recently edited loser that has one.
+
 Two Substitutions with an identical Replacement are one Substitution that two
 devices happened to create separately. They merge: the older id survives, the
 loser gets a tombstone, and the Trigger Phrases combine. Phrases carry their own

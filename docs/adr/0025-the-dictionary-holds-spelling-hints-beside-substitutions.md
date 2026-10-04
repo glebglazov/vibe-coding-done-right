@@ -1,5 +1,9 @@
 # The Dictionary holds Spelling Hints beside Substitutions
 
+> **Amended by [ADR-0026](0026-a-dictionary-note-reaches-only-modes-that-rewrite-what-was-said.md):** a Dictionary Entry can
+> hold a Note. It goes with its spelling to Dictation prompts only. Assistant and Custom prompts and
+> every Transcription Model still get the spellings alone.
+
 Users want the app to spell some words right without first finding out how the engine misspells them: their name, a phone number, a product name. That is a list of words the user means, and every Replacement already is one. So there is one list, the **Dictionary**, and not a second list beside Substitutions. A Trigger Phrase becomes optional: a Dictionary Entry with no Trigger Phrases is a Spelling Hint only, and an entry with Trigger Phrases is a Spelling Hint and is also substituted exactly. This reverses "a Substitution has one or more Trigger Phrases".
 
 Every Replacement is a Spelling Hint in two places. The first is the transcription adapter: Spelling Hints are a Transcription Model Capability, a run hands the Dictionary's hints to the provider, and each model that declares the Capability decides how to use them. Whisper declares it and turns them into prompt tokens. Parakeet does not declare it yet; its vocabulary boost (ADR-0017) is how it will. The second is the system prompt of every Mode or AI Prompt Mode that calls an LLM. A Spelling Hint never causes an AI call by itself.

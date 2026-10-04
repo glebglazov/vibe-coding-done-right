@@ -1,0 +1,1 @@
+Cube is a semantic layer that sits between your data warehouse and your application to provide consistent data access and metrics across your services. It enables developers to easily model complex business logic and serve performant, secure data through APIs without having to write repetitive SQL queries.

@@ -1,0 +1,1 @@
+We migrated the Vue site to Next 3 last month, and the build got way faster.

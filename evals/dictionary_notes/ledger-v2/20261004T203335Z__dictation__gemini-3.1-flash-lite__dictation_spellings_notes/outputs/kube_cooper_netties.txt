@@ -1,0 +1,1 @@
+I need to read up on Kubernetes before the interview because apparently they run everything on it.

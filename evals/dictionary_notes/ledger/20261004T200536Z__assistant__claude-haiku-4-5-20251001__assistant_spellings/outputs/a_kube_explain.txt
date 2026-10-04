@@ -1,0 +1,5 @@
+I need clarification: do you mean "Kubernetes" and "Grafana"? Based on your spelling hints and common developer tools, here's my best interpretation:
+
+Kubernetes orchestrates containerized applications across clusters, automating deployment, scaling, and management of microservices. Grafana visualizes metrics and logs from your infrastructure, helping you monitor system health and troubleshoot issues.
+
+If you meant different tools, please clarify what "cube" and "eighties" refer to.

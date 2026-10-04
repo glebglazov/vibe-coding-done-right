@@ -1,0 +1,1 @@
+So we moved the whole thing onto Kubernetes last month, and the pods keep restarting every couple of hours.

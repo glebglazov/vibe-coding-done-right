@@ -1,0 +1,1 @@
+Cube is a semantic layer that allows developers to model data and define metrics consistently across their applications. It provides a unified API for accessing this data, enabling developers to build dashboards and analytics features without writing complex SQL queries.
