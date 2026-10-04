@@ -8,7 +8,7 @@ import Testing
 struct RecordingRunTerminalOutcomeTests {
     @Test("success records payload and publishes bundled keyboard result")
     func success() async {
-        let settings = Self.makeSettings()
+        let settings = Self.makeSettings(promptMode: .assistant)
         let captures = ["selected context"]
         let rawTranscript = "hello world"
         let cleanedTranscript = TextPostProcessor.removeFillers(from: rawTranscript)
@@ -30,6 +30,24 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(success.finalText == TranscriptProcessor.finalize(cleanedTranscript, settings: settings))
         #expect(success.captures == captures)
         #expect(keyboard.interactions == [.publishBundledResult(success.finalText)])
+    }
+
+    @Test("a run outside Assistant drops its Captures")
+    func verbatimDropsCaptures() async {
+        let (run, _) = makeRun(
+            streaming: FakeRecordingStreamingSession(result: .success("hello world")),
+            settings: Self.makeSettings(promptMode: .verbatim),
+            captures: ["selected context"]
+        )
+
+        #expect(await run.start())
+        _ = await run.stop()
+
+        guard case .success(let success) = await run.waitForIdle(timeout: .seconds(1)) else {
+            Issue.record("Expected success outcome")
+            return
+        }
+        #expect(success.captures.isEmpty)
     }
 
     @Test("substitution rewrites the transcript before output and keyboard delivery")
@@ -157,9 +175,9 @@ struct RecordingRunTerminalOutcomeTests {
         return (run, keyboard)
     }
 
-    private static func makeSettings() -> RecordingRun.Settings {
+    private static func makeSettings(promptMode: AIPromptMode = .verbatim) -> RecordingRun.Settings {
         RecordingRun.Settings(
-            promptMode: .verbatim,
+            promptMode: promptMode,
             textStyle: .casual,
             hasAICapability: false
         )

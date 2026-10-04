@@ -82,12 +82,13 @@ struct RecordingFlowCoordinatorRunControlTests {
             Issue.record("Expected a successful run, got \(result)")
             return
         }
-        let touchedCaptures = channel.interactions.contains {
+        let interactions = channel.interactions
+        let touchedCaptures = interactions.contains {
             $0 == .readCaptures || $0 == .clearCaptures || $0 == .clearLegacySelectedText
         }
         #expect(!touchedCaptures)
+        #expect(interactions.last == .publish(.idle))
         #expect(channel.readCaptures() == ["kept for the keyboard"])
-        #expect(channel.interactions.last == .publish(.idle))
         #expect(coordinator.activeRunPhase == nil)
     }
 
