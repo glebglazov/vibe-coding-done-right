@@ -124,6 +124,7 @@ struct SubstitutionTriggerPhrasesTests {
         let singular = try #require(store.substitutions.first { $0.id == id })
         #expect(singular.triggerPhrases == ["oh my zsh"])
         #expect(singular.replacement == "Oh My Zsh")
+        #expect(singular.note.isEmpty)
         // The phrases a build wrote before they carried stamps count as added
         // when it last wrote them, which is all that file can say.
         let plural = try #require(store.substitutions.first { $0.id == arrayID })
@@ -210,5 +211,33 @@ struct SubstitutionTriggerPhrasesTests {
         let rewritten = try jsonObject(at: url)
         let preserved = try #require(rewritten["fromANewerBuild"] as? [String: Any])
         #expect(preserved["caseSensitive"] as? Bool == true)
+    }
+
+    @Test("a Note loads from its file and is written back when the entry is saved again")
+    func noteSurvivesARewrite() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let id = UUID()
+        let url = try writeRawSnapshot(
+            """
+            {"id":"\(id.uuidString)","isEnabled":true,\
+            "lastUpdated":"2026-01-01T09:30:00.000Z",\
+            "replacement":"Anya","phrases":[],"note":"my sister"}
+            """,
+            id: id,
+            into: root
+        )
+
+        let store = try await makeStore(root: root)
+        var loaded = try #require(store.substitutions.first)
+        #expect(loaded.note == "my sister")
+        loaded.replacement = "Anja"
+        store.upsert(loaded)
+
+        #expect(await eventually {
+            (try? self.jsonObject(at: url))?["replacement"] as? String == "Anja"
+        })
+        #expect(try jsonObject(at: url)["note"] as? String == "my sister")
     }
 }

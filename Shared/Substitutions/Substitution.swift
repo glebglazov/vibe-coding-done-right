@@ -15,6 +15,9 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
     /// Fixed text swapped in for any matched Trigger Phrase. Injected verbatim;
     /// never re-scanned for further Trigger Phrases.
     var replacement: String
+    /// What the entry is, in the user's words: "my sister". Empty when the user
+    /// wrote none. It reaches only Dictation prompts (ADR-0026).
+    var note: String
     /// When this entry was first made, on whichever device made it. It never
     /// moves, which is what lets two devices agree on the older of two entries
     /// holding one Replacement without asking each other (ADR-0011). An entry
@@ -93,6 +96,7 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
         id: UUID = UUID(),
         phrases: [TriggerPhrase],
         replacement: String,
+        note: String = "",
         createdAt: Date? = nil,
         lastUpdated: Date = Date(),
         isEnabled: Bool = true,
@@ -102,6 +106,7 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
         self.id = id
         self.phrases = phrases
         self.replacement = replacement
+        self.note = note
         self.createdAt = createdAt ?? lastUpdated
         self.lastUpdated = lastUpdated
         self.isEnabled = isEnabled
@@ -154,7 +159,7 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
 
     /// Known top-level keys this binary recognizes. Anything else lands in `extras`.
     private static let knownKeys: Set<String> = [
-        "id", "phrases", "replacement", "createdAt", "lastUpdated", "isEnabled", "schemaVersion",
+        "id", "phrases", "replacement", "note", "createdAt", "lastUpdated", "isEnabled", "schemaVersion",
         // The pre-stamp keys, still written for older readers:
         "triggerPhrases", "triggerPhrase",
     ]
@@ -188,6 +193,7 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
             id: try container.decode(UUID.self, forKey: AnyCodingKey("id")),
             phrases: phrases,
             replacement: try container.decode(String.self, forKey: AnyCodingKey("replacement")),
+            note: try container.decodeIfPresent(String.self, forKey: AnyCodingKey("note")) ?? "",
             createdAt: try container.decodeIfPresent(Date.self, forKey: AnyCodingKey("createdAt")),
             lastUpdated: lastUpdated,
             isEnabled: try container.decode(Bool.self, forKey: AnyCodingKey("isEnabled")),
@@ -207,6 +213,7 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
         try container.encode(triggerPhrases, forKey: AnyCodingKey("triggerPhrases"))
         try container.encode(triggerPhrase, forKey: AnyCodingKey("triggerPhrase"))
         try container.encode(replacement, forKey: AnyCodingKey("replacement"))
+        try container.encode(note, forKey: AnyCodingKey("note"))
         try container.encode(createdAt, forKey: AnyCodingKey("createdAt"))
         try container.encode(lastUpdated, forKey: AnyCodingKey("lastUpdated"))
         try container.encode(isEnabled, forKey: AnyCodingKey("isEnabled"))
