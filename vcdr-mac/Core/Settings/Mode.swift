@@ -29,6 +29,16 @@ enum PromptType: String, Codable, CaseIterable {
         case .custom: "Custom"
         }
     }
+
+    /// Only Dictation rewrites what was said, so only it is told each Note.
+    /// Assistant writes new text and would use a Note as material, and the app
+    /// cannot tell what a Custom prompt does (ADR-0026).
+    var hintDetail: SpellingHints.Detail {
+        switch self {
+        case .dictation: .withNotes
+        case .assistant, .custom: .spellingsOnly
+        }
+    }
 }
 
 enum LocalAgentProvider: String, Codable, CaseIterable {

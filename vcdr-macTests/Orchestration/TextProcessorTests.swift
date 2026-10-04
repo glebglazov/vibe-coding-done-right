@@ -207,7 +207,7 @@ struct TextProcessorAITests {
         let (processor, _, ai, _) = makeProcessor(
             aiResults: [.failure(TestError()), .success("polished")]
         )
-        let dictionary = [Substitution(triggerPhrases: [], replacement: "Glazov")]
+        let dictionary = [Substitution(triggerPhrases: [], replacement: "Glazov", note: "my surname")]
         let input = makeInput(processingType: .cloudAI, substitutions: dictionary)
 
         guard case .preview(let handle) = try await processor.process(input) else {
@@ -218,7 +218,8 @@ struct TextProcessorAITests {
 
         let calls = await ai.receivedCalls
         #expect(calls.count == 2)
-        #expect(calls.map(\.spellingHints.spellings) == [["Glazov"], ["Glazov"]])
+        let hint = SpellingHints.Hint(spelling: "Glazov", note: "my surname")
+        #expect(calls.map(\.spellingHints.hints) == [[hint], [hint]])
     }
 
     @Test("Style transform applied on retry path (no drift)")
