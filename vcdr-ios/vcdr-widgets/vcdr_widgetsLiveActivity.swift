@@ -17,7 +17,7 @@ private enum PresenceFace {
         case .live(.arming): "Starting…"
         case .live(.capturing): "Recording"
         case .live(.finalizing): "Transcribing…"
-        case .live(.concluded(.copied)): "Copied"
+        case .live(.concluded(.transcribed)): "Transcribed"
         case .live(.concluded(.noSpeech)): "No speech detected"
         case .live(.concluded(.failed)): "Couldn't transcribe"
         /// VCDR is no longer reachable in place, so the card must claim nothing:
@@ -32,7 +32,7 @@ private enum PresenceFace {
         case .live(.ready): "Ready"
         case .live(.arming), .live(.finalizing): "…"
         case .live(.capturing): "REC"
-        case .live(.concluded(.copied)): "Copied"
+        case .live(.concluded(.transcribed)): "Done"
         case .live(.concluded(.noSpeech)), .live(.concluded(.failed)): "None"
         case .notReady: "Off"
         }
@@ -43,7 +43,7 @@ private enum PresenceFace {
         case .live(.ready): "waveform"
         case .live(.arming), .live(.capturing): "mic.fill"
         case .live(.finalizing): "text.bubble"
-        case .live(.concluded(.copied)): "doc.on.clipboard"
+        case .live(.concluded(.transcribed)): "checkmark.circle"
         case .live(.concluded(.noSpeech)): "speaker.slash"
         case .live(.concluded(.failed)): "exclamationmark.triangle"
         case .notReady: "waveform.slash"
@@ -59,7 +59,7 @@ private enum PresenceFace {
     }
 
     var capturingSince: Date? {
-        guard case .live(.capturing(let since)) = self else { return nil }
+        guard case .live(.capturing(let since, _)) = self else { return nil }
         return since
     }
 
@@ -161,7 +161,7 @@ struct HotMicLiveActivity: Widget {
     @ViewBuilder
     private func stopButton(face: PresenceFace) -> some View {
         if let title = face.stopTitle {
-            Button(intent: StopRecordingIntent()) {
+            Button(intent: StopFromCardIntent()) {
                 Label(title, systemImage: "stop.fill")
             }
             .tint(face.accent)

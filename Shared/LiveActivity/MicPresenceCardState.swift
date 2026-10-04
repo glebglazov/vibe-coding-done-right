@@ -5,22 +5,24 @@ import Foundation
 /// show it after the app process is gone.
 nonisolated enum MicPresenceCardState: Codable, Hashable, Sendable {
     case ready
-    case arming
-    case capturing(since: Date)
+    /// `cardStops` is false for a run whose stop must come from where it
+    /// started, so the face shows no button.
+    case arming(cardStops: Bool)
+    case capturing(since: Date, cardStops: Bool)
     case finalizing
     case concluded(RunCardOutcome)
 
     var stopControl: CardStopControl? {
         switch self {
-        case .arming: .cancel
-        case .capturing: .stop
-        case .ready, .finalizing, .concluded: nil
+        case .arming(cardStops: true): .cancel
+        case .capturing(_, cardStops: true): .stop
+        case .arming, .capturing, .ready, .finalizing, .concluded: nil
         }
     }
 }
 
 nonisolated enum RunCardOutcome: String, Codable, Hashable, Sendable {
-    case copied
+    case transcribed
     case noSpeech
     case failed
 }

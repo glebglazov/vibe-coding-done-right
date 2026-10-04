@@ -24,19 +24,13 @@ final class AppDependencies {
             keyboardChannel: keyboard,
             recordingEngine: engine,
             hotMicSession: hotMicSession,
-            backgroundTasks: UIKitBackgroundTaskRunner(),
-            pasteboard: GeneralPasteboard()
+            backgroundTasks: UIKitBackgroundTaskRunner()
         )
         boot = AppBoot(steps: .coldLaunch(of: coordinator))
-        remote = IntentRecordingRemote(
-            boot: boot,
-            coordinator: coordinator,
-            card: card,
-            requiresCardToRecord: UIDevice.current.userInterfaceIdiom == .phone
-        )
+        remote = IntentRecordingRemote(boot: boot, coordinator: coordinator, card: card)
     }
 
-    /// Makes the remote what `@AppDependency` resolves to in both intents.
+    /// Makes the remote what `@AppDependency` resolves to in every intent.
     /// Runs from `AppDelegate.init`, before any intent can perform.
     func registerForAppIntents() {
         let remote = remote

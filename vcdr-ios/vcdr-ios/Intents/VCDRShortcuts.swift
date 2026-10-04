@@ -1,14 +1,20 @@
 import AppIntents
 
-/// Puts Toggle Recording in Shortcuts and Spotlight with no setup, which is
-/// also what an iPad hardware-keyboard shortcut binds to.
+/// Puts Start and Stop Recording in Shortcuts and Spotlight with no setup,
+/// which is also what an iPad hardware-keyboard shortcut binds to.
 struct VCDRShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
-            intent: ToggleRecordingIntent(),
-            phrases: ["Toggle recording in \(.applicationName)"],
-            shortTitle: "Toggle Recording",
+            intent: StartRecordingIntent(),
+            phrases: ["Start recording in \(.applicationName)"],
+            shortTitle: "Start Recording",
             systemImageName: "mic"
+        )
+        AppShortcut(
+            intent: StopRecordingIntent(),
+            phrases: ["Stop recording in \(.applicationName)"],
+            shortTitle: "Stop Recording",
+            systemImageName: "stop.circle"
         )
     }
 }

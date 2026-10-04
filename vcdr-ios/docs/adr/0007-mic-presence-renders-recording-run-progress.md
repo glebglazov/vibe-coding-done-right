@@ -1,5 +1,7 @@
 # Mic Presence renders Recording Run progress, and one card owns its truth
 
+> **Amended by [ADR-0008](0008-shortcut-start-and-stop-are-separate-intents.md):** "Toggle Recording" is replaced by Start Recording and Stop Recording. A Shortcut start needs the card on every device, iPad included. Clipboard Delivery is removed, so the success outcome is `transcribed`, not `copied`.
+
 Mic Presence now renders the progress of the active Recording Run as well as In-Place Reachability: Arming, Capturing with a running timer, Finalizing, and for a Shortcut run a short outcome. A new `MicPresenceCard` is the card's single writer. It merges three facts, each with its own writer, and it renews the card's `staleDate` itself. The Hot Mic Session only reports reachability. This amends [ADR-0006](0006-mic-presence-is-a-live-rendering-of-in-place-reachability.md), which kept the card a rendering of reachability alone and let the Heartbeat renew it.
 
 ## Context

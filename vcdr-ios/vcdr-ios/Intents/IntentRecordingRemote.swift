@@ -1,51 +1,28 @@
 import Foundation
 import OSLog
 
+/// A Shortcut start always needs the card: AppIntents ends VCDR when an
+/// `AudioRecordingIntent` leaves audio running without a Live Activity.
 @MainActor
 final class IntentRecordingRemote: RecordingRunRemote {
     private let boot: AppBoot
     private let coordinator: RecordingFlowCoordinator
     private let card: any RecordingRunPresence
-    /// On iPhone the system stops a background recording without a card. The
-    /// iPad records without one, so a missing card there is only logged.
-    private let requiresCardToRecord: Bool
 
-    init(
-        boot: AppBoot,
-        coordinator: RecordingFlowCoordinator,
-        card: any RecordingRunPresence,
-        requiresCardToRecord: Bool
-    ) {
+    init(boot: AppBoot, coordinator: RecordingFlowCoordinator, card: any RecordingRunPresence) {
         self.boot = boot
         self.coordinator = coordinator
         self.card = card
-        self.requiresCardToRecord = requiresCardToRecord
     }
 
-    func toggleFromShortcut() async throws(RecordingRemoteRefusal) {
+    func startFromShortcut() async throws(RecordingRemoteRefusal) {
         boot.launch()
-        switch RecordingToggle.command(for: coordinator.activeRunPhase) {
-        case .ignore:
-            Logger.recording.info("Toggle Recording ignored — a cancel or Finalizing is in flight")
-        case .stop:
-            Task { await coordinator.stopActiveRun() }
-        case .start:
-            try await startFromShortcut()
+        guard coordinator.activeRunPhase == nil else {
+            Logger.recording.info("Start Recording ignored — a run is already in progress")
+            return
         }
-    }
-
-    func stopFromCard() async {
-        boot.launch()
-        guard RecordingToggle.stopCommand(for: coordinator.activeRunPhase) == .stop else { return }
-        Task { await coordinator.stopActiveRun() }
-    }
-
-    private func startFromShortcut() async throws(RecordingRemoteRefusal) {
         guard coordinator.hasMicrophonePermission else { throw .microphoneNotAllowed }
-        if !card.areActivitiesEnabled {
-            guard !requiresCardToRecord else { throw .liveActivitiesOff }
-            Logger.recording.warning("Toggle Recording starts without a card: Live Activities are off")
-        }
+        guard card.areActivitiesEnabled else { throw .liveActivitiesOff }
 
         switch await coordinator.startRecording(origin: .shortcut) {
         case .failed(let message): throw .runFailed(message)
@@ -58,11 +35,29 @@ final class IntentRecordingRemote: RecordingRunRemote {
         // The card check suspends; the run it was made for may have ended, and
         // another may have started, by the time it answers.
         guard let active = coordinator.activeRun, active.run === run, case .capturing = active.phase else { return }
-        guard !requiresCardToRecord else {
-            Logger.recording.error("Toggle Recording discarded: ActivityKit refused the card")
-            await coordinator.discardRecording()
-            throw .cardUnavailable
+        Logger.recording.error("Start Recording discarded: ActivityKit refused the card")
+        await coordinator.discardRecording()
+        throw .cardUnavailable
+    }
+
+    func stopFromShortcut() async throws(RecordingRemoteRefusal) -> String {
+        boot.launch()
+        switch await coordinator.stopActiveRun() {
+        case .finalized(.success(let success)): return success.finalText
+        case .finalized(.processingFailure(let failure)): throw .runFailed(failure.message)
+        case .finalized(.emptyResult): throw .noSpeech
+        case .finalized(.cancellation), .cancelledArming: throw .runCancelled
+        case .ignored, .noRun: throw .notRecording
         }
-        Logger.recording.warning("Toggle Recording goes on without a card")
+    }
+
+    func stopFromCard() async {
+        boot.launch()
+        guard RecordingToggle.stopCommand(for: coordinator.activeRunPhase) == .stop else { return }
+        Task { await coordinator.stopActiveRun() }
+    }
+
+    var isRecording: Bool {
+        RecordingToggle.stopCommand(for: coordinator.activeRunPhase) == .stop
     }
 }

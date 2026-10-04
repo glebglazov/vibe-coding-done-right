@@ -29,13 +29,13 @@ struct MicPresenceCardTests {
         let env = Env()
         env.card.runChanged(.active(origin: .shortcut, phase: .arming))
         await env.settle()
-        #expect(env.store.requestedFaces == [.arming])
+        #expect(env.store.requestedFaces == [.arming(cardStops: false)])
 
         env.now = env.now.addingTimeInterval(5)
         env.clock.advance()
         await env.settle()
 
-        #expect(env.store.updatedFaces == [.arming])
+        #expect(env.store.updatedFaces == [.arming(cardStops: false)])
         #expect(env.store.updatedStaleDates == [env.now.addingTimeInterval(KeyboardChannel.heartbeatFreshnessWindow)])
         #expect(await env.card.isShowingCard())
     }
@@ -48,7 +48,7 @@ struct MicPresenceCardTests {
         env.card.reachabilityChanged(false)
         await env.settle()
 
-        #expect(env.store.updatedFaces.last == .capturing(since: since))
+        #expect(env.store.updatedFaces.last == .capturing(since: since, cardStops: true))
         #expect(env.store.endedIDs.isEmpty)
     }
 
@@ -57,9 +57,9 @@ struct MicPresenceCardTests {
         let env = Env()
         env.card.reachabilityChanged(true)
         let until = env.now.addingTimeInterval(MicPresenceCardPolicy.concludedDwell)
-        env.card.runChanged(.concluded(.copied, until: until))
+        env.card.runChanged(.concluded(.transcribed, until: until))
         await env.settle()
-        #expect(env.store.updatedFaces.last == .concluded(.copied))
+        #expect(env.store.updatedFaces.last == .concluded(.transcribed))
 
         env.now = until
         env.clock.advance()
@@ -73,10 +73,10 @@ struct MicPresenceCardTests {
         let env = Env()
         env.card.runChanged(.active(origin: .shortcut, phase: .finalizing))
         let until = env.now.addingTimeInterval(MicPresenceCardPolicy.concludedDwell)
-        env.card.runChanged(.concluded(.copied, until: until))
+        env.card.runChanged(.concluded(.transcribed, until: until))
         await env.settle()
 
-        #expect(env.store.concluded == [.init(id: "activity-1", state: .concluded(.copied), dismissAt: until)])
+        #expect(env.store.concluded == [.init(id: "activity-1", state: .concluded(.transcribed), dismissAt: until)])
         #expect(!(await env.card.isShowingCard()))
     }
 
@@ -107,6 +107,6 @@ struct MicPresenceCardTests {
         env.card.runChanged(nil)
         env.card.runChanged(.active(origin: .shortcut, phase: .arming))
         await env.settle()
-        #expect(env.store.requestedFaces == [.arming])
+        #expect(env.store.requestedFaces == [.arming(cardStops: false)])
     }
 }

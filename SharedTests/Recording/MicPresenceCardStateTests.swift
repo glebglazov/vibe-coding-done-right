@@ -9,10 +9,12 @@ import Testing
 struct MicPresenceCardStateTests {
     private static let everyFace: [MicPresenceCardState] = [
         .ready,
-        .arming,
-        .capturing(since: Date(timeIntervalSince1970: 1_000)),
+        .arming(cardStops: true),
+        .arming(cardStops: false),
+        .capturing(since: Date(timeIntervalSince1970: 1_000), cardStops: true),
+        .capturing(since: Date(timeIntervalSince1970: 1_000), cardStops: false),
         .finalizing,
-        .concluded(.copied),
+        .concluded(.transcribed),
         .concluded(.noSpeech),
         .concluded(.failed),
     ]
@@ -25,10 +27,12 @@ struct MicPresenceCardStateTests {
 
     @Test("Arming offers Cancel, Capturing offers Stop, and no other face has a button")
     func stopControl() {
-        #expect(MicPresenceCardState.arming.stopControl == .cancel)
-        #expect(MicPresenceCardState.capturing(since: .now).stopControl == .stop)
+        #expect(MicPresenceCardState.arming(cardStops: true).stopControl == .cancel)
+        #expect(MicPresenceCardState.capturing(since: .now, cardStops: true).stopControl == .stop)
+        #expect(MicPresenceCardState.arming(cardStops: false).stopControl == nil)
+        #expect(MicPresenceCardState.capturing(since: .now, cardStops: false).stopControl == nil)
         #expect(MicPresenceCardState.ready.stopControl == nil)
         #expect(MicPresenceCardState.finalizing.stopControl == nil)
-        #expect(MicPresenceCardState.concluded(.copied).stopControl == nil)
+        #expect(MicPresenceCardState.concluded(.transcribed).stopControl == nil)
     }
 }

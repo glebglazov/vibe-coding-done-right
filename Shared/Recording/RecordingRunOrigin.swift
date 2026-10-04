@@ -19,10 +19,20 @@ nonisolated enum RecordingRunOrigin: Equatable, Sendable {
         }
     }
 
-    var deliversToClipboard: Bool {
+    /// A Shortcut run has no VCDR screen to show its result, so the card shows it.
+    var showsOutcomeOnCard: Bool {
         switch self {
         case .shortcut: true
         case .app, .keyboard: false
+        }
+    }
+
+    /// A Shortcut run gives its text to the Shortcut through Stop Recording. A
+    /// stop from the card would end it with the text only in history.
+    var stopsFromCard: Bool {
+        switch self {
+        case .shortcut: false
+        case .app, .keyboard: true
         }
     }
 

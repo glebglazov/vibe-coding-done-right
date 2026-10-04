@@ -173,7 +173,6 @@ final class RecordingFlowCoordinator {
     private(set) var activeRun: ActiveRecordingRun?
     let runPresence: any RecordingRunPresence
     let backgroundTasks: any BackgroundTaskRunner
-    let pasteboard: any PasteboardWriting
     /// Text sent to AI processing — retained for the existing Done-page retry action.
     var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
@@ -193,7 +192,6 @@ final class RecordingFlowCoordinator {
         transcriptionProvider: (any StreamingTranscriptionProvider)? = nil,
         hotMicSession: HotMicSession? = nil,
         backgroundTasks: (any BackgroundTaskRunner)? = nil,
-        pasteboard: (any PasteboardWriting)? = nil,
         makeStreamingSession: (() -> any RecordingStreamingSession)? = nil
     ) {
         let engine = recordingEngine ?? AudioRecorder()
@@ -212,7 +210,6 @@ final class RecordingFlowCoordinator {
         self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, presence: presence, keyboard: keyboardChannel)
         self.runPresence = presence
         self.backgroundTasks = backgroundTasks ?? UIKitBackgroundTaskRunner()
-        self.pasteboard = pasteboard ?? GeneralPasteboard()
         self.makeStreamingSession = makeStreamingSession
     }
 
@@ -598,7 +595,7 @@ final class RecordingFlowCoordinator {
         }
 
         state = .error(failure.message)
-        endActiveRun(announcing: RunCardOutcome(terminal, clipboard: active.clipboard))
+        endActiveRun(announcing: RunCardOutcome(terminal, origin: active.origin))
         setIdleTimerDisabled(false)
         if wasStillArming {
             hotMicSession.recordIntentCancelledBeforeCapture()
@@ -608,10 +605,7 @@ final class RecordingFlowCoordinator {
         }
     }
 
-    func makeRecordingRun(
-        origin: RecordingRunOrigin,
-        clipboard: ClipboardRecordingRunCompletionAdapter?
-    ) -> RecordingRun {
+    func makeRecordingRun(origin: RecordingRunOrigin) -> RecordingRun {
         // The Prompt Mode as it stands now, because the model that transcribes
         // has to be chosen before a word is spoken — a mode flipped mid-recording
         // reaches the processing that follows, not the model already decoding.
@@ -623,7 +617,7 @@ final class RecordingFlowCoordinator {
                 settings: transcription.settings
             ),
             transcriptProcessor: makeTranscriptProcessor(),
-            completionAdapters: completionAdapters(for: origin, clipboard: clipboard),
+            completionAdapters: completionAdapters(for: origin),
             currentSettings: { [weak self] in
                 guard let self else {
                     return RecordingRun.Settings(

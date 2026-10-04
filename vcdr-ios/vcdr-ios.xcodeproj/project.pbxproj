@@ -92,8 +92,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				LiveActivity/RecordingRunRemote.swift,
-				LiveActivity/StopRecordingIntent.swift,
-				LiveActivity/ToggleRecordingIntent.swift,
+				LiveActivity/StopFromCardIntent.swift,
 			);
 			target = AA0000062F74750000000001 /* vcdr-keyboard */;
 		};

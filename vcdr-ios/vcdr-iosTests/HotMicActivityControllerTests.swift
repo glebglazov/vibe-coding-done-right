@@ -122,12 +122,12 @@ struct HotMicActivityControllerTests {
         let controller = HotMicActivityController(store: store)
         await settle()
 
-        await controller.render(.live(.arming)).value
-        await controller.render(.live(.capturing(since: since))).value
+        await controller.render(.live(.arming(cardStops: true))).value
+        await controller.render(.live(.capturing(since: since, cardStops: true))).value
         await controller.render(.live(.finalizing)).value
 
-        #expect(store.requestedFaces == [.arming])
-        #expect(store.updatedFaces == [.capturing(since: since), .finalizing])
+        #expect(store.requestedFaces == [.arming(cardStops: true)])
+        #expect(store.updatedFaces == [.capturing(since: since, cardStops: true), .finalizing])
         #expect(store.liveActivityIDs.count == 1)
     }
 
@@ -139,9 +139,9 @@ struct HotMicActivityControllerTests {
         await settle()
 
         await controller.render(.live(.finalizing)).value
-        await controller.render(.concluding(.concluded(.copied), dismissAt: dismissAt)).value
+        await controller.render(.concluding(.concluded(.transcribed), dismissAt: dismissAt)).value
 
-        #expect(store.concluded == [.init(id: "activity-1", state: .concluded(.copied), dismissAt: dismissAt)])
+        #expect(store.concluded == [.init(id: "activity-1", state: .concluded(.transcribed), dismissAt: dismissAt)])
         #expect(!controller.holdsLiveCard)
     }
 
@@ -152,8 +152,8 @@ struct HotMicActivityControllerTests {
         await settle()
 
         await controller.render(.live(.finalizing)).value
-        await controller.render(.concluding(.concluded(.copied), dismissAt: .distantFuture)).value
-        await controller.render(.live(.arming)).value
+        await controller.render(.concluding(.concluded(.transcribed), dismissAt: .distantFuture)).value
+        await controller.render(.live(.arming(cardStops: true))).value
 
         #expect(store.endedIDs == ["activity-1"])
         #expect(store.liveActivityIDs == ["activity-2"])

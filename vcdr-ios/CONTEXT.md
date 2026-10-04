@@ -37,7 +37,7 @@ The app-level warm-microphone lifecycle that makes keyboard-driven recording sta
 _Avoid_: warm engine, background mic mode
 
 **Mic Presence**:
-The user-visible card that says, from outside the app, what VCDR is doing with the microphone. It renders In-Place Reachability and the progress of the active Recording Run: ready while the Hot Mic Session is warm and reachable, then Arming, Capturing with a running timer, and Finalizing. For a Run Origin with no surface of its own, it also shows a short outcome (copied, no speech, failed). If Mic Presence says VCDR is ready, a keyboard start should be expected to record in place rather than require Deep-Link Fallback. It never makes a claim it cannot withdraw: when the app stops renewing it, iOS shows it as not ready. It is absent while VCDR is in the foreground, except while a Shortcut run is Arming or Capturing, because the system stops a Shortcut recording that has no card. For a finite Hot-Session Timeout, Mic Presence should end around the timeout deadline rather than remain visible as a stale readiness signal.
+The user-visible card that says, from outside the app, what VCDR is doing with the microphone. It renders In-Place Reachability and the progress of the active Recording Run: ready while the Hot Mic Session is warm and reachable, then Arming, Capturing with a running timer, and Finalizing. For a Run Origin with no surface of its own, it also shows a short outcome (transcribed, no speech, failed). If Mic Presence says VCDR is ready, a keyboard start should be expected to record in place rather than require Deep-Link Fallback. It never makes a claim it cannot withdraw: when the app stops renewing it, iOS shows it as not ready. It is absent while VCDR is in the foreground, except while a Shortcut run is Arming or Capturing, because the system stops a Shortcut recording that has no card. It offers Cancel while Arming and Stop while Capturing, except for a Shortcut run: that run's text reaches the user only through the Stop Recording intent, so the card only shows that it records. For a finite Hot-Session Timeout, Mic Presence should end around the timeout deadline rather than remain visible as a stale readiness signal.
 _Avoid_: live activity implementation, orange-dot label, mic badge
 
 **Readiness Fail-Closed**:
@@ -62,7 +62,7 @@ A Recording Run begins at the user's record intent — the tap — not when audi
 _Avoid_: recording service, transcription pipeline, coordinator helper
 
 **Run Origin**:
-Where a Recording Run's record intent came from: the app, the keyboard, or a Shortcut. The start fixes it, and the trigger that stops the run never changes it. It alone decides the run's Completion Delivery destinations and whether the run reads and clears Captures. A keyboard stop can end a Shortcut run, and the run still delivers as a Shortcut run.
+Where a Recording Run's record intent came from: the app, the keyboard, or a Shortcut. The start fixes it, and the trigger that stops the run never changes it. It alone decides the run's Completion Delivery destinations and whether the run reads and clears Captures. A keyboard stop can end a Shortcut run, and the run still delivers as a Shortcut run. A Shortcut run never reads or clears Captures, so it cannot consume Captures meant for a later keyboard run. VCDR never writes a Shortcut run's text to the clipboard: iOS refuses that write from the background. The Stop Recording intent returns the text, and the Shortcut copies it.
 _Avoid_: fromDeepLink, sendToKeyboard, stop origin, trigger
 
 **Arming**:
@@ -78,12 +78,8 @@ The Recording Run phase after the user stops: capture has ended and the buffered
 _Avoid_: post-processing, finishing, transcribing state
 
 **Completion Delivery**:
-The handoff that applies a Recording Run terminal state to outside destinations such as the Keyboard Channel, the clipboard, and conversation history. The Run Origin chooses the destinations. Completion Delivery must preserve the run result without making the Recording Run know which destinations are active. When History Bootstrap has not finished yet, a successful run's Conversation may be held and written once the history store is ready.
+The handoff that applies a Recording Run terminal state to outside destinations such as the Keyboard Channel and conversation history. The Run Origin chooses the destinations. Completion Delivery must preserve the run result without making the Recording Run know which destinations are active. When History Bootstrap has not finished yet, a successful run's Conversation may be held and written once the history store is ready.
 _Avoid_: callback, post-processing hook, output side effect
-
-**Clipboard Delivery**:
-Completion Delivery for a Shortcut run: a success's final text goes to the system clipboard, and Mic Presence shows that it was copied. An Empty Result, a cancellation, or a processing failure leaves the clipboard as it was. A Shortcut run never reads or clears Captures, so it cannot consume Captures meant for a later keyboard run.
-_Avoid_: paste, copy action, shortcut output
 
 **Empty Result**:
 A completed recording that produced no usable speech. Empty Result is distinct from cancellation and processing failure because the keyboard can surface it as a short no-speech state rather than a delivered transcript.
@@ -180,6 +176,6 @@ Dev: "The Recording Run ended with an Empty Result."
 
 Domain expert: "Publish Empty Result to the keyboard if it was keyboard-driven; do not create a Conversation."
 
-Dev: "The user started recording from the Toggle Recording shortcut and stopped it from the keyboard."
+Dev: "The user started recording from the Start Recording shortcut and stopped it from the keyboard."
 
-Domain expert: "The Run Origin is still Shortcut. The text goes to the clipboard, Mic Presence shows it was copied, and the keyboard only goes back to idle."
+Domain expert: "The Run Origin is still Shortcut. The text goes to history, Mic Presence shows it was transcribed, and the keyboard only goes back to idle. No Stop Recording intent ran, so no Shortcut got the text."

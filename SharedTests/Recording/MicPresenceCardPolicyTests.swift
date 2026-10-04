@@ -28,17 +28,17 @@ struct MicPresenceCardPolicyTests {
 
     @Test("a background run shows its phase whether or not the Hot Mic Session is warm", arguments: [true, false])
     func backgroundPhases(reachable: Bool) {
-        #expect(decide(reachable: reachable, .active(origin: .keyboard, phase: .arming)) == .live(.arming))
+        #expect(decide(reachable: reachable, .active(origin: .keyboard, phase: .arming)) == .live(.arming(cardStops: true)))
         #expect(decide(reachable: reachable, .active(origin: .app, phase: .capturing(since: Self.since)))
-            == .live(.capturing(since: Self.since)))
+            == .live(.capturing(since: Self.since, cardStops: true)))
         #expect(decide(reachable: reachable, .active(origin: .shortcut, phase: .finalizing)) == .live(.finalizing))
     }
 
-    @Test("a Shortcut run keeps its card on screen while Arming and Capturing")
+    @Test("a Shortcut run keeps its card on screen while Arming and Capturing, with no button")
     func shortcutInForeground() {
-        #expect(decide(foreground: true, .active(origin: .shortcut, phase: .arming)) == .live(.arming))
+        #expect(decide(foreground: true, .active(origin: .shortcut, phase: .arming)) == .live(.arming(cardStops: false)))
         #expect(decide(foreground: true, .active(origin: .shortcut, phase: .capturing(since: Self.since)))
-            == .live(.capturing(since: Self.since)))
+            == .live(.capturing(since: Self.since, cardStops: false)))
         #expect(decide(foreground: true, .active(origin: .shortcut, phase: .finalizing)) == .hidden)
     }
 
@@ -58,9 +58,9 @@ struct MicPresenceCardPolicyTests {
 
     @Test("an outcome stays live while a warm session renews it, and is frozen until its dwell ends otherwise")
     func concluded() {
-        let run = MicPresenceRun.concluded(.copied, until: Self.until)
-        #expect(decide(reachable: true, run) == .live(.concluded(.copied)))
-        #expect(decide(reachable: false, run) == .concluding(.concluded(.copied), dismissAt: Self.until))
+        let run = MicPresenceRun.concluded(.transcribed, until: Self.until)
+        #expect(decide(reachable: true, run) == .live(.concluded(.transcribed)))
+        #expect(decide(reachable: false, run) == .concluding(.concluded(.transcribed), dismissAt: Self.until))
         #expect(decide(reachable: true, foreground: true, run) == .hidden)
     }
 

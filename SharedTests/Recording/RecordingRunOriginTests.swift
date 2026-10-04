@@ -18,9 +18,20 @@ struct RecordingRunOriginTests {
         #expect(RecordingRunOrigin.keyboard.deliversToKeyboard)
         #expect(!RecordingRunOrigin.app.deliversToKeyboard)
         #expect(!RecordingRunOrigin.shortcut.deliversToKeyboard)
-        #expect(RecordingRunOrigin.shortcut.deliversToClipboard)
-        #expect(!RecordingRunOrigin.app.deliversToClipboard)
-        #expect(!RecordingRunOrigin.keyboard.deliversToClipboard)
+    }
+
+    @Test("only a Shortcut run shows its outcome on the card")
+    func cardOutcome() {
+        #expect(RecordingRunOrigin.shortcut.showsOutcomeOnCard)
+        #expect(!RecordingRunOrigin.app.showsOutcomeOnCard)
+        #expect(!RecordingRunOrigin.keyboard.showsOutcomeOnCard)
+    }
+
+    @Test("only a Shortcut run cannot be stopped from the card")
+    func cardStop() {
+        #expect(!RecordingRunOrigin.shortcut.stopsFromCard)
+        #expect(RecordingRunOrigin.app.stopsFromCard)
+        #expect(RecordingRunOrigin.keyboard.stopsFromCard)
     }
 
     @Test("only a Shortcut run keeps its card while VCDR is on screen")

@@ -6,9 +6,11 @@ import Foundation
 /// Run's own behaviour can be driven without a transcription model.
 actor FakeRecordingStreamingSession: RecordingStreamingSession {
     private let result: Result<String, any Error>
+    private let finishDelay: Duration
 
-    init(result: Result<String, any Error> = .success("")) {
+    init(result: Result<String, any Error> = .success(""), finishDelay: Duration = .zero) {
         self.result = result
+        self.finishDelay = finishDelay
     }
 
     func start() async throws {}
@@ -18,7 +20,8 @@ actor FakeRecordingStreamingSession: RecordingStreamingSession {
     func cancel() async {}
 
     func finish() async throws -> String {
-        try result.get()
+        try await Task.sleep(for: finishDelay)
+        return try result.get()
     }
 
     func liveTranscriptUpdates() async -> AsyncStream<String> {

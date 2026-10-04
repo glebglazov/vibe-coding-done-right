@@ -5,6 +5,5 @@ import SwiftUI
 struct VCDRWidgetsBundle: WidgetBundle {
     var body: some Widget {
         HotMicLiveActivity()
-        ToggleRecordingControl()
     }
 }
