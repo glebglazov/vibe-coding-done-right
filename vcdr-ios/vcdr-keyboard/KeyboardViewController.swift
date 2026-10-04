@@ -97,7 +97,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
             name: .darwinStateChanged, object: nil
         )
 
-        // Listen for settings changes from the main app (mode/style toggled in-session).
+        // Listen for settings changes from the main app (mode/style cycled in the app).
         DarwinNotificationCenter.observe(
             SharedConstants.settingsNotificationName,
             localName: .darwinSettingsChanged
@@ -414,20 +414,20 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
 
     private func refreshSettings() {
         aiConfigured = SharedConstants.sharedDefaults.bool(forKey: SharedConstants.aiConfiguredKey)
-        aiMode = SessionSettings.effectiveAIMode()
-        textStyle = SessionSettings.effectiveTextStyle()
+        aiMode = SettingOverrides.effectiveAIMode()
+        textStyle = SettingOverrides.effectiveTextStyle()
     }
 
     /// Cycles the AI mode through Verbatim → Dictation → Assistant → Verbatim.
     func cycleAIState() {
         aiMode = aiMode.next
-        SessionSettings.setAIMode(aiMode)
+        SettingOverrides.setAIMode(aiMode)
         refreshSelectedTextIndicator()
     }
 
     func cycleTextStyle() {
         textStyle = textStyle.next
-        SessionSettings.setTextStyle(textStyle)
+        SettingOverrides.setTextStyle(textStyle)
     }
 
     // MARK: - Selected Text Capture

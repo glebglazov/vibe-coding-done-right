@@ -19,19 +19,21 @@ enum SharedConstants {
     //
     //   default_*  — user-configured defaults. Written by Settings UI only via
     //                DefaultSettings. Survive across launches.
-    //   session_*  — per-session cycle overrides. Written by cycle paths via
-    //                SessionSettings. Survive across launches;
-    //                cleared when the matching default changes.
+    //   session_*  — Setting Overrides, the user's cycled picks. Written by
+    //                cycle paths via SettingOverrides. Survive across launches;
+    //                cleared when the matching default changes. The prefix is
+    //                the name they were first stored under, kept so no pick is
+    //                lost on update.
     //
-    // Consumers always read the effective value (session ?? default ?? fallback)
-    // via SessionSettings.effective…(). There is intentionally no API that can
-    // overwrite session state with default values — the bug that motivated this
+    // Consumers always read the effective value (override ?? default ?? fallback)
+    // via SettingOverrides.effective…(). There is intentionally no API that can
+    // overwrite an override with default values — the bug that motivated this
     // split ("app background resets cycled style to configured default") is
-    // unrepresentable when defaults and sessions live in different keys.
+    // unrepresentable when defaults and overrides live in different keys.
     static let defaultTextStyleKey = "default_text_style"
     static let defaultAIModeKey    = "default_ai_mode"
-    static let sessionTextStyleKey = "session_text_style"
-    static let sessionAIModeKey    = "session_ai_mode"
+    static let textStyleOverrideKey = "session_text_style"
+    static let aiModeOverrideKey    = "session_ai_mode"
 
     /// Whether the custom keyboard should fire haptic feedback. Absent → treat
     /// as enabled (the default). Written by the Settings UI via `DefaultSettings`.
@@ -113,20 +115,20 @@ enum SharedTextStyle: String, CaseIterable {
 
 /// Writes user-configured defaults. The Settings UI is the only intended caller.
 ///
-/// Every write also clears the matching session override so the new default
-/// takes effect immediately for the live session.
+/// Every write also clears the matching Setting Override so the new default
+/// takes effect immediately.
 enum DefaultSettings {
     static func setTextStyle(_ value: TextStyle) {
         write { sd in
             sd.set(value.rawValue, forKey: SharedConstants.defaultTextStyleKey)
-            sd.removeObject(forKey: SharedConstants.sessionTextStyleKey)
+            sd.removeObject(forKey: SharedConstants.textStyleOverrideKey)
         }
     }
 
     static func setAIMode(_ value: AIPromptMode) {
         write { sd in
             sd.set(value.rawValue, forKey: SharedConstants.defaultAIModeKey)
-            sd.removeObject(forKey: SharedConstants.sessionAIModeKey)
+            sd.removeObject(forKey: SharedConstants.aiModeOverrideKey)
         }
     }
 
@@ -146,30 +148,30 @@ enum DefaultSettings {
     }
 }
 
-/// Writes per-session cycle overrides and reads the effective value that
-/// consumers should act on: `session ?? default ?? hardcoded fallback`.
+/// Writes Setting Overrides and reads the effective value that consumers
+/// should act on: `override ?? default ?? hardcoded fallback`.
 ///
-/// Session keys are stored under `session_*` and never share storage with
+/// Overrides are stored under `session_*` and never share storage with
 /// defaults (`default_*`), so no write path here can clobber a user's
 /// configured default, and no write path on `DefaultSettings` can clobber a
 /// live cycle choice (beyond the intentional clear-on-default-change).
-enum SessionSettings {
+enum SettingOverrides {
     // MARK: - Writers
 
     static func setTextStyle(_ value: TextStyle) {
-        write { $0.set(value.rawValue, forKey: SharedConstants.sessionTextStyleKey) }
+        write { $0.set(value.rawValue, forKey: SharedConstants.textStyleOverrideKey) }
     }
 
     static func setAIMode(_ value: AIPromptMode) {
-        write { $0.set(value.rawValue, forKey: SharedConstants.sessionAIModeKey) }
+        write { $0.set(value.rawValue, forKey: SharedConstants.aiModeOverrideKey) }
     }
 
-    /// Drops every per-session override, so every reader falls back to the
+    /// Drops every Setting Override, so every reader falls back to the
     /// configured defaults.
     static func clearAll() {
         write { sd in
-            sd.removeObject(forKey: SharedConstants.sessionTextStyleKey)
-            sd.removeObject(forKey: SharedConstants.sessionAIModeKey)
+            sd.removeObject(forKey: SharedConstants.textStyleOverrideKey)
+            sd.removeObject(forKey: SharedConstants.aiModeOverrideKey)
         }
     }
 
@@ -177,7 +179,7 @@ enum SessionSettings {
 
     static func effectiveTextStyle() -> TextStyle {
         let sd = SharedConstants.sharedDefaults
-        let raw = sd.string(forKey: SharedConstants.sessionTextStyleKey)
+        let raw = sd.string(forKey: SharedConstants.textStyleOverrideKey)
             ?? sd.string(forKey: SharedConstants.defaultTextStyleKey)
             ?? ""
         return TextStyle(rawValue: raw) ?? .casual
@@ -185,7 +187,7 @@ enum SessionSettings {
 
     static func effectiveAIMode() -> AIPromptMode {
         let sd = SharedConstants.sharedDefaults
-        let raw = sd.string(forKey: SharedConstants.sessionAIModeKey)
+        let raw = sd.string(forKey: SharedConstants.aiModeOverrideKey)
             ?? sd.string(forKey: SharedConstants.defaultAIModeKey)
             ?? ""
         return AIPromptMode(rawValue: raw) ?? .verbatim

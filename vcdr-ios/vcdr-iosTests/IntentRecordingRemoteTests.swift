@@ -96,8 +96,8 @@ struct IntentRecordingRemoteTests {
 
     @Test("a missing card only discards the run the check was made for")
     func missingCardDoesNotDiscardALaterRun() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let env = Env()
         env.card.showsCard = false
         env.card.whileCheckingCard = {
@@ -142,8 +142,8 @@ struct IntentRecordingRemoteTests {
 
     @Test("a stop returns the final text to Shortcuts")
     func stopReturnsFinalText() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let env = Env()
 
         #expect(await start(env) == nil)
@@ -158,8 +158,8 @@ struct IntentRecordingRemoteTests {
 
     @Test("a stop that hears no speech returns no text")
     func stopWithNoSpeech() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let env = Env(transcript: "")
 
         #expect(await start(env) == nil)
@@ -181,8 +181,8 @@ struct IntentRecordingRemoteTests {
 
     @Test("start then stop takes the card from Transcribing to Transcribed")
     func startThenStopConcludesTheCard() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let env = Env()
 
         #expect(await start(env) == nil)
@@ -199,8 +199,8 @@ struct IntentRecordingRemoteTests {
 
     @Test("Is Recording is true from Arming until the stop, so one Shortcut can choose Start or Stop")
     func isRecordingFollowsTheRun() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let env = Env(startCaptureDelay: .milliseconds(200))
         #expect(!env.remote.isRecording)
 
@@ -216,8 +216,8 @@ struct IntentRecordingRemoteTests {
 
     @Test("Is Recording is false while a stopped run is Finalizing")
     func isRecordingDuringFinalizing() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let env = Env(finishDelay: .milliseconds(200))
 
         #expect(await start(env) == nil)

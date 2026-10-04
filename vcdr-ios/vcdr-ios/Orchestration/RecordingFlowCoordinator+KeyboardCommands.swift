@@ -53,8 +53,8 @@ extension RecordingFlowCoordinator {
 
     private func handleSettingsChanged() {
         SharedConstants.sharedDefaults.synchronize()
-        selectedPromptMode = SessionSettings.effectiveAIMode()
-        currentTextStyle = SessionSettings.effectiveTextStyle()
+        selectedPromptMode = SettingOverrides.effectiveAIMode()
+        currentTextStyle = SettingOverrides.effectiveTextStyle()
     }
 
     func refreshSettingsFromStorage() {

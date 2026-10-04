@@ -113,8 +113,8 @@ struct RecordingFlowCoordinatorDiscardTests {
         // Write Verbatim into shared defaults itself so the run's finalize
         // path stays local/deterministic and never reaches a real AI
         // provider; restore on exit since this suite is process-global.
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
 
         let engine = SpyWarmRecordingEngine()
         engine.hasMicrophonePermission = true

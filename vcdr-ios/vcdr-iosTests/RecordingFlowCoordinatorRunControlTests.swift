@@ -30,8 +30,8 @@ struct RecordingFlowCoordinatorRunControlTests {
 
     @Test("under the Never timeout a Shortcut run releases the mic when Capturing ends, before Finalizing")
     func neverTimeoutReleasesMicAtEndOfCapturing() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let engine = SpyWarmRecordingEngine()
         let presence = SpyPresence()
         let hotMicSession = HotMicSession(
@@ -66,8 +66,8 @@ struct RecordingFlowCoordinatorRunControlTests {
 
     @Test("a Shortcut run never reads or clears keyboard Captures and sends the keyboard idle")
     func shortcutLeavesCapturesAlone() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let channel = FakeKeyboardChannel()
         channel.replaceCaptures(["kept for the keyboard"])
         let coordinator = makeCoordinator(channel: channel) {
@@ -94,8 +94,8 @@ struct RecordingFlowCoordinatorRunControlTests {
 
     @Test("a keyboard run gets its result as a Bundled Result")
     func keyboardGetsBundledResult() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let channel = FakeKeyboardChannel()
         let coordinator = makeCoordinator(channel: channel) {
             FakeRecordingStreamingSession(result: .success("hello world"))
@@ -113,8 +113,8 @@ struct RecordingFlowCoordinatorRunControlTests {
 
     @Test("a stop during Finalizing is ignored and the run finalizes once")
     func stopDuringFinalizingIsIgnored() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let gate = RunControlGate()
         let backgroundTasks = SpyBackgroundTaskRunner()
         let coordinator = makeCoordinator(backgroundTasks: backgroundTasks) {
@@ -138,8 +138,8 @@ struct RecordingFlowCoordinatorRunControlTests {
 
     @Test("a Finalizing that fails still begins and ends exactly one background task")
     func failedFinalizingEndsItsBackgroundTask() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let backgroundTasks = SpyBackgroundTaskRunner()
         let coordinator = makeCoordinator(backgroundTasks: backgroundTasks) {
             FakeRecordingStreamingSession(result: .failure(TranscriptionFailed()))
@@ -158,8 +158,8 @@ struct RecordingFlowCoordinatorRunControlTests {
 
     @Test("the Finalizing background task lasts until the concluded card face has rendered")
     func finalizingTaskOutlivesTheConcludedFace() async {
-        SessionSettings.setAIMode(.verbatim)
-        defer { SessionSettings.clearAll() }
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
         let backgroundTasks = SpyBackgroundTaskRunner()
         let card = SpyMicPresenceCard()
         var runningWhenConcluded: Int?

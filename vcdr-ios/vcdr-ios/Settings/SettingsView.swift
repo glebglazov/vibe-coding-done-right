@@ -59,7 +59,7 @@ struct SettingsView: View {
                 }
             }
             // @AppStorage above writes directly to sharedDefaults; route each
-            // change through DefaultSettings so the matching session override
+            // change through DefaultSettings so the matching Setting Override
             // is cleared and the keyboard extension is notified.
             .onChange(of: defaultModeRaw) { _, val in
                 if let mode = AIPromptMode(rawValue: val) {

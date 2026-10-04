@@ -3,7 +3,7 @@ import Foundation
 @testable import vcdr_ios
 
 /// Tests for the default/session split exposed via DefaultSettings +
-/// SessionSettings. StyleSettings.defaultStyle is a read-only convenience
+/// SettingOverrides. StyleSettings.defaultStyle is a read-only convenience
 /// over the same storage.
 @Suite("StyleSettings Tests")
 struct StyleSettingsTests {
@@ -77,26 +77,26 @@ struct StyleSettingsTests {
         #expect(result == .casual)
     }
 
-    @Test("Setting default clears session override")
+    @Test("Setting default clears the Setting Override")
     func defaultClearsSession() {
         SharedSettingsTestIsolation.withCleanStyleSlots {
-            // Establish a session override, then change the default — session
+            // Establish a Setting Override, then change the default — the override
             // should drop so the new default wins immediately.
             DefaultSettings.setTextStyle(.casual)
-            SessionSettings.setTextStyle(.formal)
-            #expect(SessionSettings.effectiveTextStyle() == .formal)
+            SettingOverrides.setTextStyle(.formal)
+            #expect(SettingOverrides.effectiveTextStyle() == .formal)
 
             DefaultSettings.setTextStyle(.messaging)
-            #expect(SessionSettings.effectiveTextStyle() == .messaging)
+            #expect(SettingOverrides.effectiveTextStyle() == .messaging)
         }
     }
 
-    @Test("Session override wins over default")
+    @Test("Setting Override wins over default")
     func sessionBeatsDefault() {
         SharedSettingsTestIsolation.withCleanStyleSlots {
             DefaultSettings.setTextStyle(.casual)
-            SessionSettings.setTextStyle(.formal)
-            #expect(SessionSettings.effectiveTextStyle() == .formal)
+            SettingOverrides.setTextStyle(.formal)
+            #expect(SettingOverrides.effectiveTextStyle() == .formal)
 
             // Reading default directly still shows the configured default —
             // confirms the two tiers are stored separately.
@@ -104,15 +104,15 @@ struct StyleSettingsTests {
         }
     }
 
-    @Test("SessionSettings.clearAll drops overrides")
+    @Test("SettingOverrides.clearAll drops overrides")
     func clearAllDropsSession() {
         SharedSettingsTestIsolation.withCleanStyleSlots {
             DefaultSettings.setTextStyle(.messaging)
-            SessionSettings.setTextStyle(.formal)
-            #expect(SessionSettings.effectiveTextStyle() == .formal)
+            SettingOverrides.setTextStyle(.formal)
+            #expect(SettingOverrides.effectiveTextStyle() == .formal)
 
-            SessionSettings.clearAll()
-            #expect(SessionSettings.effectiveTextStyle() == .messaging)
+            SettingOverrides.clearAll()
+            #expect(SettingOverrides.effectiveTextStyle() == .messaging)
         }
     }
 }

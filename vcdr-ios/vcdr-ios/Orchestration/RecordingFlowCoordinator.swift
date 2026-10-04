@@ -89,14 +89,14 @@ final class RecordingFlowCoordinator {
     var stoppedViaDeepLink = false
     /// Status of the AI post-processing request
     var aiProcessingStatus: AIProcessingStatus = .idle
-    /// Per-session prompt mode — initialized from the current effective setting.
+    /// Prompt mode — initialized from the current effective setting.
     /// `.verbatim` is the canonical "AI off" value; mode is the single source of
     /// truth for whether AI runs and which prompt it uses.
-    var selectedPromptMode: AIPromptMode = SessionSettings.effectiveAIMode()
-    /// Per-session text style — initialized from the current effective setting.
-    var currentTextStyle: TextStyle = SessionSettings.effectiveTextStyle()
+    var selectedPromptMode: AIPromptMode = SettingOverrides.effectiveAIMode()
+    /// Text style — initialized from the current effective setting.
+    var currentTextStyle: TextStyle = SettingOverrides.effectiveTextStyle()
 
-    // MARK: - In-Session Settings (written to session_* storage)
+    // MARK: - Setting Overrides
 
     /// Cycles the AI state through Verbatim → Dictation → Assistant → Verbatim.
     func cycleAIState() {
@@ -105,14 +105,14 @@ final class RecordingFlowCoordinator {
         case .dictation: selectedPromptMode = .assistant
         case .assistant: selectedPromptMode = .verbatim
         }
-        SessionSettings.setAIMode(selectedPromptMode)
+        SettingOverrides.setAIMode(selectedPromptMode)
     }
 
     func cycleTextStyle() {
         let all = TextStyle.allCases
         let idx = all.firstIndex(of: currentTextStyle) ?? 0
         currentTextStyle = all[(idx + 1) % all.count]
-        SessionSettings.setTextStyle(currentTextStyle)
+        SettingOverrides.setTextStyle(currentTextStyle)
     }
 
     let recordingEngine: any RecordingEngine
@@ -665,8 +665,8 @@ final class RecordingFlowCoordinator {
     /// cross-process writes. Cheap (µs) — safe to call on hot paths.
     func resyncSettingsFromSharedDefaults() {
         SharedConstants.sharedDefaults.synchronize()
-        selectedPromptMode = SessionSettings.effectiveAIMode()
-        currentTextStyle = SessionSettings.effectiveTextStyle()
+        selectedPromptMode = SettingOverrides.effectiveAIMode()
+        currentTextStyle = SettingOverrides.effectiveTextStyle()
     }
 
     func reset() {
@@ -677,8 +677,8 @@ final class RecordingFlowCoordinator {
         isKeyboardRun = false
         stoppedViaDeepLink = false
         aiProcessingStatus = .idle
-        selectedPromptMode = SessionSettings.effectiveAIMode()
-        currentTextStyle = SessionSettings.effectiveTextStyle()
+        selectedPromptMode = SettingOverrides.effectiveAIMode()
+        currentTextStyle = SettingOverrides.effectiveTextStyle()
         capturedTexts = []
         let run = activeRun?.run
         setActiveRun(nil)

@@ -49,8 +49,8 @@ extension RecordingFlowCoordinator {
         capturedTexts = []
         Task { @MainActor [weak self] in
             guard let self else { return }
-            self.selectedPromptMode = SessionSettings.effectiveAIMode()
-            self.currentTextStyle = SessionSettings.effectiveTextStyle()
+            self.selectedPromptMode = SettingOverrides.effectiveAIMode()
+            self.currentTextStyle = SettingOverrides.effectiveTextStyle()
             guard origin.usesKeyboardCaptures else { return }
             let texts = self.keyboardChannel.readCaptures()
             if !texts.isEmpty {

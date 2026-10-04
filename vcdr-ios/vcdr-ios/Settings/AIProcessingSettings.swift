@@ -231,7 +231,7 @@ enum AIProcessingSettings {
 
     /// Whether AI can be used if toggled on — API key exists or AFM available.
     /// Unlike `isConfigured`, does not require the global `enabled` flag.
-    /// Used to show/hide the per-session AI toggle in recording and keyboard.
+    /// Used to show/hide the AI Prompt Mode toggle in recording and keyboard.
     @MainActor
     static var hasAICapability: Bool {
         if provider.requiresAPIKey {

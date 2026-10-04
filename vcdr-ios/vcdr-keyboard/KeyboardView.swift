@@ -564,14 +564,14 @@ enum KeyboardHaptics {
 
     /// Cached enabled flag. Refresh via `refreshEnabled()` whenever the
     /// settings notification fires.
-    private static var isEnabled: Bool = SessionSettings.effectiveKeyboardHapticsEnabled()
+    private static var isEnabled: Bool = SettingOverrides.effectiveKeyboardHapticsEnabled()
 
     /// Reads the current value from shared defaults into the cache. Call
     /// from `KeyboardViewController.handleSettingsChanged` after the
     /// `synchronize()` so changes from the main app's Settings UI take
     /// effect on the next tap.
     static func refreshEnabled() {
-        isEnabled = SessionSettings.effectiveKeyboardHapticsEnabled()
+        isEnabled = SettingOverrides.effectiveKeyboardHapticsEnabled()
     }
 
     /// Builds the long-lived generators bound to the extension's own

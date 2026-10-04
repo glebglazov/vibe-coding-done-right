@@ -17,12 +17,12 @@ enum SharedConstants {
 
     // Settings — two disjoint tiers. See the iOS SharedConstants for the full
     // contract: default_* is written by the Settings UI via DefaultSettings,
-    // session_* is written by cycle paths via SessionSettings, and consumers
-    // read effective values from SessionSettings.
+    // session_* holds Setting Overrides written via SettingOverrides, and consumers
+    // read effective values from SettingOverrides.
     static let defaultTextStyleKey = "default_text_style"
     static let defaultAIModeKey    = "default_ai_mode"
-    static let sessionTextStyleKey = "session_text_style"
-    static let sessionAIModeKey    = "session_ai_mode"
+    static let textStyleOverrideKey = "session_text_style"
+    static let aiModeOverrideKey    = "session_ai_mode"
 
     /// Mirror of the app-side key. Absent → treat as enabled.
     static let defaultKeyboardHapticsEnabledKey = "default_keyboard_haptics_enabled"
@@ -130,26 +130,26 @@ enum KeyboardDisplayModeStore {
     }
 }
 
-/// Keyboard-side mirror of SessionSettings in the main app. Only touches
+/// Keyboard-side mirror of SettingOverrides in the main app. Only touches
 /// `session_*` keys — there is intentionally no API here that can write
 /// `default_*`, so the keyboard can never overwrite the user's configured
 /// defaults from the Settings UI.
-enum SessionSettings {
+enum SettingOverrides {
     // MARK: - Writers
 
     static func setTextStyle(_ value: SharedTextStyle) {
-        write { $0.set(value.rawValue, forKey: SharedConstants.sessionTextStyleKey) }
+        write { $0.set(value.rawValue, forKey: SharedConstants.textStyleOverrideKey) }
     }
 
     static func setAIMode(_ value: AIPromptMode) {
-        write { $0.set(value.rawValue, forKey: SharedConstants.sessionAIModeKey) }
+        write { $0.set(value.rawValue, forKey: SharedConstants.aiModeOverrideKey) }
     }
 
     // MARK: - Readers (effective: session ?? default ?? fallback)
 
     static func effectiveTextStyle() -> SharedTextStyle {
         let sd = SharedConstants.sharedDefaults
-        let raw = sd.string(forKey: SharedConstants.sessionTextStyleKey)
+        let raw = sd.string(forKey: SharedConstants.textStyleOverrideKey)
             ?? sd.string(forKey: SharedConstants.defaultTextStyleKey)
             ?? ""
         return SharedTextStyle(rawValue: raw) ?? .casual
@@ -157,13 +157,13 @@ enum SessionSettings {
 
     static func effectiveAIMode() -> AIPromptMode {
         let sd = SharedConstants.sharedDefaults
-        let raw = sd.string(forKey: SharedConstants.sessionAIModeKey)
+        let raw = sd.string(forKey: SharedConstants.aiModeOverrideKey)
             ?? sd.string(forKey: SharedConstants.defaultAIModeKey)
             ?? ""
         return AIPromptMode(rawValue: raw) ?? .verbatim
     }
 
-    /// Default-only setting (no session override). Absent key → treat as enabled.
+    /// Default-only setting (no Setting Override). Absent key → treat as enabled.
     static func effectiveKeyboardHapticsEnabled() -> Bool {
         let sd = SharedConstants.sharedDefaults
         if sd.object(forKey: SharedConstants.defaultKeyboardHapticsEnabledKey) != nil {

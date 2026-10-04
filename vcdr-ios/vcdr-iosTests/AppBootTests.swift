@@ -23,10 +23,10 @@ struct AppBootTests {
     }
 
     @Test("a cold launch keeps the mode and style the user picked")
-    func coldLaunchKeepsSessionSettings() {
-        SessionSettings.setAIMode(.dictation)
-        SessionSettings.setTextStyle(.formal)
-        defer { SessionSettings.clearAll() }
+    func coldLaunchKeepsSettingOverrides() {
+        SettingOverrides.setAIMode(.dictation)
+        SettingOverrides.setTextStyle(.formal)
+        defer { SettingOverrides.clearAll() }
         let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard())
 
         AppBoot.Steps.coldLaunch(of: coordinator).prefix()

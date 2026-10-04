@@ -14,12 +14,12 @@ enum SharedSettingsTestIsolation {
 
         let defaults = SharedConstants.sharedDefaults
         let originalDefault = defaults.string(forKey: SharedConstants.defaultTextStyleKey)
-        let originalSession = defaults.string(forKey: SharedConstants.sessionTextStyleKey)
+        let originalSession = defaults.string(forKey: SharedConstants.textStyleOverrideKey)
 
         clearStyleSlots(in: defaults)
         defer {
             restore(originalDefault, forKey: SharedConstants.defaultTextStyleKey, in: defaults)
-            restore(originalSession, forKey: SharedConstants.sessionTextStyleKey, in: defaults)
+            restore(originalSession, forKey: SharedConstants.textStyleOverrideKey, in: defaults)
             defaults.synchronize()
         }
 
@@ -28,7 +28,7 @@ enum SharedSettingsTestIsolation {
 
     private static func clearStyleSlots(in defaults: UserDefaults) {
         defaults.removeObject(forKey: SharedConstants.defaultTextStyleKey)
-        defaults.removeObject(forKey: SharedConstants.sessionTextStyleKey)
+        defaults.removeObject(forKey: SharedConstants.textStyleOverrideKey)
         defaults.synchronize()
     }
 

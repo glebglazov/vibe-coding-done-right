@@ -11,7 +11,7 @@ struct StyleSessionStateTests {
     func coordinatorInitializesWithDefaultStyle() async throws {
         SharedSettingsTestIsolation.withCleanStyleSlots {
             DefaultSettings.setTextStyle(.formal)
-            SessionSettings.clearAll()
+            SettingOverrides.clearAll()
 
             let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard())
             #expect(coordinator.currentTextStyle == .formal)
@@ -23,30 +23,30 @@ struct StyleSessionStateTests {
     func coordinatorDefaultsToCasual() async throws {
         SharedSettingsTestIsolation.withCleanStyleSlots {
             SharedConstants.sharedDefaults.removeObject(forKey: SharedConstants.defaultTextStyleKey)
-            SessionSettings.clearAll()
+            SettingOverrides.clearAll()
 
             let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard())
             #expect(coordinator.currentTextStyle == .casual)
         }
     }
 
-    @Test("Session override survives scene background")
+    @Test("Setting Override survives scene background")
     @MainActor
     func sessionSurvivesBackground() async throws {
         SharedSettingsTestIsolation.withCleanStyleSlots {
-            // User has "Casual" as default, then cycles to Messaging in-session.
+            // User has "Casual" as default, then cycles to Messaging.
             // No syncAll or other broadcast should be able to revert that without
-            // someone explicitly calling SessionSettings.clearAll() or the user
+            // someone explicitly calling SettingOverrides.clearAll() or the user
             // changing the default.
             DefaultSettings.setTextStyle(.casual)
-            SessionSettings.setTextStyle(.messaging)
-            #expect(SessionSettings.effectiveTextStyle() == .messaging)
+            SettingOverrides.setTextStyle(.messaging)
+            #expect(SettingOverrides.effectiveTextStyle() == .messaging)
 
             // Simulate whatever the app might still do on background: the only
             // settings-writing API available is DefaultSettings.setAIConfigured,
             // which must not touch session_text_style.
             DefaultSettings.setAIConfigured(true)
-            #expect(SessionSettings.effectiveTextStyle() == .messaging)
+            #expect(SettingOverrides.effectiveTextStyle() == .messaging)
         }
     }
     
