@@ -9,6 +9,7 @@ struct TranscriptionTabView: View {
     /// can be chosen, so this costs a load and never a download; Status
     /// narrates that load.
     let selectDefaultModel: (TranscriptionModel) -> Void
+    let spellingHints: SpellingHints
 
     /// The pinned removal awaiting consent, or nil when none is. A removal with
     /// nothing to disclose never lands here: it happens on the press
@@ -65,7 +66,8 @@ struct TranscriptionTabView: View {
                     settings: Binding(
                         get: { settings.transcriptionSettings.modelSettings[runningFamily] },
                         set: { settings.transcriptionSettings.modelSettings[runningFamily] = $0 }
-                    )
+                    ),
+                    spellingHints: spellingHints
                 )
             }
 

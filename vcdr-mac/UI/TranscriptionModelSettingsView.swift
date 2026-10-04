@@ -13,6 +13,9 @@ struct TranscriptionModelSettingsView: View {
 
     let family: TranscriptionModelFamily
     @Binding var settings: TranscriptionModelSettings
+    /// The Dictionary as the model is told it, so the screen can say how much
+    /// of it fits.
+    let spellingHints: SpellingHints
     /// Where each value came from. The Transcription screen edits the family's
     /// own settings and says nothing; a Mode's screen edits a patch over them
     /// and accounts for every control.
@@ -27,7 +30,6 @@ struct TranscriptionModelSettingsView: View {
         case .kinds(let capabilities):
             ForEach(capabilities, id: \.self) { capability in
                 control(for: capability)
-                originRow(for: capability)
             }
         }
     }
@@ -35,8 +37,16 @@ struct TranscriptionModelSettingsView: View {
     @ViewBuilder
     private func control(for capability: TranscriptionModelCapability) -> some View {
         switch capability {
-        case .languageHint: languageHint
-        case .freeTextPrompt: freeTextPrompt
+        case .languageHint:
+            languageHint
+            originRow(for: capability)
+        case .freeTextPrompt:
+            freeTextPrompt
+            originRow(for: capability)
+        case .spellingHints:
+            // No origin row: the Dictionary is one list for every Mode, so
+            // there is nowhere else its hints could have come from.
+            dictionary
         }
     }
 
@@ -92,5 +102,25 @@ struct TranscriptionModelSettingsView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
+    }
+
+    private var dictionary: some View {
+        VStack(alignment: .leading, spacing: Self.promptSpacing) {
+            Text("Dictionary")
+            Text("""
+                Every entry in your Dictionary is passed to the model as a \
+                spelling to prefer. It shares the Vocabulary Prompt's room, and \
+                it is a hint the model may ignore.
+                """)
+            if hintsLeftOut > 0 {
+                Text("^[\(hintsLeftOut) Dictionary entry](inflect: true) left out, because the prompt has no more room. The entries you edited most recently are kept.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var hintsLeftOut: Int {
+        WhisperPrompt(typed: settings.freeTextPrompt, hints: spellingHints).hintsLeftOut
     }
 }

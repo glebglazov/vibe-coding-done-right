@@ -32,8 +32,9 @@ protocol StreamingTranscriptionProvider: Sendable {
     /// Prepares the model: the download, then the load.
     func initialize() async throws
     /// The live session that runs this model for one Recording Run, told what
-    /// its family has been told. A family that declares no Capability is handed
-    /// the settings like any other and reads nothing out of them.
+    /// its family has been told and the Dictionary's Spelling Hints. A family
+    /// that declares no Capability is handed both like any other and reads
+    /// nothing out of them.
     ///
     /// Made by the provider because the two families reach a live view by
     /// different routes — a sliding window over an offline encoder, and chunked
@@ -41,7 +42,10 @@ protocol StreamingTranscriptionProvider: Sendable {
     /// them it is. Synchronous, because capture begins before the model has
     /// finished loading (`docs/adr/0006`) and the session has to exist to
     /// receive those first buffers.
-    nonisolated func makeLiveSession(settings: TranscriptionModelSettings) -> any RecordingStreamingSession
+    nonisolated func makeLiveSession(
+        settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints
+    ) -> any RecordingStreamingSession
     /// Prepares the model at launch, running `beforeTheHeavyLoad` in whatever
     /// gap this backend's preparation leaves for it. The audio engine's HAL
     /// warm goes in that gap: it must finish before the load that competes with

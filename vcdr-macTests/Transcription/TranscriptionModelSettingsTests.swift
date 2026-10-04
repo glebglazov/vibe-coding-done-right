@@ -37,7 +37,7 @@ struct TranscriptionModelSettingsTests {
     func detectPassesNoLanguage() {
         let promptTokens = [11, 22, 33]
 
-        let detecting = WhisperProvider.decodingOptions(for: .default) { _ in promptTokens }
+        let detecting = WhisperProvider.decodingOptions(for: .default, spellingHints: .none) { _ in promptTokens }
         #expect(detecting.language == nil)
         // Nil alone is not enough: WhisperKit fills an unset language slot
         // with English unless it is asked to detect.
@@ -45,7 +45,8 @@ struct TranscriptionModelSettingsTests {
         #expect(detecting.promptTokens == nil)
 
         let hinted = WhisperProvider.decodingOptions(
-            for: TranscriptionModelSettings(languageHint: .russian, freeTextPrompt: "Parakeet")
+            for: TranscriptionModelSettings(languageHint: .russian, freeTextPrompt: "Parakeet"),
+            spellingHints: .none
         ) { _ in promptTokens }
         #expect(hinted.language == "ru")
         #expect(hinted.detectLanguage == false)
@@ -53,15 +54,52 @@ struct TranscriptionModelSettingsTests {
         #expect(hinted.usePrefillPrompt)
     }
 
+    @Test("Whisper's prompt tokens are the typed prompt followed by the Dictionary's Spelling Hints")
+    func promptCarriesSpellingHints() {
+        let encode: (String) -> [Int] = { $0.unicodeScalars.map { Int($0.value) } }
+        let hints = SpellingHints([Substitution(triggerPhrases: [], replacement: "Gleb Glazov")])
+
+        let typedAndHinted = WhisperProvider.decodingOptions(
+            for: TranscriptionModelSettings(freeTextPrompt: "Parakeet"),
+            spellingHints: hints,
+            encodePrompt: encode
+        )
+        #expect(typedAndHinted.promptTokens == encode("Parakeet, Gleb Glazov"))
+
+        // Nothing typed still primes the model, with the hints alone.
+        let hintsOnly = WhisperProvider.decodingOptions(for: .default, spellingHints: hints, encodePrompt: encode)
+        #expect(hintsOnly.promptTokens == encode("Gleb Glazov"))
+    }
+
+    @Test("A recording hands the model the Dictionary as it stands when the recording is transcribed")
+    func recordingHandsTheModelTheDictionary() async {
+        let env = CaptureSessionTestEnvironment()
+        defer { env.cleanup() }
+        env.settings.transcriptionSettings.defaultModel = .whisperLargeV3Turbo
+
+        let name = Substitution(triggerPhrases: [], replacement: "Gleb Glazov", lastUpdated: Date(timeIntervalSince1970: 1))
+        let product = Substitution(triggerPhrase: "vee see", replacement: "VCDR", lastUpdated: Date(timeIntervalSince1970: 2))
+        env.session.substitutionStore.upsert(name)
+        env.session.substitutionStore.upsert(product)
+
+        await record(with: env)
+        #expect(await env.alternateProvider.receivedSpellingHints?.spellings == ["VCDR", "Gleb Glazov"])
+
+        env.session.substitutionStore.delete(product)
+        await record(with: env)
+        #expect(await env.alternateProvider.receivedSpellingHints?.spellings == ["Gleb Glazov"])
+    }
+
     @Test("A family declares the kinds it accepts, and one that accepts nothing says why")
     func capabilitiesAreDeclaredPerFamily() {
-        #expect(TranscriptionModelFamily.whisper.capabilities == .kinds([.languageHint, .freeTextPrompt]))
+        #expect(TranscriptionModelFamily.whisper.capabilities == .kinds([.languageHint, .freeTextPrompt, .spellingHints]))
 
         guard case .nothing(let reason) = TranscriptionModelFamily.parakeet.capabilities else {
             Issue.record("Parakeet declares no Capability, so it owes an explanation")
             return
         }
         #expect(reason.contains("no language"))
+        #expect(reason.contains("Dictionary"))
     }
 
     @Test("The prompt is capped at what the model's window can hold")

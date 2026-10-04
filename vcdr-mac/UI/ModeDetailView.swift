@@ -8,6 +8,7 @@ struct ModeDetailView: View {
     /// What this Mode's Transcription Override installs from, when it pins a
     /// model the device does not have yet.
     let transcriptionLibrary: TranscriptionLibrary
+    let spellingHints: SpellingHints
     let outputDestinations: [OutputDestination]
     let definedVariableNames: Set<String>
     @FocusState private var isNameFieldFocused: Bool
@@ -145,7 +146,8 @@ struct ModeDetailView: View {
             ModeTranscriptionSection(
                 mode: $mode,
                 settings: settings,
-                library: transcriptionLibrary
+                library: transcriptionLibrary,
+                spellingHints: spellingHints
             )
 
             // Output section

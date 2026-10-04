@@ -196,16 +196,19 @@ actor WhisperProvider: TranscriptionProvider {
     /// opposite — the token is forced and detection is off, which is what the
     /// person choosing it asked for.
     ///
-    /// The prompt is encoded by the caller because only a loaded model has a
-    /// tokenizer, and an empty prompt is left absent rather than sent as no
-    /// tokens: a bare prompt marker with nothing after it biases the model
+    /// The prompt is the typed Vocabulary Prompt followed by as many Spelling
+    /// Hints as fit. It is encoded by the caller because only a loaded model
+    /// has a tokenizer, and an empty prompt is left absent rather than sent as
+    /// no tokens: a bare prompt marker with nothing after it biases the model
     /// toward ending the segment early.
     static func decodingOptions(
         for settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints,
         encodePrompt: (String) -> [Int]
     ) -> DecodingOptions {
-        let promptTokens = encodePrompt(settings.freeTextPrompt)
-        let prompt = settings.freeTextPrompt.isEmpty || promptTokens.isEmpty ? nil : promptTokens
+        let promptText = WhisperPrompt(typed: settings.freeTextPrompt, hints: spellingHints).text
+        let promptTokens = encodePrompt(promptText)
+        let prompt = promptText.isEmpty || promptTokens.isEmpty ? nil : promptTokens
         return DecodingOptions(
             language: settings.languageHint.languageCode,
             usePrefillPrompt: true,
@@ -214,7 +217,11 @@ actor WhisperProvider: TranscriptionProvider {
         )
     }
 
-    func transcribe(audioFileURL: URL, settings: TranscriptionModelSettings) async throws -> String {
+    func transcribe(
+        audioFileURL: URL,
+        settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints
+    ) async throws -> String {
         guard let whisper else {
             throw TranscriptionError.providerUnavailable
         }
@@ -223,7 +230,7 @@ actor WhisperProvider: TranscriptionProvider {
 
         return try await loggingTranscriptionTiming(audioFileURL: audioFileURL) {
             do {
-                let options = Self.decodingOptions(for: settings) { prompt in
+                let options = Self.decodingOptions(for: settings, spellingHints: spellingHints) { prompt in
                     guard let tokenizer = whisper.tokenizer else { return [] }
                     // Leading space and the special-token filter are how
                     // WhisperKit's own server encodes a caller's prompt: the

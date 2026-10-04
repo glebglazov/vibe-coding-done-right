@@ -117,7 +117,7 @@ struct TranscriptionSettingsTests {
     /// and put the markers back in a person's transcript.
     @Test("the decoder is asked to leave Whisper's markers out, whatever the family was told")
     func decodingOptionsSkipSpecialTokens() {
-        let detecting = WhisperProvider.decodingOptions(for: .default, tokenizedBy: nil)
+        let detecting = WhisperProvider.decodingOptions(for: .default, spellingHints: .none, tokenizedBy: nil)
         #expect(detecting.skipSpecialTokens)
         // Nil alone is not enough: WhisperKit fills an unset language slot
         // with English unless it is asked to detect.
@@ -127,6 +127,7 @@ struct TranscriptionSettingsTests {
 
         let hinted = WhisperProvider.decodingOptions(
             for: TranscriptionModelSettings(languageHint: .russian, freeTextPrompt: "Parakeet"),
+            spellingHints: .none,
             tokenizedBy: nil
         )
         #expect(hinted.skipSpecialTokens)
@@ -134,4 +135,48 @@ struct TranscriptionSettingsTests {
         #expect(hinted.detectLanguage == false)
         #expect(hinted.usePrefillPrompt)
     }
+
+    @Test("Whisper's prompt tokens are the typed prompt followed by the Dictionary's Spelling Hints")
+    func promptCarriesSpellingHints() {
+        let tokenizer = ScalarTokenizer()
+        let hints = SpellingHints([Substitution(triggerPhrases: [], replacement: "Gleb Glazov")])
+
+        let typedAndHinted = WhisperProvider.decodingOptions(
+            for: TranscriptionModelSettings(freeTextPrompt: "Parakeet"),
+            spellingHints: hints,
+            tokenizedBy: tokenizer
+        )
+        #expect(typedAndHinted.promptTokens == tokenizer.encode(text: " Parakeet, Gleb Glazov"))
+
+        // Nothing typed still primes the model, with the hints alone.
+        let hintsOnly = WhisperProvider.decodingOptions(for: .default, spellingHints: hints, tokenizedBy: tokenizer)
+        #expect(hintsOnly.promptTokens == tokenizer.encode(text: " Gleb Glazov"))
+    }
+}
+
+/// One token per Unicode scalar, so a test can read back exactly which text
+/// was encoded.
+private struct ScalarTokenizer: WhisperTokenizer {
+    private static let firstSpecialToken = 0x110000
+
+    let specialTokens = SpecialTokens(
+        endToken: firstSpecialToken,
+        englishToken: firstSpecialToken + 1,
+        noSpeechToken: firstSpecialToken + 2,
+        noTimestampsToken: firstSpecialToken + 3,
+        specialTokenBegin: firstSpecialToken,
+        startOfPreviousToken: firstSpecialToken + 4,
+        startOfTranscriptToken: firstSpecialToken + 5,
+        timeTokenBegin: firstSpecialToken + 6,
+        transcribeToken: firstSpecialToken + 7,
+        translateToken: firstSpecialToken + 8,
+        whitespaceToken: Int(UnicodeScalar(" ").value)
+    )
+    let allLanguageTokens: Set<Int> = []
+
+    func encode(text: String) -> [Int] { text.unicodeScalars.map { Int($0.value) } }
+    func decode(tokens: [Int]) -> String { "" }
+    func convertTokenToId(_ token: String) -> Int? { nil }
+    func convertIdToToken(_ id: Int) -> String? { nil }
+    func splitToWordTokens(tokenIds: [Int]) -> (words: [String], wordTokens: [[Int]]) { ([], []) }
 }

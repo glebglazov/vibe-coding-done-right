@@ -37,9 +37,14 @@
    generated from that declaration, so a family with an unfamiliar hint needs a
    new `TranscriptionModelCapability` kind and its control in
    `TranscriptionModelSettingsView`, not a wider string list
-6. Read the settings the run hands the provider in `transcribe(audioFileURL:settings:)`,
-   and only the fields the model declared. A Language Hint of `detect` must
-   send no language at all — see `docs/adr/0019`
+6. Read what the run hands the provider in
+   `transcribe(audioFileURL:settings:spellingHints:)` (iOS:
+   `makeLiveSession(settings:spellingHints:)`), and only what the model
+   declared. A Language Hint of `detect` must send no language at all — see
+   `docs/adr/0019`. A model that declares `spellingHints` reads the
+   Dictionary's `SpellingHints` and decides how to use them; Whisper puts them
+   after the typed prompt through `WhisperPrompt` (`docs/adr/0025`). A model
+   that does not declare it ignores them
 7. Nothing else changes: the session resolves the model a run uses through
    `TranscriptionSettings.effectiveTranscription(for:)` — the active Mode's
    Transcription Override, else the Default — hands the provider the settings

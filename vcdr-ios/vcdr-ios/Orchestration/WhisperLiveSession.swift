@@ -11,6 +11,7 @@ import WhisperKit
 actor WhisperLiveSession: RecordingStreamingSession {
     private let provider: WhisperProvider
     private let settings: TranscriptionModelSettings
+    private let spellingHints: SpellingHints
     private let audio = CapturedAudioPipeline()
 
     /// Every sample captured so far, at the 16 kHz mono Whisper decodes. The
@@ -28,9 +29,10 @@ actor WhisperLiveSession: RecordingStreamingSession {
     private let liveUpdates: AsyncStream<String>
     private let liveUpdatesInlet: AsyncStream<String>.Continuation
 
-    init(provider: WhisperProvider, settings: TranscriptionModelSettings) {
+    init(provider: WhisperProvider, settings: TranscriptionModelSettings, spellingHints: SpellingHints) {
         self.provider = provider
         self.settings = settings
+        self.spellingHints = spellingHints
         (liveUpdates, liveUpdatesInlet) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
     }
 
@@ -115,7 +117,11 @@ actor WhisperLiveSession: RecordingStreamingSession {
         guard Float(audioSamples.count) / Float(WhisperKit.sampleRate) - settledThrough >= Self.leastDecodableSeconds
         else { return [] }
 
-        var options = WhisperProvider.decodingOptions(for: settings, tokenizedBy: whisper.tokenizer)
+        var options = WhisperProvider.decodingOptions(
+            for: settings,
+            spellingHints: spellingHints,
+            tokenizedBy: whisper.tokenizer
+        )
         options.clipTimestamps = [settledThrough]
         let results = try await whisper.transcribe(audioArray: audioSamples, decodeOptions: options)
         return results.flatMap(\.segments).map {

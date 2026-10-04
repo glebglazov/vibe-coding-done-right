@@ -51,10 +51,14 @@ protocol TranscriptionProvider: Sendable {
     /// whether anything is waiting on this one right now.
     func initialize(urgency: PreparationUrgency) async throws
     /// Transcribes the recording with what this model has been told. A model
-    /// that declares no Capability is handed the settings like any other and
-    /// reads nothing out of them — declaring a Capability is what makes a
-    /// setting reach a backend at all.
-    func transcribe(audioFileURL: URL, settings: TranscriptionModelSettings) async throws -> String
+    /// that declares no Capability is handed the settings and the Dictionary's
+    /// Spelling Hints like any other and reads nothing out of them — declaring
+    /// a Capability is what makes a setting or the hints reach a backend at all.
+    func transcribe(
+        audioFileURL: URL,
+        settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints
+    ) async throws -> String
 }
 
 extension TranscriptionProvider {

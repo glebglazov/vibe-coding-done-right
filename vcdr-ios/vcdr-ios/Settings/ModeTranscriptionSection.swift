@@ -8,6 +8,7 @@ struct ModeTranscriptionSection: View {
     /// Which models this phone has, so the select offers only those. Nothing is
     /// installed from this screen.
     let library: TranscriptionLibrary
+    let spellingHints: SpellingHints
     @AppStorage(TranscriptionSettings.defaultModelKey)
     private var storedDefault = TranscriptionSettings.defaultModel.rawValue
     @AppStorage(TranscriptionSettings.modelSettingsKey)
@@ -31,6 +32,7 @@ struct ModeTranscriptionSection: View {
                 TranscriptionModelSettingsView(
                     family: model.family,
                     settings: effectiveSettings(of: model.family),
+                    spellingHints: spellingHints,
                     origin: { origin(of: $0, for: model.family) }
                 )
             }

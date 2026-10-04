@@ -295,9 +295,12 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
         }
     }
 
-    nonisolated func makeLiveSession(settings: TranscriptionModelSettings) -> any RecordingStreamingSession {
-        // Parakeet declares no Capability, so `settings` reaches it and stops
-        // here: a family is told what it has declared it can be told, and this
+    nonisolated func makeLiveSession(
+        settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints
+    ) -> any RecordingStreamingSession {
+        // Parakeet declares no Capability, so `settings` and `spellingHints`
+        // reach it and stop here: a family is told what it has declared it can be told, and this
         // one has declared nothing (`docs/adr/0020`).
         ParakeetLiveSession(provider: self)
     }

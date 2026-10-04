@@ -77,7 +77,10 @@ actor FakeInstallableProvider: StreamingTranscriptionProvider {
         }
     }
 
-    nonisolated func makeLiveSession(settings: TranscriptionModelSettings) -> any RecordingStreamingSession {
+    nonisolated func makeLiveSession(
+        settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints
+    ) -> any RecordingStreamingSession {
         FakeRecordingStreamingSession()
     }
 }

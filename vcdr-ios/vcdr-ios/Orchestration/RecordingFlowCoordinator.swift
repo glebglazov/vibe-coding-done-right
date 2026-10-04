@@ -614,7 +614,8 @@ final class RecordingFlowCoordinator {
         return RecordingRun(
             audioRecorder: recordingEngine,
             streaming: makeStreamingSession?() ?? providers.provider(for: transcription.model).makeLiveSession(
-                settings: transcription.settings
+                settings: transcription.settings,
+                spellingHints: SpellingHints(substitutionStore.substitutions)
             ),
             transcriptProcessor: makeTranscriptProcessor(),
             completionAdapters: completionAdapters(for: origin),

@@ -28,6 +28,8 @@ struct TranscriptionSettingsPatch: Codable, Equatable, Sendable {
         switch capability {
         case .languageHint: languageHint != nil
         case .freeTextPrompt: freeTextPrompt != nil
+        // The Dictionary is one list for every Mode.
+        case .spellingHints: false
         }
     }
 
@@ -36,6 +38,7 @@ struct TranscriptionSettingsPatch: Codable, Equatable, Sendable {
         switch capability {
         case .languageHint: languageHint = nil
         case .freeTextPrompt: freeTextPrompt = nil
+        case .spellingHints: break
         }
     }
 

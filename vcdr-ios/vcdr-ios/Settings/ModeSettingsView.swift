@@ -28,7 +28,11 @@ struct ModeSettingsView: View {
         Form {
             aiProcessingSection
             capturesSection
-            ModeTranscriptionSection(override: $override, library: coordinator.transcriptionLibrary)
+            ModeTranscriptionSection(
+                override: $override,
+                library: coordinator.transcriptionLibrary,
+                spellingHints: SpellingHints(coordinator.substitutionStore.substitutions)
+            )
         }
         .navigationTitle(mode.displayName)
         .navigationBarTitleDisplayMode(.inline)

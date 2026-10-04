@@ -39,7 +39,8 @@ struct TranscriptionSettingsView: View {
                     settings: Binding(
                         get: { modelSettings[model.family] },
                         set: { modelSettings[model.family] = $0 }
-                    )
+                    ),
+                    spellingHints: SpellingHints(coordinator.substitutionStore.substitutions)
                 )
             } header: {
                 Text("Model")

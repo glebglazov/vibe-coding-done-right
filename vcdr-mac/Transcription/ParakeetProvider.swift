@@ -127,9 +127,14 @@ actor ParakeetProvider: TranscriptionProvider {
         }
     }
 
-    /// `settings` is unread: Parakeet declares no Capability, so there is
-    /// nothing in it this backend could be told (`docs/adr/0019`).
-    func transcribe(audioFileURL: URL, settings: TranscriptionModelSettings) async throws -> String {
+    /// `settings` and `spellingHints` are unread: Parakeet declares no
+    /// Capability, so there is nothing in them this backend could be told
+    /// (`docs/adr/0019`).
+    func transcribe(
+        audioFileURL: URL,
+        settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints
+    ) async throws -> String {
         guard let asr else {
             throw TranscriptionError.providerUnavailable
         }

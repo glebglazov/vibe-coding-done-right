@@ -8,6 +8,10 @@ import Foundation
 enum TranscriptionModelCapability: String, Codable, Sendable, Hashable {
     case languageHint
     case freeTextPrompt
+    /// The Dictionary's Spelling Hints. Unlike the other kinds it is not a
+    /// setting: one Dictionary serves every family and every Mode, so there is
+    /// nothing to type here and nothing a Mode can override (`docs/adr/0025`).
+    case spellingHints
 }
 
 /// What a Transcription Model Family declares it can be told — or, for a family
@@ -33,10 +37,10 @@ extension TranscriptionModelFamily {
                 Parakeet accepts no settings. One vocabulary spans Latin and \
                 Cyrillic and the language of each word is decided as it is \
                 emitted, so there is no language to set — and the model takes \
-                no text prompt.
+                no text prompt. It does not use your Dictionary yet.
                 """)
         case .whisper:
-            .kinds([.languageHint, .freeTextPrompt])
+            .kinds([.languageHint, .freeTextPrompt, .spellingHints])
         }
     }
 }

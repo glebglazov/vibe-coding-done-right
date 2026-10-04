@@ -38,7 +38,8 @@ extension CaptureSession {
             let transcriptionStart = ContinuousClock.now
             let rawText = try await provider.transcribe(
                 audioFileURL: audioURL,
-                settings: effective.settings
+                settings: effective.settings,
+                spellingHints: SpellingHints(substitutionStore.substitutions)
             )
             try Task.checkCancellation()
             let elapsed = transcriptionStart.duration(to: .now)

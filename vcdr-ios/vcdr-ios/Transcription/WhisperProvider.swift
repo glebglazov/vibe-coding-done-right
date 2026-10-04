@@ -161,8 +161,11 @@ actor WhisperProvider: StreamingTranscriptionProvider {
         downloadProgress = fraction
     }
 
-    nonisolated func makeLiveSession(settings: TranscriptionModelSettings) -> any RecordingStreamingSession {
-        WhisperLiveSession(provider: self, settings: settings)
+    nonisolated func makeLiveSession(
+        settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints
+    ) -> any RecordingStreamingSession {
+        WhisperLiveSession(provider: self, settings: settings, spellingHints: spellingHints)
     }
 
     /// What `settings` mean to WhisperKit's decoder.
@@ -174,20 +177,23 @@ actor WhisperProvider: StreamingTranscriptionProvider {
     /// opposite — the token is forced and detection is off, which is what the
     /// person choosing it asked for.
     ///
-    /// The prompt is encoded here rather than by the caller because only a
-    /// loaded model has a tokenizer. An empty prompt is left absent rather than
-    /// sent as no tokens: a bare prompt marker with nothing after it biases the
-    /// model toward ending the segment early.
+    /// The prompt is the typed Vocabulary Prompt followed by as many Spelling
+    /// Hints as fit. It is encoded here rather than by the caller because only
+    /// a loaded model has a tokenizer. An empty prompt is left absent rather
+    /// than sent as no tokens: a bare prompt marker with nothing after it
+    /// biases the model toward ending the segment early.
     static func decodingOptions(
         for settings: TranscriptionModelSettings,
+        spellingHints: SpellingHints,
         tokenizedBy tokenizer: (any WhisperTokenizer)?
     ) -> DecodingOptions {
+        let promptText = WhisperPrompt(typed: settings.freeTextPrompt, hints: spellingHints).text
         let promptTokens = tokenizer.map { tokenizer in
             // Leading space and the special-token filter are how WhisperKit's
             // own server encodes a caller's prompt: the prompt joins the
             // decoder's text, and a special token smuggled in through it would
             // rewrite the prefill.
-            tokenizer.encode(text: " " + settings.freeTextPrompt)
+            tokenizer.encode(text: " " + promptText)
                 .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
         } ?? []
         return DecodingOptions(
@@ -203,7 +209,7 @@ actor WhisperProvider: StreamingTranscriptionProvider {
             // Substitution matcher, the AI prompt and — in Verbatim Mode — the
             // keyboard.
             skipSpecialTokens: true,
-            promptTokens: settings.freeTextPrompt.isEmpty || promptTokens.isEmpty ? nil : promptTokens
+            promptTokens: promptText.isEmpty || promptTokens.isEmpty ? nil : promptTokens
         )
     }
 

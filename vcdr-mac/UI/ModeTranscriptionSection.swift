@@ -9,6 +9,7 @@ struct ModeTranscriptionSection: View {
     /// Which models this Mac has, so the select offers only those. Nothing is
     /// installed from this screen.
     let library: TranscriptionLibrary
+    let spellingHints: SpellingHints
 
     var body: some View {
         Section("Transcription") {
@@ -28,6 +29,7 @@ struct ModeTranscriptionSection: View {
                 TranscriptionModelSettingsView(
                     family: model.family,
                     settings: effectiveSettings(of: model.family),
+                    spellingHints: spellingHints,
                     origin: { origin(of: $0, for: model.family) }
                 )
             }

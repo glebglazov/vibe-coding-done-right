@@ -154,7 +154,8 @@ struct MainWindowView: View {
                             },
                             selectDefaultModel: { model in
                                 Task { await dependencies.selectDefaultModel(model) }
-                            }
+                            },
+                            spellingHints: SpellingHints(dependencies.substitutionStore.substitutions)
                         )
                     case .history:
                         HistoryTabView(
@@ -186,6 +187,7 @@ struct MainWindowView: View {
                             ),
                             settings: dependencies.settings,
                             transcriptionLibrary: dependencies.transcriptionLibrary,
+                            spellingHints: SpellingHints(dependencies.substitutionStore.substitutions),
                             outputDestinations: dependencies.settings.outputDestinations,
                             definedVariableNames: dependencies.settings.definedVariableNames
                         )
