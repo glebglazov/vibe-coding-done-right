@@ -209,7 +209,7 @@ final class TextProcessor {
             processedText: pipelineResult.processedText,
             hadExternalProcessing: pipelineResult.hadExternalProcessing
         )
-        overrides.markPipelineCompleted()
+        overrides.clearAll()
         return .execute(ProcessedResult(
             text: pipelineResult.processedText,
             destinationName: input.destination.name.lowercased()
@@ -236,7 +236,7 @@ final class TextProcessor {
             processedText: handle.displayText,
             hadExternalProcessing: handle.hadExternalProcessing
         )
-        overrides.markPipelineCompleted()
+        overrides.clearAll()
     }
 
     // MARK: - AI Retry

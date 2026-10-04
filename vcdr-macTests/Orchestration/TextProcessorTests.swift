@@ -7,7 +7,8 @@ import Testing
 @MainActor
 private func makeProcessor(
     aiResults: [Result<String, Error>] = [],
-    settings: AppSettings? = nil
+    settings: AppSettings? = nil,
+    overrides: SessionOverrides? = nil
 ) -> (TextProcessor, FileHistoryStore, ScriptedAIProcessing, AppSettings) {
     let defaults = UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
     let s = settings ?? AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
@@ -16,12 +17,11 @@ private func makeProcessor(
         .appendingPathComponent("vcdr-test-\(UUID().uuidString)")
     let history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(storageRoot: historyDir))
     let ai = ScriptedAIProcessing(results: aiResults)
-    let overrides = SessionOverrides()
     let processor = TextProcessor(
         aiPort: ai,
         history: history,
         settings: s,
-        overrides: overrides,
+        overrides: overrides ?? SessionOverrides(),
         styleProvider: { .casual }
     )
     return (processor, history, ai, s)
@@ -301,5 +301,40 @@ struct TextProcessorConfirmTests {
 
         processor.recordDismissedPreview(handle)
         #expect(history.conversations.count == 1)
+    }
+}
+
+// MARK: - Session Overrides
+
+@Suite("TextProcessor — Session Overrides")
+struct TextProcessorSessionOverrideTests {
+
+    @Test("a completed Capture Session clears its Mode Parameter overrides")
+    @MainActor
+    func completionClearsParameterOverrides() async throws {
+        let overrides = SessionOverrides()
+        overrides.parameterOverrides[UUID()] = "sonnet"
+        let (processor, _, _, _) = makeProcessor(overrides: overrides)
+
+        _ = try await processor.process(makeInput(text: "Hello world"))
+
+        #expect(overrides.parameterOverrides.isEmpty)
+    }
+
+    @Test("a confirmed preview clears its Mode Parameter overrides")
+    @MainActor
+    func confirmClearsParameterOverrides() async throws {
+        let overrides = SessionOverrides()
+        overrides.parameterOverrides[UUID()] = "sonnet"
+        let (processor, _, _, _) = makeProcessor(overrides: overrides)
+        guard case .preview(let handle) = try await processor.process(makeInput(text: "Hello world", showPreview: true)) else {
+            Issue.record("Expected .preview")
+            return
+        }
+        #expect(!overrides.parameterOverrides.isEmpty)
+
+        try await processor.confirm(handle)
+
+        #expect(overrides.parameterOverrides.isEmpty)
     }
 }

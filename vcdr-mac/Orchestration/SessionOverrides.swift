@@ -2,7 +2,7 @@ import Foundation
 
 /// Manages parameter and destination overrides for the current Capture Session.
 /// Shared between `CaptureSession`, `ModeSwitcherCoordinator`, and
-/// `RecordingIndicatorPanel` — the set → consume → clear-on-next lifecycle
+/// `RecordingIndicatorPanel` — the set → consume → clear lifecycle
 /// is driven by `CaptureSession`.
 @Observable
 @MainActor
@@ -50,14 +50,8 @@ final class SessionOverrides {
 
     // MARK: - Lifecycle
 
-    /// Mark that a pipeline completed.
-    /// Destination override is cleared immediately — it's per-recording only,
-    /// and leaving it set would show stale state in the mode switcher between recordings.
-    func markPipelineCompleted() {
-        destinationOverride = nil
-    }
-
-    /// Clear all Capture Session overrides immediately (e.g. on cancel).
+    /// Clears every override when the Capture Session completes or is cancelled,
+    /// so the next Capture Session starts from the Mode defaults.
     func clearAll() {
         parameterOverrides = [:]
         destinationOverride = nil
