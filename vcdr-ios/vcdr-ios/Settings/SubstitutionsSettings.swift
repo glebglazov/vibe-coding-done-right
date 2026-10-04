@@ -154,7 +154,7 @@ private struct SubstitutionDetailView: View {
             }
 
             Section {
-                TextField("Note", text: $substitution.note, prompt: Text(SubstitutionCopy.notePrompt))
+                TextField("Note", text: $substitution.note, prompt: Text(SubstitutionCopy.notePlaceholder))
                     .focused($focus, equals: .note)
             } header: {
                 Text("Note")

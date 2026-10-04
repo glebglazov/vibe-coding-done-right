@@ -6,15 +6,11 @@ import SwiftUI
 enum SubstitutionCopy {
 
     /// The blurb over the list, explaining what an entry does — including
-    /// that it leaves the device with every AI request, and its Note with
-    /// every Dictation request.
+    /// that it leaves the device with every AI request.
     static let overview = "Your Dictionary holds the names, words and values you say. Every entry helps the transcription model and AI modes spell it right, and is sent to your AI provider with each AI request. Its Note is sent too, but only in Dictation. An entry with Triggers also swaps them for its Replacement, exactly, before any other processing. The Dictionary syncs across your devices."
 
-    /// Shown in an empty Note field: what kind of thing a Note says.
-    static let notePrompt = "my sister, container tool, my own name"
+    static let notePlaceholder = "my sister, container tool, my own name"
 
-    /// Under the Note field: where a Note helps, where it does not, and that
-    /// it leaves the device (ADR-0026).
     static let noteCaption = "Helps Dictation pick this spelling when a word was misheard. Other AI modes use only the spelling, so a Note never ends up in text they write. Sent to your AI provider."
 
     /// How a Trigger is matched against what was said, and what happens when

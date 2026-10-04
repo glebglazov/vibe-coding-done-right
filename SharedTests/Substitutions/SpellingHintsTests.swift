@@ -78,7 +78,7 @@ struct SpellingHintsTests {
         """)
     }
 
-    @Test("with Notes, each spelling that has one carries it on its own line")
+    @Test("with Notes, each spelling that has one carries it in parentheses")
     func withNotesBlock() {
         let prompt = SpellingHints(notedEntries).appended(to: "Clean up the dictation.", detail: .withNotes)
 

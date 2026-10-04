@@ -5,18 +5,13 @@ import Foundation
 /// and what every LLM call is told. Unlike a Substitution it never changes the
 /// transcript by itself — a model may ignore it (`docs/adr/0025`).
 struct SpellingHints: Equatable, Sendable {
-    /// One spelling and the Note of the entry it came from, kept together so
-    /// the case deduplication below never pairs a Note with another entry's
-    /// spelling.
     struct Hint: Equatable, Sendable {
         let spelling: String
         let note: String
     }
 
-    /// How much of each hint an LLM prompt carries. A Note reaches only a
-    /// prompt that rewrites what was said: a prompt that writes new text uses
-    /// it as material, signing a message with the user's name or adding the
-    /// entry whose Note matches the request's topic (`docs/adr/0026`).
+    /// How much of each hint an LLM prompt carries. Each platform's mode type
+    /// picks one as its `hintDetail` (`docs/adr/0026`).
     enum Detail: Sendable {
         case spellingsOnly
         case withNotes
@@ -48,7 +43,6 @@ struct SpellingHints: Equatable, Sendable {
         self.hints = hints
     }
 
-    /// The spellings alone, which is all a Transcription Model is ever told.
     var spellings: [String] { hints.map(\.spelling) }
 
     var isEmpty: Bool { hints.isEmpty }

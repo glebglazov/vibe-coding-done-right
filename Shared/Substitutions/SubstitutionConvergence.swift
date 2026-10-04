@@ -58,13 +58,13 @@ nonisolated enum SubstitutionConvergence {
         var losers: [Substitution] = []
 
         for group in groupedByReplacement(substitutions) where group.count > 1 {
-            let ranked = group.sorted(by: olderFirst)
+            let ranked = group.sorted(by: earlier(\.createdAt))
             var survivor = ranked[0]
             let merged = ranked.dropFirst()
 
             let phrases = merged.reduce(survivor.phrases) { $0.merged(with: $1.phrases) }
             let note = survivor.note.isEmpty
-                ? merged.filter { !$0.note.isEmpty }.max(by: lessRecentlyEdited)?.note ?? ""
+                ? merged.filter { !$0.note.isEmpty }.max(by: earlier(\.lastUpdated))?.note ?? ""
                 : survivor.note
             losers.append(contentsOf: merged)
 
@@ -87,21 +87,15 @@ nonisolated enum SubstitutionConvergence {
             .map { $0 }
     }
 
-    /// The entry made first survives. Two entries made in the same instant are
+    /// Orders entries by one of their dates. Two entries with the same date are
     /// ranked by id, which is arbitrary but identical on every device — and an
     /// arbitrary answer both devices reach beats a reasoned one they disagree
     /// on, because disagreement here deletes both entries.
-    private static func olderFirst(_ lhs: Substitution, _ rhs: Substitution) -> Bool {
-        lhs.createdAt == rhs.createdAt
-            ? lhs.id.uuidString < rhs.id.uuidString
-            : lhs.createdAt < rhs.createdAt
-    }
-
-    /// Ranks the losers whose Note the survivor may take. Ties fall to the id
-    /// for the same reason as `olderFirst`: both devices must take the same Note.
-    private static func lessRecentlyEdited(_ lhs: Substitution, _ rhs: Substitution) -> Bool {
-        lhs.lastUpdated == rhs.lastUpdated
-            ? lhs.id.uuidString < rhs.id.uuidString
-            : lhs.lastUpdated < rhs.lastUpdated
+    private static func earlier(_ date: KeyPath<Substitution, Date>) -> (Substitution, Substitution) -> Bool {
+        { lhs, rhs in
+            lhs[keyPath: date] == rhs[keyPath: date]
+                ? lhs.id.uuidString < rhs.id.uuidString
+                : lhs[keyPath: date] < rhs[keyPath: date]
+        }
     }
 }

@@ -299,12 +299,11 @@ struct SubstitutionStoreTests {
             lastUpdated: Date(timeIntervalSince1970: 4_000)
         )
 
-        // The same three entries reach each device in a different order.
-        for entries in [[filedFirst, notedEarlier, notedLater], [notedLater, notedEarlier, filedFirst]] {
+        for arrivalOrder in [[filedFirst, notedEarlier, notedLater], [notedLater, notedEarlier, filedFirst]] {
             let deviceRoot = makeTempRoot()
             defer { try? FileManager.default.removeItem(at: deviceRoot) }
             let directory = recordFilesDirectory(in: deviceRoot)
-            for entry in entries {
+            for entry in arrivalOrder {
                 try writeRecordFile(entry, into: directory)
             }
 
