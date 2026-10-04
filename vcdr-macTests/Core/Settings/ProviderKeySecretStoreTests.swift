@@ -129,6 +129,7 @@ private struct UnreachableAIProcessing: AIProcessingPort {
     func process(
         structuredText: String,
         mode: Mode,
+        spellingHints: SpellingHints,
         apiKey: String,
         parameterValues: [String: String]
     ) async throws -> String {

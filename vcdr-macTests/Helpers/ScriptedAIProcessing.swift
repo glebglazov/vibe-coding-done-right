@@ -16,6 +16,7 @@ actor ScriptedAIProcessing: AIProcessingPort {
     struct ReceivedCall: Equatable, Sendable {
         let structuredText: String
         let modeID: UUID
+        let spellingHints: SpellingHints
         let apiKey: String
         let parameterValues: [String: String]
     }
@@ -30,6 +31,7 @@ actor ScriptedAIProcessing: AIProcessingPort {
     func process(
         structuredText: String,
         mode: Mode,
+        spellingHints: SpellingHints,
         apiKey: String,
         parameterValues: [String: String]
     ) async throws -> String {
@@ -37,6 +39,7 @@ actor ScriptedAIProcessing: AIProcessingPort {
             ReceivedCall(
                 structuredText: structuredText,
                 modeID: mode.id,
+                spellingHints: spellingHints,
                 apiKey: apiKey,
                 parameterValues: parameterValues
             )

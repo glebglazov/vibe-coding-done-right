@@ -54,7 +54,7 @@ struct SubmissionPipelineStyleTests {
     @Test("Style applied after AI processing in AI modes")
     func styleAppliedAfterAIProcessing() async throws {
         struct MockAI: AIProcessingPort {
-            func process(structuredText: String, mode: Mode, apiKey: String, parameterValues: [String: String]) async throws -> String {
+            func process(structuredText: String, mode: Mode, spellingHints: SpellingHints, apiKey: String, parameterValues: [String: String]) async throws -> String {
                 return "the quick brown fox jumps"
             }
         }

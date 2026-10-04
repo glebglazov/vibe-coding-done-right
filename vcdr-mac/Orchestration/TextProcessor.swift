@@ -24,8 +24,9 @@ struct TranscriptionInput: Sendable {
     let removeFillerWords: Bool
     let style: Style
     let saveResultToClipboard: Bool
-    /// Substitutions applied to the dictated transcript as the pipeline's first step.
-    /// Defaults to empty so existing call sites that predate Substitutions compile unchanged.
+    /// The Dictionary: substituted into the dictated transcript as the pipeline's
+    /// first step, and every entry is a Spelling Hint for an LLM call. Defaults to
+    /// empty so existing call sites that predate Substitutions compile unchanged.
     let substitutions: [Substitution]
 
     init(
@@ -252,6 +253,7 @@ final class TextProcessor {
             var processedText = try await ai.process(
                 structuredText: structured,
                 mode: handle.input.mode,
+                spellingHints: SpellingHints(handle.input.substitutions),
                 apiKey: try handle.input.aiAPIKey.resolved(for: handle.input.mode.aiProvider),
                 parameterValues: handle.input.parameterValues
             )

@@ -44,6 +44,7 @@ enum TextProcessingPipeline {
         aiAPIKey: ProviderAPIKey = .stored(""),
         removeFillerWords: Bool = false,
         aiPort: any AIProcessingPort = AIProcessingAdapter(),
+        localAgentPort: any LocalAgentPort = LocalAgentAdapter(),
         style: Style = .casual,
         cursorContext: CursorContext? = nil
     ) async throws -> PipelineResult {
@@ -74,7 +75,15 @@ enum TextProcessingPipeline {
             && mode.processingType != .none
             && !captures.isEmpty
         let capturesForPrompt = appendCapturesAfterProcessing ? [] : captures
-        let structured = structureInput(text: cleanedText, captures: capturesForPrompt, mode: mode, style: style, cursorContext: cursorContext)
+        let spellingHints = SpellingHints(substitutions)
+        let structured = structureInput(
+            text: cleanedText,
+            captures: capturesForPrompt,
+            mode: mode,
+            style: style,
+            spellingHints: spellingHints,
+            cursorContext: cursorContext
+        )
         Logger.textTransform.debug("Structured input for \(mode.processingType.rawValue):\n\(structured)")
         let result: PipelineResult
 
@@ -88,6 +97,7 @@ enum TextProcessingPipeline {
                 let processedText = try await aiPort.process(
                     structuredText: structured,
                     mode: mode,
+                    spellingHints: spellingHints,
                     apiKey: try aiAPIKey.resolved(for: mode.aiProvider),
                     parameterValues: parameterValues
                 )
@@ -114,10 +124,10 @@ enum TextProcessingPipeline {
             // passing API keys that would override the agent's subscription credentials.
             var combinedEnv = mode.localAgentPassVariables ? variableEnvironment : [:]
             combinedEnv.merge(paramEnv) { _, param in param }
-            let processedText = try await BashRunner.run(
-                command: mode.localAgentProvider.command,
-                text: structured,
-                extraEnvironment: combinedEnv
+            let processedText = try await localAgentPort.process(
+                structuredText: structured,
+                mode: mode,
+                environment: combinedEnv
             )
             Logger.textTransform.info("Local agent output: \"\(processedText)\"")
             result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
@@ -183,12 +193,15 @@ enum TextProcessingPipeline {
 
     /// Shared interface: each processing type structures input for its consumer.
     /// Dispatches to the appropriate implementation based on processing type.
-    /// For AI modes (cloudAI, localAgent), appends style.dynamicPrompt to the system prompt.
+    /// For a Local Agent, the system prompt inlined at the top carries the style
+    /// prompt and then the Spelling Hints. A Bash Script gets no hints: it is not
+    /// known to call an LLM.
     private static func structureInput(
         text: String,
         captures: [CapturedContext],
         mode: Mode,
         style: Style,
+        spellingHints: SpellingHints,
         cursorContext: CursorContext?
     ) -> String {
         switch mode.processingType {
@@ -201,9 +214,10 @@ enum TextProcessingPipeline {
         case .localAgent:
             let prompt = AIProcessingAdapter.resolvePrompt(mode)
             // Append style dynamic prompt only when mode applies styles
-            let finalPrompt = mode.appliesStyles
+            let styledPrompt = mode.appliesStyles
                 ? AIStylePromptAppender.appendStylePrompt(to: prompt, style: style)
                 : prompt
+            let finalPrompt = spellingHints.appended(to: styledPrompt)
             return structureInputXML(text: text, captures: captures,
                                      systemPrompt: finalPrompt.isEmpty ? nil : finalPrompt,
                                      cursorContext: cursorContext)

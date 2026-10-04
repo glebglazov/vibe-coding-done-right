@@ -113,6 +113,7 @@ private actor KeyCapturingAIProcessing: AIProcessingPort {
     func process(
         structuredText: String,
         mode: Mode,
+        spellingHints: SpellingHints,
         apiKey: String,
         parameterValues: [String: String]
     ) async throws -> String {
@@ -125,6 +126,7 @@ private struct TimedOutAIProcessing: AIProcessingPort {
     func process(
         structuredText: String,
         mode: Mode,
+        spellingHints: SpellingHints,
         apiKey: String,
         parameterValues: [String: String]
     ) async throws -> String {

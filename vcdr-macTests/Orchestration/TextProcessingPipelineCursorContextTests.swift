@@ -7,9 +7,11 @@ import Testing
 @MainActor
 final class CapturingMockAI: AIProcessingPort {
     var capturedText: String?
+    var capturedSpellingHints: SpellingHints?
 
-    func process(structuredText: String, mode: Mode, apiKey: String, parameterValues: [String: String]) async throws -> String {
+    func process(structuredText: String, mode: Mode, spellingHints: SpellingHints, apiKey: String, parameterValues: [String: String]) async throws -> String {
         capturedText = structuredText
+        capturedSpellingHints = spellingHints
         return "processed"
     }
 }

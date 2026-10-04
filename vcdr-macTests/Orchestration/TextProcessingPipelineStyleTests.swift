@@ -84,7 +84,7 @@ struct TextProcessingPipelineStyleTests {
     @Test("AI mode applies style transformation after AI processing")
     func aiModeAppliesStyleTransformation() async throws {
         struct MockAI: AIProcessingPort {
-            func process(structuredText: String, mode: Mode, apiKey: String, parameterValues: [String: String]) async throws -> String {
+            func process(structuredText: String, mode: Mode, spellingHints: SpellingHints, apiKey: String, parameterValues: [String: String]) async throws -> String {
                 return "Hello World."
             }
         }
@@ -115,7 +115,7 @@ struct TextProcessingPipelineStyleTests {
     @Test("AI mode applies formal style to AI output")
     func aiModeAppliesFormalStyle() async throws {
         struct MockAI: AIProcessingPort {
-            func process(structuredText: String, mode: Mode, apiKey: String, parameterValues: [String: String]) async throws -> String {
+            func process(structuredText: String, mode: Mode, spellingHints: SpellingHints, apiKey: String, parameterValues: [String: String]) async throws -> String {
                 return "hello world"
             }
         }
@@ -238,7 +238,7 @@ struct TextProcessingPipelineStyleTests {
     @Test("AI mode output unchanged when appliesStyles is false")
     func aiModeOutputUnchangedWhenAppliesStylesFalse() async throws {
         struct MockAI: AIProcessingPort {
-            func process(structuredText: String, mode: Mode, apiKey: String, parameterValues: [String: String]) async throws -> String {
+            func process(structuredText: String, mode: Mode, spellingHints: SpellingHints, apiKey: String, parameterValues: [String: String]) async throws -> String {
                 return "Here is some code: let x = 42"
             }
         }

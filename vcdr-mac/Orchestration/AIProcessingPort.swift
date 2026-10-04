@@ -11,6 +11,7 @@ protocol AIProcessingPort: Sendable {
     ///   - structuredText: The AI request body — already wrapped in `<dictation>` tags
     ///     and augmented with capture context by the caller. The port does NOT re-structure.
     ///   - mode: Supplies `aiProvider` and the prompt (via the adapter's prompt resolver).
+    ///   - spellingHints: The Dictionary's Spelling Hints, appended after the mode's prompt.
     ///   - apiKey: The AI Provider's stored API key — the single source of truth for AI
     ///     calls. Resolved by the caller from `AppSettings`, never from a Variable.
     ///   - parameterValues: Resolved parameter values (e.g. model selection overrides)
@@ -19,6 +20,7 @@ protocol AIProcessingPort: Sendable {
     func process(
         structuredText: String,
         mode: Mode,
+        spellingHints: SpellingHints,
         apiKey: String,
         parameterValues: [String: String]
     ) async throws -> String
@@ -31,10 +33,11 @@ struct AIProcessingAdapter: AIProcessingPort {
     func process(
         structuredText: String,
         mode: Mode,
+        spellingHints: SpellingHints,
         apiKey: String,
         parameterValues: [String: String]
     ) async throws -> String {
-        let systemPrompt = Self.resolvePrompt(mode)
+        let systemPrompt = Self.systemPrompt(for: mode, spellingHints: spellingHints)
         let provider = AIProviderFactory.make(
             for: mode,
             apiKey: apiKey
@@ -43,6 +46,11 @@ struct AIProcessingAdapter: AIProcessingPort {
             text: structuredText,
             systemPrompt: systemPrompt
         )
+    }
+
+    /// The system prompt a Cloud AI call sends: the mode's prompt with the hints last.
+    static func systemPrompt(for mode: Mode, spellingHints: SpellingHints) -> String {
+        spellingHints.appended(to: resolvePrompt(mode))
     }
 
     /// Resolves the system prompt for the given mode's prompt type.

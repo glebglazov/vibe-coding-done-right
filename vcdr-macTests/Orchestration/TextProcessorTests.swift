@@ -35,7 +35,8 @@ private func makeInput(
     showPreview: Bool = false,
     hadDestinationOverride: Bool = false,
     style: Style = .casual,
-    destination: OutputDestination = OutputDestination.makeDefaultCopy()
+    destination: OutputDestination = OutputDestination.makeDefaultCopy(),
+    substitutions: [Substitution] = []
 ) -> TranscriptionInput {
     let m = mode ?? Mode(
         id: UUID(),
@@ -57,7 +58,8 @@ private func makeInput(
         hadDestinationOverride: hadDestinationOverride,
         removeFillerWords: false,
         style: style,
-        saveResultToClipboard: false
+        saveResultToClipboard: false,
+        substitutions: substitutions
     )
 }
 
@@ -196,6 +198,27 @@ struct TextProcessorAITests {
         #expect(callsAfter.count == 2)
         // CRITICAL: both calls must carry identical structured text
         #expect(callsAfter[0].structuredText == callsAfter[1].structuredText)
+    }
+
+    @Test("AI retry carries the same Spelling Hints as the first attempt")
+    @MainActor
+    func aiRetryCarriesSpellingHints() async throws {
+        struct TestError: Error { }
+        let (processor, _, ai, _) = makeProcessor(
+            aiResults: [.failure(TestError()), .success("polished")]
+        )
+        let dictionary = [Substitution(triggerPhrases: [], replacement: "Glazov")]
+        let input = makeInput(processingType: .cloudAI, substitutions: dictionary)
+
+        guard case .preview(let handle) = try await processor.process(input) else {
+            Issue.record("Expected .preview")
+            return
+        }
+        _ = try await processor.retryAI(handle)
+
+        let calls = await ai.receivedCalls
+        #expect(calls.count == 2)
+        #expect(calls.map(\.spellingHints.spellings) == [["Glazov"], ["Glazov"]])
     }
 
     @Test("Style transform applied on retry path (no drift)")
