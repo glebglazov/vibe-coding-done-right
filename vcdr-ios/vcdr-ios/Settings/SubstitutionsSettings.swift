@@ -109,6 +109,7 @@ private struct DraftedSubstitution: Identifiable, Hashable {
 /// The fields the detail view moves the caret between.
 private enum SubstitutionField: Hashable {
     case replacement
+    case note
     case trigger(Int)
 }
 
@@ -150,6 +151,15 @@ private struct SubstitutionDetailView: View {
                 TextField("Replacement", text: $substitution.replacement, axis: .vertical)
                     .lineLimit(2...6)
                     .focused($focus, equals: .replacement)
+            }
+
+            Section {
+                TextField("Note", text: $substitution.note, prompt: Text(SubstitutionCopy.notePrompt))
+                    .focused($focus, equals: .note)
+            } header: {
+                Text("Note")
+            } footer: {
+                Text(SubstitutionCopy.noteCaption)
             }
 
             Section {
