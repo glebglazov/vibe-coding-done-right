@@ -21,4 +21,17 @@ struct AppBootTests {
         #expect(prefixRuns == 1)
         #expect(deferredRuns == 1)
     }
+
+    @Test("a cold launch keeps the mode and style the user picked")
+    func coldLaunchKeepsSessionSettings() {
+        SessionSettings.setAIMode(.dictation)
+        SessionSettings.setTextStyle(.formal)
+        defer { SessionSettings.clearAll() }
+        let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard())
+
+        AppBoot.Steps.coldLaunch(of: coordinator).prefix()
+
+        #expect(coordinator.selectedPromptMode == .dictation)
+        #expect(coordinator.currentTextStyle == .formal)
+    }
 }
