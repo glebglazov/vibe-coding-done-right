@@ -43,4 +43,14 @@ extension TranscriptionModelFamily {
             .kinds([.languageHint, .freeTextPrompt, .spellingHints])
         }
     }
+
+    /// How many Spelling Hints this family cannot take next to the typed
+    /// prompt — what a settings screen owes the user. A family that takes
+    /// none leaves out every one.
+    func spellingHintsLeftOut(typed: String, hints: SpellingHints) -> Int {
+        switch self {
+        case .parakeet: hints.spellings.count
+        case .whisper: WhisperPrompt(typed: typed, hints: hints).hintsLeftOut
+        }
+    }
 }

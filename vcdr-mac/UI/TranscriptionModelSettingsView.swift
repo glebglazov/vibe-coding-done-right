@@ -121,6 +121,6 @@ struct TranscriptionModelSettingsView: View {
     }
 
     private var hintsLeftOut: Int {
-        WhisperPrompt(typed: settings.freeTextPrompt, hints: spellingHints).hintsLeftOut
+        family.spellingHintsLeftOut(typed: settings.freeTextPrompt, hints: spellingHints)
     }
 }

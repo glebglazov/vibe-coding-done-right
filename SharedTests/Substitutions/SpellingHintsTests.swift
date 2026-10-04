@@ -32,6 +32,13 @@ struct SpellingHintsTests {
         #expect(hints.spellings == ["gleb@example.com", "Powierża", "Gleb Glazov"])
     }
 
+    @Test("two spellings that differ only in case keep the more recent one")
+    func caseInsensitiveDuplicates() {
+        let hints = SpellingHints([entry("vcdr", editedAt: 1), entry("VCDR", editedAt: 2)])
+
+        #expect(hints.spellings == ["VCDR"])
+    }
+
     @Test("an entry with no Trigger Phrases changes no transcript and still becomes a hint")
     func phraseLessEntryOnlyHints() {
         let hintOnly = entry("Gleb Glazov")

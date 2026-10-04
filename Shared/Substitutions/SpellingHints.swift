@@ -6,7 +6,8 @@ import Foundation
 /// transcript by itself — a model may ignore it (`docs/adr/0025`).
 struct SpellingHints: Equatable, Sendable {
     /// Most recently edited first, so a model with too little room for all of
-    /// them keeps the ones the user touched last.
+    /// them keeps the ones the user touched last. Two spellings that differ
+    /// only in case contradict each other, so the more recent one is kept.
     let spellings: [String]
 
     static let none = SpellingHints(spellings: [])
@@ -17,7 +18,7 @@ struct SpellingHints: Equatable, Sendable {
             .filter(\.isEnabled)
             .sorted { $0.lastUpdated > $1.lastUpdated }
             .map { $0.replacement.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
     }
 
     private init(spellings: [String]) {

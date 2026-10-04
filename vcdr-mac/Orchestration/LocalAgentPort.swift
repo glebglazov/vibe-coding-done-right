@@ -13,7 +13,6 @@ protocol LocalAgentPort: Sendable {
     ) async throws -> String
 }
 
-/// Production adapter: the Local Agent's shell command, run through `BashRunner`.
 struct LocalAgentAdapter: LocalAgentPort {
     func process(
         structuredText: String,

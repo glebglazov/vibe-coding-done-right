@@ -48,13 +48,12 @@ struct AIProcessingAdapter: AIProcessingPort {
         )
     }
 
-    /// The system prompt a Cloud AI call sends: the mode's prompt with the hints last.
     static func systemPrompt(for mode: Mode, spellingHints: SpellingHints) -> String {
         spellingHints.appended(to: resolvePrompt(mode))
     }
 
     /// Resolves the system prompt for the given mode's prompt type.
-    /// Shared by all processing types that use prompts (cloudAI, localAgent, bashScript with prompt).
+    /// Shared by Cloud AI and Local Agent; a Bash Script reads `mode.systemPrompt` directly.
     static func resolvePrompt(_ mode: Mode) -> String {
         switch mode.promptType {
         case .dictation: BuiltInPrompts.dictation

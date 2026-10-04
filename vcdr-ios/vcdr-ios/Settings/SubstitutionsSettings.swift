@@ -10,7 +10,7 @@ import SwiftUI
 /// presentation is iOS-idiomatic (grouped list, swipe to delete).
 struct SubstitutionsSettings: View {
     @State private var viewModel: SubstitutionsViewModel
-    /// The Substitution "Add Substitution" just drafted, pushed so it opens
+    /// The entry "Add Entry" just drafted, pushed so it opens
     /// ready to type in rather than leaving a nameless row behind.
     @State private var drafted: DraftedSubstitution?
 
