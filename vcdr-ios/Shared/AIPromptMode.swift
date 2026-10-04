@@ -47,6 +47,16 @@ enum AIPromptMode: String, CaseIterable, Codable {
         }
     }
 
+    /// Only Dictation rewrites what was said, so only it is told each Note.
+    /// Assistant writes new text and would use a Note as material (ADR-0026).
+    /// Verbatim calls no LLM.
+    var hintDetail: SpellingHints.Detail {
+        switch self {
+        case .dictation: .withNotes
+        case .verbatim, .assistant: .spellingsOnly
+        }
+    }
+
     /// Cycles verbatim → dictation → assistant → verbatim.
     var next: AIPromptMode {
         switch self {

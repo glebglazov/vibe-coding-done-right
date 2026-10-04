@@ -74,11 +74,11 @@ struct TranscriptProcessorTests {
         #expect(output.historyLabel == "Dictation · Formal")
     }
 
-    @Test("a Dictation run's system prompt is the mode's prompt with the Spelling Hints last")
+    @Test("a Dictation run's system prompt is the mode's prompt with the Spelling Hints and their Notes last")
     func dictationSystemPromptEndsWithSpellingHints() async throws {
         let llm = FakeLLMProvider(behavior: .alwaysSucceed(output: "Hi Glazov."))
         let processor = Self.processor(calling: llm)
-        let dictionary = [Substitution(triggerPhrases: [], replacement: "Glazov")]
+        let dictionary = [Substitution(triggerPhrases: [], replacement: "Glazov", note: "my surname")]
 
         _ = await processor.processFinalTranscript(
             "hi glass of",
@@ -90,7 +90,27 @@ struct TranscriptProcessorTests {
 
         let systemPrompt = try #require(llm.receivedSystemPrompts.first)
         #expect(systemPrompt.hasPrefix(BuiltInPrompts.prompt(for: .dictation) + "\n\n<spelling_hints>"))
+        #expect(systemPrompt.hasSuffix("- Glazov (my surname)\n</spelling_hints>"))
+    }
+
+    @Test("an Assistant run's system prompt carries the spellings without their Notes")
+    func assistantSystemPromptHasNoNotes() async throws {
+        let llm = FakeLLMProvider(behavior: .alwaysSucceed(output: "Dear Kathleen, thank you."))
+        let processor = Self.processor(calling: llm)
+        let dictionary = [Substitution(triggerPhrases: [], replacement: "Glazov", note: "my surname")]
+
+        _ = await processor.processFinalTranscript(
+            "write a thank-you note to kathleen",
+            initialSettings: .init(promptMode: .assistant, textStyle: .casual, hasAICapability: true),
+            finalSettings: { .init(promptMode: .assistant, textStyle: .casual, hasAICapability: true) },
+            captures: [],
+            spellingHints: SpellingHints(dictionary)
+        )
+
+        let systemPrompt = try #require(llm.receivedSystemPrompts.first)
+        #expect(systemPrompt.hasPrefix(BuiltInPrompts.prompt(for: .assistant) + "\n\n<spelling_hints>"))
         #expect(systemPrompt.hasSuffix("- Glazov\n</spelling_hints>"))
+        #expect(!systemPrompt.contains("my surname"))
     }
 
     @Test("a Verbatim run with Spelling Hints makes no AI call")
