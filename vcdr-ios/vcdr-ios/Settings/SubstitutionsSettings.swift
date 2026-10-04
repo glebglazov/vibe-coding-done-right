@@ -36,7 +36,7 @@ struct SubstitutionsSettings: View {
 
             Section {
                 if viewModel.drafts.isEmpty {
-                    Text("No substitutions yet.")
+                    Text("Your Dictionary is empty.")
                         .foregroundStyle(.secondary)
                 }
 
@@ -69,11 +69,11 @@ struct SubstitutionsSettings: View {
                 Button {
                     drafted = DraftedSubstitution(id: viewModel.add())
                 } label: {
-                    Label("Add Substitution", systemImage: "plus")
+                    Label("Add Entry", systemImage: "plus")
                 }
             }
         }
-        .navigationTitle("Substitutions")
+        .navigationTitle("Dictionary")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $drafted) { drafted in
             detail(for: drafted.id)

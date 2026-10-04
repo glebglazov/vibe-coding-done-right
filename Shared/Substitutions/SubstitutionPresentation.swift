@@ -1,25 +1,26 @@
 import SwiftUI
 
-/// The words and the marks the Substitutions editors show. Both apps read them
+/// The words and the marks the Dictionary editors show. Both apps read them
 /// from here, so the feature that is called one thing on macOS is never called
 /// another on iOS, and a Trigger Phrase Clash is marked the same way on both.
 enum SubstitutionCopy {
 
-    /// The blurb over the list, explaining what a Substitution does.
-    static let overview = "Substitutions swap a spoken Trigger for fixed Replacement text in your dictation, before any other processing. They apply in every mode and sync across your devices."
+    /// The blurb over the list, explaining what an entry does — including
+    /// that it leaves the device with every AI request.
+    static let overview = "Your Dictionary holds the names, words and values you say. Every entry helps the transcription model and AI modes spell it right, and is sent to your AI provider with each AI request. An entry with Triggers also swaps them for its Replacement, exactly, before any other processing. The Dictionary syncs across your devices."
 
     /// How a Trigger is matched against what was said, and what happens when
-    /// two Substitutions want the same words.
-    static let matchingRules = "Matching is case-insensitive and whole-word. A Substitution fires on any of its Triggers, and the longest Trigger wins when two overlap."
+    /// two entries want the same words.
+    static let matchingRules = "Triggers are optional. Matching is case-insensitive and whole-word. An entry fires on any of its Triggers, and the longest Trigger wins when two overlap."
 
-    /// What a Substitution is called while its Replacement is still empty.
-    static let untitled = "New Substitution"
+    /// What an entry is called while its Replacement is still empty.
+    static let untitled = "New Entry"
 
     /// Said on the Trigger that lost a clash, naming the Replacement that fires
     /// instead — the user typed the phrase here, so this is where the answer
     /// belongs.
     static func clashExplanation(_ clash: TriggerPhraseClash) -> String {
-        "Another Substitution also uses this Trigger, and wins it: your dictation gets \"\(clash.winningReplacement)\"."
+        "Another entry also uses this Trigger, and wins it: your dictation gets \"\(clash.winningReplacement)\"."
     }
 
     /// The name a Substitution is known by — the row's prominent half, and the

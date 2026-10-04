@@ -131,7 +131,7 @@ struct SettingsView: View {
 
     private var substitutionsSection: some View {
         Section {
-            NavigationLink("Substitutions") {
+            NavigationLink("Dictionary") {
                 SubstitutionsSettings(
                     store: substitutionStore,
                     sync: substitutionSync

@@ -46,13 +46,13 @@ struct SubstitutionsListView: View {
                 .padding(.trailing, 16)
                 .padding(.top, 8)
         }
-        .navigationTitle("Substitutions")
+        .navigationTitle("Dictionary")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: add) {
                     Image(systemName: "plus")
                 }
-                .help("Add new substitution")
+                .help("Add new entry")
             }
         }
         .task {
@@ -129,7 +129,7 @@ struct SubstitutionDetailView: View {
 
             Section {
                 Toggle("Enabled", isOn: $substitution.isEnabled)
-                    .help(substitution.isEnabled ? "Substitution is active" : "Substitution is disabled")
+                    .help(substitution.isEnabled ? "Entry is active" : "Entry is disabled")
             }
         }
         .formStyle(.grouped)
