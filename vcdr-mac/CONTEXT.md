@@ -115,7 +115,7 @@ The Style actually used for output: Style Override when active, otherwise Detect
 _Avoid_: current style, resolved style, active style
 
 **Style Override**:
-A user-chosen Style that replaces Detected Style as the effective Style until cleared. Style Override persists across Capture Sessions for as long as the app is running; it is cleared when the user cycles back to Detected Style or chooses Clear from the menu bar. Style Override is not a Session Override. Capture Session processing reads Effective Style at processing time, not at recording start.
+A user-chosen Style that replaces Detected Style as the effective Style until cleared. Style Override persists across Capture Sessions and app launches; it is cleared only when the user cycles back to Detected Style or chooses Clear from the menu bar. Style Override is not a Session Override. Capture Session processing reads Effective Style at processing time, not at recording start.
 _Avoid_: style setting, manual style, forced style, session override
 
 **Context-Aware Formatting**:

@@ -40,7 +40,7 @@ public protocol StyleResolution: Sendable {
 
 // MARK: - StyleResolutionPipeline
 
-/// Owns Detected Style, Style Override, and Effective Style for the app run.
+/// Owns Detected Style, Style Override, and Effective Style.
 ///
 /// Resolution priority for Effective Style:
 /// 1. Style Override (if active)
@@ -92,8 +92,14 @@ public final class StyleResolutionPipeline: StyleResolution {
     private var monitorTask: Task<Void, Never>?
     private var isRunning = false
 
-    /// Active Style Override ID, if any.
-    private var activeOverrideID: UUID?
+    /// Active Style Override ID, if any. Saved on every change, so the
+    /// user's pick survives a relaunch.
+    private var activeOverrideID: UUID? {
+        didSet { userDefaults.set(activeOverrideID?.uuidString, forKey: Self.activeOverrideIDKey) }
+    }
+
+    private static let activeOverrideIDKey = "activeStyleOverrideID"
+    private let userDefaults: UserDefaults
 
     /// The current frontmost app bundle ID, if known.
     private var currentFrontmostBundleID: String?
@@ -103,12 +109,15 @@ public final class StyleResolutionPipeline: StyleResolution {
     public init(
         styleRegistry: StyleRegistry,
         frontmostAppMonitor: any FrontmostAppMonitoring,
+        userDefaults: UserDefaults,
         availableStyles: [Style]? = nil,
         initialStyle: Style? = nil
     ) {
         self.styleRegistry = styleRegistry
         self.frontmostAppMonitor = frontmostAppMonitor
+        self.userDefaults = userDefaults
         self.availableStyles = availableStyles ?? Style.builtIn
+        self.activeOverrideID = userDefaults.string(forKey: Self.activeOverrideIDKey).flatMap(UUID.init(uuidString:))
 
         let style = initialStyle ?? Style.casual
         self.currentStyle = style

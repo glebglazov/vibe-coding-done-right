@@ -106,7 +106,8 @@ final class AppDependencies {
         self.frontmostAppMonitor = FrontmostAppMonitor()
         self.styleResolution = StyleResolutionPipeline(
             styleRegistry: styleRegistry,
-            frontmostAppMonitor: frontmostAppMonitor
+            frontmostAppMonitor: frontmostAppMonitor,
+            userDefaults: .standard
         )
 
         self.modeSwitcherCoordinator = ModeSwitcherCoordinator(

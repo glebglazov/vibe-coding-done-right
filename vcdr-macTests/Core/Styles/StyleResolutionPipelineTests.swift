@@ -14,7 +14,8 @@ struct StyleResolutionPipelineTests {
         let monitor = MockFrontmostAppMonitor()
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         #expect(pipeline.currentStyle.id == Style.casualID)
@@ -26,7 +27,8 @@ struct StyleResolutionPipelineTests {
         let monitor = MockFrontmostAppMonitor()
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         // Assign Safari to Formal style
@@ -61,7 +63,8 @@ struct StyleResolutionPipelineTests {
         let monitor = MockFrontmostAppMonitor()
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         // Assign Safari to Formal
@@ -80,7 +83,8 @@ struct StyleResolutionPipelineTests {
         let monitor = MockFrontmostAppMonitor()
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         // Set and then clear override
@@ -97,7 +101,8 @@ struct StyleResolutionPipelineTests {
         let monitor = MockFrontmostAppMonitor()
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         let stream = pipeline.styleStream
@@ -122,7 +127,8 @@ struct StyleResolutionPipelineTests {
         let monitor = MockFrontmostAppMonitor()
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         // Set override twice to the same style
@@ -139,7 +145,8 @@ struct StyleResolutionPipelineTests {
         let monitor = MockFrontmostAppMonitor(hasAccessibilityPermission: true)
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         var callbackInvoked = false
@@ -164,7 +171,8 @@ struct StyleResolutionPipelineTests {
         let monitor = MockFrontmostAppMonitor()
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         var callbackInvoked = false
@@ -189,6 +197,7 @@ struct StyleResolutionPipelineTests {
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
             frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!,
             availableStyles: [.casual, .formal]
         )
 
@@ -199,6 +208,48 @@ struct StyleResolutionPipelineTests {
 
         pipeline.cycleToNextStyle()
         #expect(pipeline.hasActiveOverride == false)
+    }
+
+    @Test("a relaunch keeps the Style Override the user picked")
+    func relaunchKeepsStyleOverride() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)"))
+        let beforeQuit = StyleResolutionPipeline(
+            styleRegistry: StyleRegistry(),
+            frontmostAppMonitor: MockFrontmostAppMonitor(),
+            userDefaults: defaults
+        )
+        beforeQuit.activateOverride(.formal)
+
+        let afterRelaunch = StyleResolutionPipeline(
+            styleRegistry: StyleRegistry(),
+            frontmostAppMonitor: MockFrontmostAppMonitor(),
+            userDefaults: defaults
+        )
+        await afterRelaunch.start()
+
+        #expect(afterRelaunch.hasActiveOverride)
+        #expect(afterRelaunch.currentStyle.id == Style.formalID)
+    }
+
+    @Test("a relaunch after the user clears the Style Override uses the Detected Style")
+    func relaunchAfterClearUsesDetectedStyle() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)"))
+        let beforeQuit = StyleResolutionPipeline(
+            styleRegistry: StyleRegistry(),
+            frontmostAppMonitor: MockFrontmostAppMonitor(),
+            userDefaults: defaults
+        )
+        beforeQuit.activateOverride(.formal)
+        beforeQuit.clearOverride()
+
+        let afterRelaunch = StyleResolutionPipeline(
+            styleRegistry: StyleRegistry(),
+            frontmostAppMonitor: MockFrontmostAppMonitor(),
+            userDefaults: defaults
+        )
+        await afterRelaunch.start()
+
+        #expect(!afterRelaunch.hasActiveOverride)
     }
 }
 
@@ -270,7 +321,8 @@ struct StyleResolutionIntegrationTests {
         let monitor = MockFrontmostAppMonitor()
         let pipeline = StyleResolutionPipeline(
             styleRegistry: registry,
-            frontmostAppMonitor: monitor
+            frontmostAppMonitor: monitor,
+            userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
         )
 
         // Assign Safari to Formal

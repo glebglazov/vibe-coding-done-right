@@ -51,7 +51,8 @@ struct ModeSwitcherCoordinatorHotkeyTests {
             overrides: SessionOverrides(),
             styleResolution: StyleResolutionPipeline(
                 styleRegistry: StyleRegistry(),
-                frontmostAppMonitor: FrontmostAppMonitor()
+                frontmostAppMonitor: FrontmostAppMonitor(),
+                userDefaults: UserDefaults(suiteName: "vcdr.test.\(UUID().uuidString)")!
             )
         )
         let delegate = DelegateSpy()
