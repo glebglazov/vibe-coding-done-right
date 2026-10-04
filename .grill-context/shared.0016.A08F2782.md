@@ -15,9 +15,14 @@ branch: master
   under: Substitutions
 
 + Spelling Hint
-  The use of every Dictionary Entry's Replacement as a preferred spelling: it is given to the Transcription Model's vocabulary mechanism and to the LLM in every Mode or AI Prompt Mode that calls one. It is a soft hint the model may ignore, never a rule, and it never inserts text the user did not speak.
+  The use of every Dictionary Entry's Replacement as a preferred spelling. It reaches each Transcription Model that declares the Spelling Hints Capability, and the LLM in every Mode or AI Prompt Mode that calls one. It is a soft hint the model may ignore, never a rule, and it never inserts text the user did not speak.
   avoid: vocabulary boost, context words, custom vocabulary, bias list
   under: Substitutions
+
+~ Transcription Model Capability
+  What one Transcription Model declares it can be told, typed by kind rather than as a list of string options — a language hint, a free-text prompt, Spelling Hints. Two Transcription Models differ in which kinds they declare, not merely in the values they accept, which is why Mode Parameter cannot express this. How a model uses a kind is its own business: Whisper turns Spelling Hints into prompt tokens, and Parakeet would turn them into a vocabulary boost.
+  was: What one Transcription Model declares it can be told, typed by kind rather than as a list of string options — a language hint, a free-text prompt, a vocabulary boost. Two Transcription Models differ in which kinds they declare, not merely in the values they accept, which is why Mode Parameter cannot express this.
+  avoid: model option, transcription parameter, model feature
 
 ~ Substitution
   The exact, deterministic swap of a Trigger Phrase for its Dictionary Entry's Replacement in the raw transcript. It applies on both macOS and iOS, in every mode, before any other text processing. Only a Dictionary Entry with Trigger Phrases causes one.
