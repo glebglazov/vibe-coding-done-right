@@ -121,6 +121,7 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
         id: UUID = UUID(),
         triggerPhrases: [String],
         replacement: String,
+        note: String = "",
         createdAt: Date? = nil,
         lastUpdated: Date = Date(),
         isEnabled: Bool = true
@@ -129,6 +130,7 @@ struct Substitution: Identifiable, Codable, Equatable, Sendable {
             id: id,
             phrases: triggerPhrases.map { TriggerPhrase(text: $0, addedAt: lastUpdated) },
             replacement: replacement,
+            note: note,
             createdAt: createdAt,
             lastUpdated: lastUpdated,
             isEnabled: isEnabled

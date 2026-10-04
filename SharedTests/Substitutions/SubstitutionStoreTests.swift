@@ -276,6 +276,77 @@ struct SubstitutionStoreTests {
         #expect(Set(answers[0].phrases) == ["gleb at gmail", "glep at gmail"])
     }
 
+    @Test("A survivor with no Note takes the most recent Note of the entries merged into it, on every device")
+    func survivorTakesTheLosersNote() async throws {
+        let filedFirst = Substitution(
+            triggerPhrases: ["anja"],
+            replacement: "Anya",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            lastUpdated: Date(timeIntervalSince1970: 1_000)
+        )
+        let notedEarlier = Substitution(
+            triggerPhrases: [],
+            replacement: "Anya",
+            note: "a friend",
+            createdAt: Date(timeIntervalSince1970: 2_000),
+            lastUpdated: Date(timeIntervalSince1970: 2_000)
+        )
+        let notedLater = Substitution(
+            triggerPhrases: [],
+            replacement: "Anya",
+            note: "my sister",
+            createdAt: Date(timeIntervalSince1970: 3_000),
+            lastUpdated: Date(timeIntervalSince1970: 4_000)
+        )
+
+        // The same three entries reach each device in a different order.
+        for entries in [[filedFirst, notedEarlier, notedLater], [notedLater, notedEarlier, filedFirst]] {
+            let deviceRoot = makeTempRoot()
+            defer { try? FileManager.default.removeItem(at: deviceRoot) }
+            let directory = recordFilesDirectory(in: deviceRoot)
+            for entry in entries {
+                try writeRecordFile(entry, into: directory)
+            }
+
+            let store = try makeStore(root: deviceRoot)
+            await store.syncRecordFiles(in: directory)
+
+            #expect(store.substitutions.map(\.id) == [filedFirst.id])
+            #expect(store.substitutions.first?.note == "my sister")
+        }
+    }
+
+    @Test("A survivor keeps its own Note over the Notes of the entries merged into it")
+    func survivorKeepsItsOwnNote() async throws {
+        let root = makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = recordFilesDirectory(in: root)
+
+        let filedFirst = Substitution(
+            triggerPhrases: [],
+            replacement: "Kubernetes",
+            note: "container orchestration tool",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            lastUpdated: Date(timeIntervalSince1970: 1_000)
+        )
+        let filedSecond = Substitution(
+            triggerPhrases: ["cube ernetes"],
+            replacement: "Kubernetes",
+            note: "k8s",
+            createdAt: Date(timeIntervalSince1970: 2_000),
+            lastUpdated: Date(timeIntervalSince1970: 2_000)
+        )
+        try writeRecordFile(filedFirst, into: directory)
+        try writeRecordFile(filedSecond, into: directory)
+
+        let store = try makeStore(root: root)
+        await store.syncRecordFiles(in: directory)
+
+        #expect(store.substitutions.map(\.id) == [filedFirst.id])
+        #expect(store.substitutions.first?.note == "container orchestration tool")
+        #expect(store.substitutions.first?.triggerPhrases == ["cube ernetes"])
+    }
+
     @Test("Fixing a typo in a Replacement keeps the entry it was fixed on")
     func editingAReplacementKeepsTheEntry() async throws {
         let root = makeTempRoot()

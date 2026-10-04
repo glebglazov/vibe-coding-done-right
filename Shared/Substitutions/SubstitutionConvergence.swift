@@ -10,7 +10,8 @@ import OSLog
 /// Replacements competing for one phrase, which the user has to settle — so
 /// they are merged instead: the older entry survives, the Trigger Phrases
 /// combine, and the younger one is deleted the way any Substitution is
-/// (ADR-0011).
+/// (ADR-0011). A survivor with no Note takes the losers' most recent one, so a
+/// Note written on only one device is not deleted with its entry (ADR-0026).
 ///
 /// The rule reads only what the entries themselves carry, so both devices reach
 /// the same survivor without coordinating. This runs on a sync pass and not on
@@ -62,10 +63,14 @@ nonisolated enum SubstitutionConvergence {
             let merged = ranked.dropFirst()
 
             let phrases = merged.reduce(survivor.phrases) { $0.merged(with: $1.phrases) }
+            let note = survivor.note.isEmpty
+                ? merged.filter { !$0.note.isEmpty }.max(by: lessRecentlyEdited)?.note ?? ""
+                : survivor.note
             losers.append(contentsOf: merged)
 
-            guard phrases != survivor.phrases else { continue }
+            guard phrases != survivor.phrases || note != survivor.note else { continue }
             survivor.phrases = phrases
+            survivor.note = note
             survivor.lastUpdated = now
             survivors.append(survivor)
         }
@@ -90,5 +95,13 @@ nonisolated enum SubstitutionConvergence {
         lhs.createdAt == rhs.createdAt
             ? lhs.id.uuidString < rhs.id.uuidString
             : lhs.createdAt < rhs.createdAt
+    }
+
+    /// Ranks the losers whose Note the survivor may take. Ties fall to the id
+    /// for the same reason as `olderFirst`: both devices must take the same Note.
+    private static func lessRecentlyEdited(_ lhs: Substitution, _ rhs: Substitution) -> Bool {
+        lhs.lastUpdated == rhs.lastUpdated
+            ? lhs.id.uuidString < rhs.id.uuidString
+            : lhs.lastUpdated < rhs.lastUpdated
     }
 }
