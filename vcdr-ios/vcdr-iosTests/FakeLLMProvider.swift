@@ -24,6 +24,7 @@ final class FakeLLMProvider: LLMAdapter {
     let displayName: String
     private let behavior: Behavior
     private let attemptCount = OSAllocatedUnfairLock(initialState: 0)
+    private let systemPrompts = OSAllocatedUnfairLock(initialState: [String]())
 
     init(displayName: String = "Fake", behavior: Behavior) {
         self.displayName = displayName
@@ -35,7 +36,13 @@ final class FakeLLMProvider: LLMAdapter {
         attemptCount.withLock { $0 }
     }
 
+    /// The system prompt of every call, in call order.
+    var receivedSystemPrompts: [String] {
+        systemPrompts.withLock { $0 }
+    }
+
     func process(text: String, systemPrompt: String) async throws -> String {
+        systemPrompts.withLock { $0.append(systemPrompt) }
         let attempt = attemptCount.withLock { count -> Int in
             count += 1
             return count

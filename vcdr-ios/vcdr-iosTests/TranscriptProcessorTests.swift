@@ -64,13 +64,50 @@ struct TranscriptProcessorTests {
             finalSettings: {
                 .init(promptMode: .dictation, textStyle: .formal, hasAICapability: true)
             },
-            captures: []
+            captures: [],
+            spellingHints: .none
         )
 
         #expect(output.transcript == "hello world")
         #expect(output.processed == "Hello world.")
         #expect(output.finalText == "Hello world. ")
         #expect(output.historyLabel == "Dictation · Formal")
+    }
+
+    @Test("a Dictation run's system prompt is the mode's prompt with the Spelling Hints last")
+    func dictationSystemPromptEndsWithSpellingHints() async throws {
+        let llm = FakeLLMProvider(behavior: .alwaysSucceed(output: "Hi Glazov."))
+        let processor = Self.processor(calling: llm)
+        let dictionary = [Substitution(triggerPhrases: [], replacement: "Glazov")]
+
+        _ = await processor.processFinalTranscript(
+            "hi glass of",
+            initialSettings: .init(promptMode: .dictation, textStyle: .casual, hasAICapability: true),
+            finalSettings: { .init(promptMode: .dictation, textStyle: .casual, hasAICapability: true) },
+            captures: [],
+            spellingHints: SpellingHints(dictionary)
+        )
+
+        let systemPrompt = try #require(llm.receivedSystemPrompts.first)
+        #expect(systemPrompt.hasPrefix(BuiltInPrompts.prompt(for: .dictation) + "\n\n<spelling_hints>"))
+        #expect(systemPrompt.hasSuffix("- Glazov\n</spelling_hints>"))
+    }
+
+    @Test("a Verbatim run with Spelling Hints makes no AI call")
+    func verbatimWithSpellingHintsMakesNoCall() async {
+        let llm = FakeLLMProvider(behavior: .alwaysSucceed(output: "should not be used"))
+        let processor = Self.processor(calling: llm)
+
+        let output = await processor.processFinalTranscript(
+            "hi glass of",
+            initialSettings: .init(promptMode: .verbatim, textStyle: .casual, hasAICapability: true),
+            finalSettings: { .init(promptMode: .verbatim, textStyle: .casual, hasAICapability: true) },
+            captures: [],
+            spellingHints: SpellingHints([Substitution(triggerPhrases: [], replacement: "Glazov")])
+        )
+
+        #expect(llm.attempts == 0)
+        #expect(output.processed == nil)
     }
 
     @Test("AI timeout falls back to local transcript")
@@ -94,10 +131,21 @@ struct TranscriptProcessorTests {
             finalSettings: {
                 .init(promptMode: .dictation, textStyle: .casual, hasAICapability: true)
             },
-            captures: []
+            captures: [],
+            spellingHints: .none
         )
 
         #expect(output.processed == "local text")
         #expect(output.finalText == "local text ")
+    }
+
+    private static func processor(calling llm: FakeLLMProvider) -> TranscriptProcessor {
+        TranscriptProcessor(
+            makeAIProvider: { _ in
+                ProviderCascade(primary: llm, fallback: nil, maxAttempts: 1, timeout: .seconds(1))
+            },
+            onAIProcessingStatus: { _ in },
+            onAIInputText: { _ in }
+        )
     }
 }

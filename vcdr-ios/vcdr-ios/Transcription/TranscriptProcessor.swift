@@ -50,7 +50,8 @@ struct TranscriptProcessor {
         _ cleanedText: String,
         initialSettings: Settings,
         finalSettings: @MainActor () -> Settings,
-        captures: [String]
+        captures: [String],
+        spellingHints: SpellingHints
     ) async -> Output {
         let shouldUseAI = usesAI(initialSettings)
         let processedText: String
@@ -58,7 +59,8 @@ struct TranscriptProcessor {
             processedText = await processWithAI(
                 localText: cleanedText,
                 mode: initialSettings.promptMode,
-                captures: captures
+                captures: captures,
+                spellingHints: spellingHints
             )
         } else {
             processedText = cleanedText
@@ -73,8 +75,18 @@ struct TranscriptProcessor {
         )
     }
 
-    func processWithAI(localText: String, settings: Settings, captures: [String]) async -> String {
-        await processWithAI(localText: localText, mode: settings.promptMode, captures: captures)
+    func processWithAI(
+        localText: String,
+        settings: Settings,
+        captures: [String],
+        spellingHints: SpellingHints
+    ) async -> String {
+        await processWithAI(
+            localText: localText,
+            mode: settings.promptMode,
+            captures: captures,
+            spellingHints: spellingHints
+        )
     }
 
     static func finalize(_ text: String, settings: Settings) -> String {
@@ -102,11 +114,16 @@ struct TranscriptProcessor {
         settings.promptMode != .verbatim && settings.hasAICapability
     }
 
-    private func processWithAI(localText: String, mode: AIPromptMode, captures: [String]) async -> String {
+    private func processWithAI(
+        localText: String,
+        mode: AIPromptMode,
+        captures: [String],
+        spellingHints: SpellingHints
+    ) async -> String {
         onAIInputText(localText)
         onAIProcessingStatus(.processing)
 
-        let systemPrompt = BuiltInPrompts.prompt(for: mode)
+        let systemPrompt = spellingHints.appended(to: BuiltInPrompts.prompt(for: mode))
         let input = Self.buildAIInput(localText, mode: mode, captures: captures)
         let provider = makeAIProvider(mode)
 

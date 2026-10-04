@@ -196,7 +196,8 @@ final class RecordingRun {
         // included). Captures are never run through the matcher. The keyboard
         // extension stays out of this: it receives the already-substituted
         // text via the Bundled Result on the Keyboard Channel.
-        let substitutedText = SubstitutionMatcher(substitutions: currentSubstitutions())
+        let dictionary = currentSubstitutions()
+        let substitutedText = SubstitutionMatcher(substitutions: dictionary)
             .apply(to: rawText)
         if substitutedText != rawText {
             Logger.app.info("After substitutions: \(substitutedText.prefix(50))...")
@@ -214,7 +215,8 @@ final class RecordingRun {
             cleanedText,
             initialSettings: initialSettings,
             finalSettings: currentSettings,
-            captures: captures
+            captures: captures,
+            spellingHints: SpellingHints(dictionary)
         )
         let terminal = RecordingRunTerminalState.success(RecordingRunSuccess(
             conversationID: conversationID,

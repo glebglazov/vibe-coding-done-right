@@ -39,7 +39,8 @@ extension RecordingFlowCoordinator {
             let aiResult = await makeTranscriptProcessor().processWithAI(
                 localText: aiInputText,
                 settings: initialSettings,
-                captures: capturedTexts
+                captures: capturedTexts,
+                spellingHints: SpellingHints(substitutionStore.substitutions)
             )
             guard !Task.isCancelled else { return }
             // Pick up any style/mode change the user made during the retry, then
