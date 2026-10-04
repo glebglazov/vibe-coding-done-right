@@ -123,7 +123,7 @@ struct TranscriptProcessor {
         onAIInputText(localText)
         onAIProcessingStatus(.processing)
 
-        let systemPrompt = spellingHints.appended(to: BuiltInPrompts.prompt(for: mode))
+        let systemPrompt = spellingHints.appended(to: BuiltInPrompts.prompt(for: mode), detail: .spellingsOnly)
         let input = Self.buildAIInput(localText, mode: mode, captures: captures)
         let provider = makeAIProvider(mode)
 

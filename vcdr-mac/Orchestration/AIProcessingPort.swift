@@ -49,7 +49,7 @@ struct AIProcessingAdapter: AIProcessingPort {
     }
 
     static func systemPrompt(for mode: Mode, spellingHints: SpellingHints) -> String {
-        spellingHints.appended(to: resolvePrompt(mode))
+        spellingHints.appended(to: resolvePrompt(mode), detail: .spellingsOnly)
     }
 
     /// Resolves the system prompt for the given mode's prompt type.

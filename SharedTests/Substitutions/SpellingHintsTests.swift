@@ -9,10 +9,11 @@ import Testing
 @Suite("Spelling Hints")
 struct SpellingHintsTests {
 
-    private func entry(_ replacement: String, phrases: [String] = [], editedAt seconds: TimeInterval = 0, enabled: Bool = true) -> Substitution {
+    private func entry(_ replacement: String, phrases: [String] = [], note: String = "", editedAt seconds: TimeInterval = 0, enabled: Bool = true) -> Substitution {
         Substitution(
             triggerPhrases: phrases,
             replacement: replacement,
+            note: note,
             lastUpdated: Date(timeIntervalSince1970: seconds),
             isEnabled: enabled
         )
@@ -47,25 +48,64 @@ struct SpellingHintsTests {
         #expect(SpellingHints([hintOnly]).spellings == ["Gleb Glazov"])
     }
 
-    @Test("the system prompt keeps its own text and gains the hints after it")
-    func appendedToSystemPrompt() {
-        let prompt = SpellingHints([entry("Gleb Glazov"), entry("+44 7700 900123", editedAt: 1)])
-            .appended(to: "Clean up the dictation.")
+    @Test("two spellings that differ only in case keep the Note of the more recent one")
+    func caseInsensitiveDuplicatesKeepTheirOwnNote() {
+        let hints = SpellingHints([
+            entry("vcdr", note: "an old name", editedAt: 1),
+            entry("VCDR", note: "my dictation app", editedAt: 2),
+        ])
 
-        #expect(prompt.hasPrefix("Clean up the dictation.\n\n<spelling_hints>"))
-        #expect(prompt.contains("- +44 7700 900123\n- Gleb Glazov\n</spelling_hints>"))
-        #expect(prompt.contains("Never add one that the speaker did not say."))
+        #expect(hints.hints == [SpellingHints.Hint(spelling: "VCDR", note: "my dictation app")])
+    }
+
+    private let notedEntries = [
+        Substitution(triggerPhrases: [], replacement: "Gleb Glazov", lastUpdated: Date(timeIntervalSince1970: 0)),
+        Substitution(triggerPhrases: ["anja"], replacement: "Anya", note: " my\nsister ", lastUpdated: Date(timeIntervalSince1970: 1)),
+    ]
+
+    @Test("spellings only is the block the prompts carried before Notes, byte for byte")
+    func spellingsOnlyBlock() {
+        let prompt = SpellingHints(notedEntries).appended(to: "Clean up the dictation.", detail: .spellingsOnly)
+
+        #expect(prompt == """
+        Clean up the dictation.
+
+        <spelling_hints>
+        The speaker often says these names, words and values. When the dictation contains something that sounds like one of them, write it with exactly this spelling. Never add one that the speaker did not say.
+        - Anya
+        - Gleb Glazov
+        </spelling_hints>
+        """)
+    }
+
+    @Test("with Notes, each spelling that has one carries it on its own line")
+    func withNotesBlock() {
+        let prompt = SpellingHints(notedEntries).appended(to: "Clean up the dictation.", detail: .withNotes)
+
+        #expect(prompt == """
+        Clean up the dictation.
+
+        <spelling_hints>
+        The speaker often says these names, words and values. When the dictation contains something that sounds like one of them, write it with exactly this spelling. Never add one that the speaker did not say.
+        - Anya (my sister)
+        - Gleb Glazov
+        </spelling_hints>
+        """)
     }
 
     @Test("no hints leave the system prompt untouched")
     func noHintsNoChange() {
-        #expect(SpellingHints.none.appended(to: "Clean up.") == "Clean up.")
-        #expect(SpellingHints([entry("x", enabled: false)]).appended(to: "") == "")
+        #expect(SpellingHints.none.appended(to: "Clean up.", detail: .withNotes) == "Clean up.")
+        #expect(SpellingHints([entry("x", enabled: false)]).appended(to: "", detail: .withNotes) == "")
     }
 
     @Test("Whisper's prompt is the typed prompt, then the hints that fit in the budget")
     func whisperPromptBudget() {
-        let hints = SpellingHints([entry("Gleb", editedAt: 3), entry("Glazovsky", editedAt: 2), entry("VCDR", editedAt: 1)])
+        let hints = SpellingHints([
+            entry("Gleb", note: "my own name", editedAt: 3),
+            entry("Glazovsky", editedAt: 2),
+            entry("VCDR", editedAt: 1),
+        ])
 
         let prompt = WhisperPrompt(typed: " Parakeet ", hints: hints, characterBudget: 20)
 

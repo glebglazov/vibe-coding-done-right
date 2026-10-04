@@ -217,7 +217,7 @@ enum TextProcessingPipeline {
             let styledPrompt = mode.appliesStyles
                 ? AIStylePromptAppender.appendStylePrompt(to: prompt, style: style)
                 : prompt
-            let finalPrompt = spellingHints.appended(to: styledPrompt)
+            let finalPrompt = spellingHints.appended(to: styledPrompt, detail: .spellingsOnly)
             return structureInputXML(text: text, captures: captures,
                                      systemPrompt: finalPrompt.isEmpty ? nil : finalPrompt,
                                      cursorContext: cursorContext)
