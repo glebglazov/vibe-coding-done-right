@@ -95,8 +95,9 @@ private enum SubstitutionField: Hashable {
     case trigger(Int)
 }
 
-/// The editor for one Substitution, asking in the order the answers arrive:
-/// the Trigger Phrases that were said, then the Replacement they produce.
+/// The editor for one Dictionary Entry. It asks for the Replacement first,
+/// because every entry is a Spelling Hint, then the Note, then the optional
+/// Trigger Phrases.
 struct SubstitutionDetailView: View {
     @Binding var substitution: Substitution
     let clashes: [TriggerPhraseClash]
@@ -106,24 +107,8 @@ struct SubstitutionDetailView: View {
 
     var body: some View {
         Form {
-            Section("Triggers") {
-                ForEach(Array(substitution.livePhrases.enumerated()), id: \.element.id) { index, phrase in
-                    TriggerRowView(
-                        phrase: $substitution[phrase: phrase.id],
-                        clash: clash(for: phrase.text),
-                        focus: $focus,
-                        field: .trigger(index),
-                        onDelete: {
-                            substitution.removePhrase(phrase.id)
-                        }
-                    )
-                }
-
-                Button("Add Trigger", action: addTrigger)
-            }
-
-            Section("Replacement") {
-                TextField("Replacement", text: $substitution.replacement, axis: .vertical)
+            Section("Spelling") {
+                TextField("Spelling", text: $substitution.replacement, axis: .vertical)
                     .lineLimit(2...6)
                     .focused($focus, equals: .replacement)
             }
@@ -138,6 +123,26 @@ struct SubstitutionDetailView: View {
             }
 
             Section {
+                ForEach(Array(substitution.livePhrases.enumerated()), id: \.element.id) { index, phrase in
+                    TriggerRowView(
+                        phrase: $substitution[phrase: phrase.id],
+                        clash: clash(for: phrase.text),
+                        focus: $focus,
+                        field: .trigger(index),
+                        onDelete: {
+                            substitution.removePhrase(phrase.id)
+                        }
+                    )
+                }
+
+                Button("Add Trigger", action: addTrigger)
+            } header: {
+                Text("Triggers")
+            } footer: {
+                Text(SubstitutionCopy.triggersCaption)
+            }
+
+            Section {
                 Toggle("Enabled", isOn: $substitution.isEnabled)
                     .help(substitution.isEnabled ? "Entry is active" : "Entry is disabled")
             }
@@ -148,20 +153,15 @@ struct SubstitutionDetailView: View {
             onCommit()
         }
         .onAppear {
-            // Unconditionally, because the alternative is a rule that reads the
-            // entry to guess what the visit came for — and a wrong guess types a
-            // Trigger Phrase into the Replacement. A visit that came to fix the
-            // Replacement pays one click instead.
-            addTrigger()
+            if substitution.replacement.isEmpty {
+                focus = .replacement
+            }
         }
         .onDisappear {
             substitution.dropBlankPhrases()
         }
     }
 
-    /// Appends the row and puts the caret in it, so filing a newly discovered
-    /// mishearing costs one click and the typing — less than the Replacement a
-    /// new Substitution would also need.
     private func addTrigger() {
         substitution.addPhrase()
         focus = .trigger(substitution.livePhrases.count - 1)

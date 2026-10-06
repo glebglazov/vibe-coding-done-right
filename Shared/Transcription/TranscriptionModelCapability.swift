@@ -44,6 +44,11 @@ extension TranscriptionModelFamily {
         }
     }
 
+    var takesSpellingHints: Bool {
+        guard case .kinds(let kinds) = capabilities else { return false }
+        return kinds.contains(.spellingHints)
+    }
+
     /// How many Spelling Hints this family cannot take next to the typed
     /// prompt — what a settings screen owes the user. A family that takes
     /// none leaves out every one.

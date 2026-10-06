@@ -7,15 +7,23 @@ enum SubstitutionCopy {
 
     /// The blurb over the list, explaining what an entry does — including
     /// that it leaves the device with every AI request.
-    static let overview = "Your Dictionary holds the names, words and values you say. Every entry helps the transcription model and AI modes spell it right, and is sent to your AI provider with each AI request. Its Note is sent too, but only in Dictation. An entry with Triggers also swaps them for its Replacement, exactly, before any other processing. The Dictionary syncs across your devices."
+    static let overview = "Your Dictionary holds the names, words and values you say. Every entry helps the transcription model and AI modes spell it right, and is sent to your AI provider with each AI request. Its Note is sent too, but only in Dictation. An entry with Triggers also swaps them for its Spelling, exactly, before any other processing. The Dictionary syncs across your devices."
 
     static let notePlaceholder = "my sister, container tool, my own name"
 
     static let noteCaption = "Helps Dictation pick this spelling when a word was misheard. Other AI modes use only the spelling, so a Note never ends up in text they write. Sent to your AI provider."
 
-    /// How a Trigger is matched against what was said, and what happens when
-    /// two entries want the same words.
-    static let matchingRules = "Triggers are optional. Matching is case-insensitive and whole-word. An entry fires on any of its Triggers, and the longest Trigger wins when two overlap."
+    /// When an entry needs Triggers, and how they match. It names each model
+    /// that ignores Spelling Hints, because there a Trigger is the only fix a
+    /// mode without AI has.
+    static var triggersCaption: String {
+        let rules = "Triggers are optional. Add one only when the transcript keeps writing this word wrong. Type the wrong text that it writes. The app then replaces that text with the Spelling, exactly, before any other processing. Matching is case-insensitive and whole-word. When two Triggers overlap, the longest one wins."
+        let hintless = TranscriptionModelFamily.allCases.filter { !$0.takesSpellingHints }
+        guard !hintless.isEmpty else { return rules }
+        let names = ListFormatter.localizedString(byJoining: hintless.map(\.displayName))
+        let verb = hintless.count == 1 ? "does" : "do"
+        return rules + " \(names) \(verb) not use the Spelling. With \(names), a mode that does not use AI changes this word only through a Trigger."
+    }
 
     /// What an entry is called while its Replacement is still empty.
     static let untitled = "New Entry"

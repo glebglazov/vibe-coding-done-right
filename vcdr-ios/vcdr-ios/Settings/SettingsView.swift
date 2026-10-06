@@ -138,7 +138,7 @@ struct SettingsView: View {
                 )
             }
         } footer: {
-            Text("Swap a spoken Trigger for fixed Replacement text, applied before any other processing in every mode.")
+            Text("Names, words and values that you want spelled right. A Trigger also swaps a wrong word for the Spelling before any other processing.")
         }
     }
 

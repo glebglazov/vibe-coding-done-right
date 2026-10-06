@@ -166,9 +166,9 @@ struct SubstitutionCommitTests {
         #expect(try await onDisk(root).count == 1)
     }
 
-    // MARK: - Opening is not editing
+    // MARK: - A blank row is not an edit
 
-    @Test("a blank trigger row added on open leaves the store alone until it carries text")
+    @Test("a blank trigger row leaves the store alone until it carries text")
     func blankTriggerRowWritesNothing() async throws {
         let root = makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -181,7 +181,7 @@ struct SubstitutionCommitTests {
         let stampBeforeOpening = draft.lastUpdated
         let exportsBeforeOpening = recordFileStamps(in: root)
 
-        // What opening the editor does: a row for the caret to land in.
+        // What "Add Trigger" does: a row for the caret to land in.
         draft.addPhrase()
         _ = viewModel.commit(draft)
 
@@ -209,9 +209,8 @@ struct SubstitutionCommitTests {
         viewModel.syncFromStore()
         let editing = viewModel.binding(for: stored.id)
 
-        // Three visits that typed nothing: each opens a row for the caret and
-        // closes on it, so the list must read the same after the third as the
-        // first.
+        // Three visits that added a row, typed nothing and closed, so the list
+        // must read the same after the third as the first.
         for _ in 1...3 {
             editing.wrappedValue.addPhrase()
             _ = viewModel.commit(editing.wrappedValue)

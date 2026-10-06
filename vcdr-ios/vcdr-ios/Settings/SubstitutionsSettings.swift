@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// iOS Substitutions screen. Part of the App Shell — reachable from Settings
+/// iOS Dictionary screen. Part of the App Shell, reachable from Settings
 /// without Transcription Readiness. Two levels, like the macOS tab: a list of
-/// Substitutions, each row reading from its Triggers through an arrow to the
-/// Replacement they produce, and a screen behind each one where Triggers are
-/// added, edited and deleted, then the Replacement they produce is edited.
+/// entries, each row reading from its Triggers through an arrow to the
+/// Replacement they produce, and an editor behind each one.
 ///
 /// Shares the view model and its wording with the macOS tab; only the
 /// presentation is iOS-idiomatic (grouped list, swipe to delete).
@@ -55,8 +54,6 @@ struct SubstitutionsSettings: View {
                         viewModel.delete(viewModel.drafts[index])
                     }
                 }
-            } footer: {
-                Text(SubstitutionCopy.matchingRules)
             }
 
             if let sync {
@@ -113,9 +110,9 @@ private enum SubstitutionField: Hashable {
     case trigger(Int)
 }
 
-/// The editor for one Substitution, asking in the order the answers arrive:
-/// the Trigger Phrases that were said, then the Replacement they produce — the
-/// same order the macOS editor asks in.
+/// The editor for one Dictionary Entry, in the same order as the macOS editor:
+/// the Replacement first, because every entry is a Spelling Hint, then the
+/// Note, then the optional Trigger Phrases.
 private struct SubstitutionDetailView: View {
     @Binding var substitution: Substitution
     let clashes: [TriggerPhraseClash]
@@ -125,7 +122,22 @@ private struct SubstitutionDetailView: View {
 
     var body: some View {
         Form {
-            Section("Triggers") {
+            Section("Spelling") {
+                TextField("Spelling", text: $substitution.replacement, axis: .vertical)
+                    .lineLimit(2...6)
+                    .focused($focus, equals: .replacement)
+            }
+
+            Section {
+                TextField("Note", text: $substitution.note, prompt: Text(SubstitutionCopy.notePlaceholder))
+                    .focused($focus, equals: .note)
+            } header: {
+                Text("Note")
+            } footer: {
+                Text(SubstitutionCopy.noteCaption)
+            }
+
+            Section {
                 ForEach(Array(substitution.livePhrases.enumerated()), id: \.element.id) { index, phrase in
                     TriggerRow(
                         phrase: $substitution[phrase: phrase.id],
@@ -145,21 +157,10 @@ private struct SubstitutionDetailView: View {
                 Button(action: addTrigger) {
                     Label("Add Trigger", systemImage: "plus")
                 }
-            }
-
-            Section("Replacement") {
-                TextField("Replacement", text: $substitution.replacement, axis: .vertical)
-                    .lineLimit(2...6)
-                    .focused($focus, equals: .replacement)
-            }
-
-            Section {
-                TextField("Note", text: $substitution.note, prompt: Text(SubstitutionCopy.notePlaceholder))
-                    .focused($focus, equals: .note)
             } header: {
-                Text("Note")
+                Text("Triggers")
             } footer: {
-                Text(SubstitutionCopy.noteCaption)
+                Text(SubstitutionCopy.triggersCaption)
             }
 
             Section {
@@ -172,20 +173,15 @@ private struct SubstitutionDetailView: View {
             onCommit()
         }
         .onAppear {
-            // Unconditionally, because the alternative is a rule that reads the
-            // entry to guess what the visit came for — and a wrong guess types a
-            // Trigger Phrase into the Replacement. A visit that came to fix the
-            // Replacement pays one tap instead.
-            addTrigger()
+            if substitution.replacement.isEmpty {
+                focus = .replacement
+            }
         }
         .onDisappear {
             substitution.dropBlankPhrases()
         }
     }
 
-    /// Appends the row and puts the caret in it, so filing a newly discovered
-    /// mishearing costs one tap and the typing — less than the Replacement a
-    /// new Substitution would also need.
     private func addTrigger() {
         substitution.addPhrase()
         focus = .trigger(substitution.livePhrases.count - 1)
