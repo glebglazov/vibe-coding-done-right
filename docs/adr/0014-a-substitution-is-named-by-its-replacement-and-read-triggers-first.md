@@ -1,5 +1,9 @@
 # A Substitution is named by its Replacement and read Trigger Phrases first
 
+> **Amended by [ADR-0027](0027-the-dictionary-editor-asks-for-the-spelling-first.md):** Trigger Phrases are optional now, so the
+> editor asks for the Spelling (the Replacement) first, then the Note, then the Trigger Phrases. It does not
+> add a blank Trigger Phrase row when it opens. Naming and the list row do not change.
+
 The Substitutions editors led with the Replacement on both platforms, on the recorded ground that the Replacement is "the thing the user meant" and the Trigger Phrases are "the ways the engine failed to write it". That ground is sound about *naming* and wrong about *reading*: a user meets a Substitution in the order he thinks about one, which is what was said and then what it becomes. Both rows and both editor forms now put the Trigger Phrases first and the Replacement second, and the Replacement keeps the prominence — a list row reads `"power zha", "powerja" → **Powierża**`, left to right, with the arrow saying the relation instead of leaving it to be inferred from stacking.
 
 The distinction this records is that **naming is not ordering**. The Replacement still names the entry: it is the navigation title, it is the "New Substitution" empty state, it is what a list of thirty is scanned for, and it is what Substitution Convergence (ADR-0011) merges two devices' entries on. Only its position moved.
