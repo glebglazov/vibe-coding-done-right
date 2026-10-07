@@ -53,6 +53,9 @@ enum SubstitutionCopy {
 /// and goes with the Trigger Phrases so a Substitution with no phrases yet shows
 /// no dangling one.
 ///
+/// The Note goes on a second line under it, so the user can see later what
+/// each entry is, and which entries have no Note yet.
+///
 /// Both apps show this, so a row cannot read one way on macOS and another on
 /// iOS. Trailing accessories — a "Disabled" tag, a chevron — belong to the app
 /// and sit after it.
@@ -61,6 +64,27 @@ struct SubstitutionRowLabel: View {
     let clashes: [TriggerPhraseClash]
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            mainLine
+
+            if !note.isEmpty {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .opacity(substitution.isEnabled ? 1 : 0.5)
+    }
+
+    /// One line, so a Note written over several lines still fits the row.
+    private var note: String {
+        substitution.note.split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    private var mainLine: some View {
         HStack(spacing: 6) {
             if let summary = substitution.triggerSummary(losing: clashes) {
                 // The phrases are the side that gives way when the row is
@@ -83,7 +107,6 @@ struct SubstitutionRowLabel: View {
 
             Spacer(minLength: 0)
         }
-        .opacity(substitution.isEnabled ? 1 : 0.5)
     }
 }
 
