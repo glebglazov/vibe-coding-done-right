@@ -55,7 +55,7 @@ struct ModeTemplate {
         mode.localAgentProvider = localAgentProvider
         mode.localAgentPassVariables = localAgentPassVariables
         mode.defaultOutputDestinationID = defaultOutputDestinationID
-        mode.parameters = parameters
+        mode.resetParameters(to: parameters)
         mode.showPreview = showPreview
         mode.appliesStyles = appliesStyles
         mode.contextAware = contextAware

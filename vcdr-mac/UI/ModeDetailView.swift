@@ -67,9 +67,6 @@ struct ModeDetailView: View {
                             Text(providerLabel(provider)).tag(provider)
                         }
                     }
-                    .onChange(of: mode.aiProvider) { _, newProvider in
-                        mode.parameters = newProvider.defaultParameters
-                    }
 
                     if !mode.parameters.isEmpty {
                         providerParametersSection
@@ -93,9 +90,6 @@ struct ModeDetailView: View {
                         ForEach(LocalAgentProvider.allCases, id: \.self) { provider in
                             Text(provider.displayName).tag(provider)
                         }
-                    }
-                    .onChange(of: mode.localAgentProvider) { _, newProvider in
-                        mode.parameters = newProvider.defaultParameters
                     }
 
                     localAgentParametersSection
@@ -192,11 +186,6 @@ struct ModeDetailView: View {
         // named here reports its progress while the person watches.
         .task { await transcriptionLibrary.watch() }
         .modifier(SelectAllOnAppear(focusState: $isNameFieldFocused))
-        .onChange(of: mode.processingType) { _, newType in
-            if newType == .localAgent && mode.parameters.isEmpty {
-                mode.parameters = mode.localAgentProvider.defaultParameters
-            }
-        }
     }
 
     // MARK: - Provider picker

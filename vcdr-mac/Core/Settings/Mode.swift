@@ -9,14 +9,6 @@ enum ProcessingType: String, Codable, CaseIterable {
 
 typealias AIProvider = CloudAIBackend
 
-extension CloudAIBackend {
-    /// Default parameters for this provider. Currently no cloud providers
-    /// expose model selection; each adapter keeps its Phase 1 default model.
-    var defaultParameters: [ModeParameter] {
-        []
-    }
-}
-
 enum PromptType: String, Codable, CaseIterable {
     case dictation
     case assistant
@@ -137,7 +129,25 @@ struct Mode: Identifiable, Codable, Equatable {
     var localAgentPassVariables: Bool
 
     // Parameters
-    var parameters: [ModeParameter]
+    private var bashScriptParameters: [ModeParameter]
+    private var localAgentParameters: [ModeParameter]
+
+    var parameters: [ModeParameter] {
+        get {
+            switch processingType {
+            case .none, .cloudAI: []
+            case .localAgent: localAgentParameters
+            case .bashScript: bashScriptParameters
+            }
+        }
+        set {
+            switch processingType {
+            case .none, .cloudAI: break
+            case .localAgent: localAgentParameters = newValue
+            case .bashScript: bashScriptParameters = newValue
+            }
+        }
+    }
 
     // Transcription
     /// Which Transcription Model this Mode records with, and what it tells it.
@@ -198,6 +208,12 @@ struct Mode: Identifiable, Codable, Equatable {
     }
 
     // MARK: - Parameter Mutation
+
+    mutating func resetParameters(to defaults: [ModeParameter]) {
+        bashScriptParameters = processingType == .bashScript ? defaults : []
+        localAgentParameters = processingType == .localAgent && !defaults.isEmpty
+            ? defaults : localAgentProvider.defaultParameters
+    }
 
     mutating func removeParameter(at index: Int) {
         parameters.remove(at: index)
@@ -260,7 +276,9 @@ struct Mode: Identifiable, Codable, Equatable {
         self.localAgentProvider = localAgentProvider
         self.localAgentPassVariables = localAgentPassVariables
         self.defaultOutputDestinationID = defaultOutputDestinationID
-        self.parameters = parameters
+        self.bashScriptParameters = processingType == .bashScript ? parameters : []
+        self.localAgentParameters = processingType == .localAgent && !parameters.isEmpty
+            ? parameters : localAgentProvider.defaultParameters
         self.transcriptionOverride = transcriptionOverride
         self.showPreview = showPreview
         self.saveResultToClipboard = saveResultToClipboard
@@ -280,7 +298,7 @@ struct Mode: Identifiable, Codable, Equatable {
         // Legacy keys (read-only, for migration)
         case aiPromptType, localAgentPromptType, localAgentSystemPrompt
         case defaultOutputDestinationID
-        case parameters
+        case parameters, bashScriptParameters, localAgentParameters
         case transcriptionOverride
         case showPreview
         case saveResultToClipboard
@@ -310,6 +328,8 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(localAgentPassVariables, forKey: .localAgentPassVariables)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
+        try container.encode(bashScriptParameters, forKey: .bashScriptParameters)
+        try container.encode(localAgentParameters, forKey: .localAgentParameters)
         try container.encode(transcriptionOverride, forKey: .transcriptionOverride)
         try container.encode(showPreview, forKey: .showPreview)
         try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
@@ -329,7 +349,6 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPromptEnabled = try container.decodeIfPresent(Bool.self, forKey: .systemPromptEnabled) ?? false
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         defaultOutputDestinationID = try container.decodeIfPresent(UUID.self, forKey: .defaultOutputDestinationID) ?? OutputDestination.builtInPasteID
-        parameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
         // A Mode written before Modes could pin a model overrides nothing, and
         // so records with the Default.
         transcriptionOverride = try container.decodeIfPresent(
@@ -383,6 +402,14 @@ struct Mode: Identifiable, Codable, Equatable {
         // Local agent fields — backward-compatible defaults
         localAgentProvider = try container.decodeIfPresent(LocalAgentProvider.self, forKey: .localAgentProvider) ?? .claudeCode
         localAgentPassVariables = try container.decodeIfPresent(Bool.self, forKey: .localAgentPassVariables) ?? false
+
+        let legacyParameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
+        bashScriptParameters = try container.decodeIfPresent([ModeParameter].self, forKey: .bashScriptParameters)
+            ?? (processingType == .bashScript ? legacyParameters : [])
+        let savedLocalParameters = try container.decodeIfPresent([ModeParameter].self, forKey: .localAgentParameters)
+            ?? (processingType == .localAgent ? legacyParameters : [])
+        localAgentParameters = savedLocalParameters.isEmpty
+            ? localAgentProvider.defaultParameters : savedLocalParameters
 
         // Unified prompt type (new key takes precedence over legacy)
         if let rawPromptType = try container.decodeIfPresent(String.self, forKey: .promptType) {
