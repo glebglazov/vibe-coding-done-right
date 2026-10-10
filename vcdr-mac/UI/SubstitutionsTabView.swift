@@ -41,13 +41,11 @@ struct SubstitutionsListView: View {
                 }
             }
         }
-        .overlay(alignment: .topTrailing) {
-            SyncIndicator(reconciler: substitutionSync)
-                .padding(.trailing, 16)
-                .padding(.top, 8)
-        }
         .navigationTitle("Dictionary")
         .toolbar {
+            ToolbarItem(placement: .status) {
+                SyncIndicator(reconciler: substitutionSync)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button(action: add) {
                     Image(systemName: "plus")

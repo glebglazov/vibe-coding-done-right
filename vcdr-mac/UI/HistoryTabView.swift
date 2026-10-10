@@ -31,13 +31,11 @@ struct HistoryTabView: View {
                 .listStyle(.inset)
             }
         }
-        .overlay(alignment: .topTrailing) {
-            SyncIndicator(reconciler: historySync)
-                .padding(.trailing, 16)
-                .padding(.top, 8)
-        }
         .navigationTitle("History")
         .toolbar {
+            ToolbarItem(placement: .status) {
+                SyncIndicator(reconciler: historySync)
+            }
             if !history.conversations.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
