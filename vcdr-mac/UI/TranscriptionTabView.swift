@@ -43,6 +43,19 @@ struct TranscriptionTabView: View {
                         Text(failure.remedy)
                     }
                 }
+
+                // Only the family the Default belongs to: the settings on this
+                // screen are the ones the next recording carries, so a family
+                // that is not running has nothing to say here. Its values are
+                // kept, not shown — making it the Default brings them back.
+                TranscriptionModelSettingsView(
+                    family: runningFamily,
+                    settings: Binding(
+                        get: { settings.transcriptionSettings.modelSettings[runningFamily] },
+                        set: { settings.transcriptionSettings.modelSettings[runningFamily] = $0 }
+                    ),
+                    spellingHints: spellingHints
+                )
             }
 
             Section("Library") {
@@ -54,21 +67,6 @@ struct TranscriptionTabView: View {
                         remove: { remove(entry.model) }
                     )
                 }
-            }
-
-            // Only the family the Default belongs to: the settings on this
-            // screen are the ones the next recording carries, so a family
-            // that is not running has nothing to say here. Its values are
-            // kept, not shown — making it the Default brings them back.
-            Section("\(runningFamily.displayName) Settings") {
-                TranscriptionModelSettingsView(
-                    family: runningFamily,
-                    settings: Binding(
-                        get: { settings.transcriptionSettings.modelSettings[runningFamily] },
-                        set: { settings.transcriptionSettings.modelSettings[runningFamily] = $0 }
-                    ),
-                    spellingHints: spellingHints
-                )
             }
 
             Section("Pre-processing") {
