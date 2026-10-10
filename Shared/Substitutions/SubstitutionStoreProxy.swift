@@ -2,10 +2,12 @@ import Foundation
 import Observation
 
 /// Queues Substitution edits until a real store is assigned, then flushes them.
-/// Mirrors the real store's observable `substitutions` so views and the
-/// text-processing pipeline reading through the proxy get proper @Observation
-/// invalidation. Lets `AppDependencies` hand out a stable store reference at
-/// launch while the real (possibly iCloud-backed) store is resolved off-main.
+/// Lets `AppDependencies` hand out a stable store reference at launch while the
+/// real (possibly iCloud-backed) store is resolved off-main.
+///
+/// Once the real store is assigned, `substitutions` reads straight from it, so
+/// an entry a sync pass brings in reaches the screens and the text-processing
+/// pipeline the moment the store has it, and redraws whatever read it.
 ///
 /// Mirrors `HistoryStoreProxy` — the same shell-first bootstrap pattern.
 @MainActor
@@ -20,13 +22,16 @@ final class SubstitutionStoreProxy: SubstitutionStore {
     private var realStore: (any SubstitutionStore)?
     private var pendingOps: [PendingOp] = []
 
-    private(set) var substitutions: [Substitution] = []
+    /// What the edits made before the real store was assigned add up to, shown
+    /// until it is.
+    private var pendingSubstitutions: [Substitution] = []
 
-    /// Installs the resolved store, replays any edits made before it was ready,
-    /// then adopts its snapshot.
+    var substitutions: [Substitution] {
+        realStore?.substitutions ?? pendingSubstitutions
+    }
+
+    /// Installs the resolved store and replays any edits made before it was ready.
     func setRealStore(_ store: any SubstitutionStore) {
-        realStore = store
-
         for op in pendingOps {
             switch op {
             case .upsert(let substitution): store.upsert(substitution)
@@ -34,39 +39,31 @@ final class SubstitutionStoreProxy: SubstitutionStore {
             }
         }
         pendingOps.removeAll()
+        pendingSubstitutions.removeAll()
 
-        syncFromRealStore()
+        realStore = store
     }
 
     func upsert(_ substitution: Substitution) {
         if let real = realStore {
             real.upsert(substitution)
-            syncFromRealStore()
         } else {
             pendingOps.append(.upsert(substitution))
-            // Optimistic in-memory update so the UI reflects the edit immediately.
-            substitutions.removeAll { $0.id == substitution.id }
-            substitutions.insert(substitution, at: 0)
+            pendingSubstitutions.removeAll { $0.id == substitution.id }
+            pendingSubstitutions.insert(substitution, at: 0)
         }
     }
 
     func delete(_ substitution: Substitution) {
         if let real = realStore {
             real.delete(substitution)
-            syncFromRealStore()
         } else {
             pendingOps.append(.delete(substitution))
-            substitutions.removeAll { $0.id == substitution.id }
+            pendingSubstitutions.removeAll { $0.id == substitution.id }
         }
     }
 
     func reload() {
         realStore?.reload()
-        syncFromRealStore()
-    }
-
-    private func syncFromRealStore() {
-        guard let realStore else { return }
-        substitutions = realStore.substitutions
     }
 }

@@ -55,7 +55,7 @@ struct SubstitutionsListView: View {
                 .help("Add new entry")
             }
         }
-        .task {
+        .onChange(of: viewModel.persisted, initial: true) {
             viewModel.syncFromStore()
         }
     }

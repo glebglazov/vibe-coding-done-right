@@ -80,7 +80,7 @@ struct SubstitutionsSettings: View {
                 EditButton()
             }
         }
-        .task {
+        .onChange(of: viewModel.persisted, initial: true) {
             viewModel.syncFromStore()
         }
     }

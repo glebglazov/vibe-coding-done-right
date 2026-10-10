@@ -11,9 +11,9 @@ import SwiftUI
 /// doesn't jump while the user is typing — the store re-sorts newest-edited
 /// first on every `upsert`, which would otherwise reorder rows mid-edit. Edits
 /// still flow straight to the store, so persistence and cross-device sync are
-/// never deferred. `syncFromStore()` re-adopts the persisted snapshot when the
-/// tab (re)appears, covering the launch race where the store finishes its
-/// deferred bootstrap after this model was created.
+/// never deferred. `syncFromStore()` takes in what the store holds whenever it
+/// changes — the deferred bootstrap finishing, or a sync pass bringing in
+/// another device's entries — without moving rows or undoing typing.
 @MainActor
 @Observable
 final class SubstitutionsViewModel {
@@ -28,10 +28,30 @@ final class SubstitutionsViewModel {
         self.drafts = store.substitutions
     }
 
-    /// Re-adopts the persisted snapshot. Called when the tab appears so a list
-    /// built before the store's deferred bootstrap finished still shows entries.
+    /// What the store holds, for a view to watch so it can call
+    /// `syncFromStore()` when it changes.
+    var persisted: [Substitution] {
+        store.substitutions
+    }
+
+    /// Takes in what the store holds, keeping the rows where they are. A row
+    /// whose commit would change nothing keeps the draft, because that draft
+    /// can hold what a commit tidies away while the user is still typing: a
+    /// trailing space, or a blank Trigger row for the caret. A row with no
+    /// Replacement is a draft the store never got, so it stays. Any other row
+    /// the store no longer has was deleted, here or on another device. Entries
+    /// new to this list go first, as the store orders them.
     func syncFromStore() {
-        drafts = store.substitutions
+        let stored = store.substitutions
+        let storedByID = Dictionary(uniqueKeysWithValues: stored.map { ($0.id, $0) })
+        let kept: [Substitution] = drafts.compactMap { draft in
+            guard let persisted = storedByID[draft.id] else {
+                return draft.replacement.isEmpty ? draft : nil
+            }
+            return draft.tidiedForCommit().wouldNotChange(persisted) ? draft : persisted
+        }
+        let keptIDs = Set(kept.map(\.id))
+        drafts = stored.filter { !keptIDs.contains($0.id) } + kept
     }
 
     /// Appends a blank Substitution to the UI list and returns its id so the
