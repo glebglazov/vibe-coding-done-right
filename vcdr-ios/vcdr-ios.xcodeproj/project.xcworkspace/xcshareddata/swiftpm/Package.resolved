@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/KeyboardKit/KeyboardKit.git",
       "state" : {
-        "revision" : "9b38e0a6aa6b2a6a2dab2c35acfb76ee9580c1da",
-        "version" : "10.3.1"
+        "revision" : "fd7a231b58e1485b5226fc5b136bcd45d775fc21",
+        "version" : "10.9.7"
       }
     },
     {
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/LicenseKit/LicenseKit.git",
       "state" : {
-        "revision" : "f9bdcdc3472918c6da7566940a12936374f0faee",
-        "version" : "2.1.3"
+        "revision" : "7a4b1097c920aae3053c307741497568e43a2f66",
+        "version" : "2.2.4"
       }
     },
     {
