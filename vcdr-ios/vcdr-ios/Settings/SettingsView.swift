@@ -24,6 +24,7 @@ struct SettingsView: View {
         HistorySync.syncEnabledDefaultsKey,
         store: SharedConstants.sharedDefaults
     ) private var syncHistoryViaICloud: Bool = true
+    @AppStorage(HostReturn.enabledKey) private var hostReturnEnabled = true
     @AppStorage(HotSessionTimeout.storageKey)
     private var hotSessionTimeoutSeconds: Int = HotSessionTimeout.defaultValue.rawValue
     @AppStorage(
@@ -243,6 +244,7 @@ struct SettingsView: View {
     private var diagnosticsSettingsSection: some View {
         Section {
             Toggle("Show Diagnostics", isOn: $diagnosticsUnlock.isShown)
+            Toggle("Return to App After Keyboard Start", isOn: $hostReturnEnabled)
             Button("Forget Diagnostics", role: .destructive) {
                 diagnosticsUnlock.forget()
             }

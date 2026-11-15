@@ -31,7 +31,8 @@ struct HostReturnTests {
             openApp: { host in
                 openedSink.yield(host)
                 return true
-            }
+            },
+            isEnabled: { true }
         )
 
         hostReturn.recordDeepLinkArrived()
@@ -40,5 +41,26 @@ struct HostReturnTests {
 
         var hosts = opened.makeAsyncIterator()
         #expect(await hosts.next() == Self.muxify)
+    }
+
+    @Test("with the Diagnostics switch off, a keyboard start stays in VCDR", .timeLimit(.minutes(1)))
+    func switchOffStays() async throws {
+        let source = FakeHostAppSource()
+        source.state = .observing(latest: HostObservation(host: Self.muxify, observedAt: Date()))
+        var openedHosts: [HostBundleID] = []
+        let hostReturn = HostReturn(
+            source: source,
+            runProgress: { .capturing },
+            openApp: { host in
+                openedHosts.append(host)
+                return true
+            },
+            isEnabled: { false }
+        )
+
+        hostReturn.recordDeepLinkArrived()
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(openedHosts.isEmpty)
     }
 }

@@ -12,10 +12,13 @@ final class HostReturn {
     // MARK: - Constants
 
     private static let millisecondsPerSecond: Double = 1000
+    /// Diagnostics switch: off keeps the user in VCDR after a keyboard start.
+    static let enabledKey = "hostReturnEnabled"
 
     @ObservationIgnored private let source: any HostAppSource
     @ObservationIgnored private let runProgress: @MainActor () -> HostReturnRunProgress
     @ObservationIgnored private let openApp: @MainActor (HostBundleID) -> Bool
+    @ObservationIgnored private let isEnabled: () -> Bool
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var attempt: Task<Void, Never>?
     private var deadlinePassed = false
@@ -24,11 +27,13 @@ final class HostReturn {
         source: any HostAppSource,
         runProgress: @escaping @MainActor () -> HostReturnRunProgress,
         openApp: @escaping @MainActor (HostBundleID) -> Bool,
+        isEnabled: @escaping () -> Bool = { UserDefaults.standard.object(forKey: HostReturn.enabledKey) as? Bool ?? true },
         now: @escaping () -> Date = Date.init
     ) {
         self.source = source
         self.runProgress = runProgress
         self.openApp = openApp
+        self.isEnabled = isEnabled
         self.now = now
     }
 
@@ -39,6 +44,10 @@ final class HostReturn {
     /// Call when the `record` deep link arrives, after the coordinator has
     /// marked the run Arming. A repeated link joins the attempt in flight.
     func recordDeepLinkArrived() {
+        guard isEnabled() else {
+            Logger.app.notice("Host Return: off in Diagnostics Settings")
+            return
+        }
         guard attempt == nil else {
             Logger.app.info("Host Return: an attempt is already in flight")
             return
