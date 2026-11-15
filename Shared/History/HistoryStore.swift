@@ -13,7 +13,9 @@ protocol HistoryStore: AnyObject, Observable {
     /// Conversations currently loaded in memory, newest first.
     var conversations: [Conversation] { get }
 
-    /// Most recently modified conversation on disk, if any is loaded.
+    /// The newest normal conversation in the store, loaded or not, whatever
+    /// the filter. Copy Latest and the menu read it, and a Discard must never
+    /// reach them.
     var latestConversation: Conversation? { get }
 
     /// Whether there are more conversations on disk beyond what's loaded.
@@ -27,13 +29,46 @@ protocol HistoryStore: AnyObject, Observable {
         label: String?
     )
 
-    /// Writes a tombstone event and removes the conversation from memory.
-    /// Leaves the snapshot file on disk so unsynced peers can merge correctly.
-    func removeConversation(_ conversation: Conversation)
+    /// Creates a Discarded Conversation: the verbatim transcript of a run the
+    /// user discarded, with no output, and the choice to process it with later.
+    func recordDiscarded(
+        conversationID: UUID,
+        inputSegments: [InputSegment],
+        choice: RecordedOutputChoice
+    )
+
+    /// Gives a Discarded Conversation its processed output and makes it a
+    /// normal entry. It keeps its capture time and its place in the list. Does
+    /// nothing when the conversation is gone.
+    func resolveDiscarded(conversationID: UUID, output: String, label: String?)
+
+    /// Which conversations `conversations` and paging show. A change starts
+    /// paging again from the first page.
+    var filter: HistoryFilter { get set }
+
+    /// How many Discarded Conversations the store holds, loaded or not.
+    var discardedCount: Int { get }
+
+    /// Writes a tombstone event and removes the conversation, loaded or not.
+    /// Does nothing when the store does not hold it. Leaves the snapshot file
+    /// on disk so unsynced peers can merge correctly.
+    func removeConversation(id: UUID)
 
     /// Tombstones every loaded conversation and empties the in-memory list.
     func clearAll()
 
     /// Reads up to one page of older conversations from disk.
     func loadNextPage()
+}
+
+nonisolated enum HistoryFilter: Equatable, Sendable {
+    case all
+    case discarded
+
+    func admits(_ conversation: Conversation) -> Bool {
+        switch self {
+        case .all: true
+        case .discarded: conversation.status.isDiscarded
+        }
+    }
 }

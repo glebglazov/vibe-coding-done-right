@@ -41,6 +41,9 @@ final class FakeCapturePanel: CapturePanelSurface {
     var lastPreviewText: String?
     var lastErrorMessage: String?
     var lastAIErrorMessage: String?
+    /// Runs inside `show`, which the session calls while it prepares to
+    /// record: the seam a test uses to act in that phase.
+    var onShow: (() -> Void)?
 
     // MARK: - CapturePanelSurface methods
 
@@ -49,6 +52,7 @@ final class FakeCapturePanel: CapturePanelSurface {
         lastShownConfig = config
         isVisible = true
         isMinimized = config.minimized
+        onShow?()
     }
 
     func dismiss() {

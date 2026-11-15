@@ -1,4 +1,10 @@
+---
+status: superseded by ADR-0010
+---
+
 # Discard is announced after a dwell, not signalled at touch-down
+
+> **Superseded by [ADR-0010](0010-discard-saves-the-run-to-history.md):** Discard is no longer a hold on STOP. STOP is a plain tap, and Discard is a separate ✕ control. A Discard ends the run at once, and a Discard during Capturing saves the run's verbatim transcript to History as a Discarded Conversation instead of deleting it. AI Prompt Mode and Text Style are locked during Arming and Capturing, which reverses this ADR's amendment that kept the pills usable for the whole run.
 
 Holding Stop shows nothing for the first second (the Discard Dwell). Only then does the Discard Warning appear — the surface around Stop reddening over two seconds while haptic ticks accelerate — with Discard firing at a three-second Hold Threshold. The control keeps saying "STOP" throughout, and a reserved row above the controls carries the teaching — the Discard Hint at rest, and live narration of the escape hatch and the deadline once the warning is up.
 

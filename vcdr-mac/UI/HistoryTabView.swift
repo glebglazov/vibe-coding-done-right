@@ -4,26 +4,20 @@ struct HistoryTabView: View {
     let history: any HistoryStore
     let historySync: SyncReconciler?
     let settings: AppSettings
+    let reprocessor: any ConversationReprocessor
     @State private var showClearAllConfirmation = false
 
     var body: some View {
         Group {
             if history.conversations.isEmpty {
-                ContentUnavailableView(
-                    "No History Yet",
-                    systemImage: "text.bubble",
-                    description: Text("Your history will appear here.")
-                )
+                emptyView
             } else {
                 List {
                     ForEach(history.conversations) { conversation in
-                        ConversationRowView(
-                            conversation: conversation,
-                            onDelete: { history.removeConversation(conversation) }
-                        )
+                        row(for: conversation)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button("Delete", role: .destructive) {
-                                history.removeConversation(conversation)
+                                history.removeConversation(id: conversation.id)
                             }
                         }
                     }
@@ -35,6 +29,14 @@ struct HistoryTabView: View {
         .toolbar {
             ToolbarItem(placement: .status) {
                 SyncIndicator(reconciler: historySync)
+            }
+            ToolbarItem(placement: .principal) {
+                Picker("Show", selection: filter) {
+                    Text("All").tag(HistoryFilter.all)
+                    Text("Discarded · \(history.discardedCount)").tag(HistoryFilter.discarded)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
             }
             if !history.conversations.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
@@ -57,6 +59,48 @@ struct HistoryTabView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This permanently deletes all transcriptions. This cannot be undone.")
+        }
+    }
+
+    private var filter: Binding<HistoryFilter> {
+        Binding(get: { history.filter }, set: { history.filter = $0 })
+    }
+
+    @ViewBuilder
+    private var emptyView: some View {
+        switch history.filter {
+        case .all:
+            ContentUnavailableView(
+                "No History Yet",
+                systemImage: "text.bubble",
+                description: Text("Your history will appear here.")
+            )
+        case .discarded:
+            ContentUnavailableView(
+                "No Discarded Entries",
+                systemImage: "xmark.circle",
+                description: Text("A recording you discard with its hotkey appears here.")
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func row(for conversation: Conversation) -> some View {
+        if case .discarded(let choice) = conversation.status {
+            DiscardedConversationRowView(
+                conversation: conversation,
+                choice: choice,
+                modes: settings.modes,
+                isProcessing: reprocessor.processingIDs.contains(conversation.id),
+                failure: reprocessor.failures[conversation.id],
+                onProcess: { mode in Task { await reprocessor.process(conversation, with: mode) } },
+                onDelete: { history.removeConversation(id: conversation.id) }
+            )
+        } else {
+            ConversationRowView(
+                conversation: conversation,
+                onDelete: { history.removeConversation(id: conversation.id) }
+            )
         }
     }
 }

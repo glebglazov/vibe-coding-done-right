@@ -24,26 +24,22 @@ extension CaptureSession {
             // the hotkey never refuses. This is the one moment the app cannot
             // proceed without the model, so the wait lives here. The pill has
             // been narrating the phase since the recording began.
-            while !(await provider.isReady) {
-                // A Preparation Failure ends the wait rather than outlasting
-                // it: the model is not coming, and the run must say so instead
-                // of holding the audio forever.
-                if case .failed(let failure) = await provider.initPhase {
-                    throw TranscriptionError.initializationFailed(failure)
-                }
-                try Task.checkCancellation()
-                try await Task.sleep(for: Self.modelReadinessPollingInterval)
-            }
-
-            let transcriptionStart = ContinuousClock.now
-            let rawText = try await provider.transcribe(
-                audioFileURL: audioURL,
-                settings: effective.settings,
-                spellingHints: SpellingHints(substitutionStore.substitutions)
-            )
+            try await provider.waitUntilReady(pollingEvery: Self.modelReadinessPollingInterval)
             try Task.checkCancellation()
-            let elapsed = transcriptionStart.duration(to: .now)
-            Logger.app.info("Transcribed in \(elapsed): \(rawText)")
+
+            // A run discarded just before this one may still be decoding.
+            let rawText = try await decodeTurnstile.takingTurn {
+                try Task.checkCancellation()
+                let transcriptionStart = ContinuousClock.now
+                let text = try await provider.transcribe(
+                    audioFileURL: audioURL,
+                    settings: effective.settings,
+                    spellingHints: SpellingHints(substitutionStore.substitutions)
+                )
+                Logger.app.info("Transcribed in \(transcriptionStart.duration(to: .now)): \(text)")
+                return text
+            }
+            try Task.checkCancellation()
 
             try? FileManager.default.removeItem(at: audioURL)
 

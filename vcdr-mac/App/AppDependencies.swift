@@ -22,6 +22,7 @@ final class AppDependencies {
     let styleResolution: StyleResolutionPipeline
     let modeSwitcherCoordinator: ModeSwitcherCoordinator
     let copyLatestCaptureHandler: CopyLatestCaptureHandler
+    let conversationReprocessor: PipelineConversationReprocessor
     let hotkeyRegistry = SuspendableHotkeyRegistry(wrapping: CarbonHotkeyRegistry())
 
     #if DEBUG
@@ -125,6 +126,18 @@ final class AppDependencies {
         )
 
         let capturePanel = CapturePanel()
+        let decodeTurnstile = DecodeTurnstile()
+
+        let styleRegistry = self.styleRegistry
+        let styleResolution = self.styleResolution
+        self.conversationReprocessor = PipelineConversationReprocessor(
+            history: history,
+            settings: settings,
+            substitutionStore: substitutions,
+            aiPort: AIProcessingAdapter(),
+            styleWithID: { await styleRegistry.style(withID: $0) },
+            currentStyle: { styleResolution.currentStyle }
+        )
 
         let textProcessor = TextProcessor(
             aiPort: AIProcessingAdapter(),
@@ -155,7 +168,13 @@ final class AppDependencies {
                 textProcessor: textProcessor,
                 substitutionStore: substitutions,
                 overrides: overrides,
-                styleProvider: { .casual }
+                styleProvider: { .casual },
+                discardedCaptures: VerbatimDiscardedCaptureFinalizer(
+                    history: history,
+                    decodeTurnstile: decodeTurnstile,
+                    modelReadinessPollingInterval: CaptureSession.modelReadinessPollingInterval
+                ),
+                decodeTurnstile: decodeTurnstile
             )
         )
         self.session = captureSession

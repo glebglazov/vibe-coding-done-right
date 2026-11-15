@@ -107,7 +107,8 @@ struct AIProviderFactoryTests {
     }
 }
 
-private actor KeyCapturingAIProcessing: AIProcessingPort {
+@MainActor
+private final class KeyCapturingAIProcessing: AIProcessingPort {
     private(set) var receivedKey: String?
 
     func process(

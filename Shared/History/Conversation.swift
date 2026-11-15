@@ -12,6 +12,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
     /// nudged forward when a delete has to beat the edit it buries, so it is a
     /// sync mechanism and never a date to show anyone.
     var lastUpdated: Date
+    var status: ConversationStatus
     var schemaVersion: Int
     /// Top-level JSON keys written by a newer schema that this binary doesn't
     /// know about. Preserved verbatim so old readers round-trip new data without
@@ -50,6 +51,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
             label: label,
             capturedAt: capturedAt,
             lastUpdated: lastUpdated,
+            status: status,
             schemaVersion: schemaVersion,
             extras: extras
         )
@@ -62,6 +64,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
         label: String?,
         capturedAt: Date? = nil,
         lastUpdated: Date,
+        status: ConversationStatus = .normal,
         schemaVersion: Int = Conversation.currentSchemaVersion,
         extras: [String: AnyJSON] = [:]
     ) {
@@ -73,6 +76,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
         // covers records written before capture time was stored separately.
         self.capturedAt = capturedAt ?? lastUpdated
         self.lastUpdated = lastUpdated
+        self.status = status
         self.schemaVersion = schemaVersion
         self.extras = extras
     }
@@ -83,7 +87,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
 
     /// Known top-level keys this binary recognizes. Anything else lands in `extras`.
     private static let knownKeys: Set<String> = [
-        "id", "segments", "output", "label", "capturedAt", "lastUpdated", "schemaVersion",
+        "id", "segments", "output", "label", "capturedAt", "lastUpdated", "schemaVersion", "discarded",
         // Legacy / backward-compat keys:
         "modeID", "modeName", "turns",
     ]
@@ -122,6 +126,11 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
             output = try container.decodeIfPresent(String.self, forKey: AnyCodingKey("output"))
         }
 
+        // An older record has no "discarded" key, and that means a normal entry.
+        let status: ConversationStatus = try container
+            .decodeIfPresent(RecordedOutputChoice.self, forKey: AnyCodingKey("discarded"))
+            .map { .discarded($0) } ?? .normal
+
         // Capture any unknown top-level keys into extras so future-schema
         // fields round-trip through older readers unchanged.
         var extras: [String: AnyJSON] = [:]
@@ -138,6 +147,7 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
             label: label,
             capturedAt: capturedAt,
             lastUpdated: lastUpdated,
+            status: status,
             schemaVersion: schemaVersion,
             extras: extras
         )
@@ -152,6 +162,9 @@ struct Conversation: Identifiable, Equatable, Codable, Sendable {
         try container.encode(capturedAt, forKey: AnyCodingKey("capturedAt"))
         try container.encode(lastUpdated, forKey: AnyCodingKey("lastUpdated"))
         try container.encode(schemaVersion, forKey: AnyCodingKey("schemaVersion"))
+        if case .discarded(let choice) = status {
+            try container.encode(choice, forKey: AnyCodingKey("discarded"))
+        }
 
         // Re-emit preserved unknown fields verbatim. If a caller explicitly
         // stored a value under a known key, the known-key write above wins.

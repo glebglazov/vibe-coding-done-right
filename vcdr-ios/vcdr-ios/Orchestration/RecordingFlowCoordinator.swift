@@ -33,8 +33,10 @@ private final class PrewarmBarrierContinuation: @unchecked Sendable {
 ///   settings listeners.
 /// - `RecordingFlowCoordinator+AIProcessing` — AI processing + retry.
 /// - `RecordingFlowCoordinator+StatePublishing` — recording-state publishing.
-/// - `RecordingFlowCoordinator+RunControl` — starting, stopping and
-///   discarding the active Recording Run.
+/// - `RecordingFlowCoordinator+RunControl` — starting and stopping the
+///   active Recording Run.
+/// - `RecordingFlowCoordinator+Discard` — Discard, and cancelling a run for
+///   a caller that is not the user.
 ///
 /// Members shared across those files are `internal` (or `private(set)`) rather
 /// than `private` because Swift scopes `private` to a single file; the
@@ -56,8 +58,6 @@ final class RecordingFlowCoordinator {
         /// catches up at Finalizing (`.transcribing`).
         case recording
         case transcribing
-        /// Brief Discard acknowledgement — auto-reverts to idle or ready.
-        case cancelled
         case complete(String)
         case error(String)
     }
@@ -71,6 +71,10 @@ final class RecordingFlowCoordinator {
     }
 
     var state: State = .idle
+    /// What the model preparation last published, while a run may cover it:
+    /// `.idle`, `.initializing`, `.ready`, or the failure. A run that ends
+    /// with nothing to show goes back to it.
+    @ObservationIgnored private(set) var readinessState: State = .idle
     private(set) var initProgress: String = ModelPreparationPhase.initialLabel
     /// True while artifacts are already on disk and Transcription Readiness is
     /// still pending. The hero may show READY because Recording Runs can begin
@@ -98,8 +102,16 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Setting Overrides
 
+    /// AI Prompt Mode and Text Style are fixed while a run listens. A deep-link
+    /// start shows Arming before its run exists, so that state locks them too.
+    var areOutputChoicesLocked: Bool {
+        guard let phase = activeRunPhase else { return state == .arming }
+        return phase.locksOutputChoices
+    }
+
     /// Cycles the AI state through Verbatim → Dictation → Assistant → Verbatim.
     func cycleAIState() {
+        guard !areOutputChoicesLocked else { return }
         switch selectedPromptMode {
         case .verbatim: selectedPromptMode = .dictation
         case .dictation: selectedPromptMode = .assistant
@@ -109,6 +121,7 @@ final class RecordingFlowCoordinator {
     }
 
     func cycleTextStyle() {
+        guard !areOutputChoicesLocked else { return }
         let all = TextStyle.allCases
         let idx = all.firstIndex(of: currentTextStyle) ?? 0
         currentTextStyle = all[(idx + 1) % all.count]
@@ -173,6 +186,11 @@ final class RecordingFlowCoordinator {
     private(set) var activeRun: ActiveRecordingRun?
     let runPresence: any RecordingRunPresence
     let backgroundTasks: any BackgroundTaskRunner
+    /// Takes the history writes that can come before `history` is ready: a
+    /// Discarded Conversation, and its later processing.
+    let historyWrites: HistoryStoreProxy
+    let discardedRunFinalizer: any DiscardedRunFinalizer
+    let discardNotes = DiscardNoteCenter()
     /// Text sent to AI processing — retained for the existing Done-page retry action.
     var aiInputText: String = ""
     /// Text selections captured by the keyboard extension during recording (assistant mode only).
@@ -192,6 +210,8 @@ final class RecordingFlowCoordinator {
         transcriptionProvider: (any StreamingTranscriptionProvider)? = nil,
         hotMicSession: HotMicSession? = nil,
         backgroundTasks: (any BackgroundTaskRunner)? = nil,
+        historyWrites: HistoryStoreProxy? = nil,
+        discardedRunFinalizer: (any DiscardedRunFinalizer)? = nil,
         makeStreamingSession: (() -> any RecordingStreamingSession)? = nil
     ) {
         let engine = recordingEngine ?? AudioRecorder()
@@ -209,7 +229,12 @@ final class RecordingFlowCoordinator {
         self.keyboardChannel = keyboardChannel
         self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, presence: presence, keyboard: keyboardChannel)
         self.runPresence = presence
-        self.backgroundTasks = backgroundTasks ?? UIKitBackgroundTaskRunner()
+        let backgroundTasks = backgroundTasks ?? UIKitBackgroundTaskRunner()
+        let historyWrites = historyWrites ?? HistoryStoreProxy()
+        self.backgroundTasks = backgroundTasks
+        self.historyWrites = historyWrites
+        self.discardedRunFinalizer = discardedRunFinalizer
+            ?? HistoryDiscardedRunFinalizer(history: historyWrites, backgroundTasks: backgroundTasks)
         self.makeStreamingSession = makeStreamingSession
     }
 
@@ -293,6 +318,7 @@ final class RecordingFlowCoordinator {
         let history = LocalHistoryStore(snapshot: snapshot)
         self.history = history
         historyCompletionAdapter.setHistory(history)
+        historyWrites.setRealStore(history)
         LaunchTelemetry.mark(.historyReadable)
         // The record files are the sync transport, not the read path: the
         // reconciler resolves the iCloud container and merges it in behind a
@@ -439,6 +465,7 @@ final class RecordingFlowCoordinator {
             Logger.app.info("[InitTiming] \(provider.model.rawValue) launch preparation done at +\(ContinuousClock.now - initStart)")
 
             pollTask.cancel()
+            readinessState = .ready
             // Don't overwrite state if recording started while we were initializing
             if state == .initializing {
                 state = .ready
@@ -474,8 +501,9 @@ final class RecordingFlowCoordinator {
         } catch {
             pollTask.cancel()
             isModelWarming = false
+            readinessState = .error("Model initialization failed: \(error.localizedDescription)")
             if state == .initializing || state == .ready {
-                state = .error("Model initialization failed: \(error.localizedDescription)")
+                state = readinessState
             }
             Logger.app.error("Model init failed: \(error)")
         }
@@ -485,9 +513,11 @@ final class RecordingFlowCoordinator {
         switch predictedVerdict {
         case .coldDownload:
             isModelWarming = false
+            readinessState = .initializing
             state = .initializing
         case .coldSpecialize, .warm:
             isModelWarming = true
+            readinessState = .ready
             if state == .idle || state == .initializing {
                 state = .ready
             }
@@ -529,19 +559,6 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Recording State Machine
 
-    /// Surfaces the optimistic "CANCELLED" flash for ~1s, then returns to the
-    /// given steady state. Discard always shows this on the app surface; the
-    /// keyboard shows its own optimistic flash (ADR-0003).
-    func flashCancelled(revertingTo target: State) {
-        state = .cancelled
-        Task {
-            try? await Task.sleep(for: .seconds(HoldToDiscardController.cancelledFlashDuration))
-            if state == .cancelled {
-                state = target
-            }
-        }
-    }
-
     /// Publishes cancellation — never Empty Result, never idle — because that
     /// is what the run will terminate in once the in-flight start tears it
     /// down. Publishing here rather than waiting for that teardown is what
@@ -552,7 +569,7 @@ final class RecordingFlowCoordinator {
             "Publishing cancelled: stop or Discard landed during Arming — no audio was captured"
         )
         if var active = activeRun {
-            active.phase = .cancellingArming
+            active.phase = .cancelling
             setActiveRun(active)
         }
         state = .idle
@@ -591,7 +608,7 @@ final class RecordingFlowCoordinator {
         switch active.phase {
         case .arming: wasStillArming = true
         case .capturing: wasStillArming = false
-        case .cancellingArming, .finalizing: return
+        case .cancelling, .finalizing: return
         }
 
         state = .error(failure.message)
@@ -619,6 +636,7 @@ final class RecordingFlowCoordinator {
             ),
             transcriptProcessor: makeTranscriptProcessor(),
             completionAdapters: completionAdapters(for: origin),
+            decodeInFlight: discardedRunFinalizer.decodeInFlight,
             currentSettings: { [weak self] in
                 guard let self else {
                     return RecordingRun.Settings(

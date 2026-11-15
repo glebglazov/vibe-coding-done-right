@@ -161,7 +161,8 @@ struct MainWindowView: View {
                         HistoryTabView(
                             history: dependencies.transcriptionHistory,
                             historySync: dependencies.historySync,
-                            settings: dependencies.settings
+                            settings: dependencies.settings,
+                            reprocessor: dependencies.conversationReprocessor
                         )
                     case .diagnostics:
                         #if DEBUG

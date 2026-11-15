@@ -24,9 +24,9 @@ struct CompactKeyboardView: View {
     /// Read by `KeyboardDisplayModeManager` to pin the Compact height — every
     /// point above this is dead space between the controls and the host app.
     ///
-    /// The status text costs nothing here: it shares the control row's line
-    /// with the pills rather than claiming one of its own, so the frame is the
-    /// same whether or not a run is in progress. See vcdr-ios ADR-0004.
+    /// The Discard control costs nothing here: it takes the settings pills'
+    /// place on the control row during a run, so the frame is the same
+    /// whether or not a run is in progress (ADR-0010).
     static var intrinsicHeight: CGFloat {
         topPadding + pillHeight + bottomPadding
     }
@@ -34,20 +34,9 @@ struct CompactKeyboardView: View {
     @ObservedObject var controller: KeyboardViewController
     @ObservedObject var reachability: KeyboardReachabilityMonitor
 
-    /// Drives the Discard Warning wash. Compact paints no background of its own
-    /// so the host app shows through; the wash is the one exception, and only
-    /// for as long as a hold lasts — at rest its progress is 0 and the row is
-    /// fully transparent again.
-    @State private var wash = DiscardWarningWashState()
-
-    /// Where the current hold is, for the status row's narration. Separate from
-    /// `wash` because the words must go the instant the hold ends, while the
-    /// colour is still easing out.
-    @State private var narration = HoldNarrationState()
-
     var body: some View {
         HStack {
-            KeyboardStripLeading(controller: controller, narration: narration)
+            KeyboardStripLeading(controller: controller)
             Spacer()
             DictateActionButton(
                 dictationState: controller.dictationState,
@@ -56,22 +45,9 @@ struct CompactKeyboardView: View {
                 captureCount: controller.captureCount,
                 onStart: { controller.startRecordingFromKeyboard() },
                 onStop: { controller.stopAndWaitForResult() },
-                onDiscard: {
-                    wash.beginDiscardUnwind()
-                    narration.end()
-                    controller.discardRecordingFromKeyboard()
-                },
                 onInsert: { controller.insertPendingText() },
                 onCapture: { controller.captureSelectedText() },
-                onShowFailure: { controller.showFailureReason() },
-                onWarningRamp: {
-                    wash.ramp(to: $0)
-                    narration.ramp(to: $0)
-                },
-                onWarningEnd: {
-                    wash.end()
-                    narration.end()
-                }
+                onShowFailure: { controller.showFailureReason() }
             )
             KeyboardModeToggleButton(direction: .expand) {
                 controller.expandKeyboard()
@@ -79,15 +55,6 @@ struct CompactKeyboardView: View {
         }
         .padding(.horizontal, Self.horizontalPadding)
         .padding(.top, Self.topPadding)
-        .discardWarningWash(progress: wash.progress)
-        // Belt-and-braces: whatever ends the run, the wash cannot outlive it,
-        // so Compact returns fully transparent even off an unexpected path.
-        .onChange(of: controller.dictationState) { _, newState in
-            if newState != .recording {
-                wash.end()
-                narration.end()
-            }
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }

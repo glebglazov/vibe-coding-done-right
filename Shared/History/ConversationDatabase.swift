@@ -44,83 +44,41 @@ nonisolated final class ConversationDatabase: Sendable {
         self.database = try SQLiteDatabase(fileURL: fileURL)
         self.encoder = HistoryJSONCoders.makeEncoder()
         self.decoder = HistoryJSONCoders.makeDecoder()
-        try database.execute(Self.schema)
-        // Between the two: a database written before capture time existed has
-        // the table but not the column, so the index over it cannot be created
-        // until the migration has added it.
-        try adoptCaptureTimes()
-        try database.execute(Self.captureTimeIndex)
-    }
-
-    private static let schema = """
-        PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY NOT NULL,
-            captured_at REAL NOT NULL,
-            last_updated REAL NOT NULL,
-            payload BLOB NOT NULL,
-            record_filename TEXT NOT NULL,
-            exported INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS conversation_tombstones (
-            id TEXT PRIMARY KEY NOT NULL,
-            deleted_at REAL NOT NULL,
-            exported INTEGER NOT NULL
-        );
-        """
-
-    /// Recency by merge stamp is nobody's ordering any more.
-    private static let captureTimeIndex = """
-        DROP INDEX IF EXISTS conversations_by_recency;
-        CREATE INDEX IF NOT EXISTS conversations_by_capture
-            ON conversations (captured_at DESC);
-        """
-
-    /// Gives a database written before capture time was stored the column it
-    /// now sorts by, filled the same way an import fills it: from the record
-    /// filename, which has carried the capture time all along.
-    private func adoptCaptureTimes() throws {
-        let present = try database.query(
-            "SELECT COUNT(*) FROM pragma_table_info('conversations') WHERE name = 'captured_at'",
-            []
-        ) { $0.int(0) }.first ?? 0
-        guard present == 0 else { return }
-
-        try database.execute(
-            "ALTER TABLE conversations ADD COLUMN captured_at REAL NOT NULL DEFAULT 0"
-        )
-        let rows = try database.query(
-            "SELECT id, record_filename, last_updated FROM conversations",
-            []
-        ) { row -> (String, Date)? in
-            guard let id = row.text(0), let filename = row.text(1) else { return nil }
-            let capturedAt = ConversationFileArchive.captureTime(fromFilename: filename)
-                ?? Date(timeIntervalSinceReferenceDate: row.double(2))
-            return (id, capturedAt)
-        }
-        try database.transaction {
-            for (id, capturedAt) in rows.compactMap({ $0 }) {
-                try database.run(
-                    "UPDATE conversations SET captured_at = ? WHERE id = ?",
-                    [.double(capturedAt.timeIntervalSinceReferenceDate), .text(id)]
-                )
-            }
-        }
-        Logger.history.info("Local store adopted capture times for \(rows.count) conversations")
+        try ConversationDatabaseSchema.prepare(database)
     }
 
     // MARK: - Reading
 
     /// Conversations newest first, as the history list shows them.
-    func page(offset: Int, limit: Int) -> [Conversation] {
+    func page(offset: Int, limit: Int, filter: HistoryFilter = .all) -> [Conversation] {
         read(
-            "SELECT payload, captured_at FROM conversations ORDER BY captured_at DESC, id ASC LIMIT ? OFFSET ?",
+            """
+            SELECT payload, captured_at FROM conversations \(Self.condition(filter))
+            ORDER BY captured_at DESC, id ASC LIMIT ? OFFSET ?
+            """,
             [.int(Int64(limit)), .int(Int64(offset))]
         ) { decodeStamped($0) }.compactMap { $0 }
     }
 
-    func conversationCount() -> Int {
-        read("SELECT COUNT(*) FROM conversations") { Int($0.int(0)) }.first ?? 0
+    /// The newest conversation that is not discarded.
+    func newestNormal() -> Conversation? {
+        read(
+            """
+            SELECT payload, captured_at FROM conversations WHERE discarded = 0
+            ORDER BY captured_at DESC, id ASC LIMIT 1
+            """
+        ) { decodeStamped($0) }.first ?? nil
+    }
+
+    func conversationCount(filter: HistoryFilter = .all) -> Int {
+        read("SELECT COUNT(*) FROM conversations \(Self.condition(filter))") { Int($0.int(0)) }.first ?? 0
+    }
+
+    private static func condition(_ filter: HistoryFilter) -> String {
+        switch filter {
+        case .all: ""
+        case .discarded: "WHERE discarded = 1"
+        }
     }
 
     func stored(id: UUID) -> Stored? {
@@ -144,12 +102,13 @@ nonisolated final class ConversationDatabase: Sendable {
         }
         write(
             """
-            INSERT INTO conversations (id, captured_at, last_updated, payload, record_filename, exported)
-            VALUES (?, ?, ?, ?, ?, 0)
+            INSERT INTO conversations (id, captured_at, last_updated, payload, record_filename, exported, discarded)
+            VALUES (?, ?, ?, ?, ?, 0, ?)
             ON CONFLICT(id) DO UPDATE SET
                 last_updated = excluded.last_updated,
                 payload = excluded.payload,
-                exported = 0
+                exported = 0,
+                discarded = excluded.discarded
             """,
             [
                 .text(conversation.id.uuidString),
@@ -157,6 +116,7 @@ nonisolated final class ConversationDatabase: Sendable {
                 .double(conversation.lastUpdated.timeIntervalSinceReferenceDate),
                 .blob(payload),
                 .text(filename),
+                Self.discardedFlag(conversation),
             ]
         )
     }
@@ -183,6 +143,7 @@ nonisolated final class ConversationDatabase: Sendable {
                         .double(lastUpdated),
                         .blob(payload),
                         .text(record.filename),
+                        Self.discardedFlag(record.conversation),
                         .text(id),
                         .double(lastUpdated),
                     ])
@@ -194,8 +155,8 @@ nonisolated final class ConversationDatabase: Sendable {
     }
 
     private static let mergeRecord = """
-        INSERT INTO conversations (id, captured_at, last_updated, payload, record_filename, exported)
-        SELECT ?, ?, ?, ?, ?, 1
+        INSERT INTO conversations (id, captured_at, last_updated, payload, record_filename, exported, discarded)
+        SELECT ?, ?, ?, ?, ?, 1, ?
         WHERE NOT EXISTS (
             SELECT 1 FROM conversation_tombstones WHERE id = ? AND deleted_at >= ?
         )
@@ -203,7 +164,8 @@ nonisolated final class ConversationDatabase: Sendable {
             last_updated = excluded.last_updated,
             payload = excluded.payload,
             record_filename = excluded.record_filename,
-            exported = 1
+            exported = 1,
+            discarded = excluded.discarded
         WHERE excluded.last_updated > conversations.last_updated
         """
 
@@ -327,6 +289,12 @@ nonisolated final class ConversationDatabase: Sendable {
     }
 
     // MARK: - Statement plumbing
+
+    /// The column copy of the payload's status, which the Discarded filter
+    /// pages and counts by.
+    private static func discardedFlag(_ conversation: Conversation) -> SQLiteDatabase.Value {
+        .int(conversation.status.isDiscarded ? 1 : 0)
+    }
 
     /// Decodes the payload in column 0 and gives it the capture time in column
     /// 1. The column is the authority: a record stored before capture time was

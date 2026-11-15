@@ -73,6 +73,8 @@ final class CaptureSession {
             case previewShown
             case aiProcessingFallback
             case cancelled
+            /// ⇧⎋ ended the run; its words go to History when it had speech.
+            case discarded
             case failed
             case rejected
         }
@@ -140,6 +142,10 @@ final class CaptureSession {
         /// Provides the effective style for the current capture.
         /// Returns the style to apply for text transformation.
         let styleProvider: @MainActor @Sendable () -> Style
+        /// Saves a discarded recording to History once the session is idle again.
+        let discardedCaptures: any DiscardedCaptureFinalizer
+        /// The one decode at a time, shared with `discardedCaptures`.
+        let decodeTurnstile: DecodeTurnstile
     }
 
     // MARK: - Constants
@@ -184,6 +190,8 @@ final class CaptureSession {
     let substitutionStore: any SubstitutionStore
     let overrides: SessionOverrides
     var styleProvider: @MainActor @Sendable () -> Style
+    let discardedCaptures: any DiscardedCaptureFinalizer
+    let decodeTurnstile: DecodeTurnstile
 
     // MARK: - Public observable
 
@@ -277,6 +285,8 @@ final class CaptureSession {
         self.substitutionStore = deps.substitutionStore
         self.overrides = deps.overrides
         self.styleProvider = deps.styleProvider
+        self.discardedCaptures = deps.discardedCaptures
+        self.decodeTurnstile = deps.decodeTurnstile
         self.destinationHotkey = DestinationHotkeyManager(registry: deps.hotkeyRegistry)
         wirePanelCallbacks()
         wireDestinationHotkeys()
@@ -324,12 +334,16 @@ final class CaptureSession {
         }
     }
 
-    /// Esc or menu bar "Cancel". Cancels whatever is happening and returns to idle.
+    /// Esc or menu bar "Cancel". Returns to idle at once. While recording this
+    /// is a Discard: the words still go to History. After the recording ended
+    /// it is a cancel.
     func cancel() {
         switch status.phase {
         case .idle:
             return
-        case .preparingToRecord, .recording, .transcribing:
+        case .recording:
+            discardRecording()
+        case .preparingToRecord, .transcribing:
             cancelRecording()
         case .awaitingPreview, .executing:
             cancelCapture()

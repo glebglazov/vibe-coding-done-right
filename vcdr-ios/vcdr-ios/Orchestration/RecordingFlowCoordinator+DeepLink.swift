@@ -12,7 +12,7 @@ extension RecordingFlowCoordinator {
     /// (Capturing) only once audio actually flows.
     /// Called from `onOpenURL` before the async recording flow begins.
     func prepareForDeepLinkRecording() {
-        guard state != .arming && state != .recording && state != .transcribing else { return }
+        guard activeRun == nil, state != .arming, state != .recording, state != .transcribing else { return }
         state = .arming
         isKeyboardRun = true
         stoppedViaDeepLink = false
@@ -39,7 +39,7 @@ extension RecordingFlowCoordinator {
         switch activeRunPhase {
         case .arming: .arming
         case .capturing: .capturing
-        case .cancellingArming, .finalizing: .ended
+        case .cancelling, .finalizing: .ended
         case nil: state == .arming ? .arming : .ended
         }
     }

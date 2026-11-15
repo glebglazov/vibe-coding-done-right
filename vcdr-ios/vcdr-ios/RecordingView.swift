@@ -1,24 +1,18 @@
+import OSLog
 import SwiftUI
 import UIKit
 
 struct RecordingView: View {
     @Bindable var coordinator: RecordingFlowCoordinator
+    let conversationReprocessor: any ConversationReprocessor
     @Environment(\.colorScheme) private var colorScheme
     private var theme: Theme { Theme.current(for: colorScheme) }
     @State private var showCopiedConfirmation = false
     @State private var recordingStart: Date?
-    /// Drives the Discard Warning tint on the screen behind the Stop button.
-    /// Lives here, not in the button, because the escalation has to be visible
-    /// around a thumb that covers the control.
-    @State private var discardWarningProgress: CGFloat = 0
-    /// Where the current hold is, for the status row's narration. Separate from
-    /// `discardWarningProgress` because that one eases out after the hold ends,
-    /// which is right for the colour and wrong for the words.
-    @State private var narration = HoldNarrationState()
 
     // MARK: - Constants
     private static let copiedConfirmationDuration: Duration = .seconds(3)
-    private static let stopIconSize: CGFloat = 32
+    private static let discardNoteFade: Double = 0.2
     private static let recordIconSize: CGFloat = 36
     private static let dotGridSpacing: CGFloat = 40
     private static let dotGridRadius: CGFloat = 0.5
@@ -33,22 +27,23 @@ struct RecordingView: View {
     /// Clearance under the safe area for the header line — the status row and
     /// the App Shell icons together.
     private static let headerTopPadding: CGFloat = 12
-    private static let discardTintMaxOpacity: Double = 0.4
-    /// Release before the threshold is the recovery gesture — it has to read
-    /// as *gone*, not as fading. Fast enough to look instant, slow enough
-    /// that a full-screen 40%-opacity wash doesn't leave a hard flash edge.
-    /// Device verification (task 07) found the previous 200ms read as
-    /// lingering; this is the value that replaced it.
-    private static let discardTintReleaseFadeDuration: Double = 0.09
-    /// Discard's ease-out overlaps the CANCELLED flash and has a different
-    /// job than the release retreat, so it keeps the longer, original pace.
-    private static let discardTintDiscardFadeDuration: Double = 0.2
+    private static let runCenterHeight: CGFloat = 120
+    /// STOP sits this far above the bottom safe area in every run, keyboard
+    /// start or app start, clear of the bottom-edge swipe hint.
+    private static let stopDockBottomPadding: CGFloat = 112
+    private static let discardNoteBottomPadding: CGFloat = 24
+    private static let discardNoteHorizontalPadding: CGFloat = 24
+    /// Mode and style while they are locked: visible, but plainly not live.
+    private static let lockedPillOpacity: Double = 0.35
+    /// The return hint points up at the system back link in the status bar's
+    /// leading corner, so it sits just under it, above the status row.
+    private static let returnHintTopPadding: CGFloat = 4
+    private static let returnHintLeadingPadding: CGFloat = 20
 
     var body: some View {
         ZStack {
             theme.surfaceLowest.ignoresSafeArea()
             dotGrid
-            discardWarningTint
 
             VStack(spacing: 0) {
                 header
@@ -56,17 +51,43 @@ struct RecordingView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 bottomArea
             }
+
+            if showsReturnHint {
+                returnHint
+                    .padding(.leading, Self.returnHintLeadingPadding)
+                    .padding(.top, Self.returnHintTopPadding)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                EdgeSwipeHint()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(edges: .bottom)
+            }
         }
+        .overlay(alignment: .bottom) {
+            if let note = coordinator.discardNotes.note {
+                DiscardNoteView(note: note) { coordinator.discardNotes.viewInHistory() }
+                    .padding(.horizontal, Self.discardNoteHorizontalPadding)
+                    .padding(.bottom, Self.discardNoteBottomPadding)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: Self.discardNoteFade), value: coordinator.discardNotes.note)
         .onChange(of: coordinator.state) { _, newState in
             if case .recording = newState {
                 recordingStart = .now
             } else {
                 recordingStart = nil
             }
-            endDiscardWarning()
         }
         // Propagate theme to child views (WaveformView) via environment
         .environment(\.theme, theme)
+        // The host app's keyboard is still up as VCDR opens from it. This page
+        // has no text field, so it must not lift the STOP button out of the way.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        // PROBE: confirms the host keyboard reaches this page on a keyboard start.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+            Logger.app.notice("PROBE keyboard frame change end=\(frame.map { "\($0)" } ?? "nil") state=\(coordinator.state)")
+        }
     }
 
     // MARK: - Header
@@ -94,6 +115,8 @@ struct RecordingView: View {
         default:
             RecordingTopBar(
                 coordinator: coordinator,
+                conversationReprocessor: conversationReprocessor,
+                discardNotes: coordinator.discardNotes,
                 history: coordinator.history,
                 historySync: coordinator.historySync,
                 substitutionStore: coordinator.substitutionStore,
@@ -122,9 +145,6 @@ struct RecordingView: View {
         case .transcribing:
             transcribingContent
 
-        case .cancelled:
-            cancelledFlashContent
-
         case .complete(let text):
             completeContent(text)
 
@@ -143,12 +163,7 @@ struct RecordingView: View {
                 InitProgressLabel(coordinator: coordinator, theme: theme)
             }
             VStack(spacing: 12) {
-                actionCircle(
-                    icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
-                    label: "RECORD"
-                ) {
-                    Task { await coordinator.startRecording(origin: .app) }
-                }
+                recordButton
                 // The recording flow already supports starting before init
                 // completes — audio buffers queue in StreamingAsrManager and
                 // drain once the model is ready. The button has always been
@@ -171,12 +186,7 @@ struct RecordingView: View {
                     warmingPill
                 }
             }
-            actionCircle(
-                icon: { Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize) },
-                label: "RECORD"
-            ) {
-                Task { await coordinator.startRecording(origin: .app) }
-            }
+            recordButton
         }
     }
 
@@ -206,9 +216,8 @@ struct RecordingView: View {
     /// yet, so a running timer or moving waveform would be a lie. STOP cancels
     /// the warming engine (cancellation, no result).
     private var armingContent: some View {
-        VStack(spacing: 40) {
-            VStack(spacing: 24) {
-                heroTitle("STARTING…")
+        runLayout(title: "STARTING…") {
+            VStack(spacing: 16) {
                 ProgressView()
                     .tint(theme.primary)
                     .scaleEffect(1.2)
@@ -216,152 +225,107 @@ struct RecordingView: View {
                     .font(.system(size: Self.hintFontSize))
                     .foregroundStyle(theme.onSurfaceVariant.opacity(0.7))
             }
-            actionCircle(
-                icon: {
-                    Rectangle()
-                        .fill(theme.onSurface)
-                        .frame(width: Self.stopIconSize, height: Self.stopIconSize)
-                },
-                label: "STOP",
-                onStop: { Task { await coordinator.stopActiveRun() } },
-                onDiscard: {
-                    beginDiscardUnwind()
-                    Task { await coordinator.discardRecording() }
-                }
-            )
         }
     }
 
-    private var cancelledFlashContent: some View {
-        VStack(spacing: 40) {
-            heroTitle("CANCELLED")
+    private var recordButton: some View {
+        ActionCircle(label: "RECORD") {
+            Task { await coordinator.startRecording(origin: .app) }
+        } icon: {
+            Circle().fill(theme.onSurface).frame(width: Self.recordIconSize, height: Self.recordIconSize)
         }
     }
 
     private var recordingContent: some View {
-        ZStack {
-            // Core content — truly centered on screen
-            VStack(spacing: 0) {
-                heroTitle("LISTENING")
-                    .padding(.bottom, 8)
+        runLayout(title: "LISTENING") {
+            // Waveform with timer and transcript overlay
+            ZStack {
+                WaveformView(levels: coordinator.audioLevels)
+                    .frame(height: 120)
+                    .padding(.horizontal, 8)
 
-                // Waveform with timer and transcript overlay
-                ZStack {
-                    WaveformView(levels: coordinator.audioLevels)
-                        .frame(height: 120)
-                        .padding(.horizontal, 8)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(formatDuration(recordingStart.map { context.date.timeIntervalSince($0) } ?? 0))
+                        .font(.system(size: 32, weight: .heavy, design: .monospaced))
+                        .tracking(4)
+                        .foregroundStyle(theme.onSurface)
+                        .shadow(color: theme.background.opacity(0.9), radius: 8)
+                        .shadow(color: theme.background.opacity(0.7), radius: 16)
+                }
 
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(formatDuration(recordingStart.map { context.date.timeIntervalSince($0) } ?? 0))
-                            .font(.system(size: 32, weight: .heavy, design: .monospaced))
-                            .tracking(4)
-                            .foregroundStyle(theme.onSurface)
-                            .shadow(color: theme.background.opacity(0.9), radius: 8)
-                            .shadow(color: theme.background.opacity(0.7), radius: 16)
-                    }
-
-                    if !coordinator.liveTranscript.isEmpty {
-                        ScrollViewReader { proxy in
-                            ScrollView {
-                                Text(coordinator.liveTranscript)
-                                    .font(.system(size: Self.transcriptFontSize, weight: .light))
-                                    .foregroundStyle(theme.onSurface.opacity(0.7))
-                                    .lineSpacing(6)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 32)
-                                    .id("transcript")
-                            }
-                            .onChange(of: coordinator.liveTranscript) {
-                                // Non-animated scroll — avoids queuing animation
-                                // transactions that compete with the waveform
-                                // for main-thread time during rapid updates.
-                                proxy.scrollTo("transcript", anchor: .bottom)
-                            }
+                if !coordinator.liveTranscript.isEmpty {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            Text(coordinator.liveTranscript)
+                                .font(.system(size: Self.transcriptFontSize, weight: .light))
+                                .foregroundStyle(theme.onSurface.opacity(0.7))
+                                .lineSpacing(6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 32)
+                                .id("transcript")
+                        }
+                        .onChange(of: coordinator.liveTranscript) {
+                            // Non-animated scroll — avoids queuing animation
+                            // transactions that compete with the waveform
+                            // for main-thread time during rapid updates.
+                            proxy.scrollTo("transcript", anchor: .bottom)
                         }
                     }
                 }
-                .frame(height: 120)
+            }
+        }
+    }
+
+    /// Arming and Recording share one layout, so the switch to Capturing
+    /// changes only the title and the centre, and nothing moves. The title,
+    /// centre and pills are centred in the space between the header and the
+    /// controls, not in the whole page, so the group stays balanced above STOP.
+    private func runLayout<Center: View>(title: String, @ViewBuilder center: () -> Center) -> some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                heroTitle(title)
+                    .padding(.bottom, 8)
+
+                center()
+                    .frame(height: Self.runCenterHeight)
 
                 aiSessionToggle
                     .padding(.top, 20)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Top overlay — the return hint
-            VStack(spacing: 0) {
-                HStack {
-                    if coordinator.isKeyboardRun {
-                        returnHint
-                            .padding(.leading, 20)
-                    }
-                    Spacer()
-                }
-                .padding(.top, 16)
-                Spacer()
-            }
-
-            // Bottom-pinned content — stop button
-            VStack(spacing: 0) {
-                Spacer()
-
-                actionCircle(
-                    icon: {
-                        Rectangle()
-                            .fill(theme.onSurface)
-                            .frame(width: Self.stopIconSize, height: Self.stopIconSize)
-                    },
-                    label: "STOP",
-                    onStop: { Task { await coordinator.stopActiveRun() } },
-                    onDiscard: {
-                        beginDiscardUnwind()
-                        Task { await coordinator.discardRecording() }
-                    }
-                )
-                .padding(.bottom, 16)
-
-                if coordinator.isKeyboardRun {
-                    swipeBackHint
-                        .padding(.bottom, 16)
-                }
-            }
+            RunControlDock(
+                onStop: { Task { await coordinator.stopActiveRun() } },
+                onDiscard: { Task { await coordinator.discardRecording() } }
+            )
+            .padding(.bottom, Self.stopDockBottomPadding)
         }
     }
 
-    /// The reserved status row, shared with the keyboard. It sits above
-    /// `stateContent` rather than inside the recording screen because it is the
-    /// screen's status line in every phase, not just while a hold is possible:
-    /// its height is reserved for the whole session, so nothing reflows when a
-    /// run begins, ends, or is held.
+    /// The reserved status row at the top of the screen. Its height is
+    /// reserved in every phase, so nothing reflows when a run begins or ends.
     private var statusRow: some View {
         StatusRow(
-            content: StatusRowContent.resolve(
-                warningProgress: narration.warningProgress,
-                status: transientStatus,
-                holdAvailable: holdAvailable
-            ),
+            status: transientStatus,
             fontSize: Self.hintFontSize,
-            color: theme.onSurfaceVariant,
-            isHoldNarration: narration.warningProgress != nil
+            color: theme.onSurfaceVariant
         )
     }
 
-    /// Both phases that put a hold-capable STOP button on screen: audio is
-    /// warming, or audio is flowing. Release stops either way, and a hold
-    /// discards either way, so the resting hint belongs in both.
-    private var holdAvailable: Bool {
-        switch coordinator.state {
-        case .arming, .recording: true
-        default: false
-        }
-    }
-
     /// The run-adjacent states that had nowhere to say anything before the row
-    /// became a status line. The empty-result case is recognised by the message
-    /// the coordinator puts on its error state, which is the same constant.
+    /// became a status line. An empty result is not one of them here: the
+    /// error content in the middle of the page already says it.
     private var transientStatus: TransientStatus? {
         switch coordinator.state {
         case .transcribing: .transcribing
-        case .error(let message) where message == TransientStatus.noSpeechDetectedText: .noSpeechDetected
         default: nil
+        }
+    }
+
+    private var showsReturnHint: Bool {
+        switch coordinator.state {
+        case .arming, .recording: coordinator.isKeyboardRun
+        default: false
         }
     }
 
@@ -378,10 +342,6 @@ struct RecordingView: View {
                 .font(.system(size: Self.hintFontSize, weight: .medium))
         }
         .foregroundStyle(theme.onSurfaceVariant)
-    }
-
-    private var swipeBackHint: some View {
-        swipeHint("Swipe to go back")
     }
 
     /// Animated "swipe back" hint reused on the Done page (with a "paste"
@@ -545,8 +505,11 @@ struct RecordingView: View {
     /// All three labels of the text style pill.
     private static let styleSizingLabels = ["CASUAL", "MESSAGING", "FORMAL"]
 
+    /// Locked while the run listens (ADR-0010): dimmed and inert, but still on
+    /// screen so the user can see what the run will use.
     @ViewBuilder
     private var aiSessionToggle: some View {
+        let locked = coordinator.areOutputChoicesLocked
         HStack(spacing: 10) {
             // AI mode pill: cycles Verbatim → Dictation → Assistant
             if AIProcessingSettings.hasAICapability {
@@ -578,6 +541,8 @@ struct RecordingView: View {
             .allowsHitTesting(styleVisible)
             .accessibilityHidden(!styleVisible)
         }
+        .opacity(locked ? Self.lockedPillOpacity : 1)
+        .disabled(locked)
     }
 
     private func sonicPill(
@@ -652,57 +617,6 @@ struct RecordingView: View {
             .lineLimit(1)
     }
 
-    private func actionCircle<Icon: View>(
-        icon: () -> Icon,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        VStack(spacing: 16) {
-            Button(action: action) {
-                ZStack {
-                    Circle()
-                        .fill(theme.primaryDim)
-                        .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
-                        .shadow(color: theme.primaryDim.opacity(0.2), radius: 20)
-                    Circle()
-                        .stroke(theme.surfaceHighest, lineWidth: ActionButtonMetrics.border)
-                        .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
-                    icon()
-                }
-            }
-            Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .tracking(3)
-                .foregroundStyle(theme.onSurface)
-        }
-    }
-
-    private func actionCircle(
-        icon: @escaping () -> some View,
-        label: String,
-        onStop: @escaping () -> Void,
-        onDiscard: @escaping () -> Void
-    ) -> some View {
-        VStack(spacing: 16) {
-            HoldToDiscardRingStopButton(
-                theme: theme,
-                label: label,
-                icon: icon,
-                onStop: onStop,
-                onDiscard: onDiscard,
-                onWarningRamp: {
-                    discardWarningProgress = $0
-                    narration.ramp(to: $0)
-                },
-                onWarningEnd: endDiscardWarning
-            )
-            Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .tracking(3)
-                .foregroundStyle(theme.onSurface)
-        }
-    }
-
     private func brutalistButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
@@ -741,51 +655,6 @@ struct RecordingView: View {
         .ignoresSafeArea()
     }
 
-    /// Sweeps red across the screen behind the Stop button as the Discard
-    /// Warning ramps: how far it has travelled is how close Discard is. The
-    /// button itself is left alone — release still stops, so the control must
-    /// keep naming what release does (ADR-0004).
-    private var discardWarningTint: some View {
-        DiscardWarningWipe(
-            color: theme.primaryDim,
-            progress: discardWarningProgress,
-            opacity: Self.discardTintMaxOpacity
-        )
-        .ignoresSafeArea()
-    }
-
-    /// Retreats the tint on a release before the threshold — the recovery
-    /// gesture, which has to read as instant rather than as a fade. Called
-    /// straight from the gesture's release (not just from the later
-    /// `isWarning` `onChange`) so nothing delays the retreat from starting.
-    private func endDiscardWarning() {
-        narration.end()
-        resetDiscardWarning(duration: Self.discardTintReleaseFadeDuration)
-    }
-
-    /// Starts the tint's unwind the instant Discard fires, before the
-    /// coordinator's teardown `Task` is even spawned — the button unmounts
-    /// as soon as `coordinator.state` leaves `.recording`, so waiting on that
-    /// state change would hold the screen at full red for the whole teardown
-    /// gap. The ease-out here is intentionally slower than the release
-    /// retreat: it overlaps the CANCELLED flash and has a different job.
-    private func beginDiscardUnwind() {
-        narration.end()
-        resetDiscardWarning(duration: Self.discardTintDiscardFadeDuration)
-    }
-
-    /// `guard discardWarningProgress > 0` makes repeat calls a no-op, so
-    /// whichever of `endDiscardWarning()`, `beginDiscardUnwind()`, and the
-    /// `onChange(of: coordinator.state)` belt-and-braces path runs first
-    /// wins — the others don't retrigger or shorten an animation already
-    /// under way.
-    private func resetDiscardWarning(duration: Double) {
-        guard discardWarningProgress > 0 else { return }
-        withAnimation(.easeOut(duration: duration)) {
-            discardWarningProgress = 0
-        }
-    }
-
     // MARK: - Helpers
 
     private func formatDuration(_ interval: TimeInterval) -> String {
@@ -794,108 +663,6 @@ struct RecordingView: View {
         let m = (total % 3600) / 60
         let s = total % 60
         return String(format: "%02d:%02d:%02d", h, m, s)
-    }
-}
-
-private enum ActionButtonMetrics {
-    static let size: CGFloat = 96
-    static let border: CGFloat = 8
-}
-
-private struct HoldToDiscardRingStopButton<Icon: View>: View {
-    let theme: Theme
-    let label: String
-    let icon: () -> Icon
-    let onStop: () -> Void
-    let onDiscard: () -> Void
-    let onWarningEnd: () -> Void
-
-    @State private var holdController: HoldToDiscardController
-    @State private var isPressed = false
-    /// Boxed so the controller's ramp closure and the gesture can share it.
-    /// Held in `@State` (not a plain `let`) so re-inits of this view struct —
-    /// which happen ~60×/s while the ramp drives `discardWarningProgress` —
-    /// don't hand the gesture a fresh, disconnected box each render.
-    @State private var ladder: HapticLadderBox
-
-    init(
-        theme: Theme,
-        label: String,
-        icon: @escaping () -> Icon,
-        onStop: @escaping () -> Void,
-        onDiscard: @escaping () -> Void,
-        onWarningRamp: @escaping (CGFloat) -> Void = { _ in },
-        onWarningEnd: @escaping () -> Void = {}
-    ) {
-        self.theme = theme
-        self.label = label
-        self.icon = icon
-        self.onStop = onStop
-        self.onDiscard = onDiscard
-        self.onWarningEnd = onWarningEnd
-        let ladder = HapticLadderBox()
-        _ladder = State(initialValue: ladder)
-        _holdController = State(
-            initialValue: HoldToDiscardController(
-                onStop: onStop,
-                onDiscard: onDiscard,
-                onDiscardHaptic: { AppHaptics.medium() },
-                onWarningRamp: { progress in
-                    onWarningRamp(progress)
-                    for _ in 0..<ladder.ticks(upTo: progress) { AppHaptics.light() }
-                }
-            )
-        )
-    }
-
-    var body: some View {
-        @Bindable var hold = holdController
-
-        ZStack {
-            Circle()
-                .fill(theme.primaryDim)
-                .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
-                .shadow(color: theme.primaryDim.opacity(0.2), radius: 20)
-
-            Circle()
-                .stroke(theme.surfaceHighest, lineWidth: ActionButtonMetrics.border)
-                .frame(width: ActionButtonMetrics.size, height: ActionButtonMetrics.size)
-
-            icon()
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: "Discard recording") {
-            holdController.discardImmediately()
-        }
-        .onAppear { AppHaptics.prepare() }
-        .onChange(of: hold.isWarning) { _, warning in
-            if !warning {
-                ladder.reset()
-                onWarningEnd()
-            }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard !isPressed else { return }
-                    isPressed = true
-                    ladder.reset()
-                    holdController.touchDown()
-                }
-                .onEnded { _ in
-                    guard isPressed else { return }
-                    isPressed = false
-                    holdController.touchUp()
-                    // Fire the retreat straight from the release rather than
-                    // only from the `isWarning` `onChange` below, which lands
-                    // a render pass later. `onWarningEnd()` is idempotent, so
-                    // the `onChange` still firing afterward is a no-op.
-                    ladder.reset()
-                    onWarningEnd()
-                }
-        )
     }
 }
 

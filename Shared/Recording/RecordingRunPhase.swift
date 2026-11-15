@@ -2,9 +2,21 @@ import Foundation
 
 nonisolated enum RecordingRunPhase: Equatable, Sendable {
     case arming
-    case cancellingArming
+    /// Torn down with no result: a stop or Discard during Arming, or a
+    /// Shortcut start whose card the system refused. Nothing may act on the
+    /// run while it ends.
+    case cancelling
     case capturing(since: Date)
     case finalizing
+
+    /// AI Prompt Mode and Text Style are fixed while the run listens: they
+    /// unlock once capture ends.
+    var locksOutputChoices: Bool {
+        switch self {
+        case .arming, .capturing: true
+        case .cancelling, .finalizing: false
+        }
+    }
 }
 
 nonisolated enum RecordingRunCommand: Equatable, Sendable {
@@ -18,7 +30,7 @@ nonisolated enum RecordingToggle {
         switch phase {
         case nil: .start
         case .arming?, .capturing?: .stop
-        case .cancellingArming?, .finalizing?: .ignore
+        case .cancelling?, .finalizing?: .ignore
         }
     }
 

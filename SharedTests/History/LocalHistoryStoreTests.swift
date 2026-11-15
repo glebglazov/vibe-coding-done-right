@@ -196,7 +196,7 @@ struct LocalHistoryStoreTests {
         // The other device deletes it; this one stops showing it, and keeps it
         // gone however many passes follow.
         let arrived = try #require(otherDevice.conversations.first { $0.id == fromOther })
-        otherDevice.removeConversation(arrived)
+        otherDevice.removeConversation(id: arrived.id)
         await otherDevice.syncRecordFiles(in: directory)
 
         await thisDevice.syncRecordFiles(in: directory)
@@ -216,7 +216,7 @@ struct LocalHistoryStoreTests {
         await otherDevice.syncRecordFiles(in: directory)
         #expect(otherDevice.conversations.map(\.id) == [fromHere])
 
-        thisDevice.removeConversation(try #require(thisDevice.latestConversation))
+        thisDevice.removeConversation(id: try #require(thisDevice.latestConversation).id)
         await thisDevice.syncRecordFiles(in: directory)
         #expect(thisDevice.conversations.isEmpty, "the pass that exported the delete undid it")
         await otherDevice.syncRecordFiles(in: directory)
@@ -374,7 +374,7 @@ struct LocalHistoryStoreTests {
             label: nil
         )
         let conversation = try #require(store.latestConversation)
-        store.removeConversation(conversation)
+        store.removeConversation(id: conversation.id)
 
         #expect(store.conversations.isEmpty)
         let tombstoned = await eventually {

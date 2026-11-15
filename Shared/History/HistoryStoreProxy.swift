@@ -10,79 +10,118 @@ import OSLog
 @Observable
 final class HistoryStoreProxy: HistoryStore {
     private var realStore: (any HistoryStore)?
-    private var pendingRecords: [(UUID, [InputSegment], String?, String?)] = []
-    private var pendingRemovals: [Conversation] = []
+    /// The writes made before the real store was assigned, in the order they
+    /// were made, so a resolve or a delete lands after the write it follows.
+    private var pendingWrites: [(any HistoryStore) -> Void] = []
+    private var pendingFilter: HistoryFilter = .all
 
     /// What the writes made before the real store was assigned add up to,
     /// shown until it is.
     private var pendingConversations: [Conversation] = []
 
     var conversations: [Conversation] {
-        realStore?.conversations ?? pendingConversations
+        realStore?.conversations ?? pendingConversations.filter(pendingFilter.admits)
     }
 
     var latestConversation: Conversation? {
-        realStore.map { $0.latestConversation } ?? pendingConversations.first
+        realStore.map { $0.latestConversation } ?? pendingConversations.first { !$0.status.isDiscarded }
     }
 
     var hasMorePages: Bool {
         realStore?.hasMorePages ?? false
     }
 
-    func setRealStore(_ store: any HistoryStore) {
-        for (id, segments, output, label) in pendingRecords {
-            store.record(conversationID: id, inputSegments: segments, output: output, label: label)
+    var filter: HistoryFilter {
+        get { realStore?.filter ?? pendingFilter }
+        set {
+            if let realStore {
+                realStore.filter = newValue
+            } else {
+                pendingFilter = newValue
+            }
         }
-        pendingRecords.removeAll()
+    }
 
-        for conversation in pendingRemovals {
-            store.removeConversation(conversation)
+    var discardedCount: Int {
+        realStore?.discardedCount ?? pendingConversations.filter(\.status.isDiscarded).count
+    }
+
+    func setRealStore(_ store: any HistoryStore) {
+        store.filter = pendingFilter
+        for write in pendingWrites {
+            write(store)
         }
-        pendingRemovals.removeAll()
+        pendingWrites.removeAll()
         pendingConversations.removeAll()
 
         realStore = store
     }
 
     func record(conversationID: UUID, inputSegments: [InputSegment], output: String?, label: String?) {
-        if let real = realStore {
-            real.record(conversationID: conversationID, inputSegments: inputSegments, output: output, label: label)
-        } else {
-            pendingRecords.append((conversationID, inputSegments, output, label))
-            let conversation = Conversation(
-                id: conversationID,
-                inputSegments: inputSegments,
-                output: output,
-                label: label,
-                lastUpdated: Date(),
-                schemaVersion: Conversation.currentSchemaVersion,
-                extras: [:]
-            )
-            pendingConversations.removeAll { $0.id == conversationID }
-            pendingConversations.insert(conversation, at: 0)
-        }
+        perform { $0.record(conversationID: conversationID, inputSegments: inputSegments, output: output, label: label) }
+        guard realStore == nil else { return }
+        showPending(Conversation(
+            id: conversationID,
+            inputSegments: inputSegments,
+            output: output,
+            label: label,
+            lastUpdated: Date()
+        ))
     }
 
-    func removeConversation(_ conversation: Conversation) {
-        if let real = realStore {
-            real.removeConversation(conversation)
-        } else {
-            pendingRemovals.append(conversation)
-            pendingConversations.removeAll { $0.id == conversation.id }
-        }
+    func recordDiscarded(conversationID: UUID, inputSegments: [InputSegment], choice: RecordedOutputChoice) {
+        perform { $0.recordDiscarded(conversationID: conversationID, inputSegments: inputSegments, choice: choice) }
+        guard realStore == nil else { return }
+        showPending(Conversation(
+            id: conversationID,
+            inputSegments: inputSegments,
+            output: nil,
+            label: nil,
+            lastUpdated: Date(),
+            status: .discarded(choice)
+        ))
+    }
+
+    func resolveDiscarded(conversationID: UUID, output: String, label: String?) {
+        perform { $0.resolveDiscarded(conversationID: conversationID, output: output, label: label) }
+        guard realStore == nil,
+              let index = pendingConversations.firstIndex(where: { $0.id == conversationID })
+        else { return }
+        pendingConversations[index].output = output
+        pendingConversations[index].label = label
+        pendingConversations[index].status = .normal
+        pendingConversations[index].lastUpdated = Date()
+    }
+
+    func removeConversation(id: UUID) {
+        perform { $0.removeConversation(id: id) }
+        pendingConversations.removeAll { $0.id == id }
     }
 
     func clearAll() {
         if let real = realStore {
             real.clearAll()
         } else {
-            pendingRecords.removeAll()
-            pendingRemovals.removeAll()
+            pendingWrites.removeAll()
             pendingConversations.removeAll()
         }
     }
 
     func loadNextPage() {
         realStore?.loadNextPage()
+    }
+
+    private func perform(_ write: @escaping (any HistoryStore) -> Void) {
+        if let realStore {
+            write(realStore)
+        } else {
+            pendingWrites.append(write)
+        }
+    }
+
+    /// Keeps the pending list newest first, one entry per conversation.
+    private func showPending(_ conversation: Conversation) {
+        pendingConversations.removeAll { $0.id == conversation.id }
+        pendingConversations.insert(conversation, at: 0)
     }
 }

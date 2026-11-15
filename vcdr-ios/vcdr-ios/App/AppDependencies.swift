@@ -7,6 +7,7 @@ import UIKit
 @MainActor
 final class AppDependencies {
     let coordinator: RecordingFlowCoordinator
+    let conversationReprocessor: any ConversationReprocessor
     let boot: AppBoot
     let hostAppSource: any HostAppSource
     let hostReturn: HostReturn
@@ -21,12 +22,24 @@ final class AppDependencies {
             now: Date.init
         )
         let hotMicSession = HotMicSession(engine: engine, presence: card, keyboard: keyboard)
+        let backgroundTasks = UIKitBackgroundTaskRunner()
+        let historyWrites = HistoryStoreProxy()
         coordinator = RecordingFlowCoordinator(
             presence: card,
             keyboardChannel: keyboard,
             recordingEngine: engine,
             hotMicSession: hotMicSession,
-            backgroundTasks: UIKitBackgroundTaskRunner()
+            backgroundTasks: backgroundTasks,
+            historyWrites: historyWrites,
+            discardedRunFinalizer: HistoryDiscardedRunFinalizer(
+                history: historyWrites,
+                backgroundTasks: backgroundTasks
+            )
+        )
+        conversationReprocessor = AIConversationReprocessor(
+            history: historyWrites,
+            backgroundTasks: backgroundTasks,
+            substitutions: { [coordinator] in coordinator.substitutionStore.substitutions }
         )
         boot = AppBoot(steps: .coldLaunch(of: coordinator))
         remote = IntentRecordingRemote(boot: boot, coordinator: coordinator, card: card)

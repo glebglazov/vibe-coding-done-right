@@ -10,7 +10,7 @@ import Testing
 @Suite("CaptureSession — Cancel hotkey")
 struct CaptureSessionCancelHotkeyTests {
 
-    @Test("Pressing the bound cancel combination during a capture cancels it")
+    @Test("Pressing the bound cancel combination during a recording discards it")
     @MainActor
     func cancelPressDuringCaptureCancelsIt() async {
         let env = CaptureSessionTestEnvironment(
@@ -25,7 +25,7 @@ struct CaptureSessionCancelHotkeyTests {
         #expect(await env.waitForPhase { $0 == .idle })
 
         let outcome = await env.session.waitForNextIdle(timeout: .seconds(2))
-        #expect(outcome?.kind == .cancelled)
+        #expect(outcome?.kind == .discarded)
     }
 
     @Test("An idle session claims nothing, so the cancel combination reaches the frontmost app")

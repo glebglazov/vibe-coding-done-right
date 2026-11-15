@@ -23,13 +23,20 @@ final class FileHistoryStore: HistoryStore {
 
     // MARK: - State
 
-    private(set) var conversations: [Conversation] = []
+    /// Every conversation read in so far, whatever the filter. This legacy
+    /// store, which only tests construct, filters and counts in memory, so it
+    /// is exact only while everything it holds is loaded.
+    private var loaded: [Conversation] = []
+    var filter: HistoryFilter = .all
 
-    var latestConversation: Conversation? { conversations.first }
+    var conversations: [Conversation] { loaded.filter(filter.admits) }
+    var discardedCount: Int { loaded.filter(\.status.isDiscarded).count }
+
+    var latestConversation: Conversation? { loaded.first { !$0.status.isDiscarded } }
     /// Paginate until the UI shows the latest `maxConversations`. Older
     /// conversations remain on disk — never auto-deleted — but are invisible
     /// until a future version exposes a "full history" view.
-    var hasMorePages: Bool { cursor < index.count && conversations.count < Self.maxConversations }
+    var hasMorePages: Bool { cursor < index.count && loaded.count < Self.maxConversations }
 
     let conversationsDir: URL
     private let archive: ConversationFileArchive
@@ -69,7 +76,7 @@ final class FileHistoryStore: HistoryStore {
         self.encoder = HistoryJSONCoders.makeEncoder()
         self.decoder = HistoryJSONCoders.makeDecoder()
         self.index = snapshot.index
-        self.conversations = snapshot.conversations
+        self.loaded = snapshot.conversations
         self.cursor = snapshot.cursor
     }
 
@@ -110,38 +117,53 @@ final class FileHistoryStore: HistoryStore {
         output: String?,
         label: String?
     ) {
+        write(conversationID) {
+            $0.inputSegments = inputSegments
+            $0.output = output
+            $0.label = label
+            $0.status = .normal
+        }
+    }
+
+    func recordDiscarded(
+        conversationID: UUID,
+        inputSegments: [InputSegment],
+        choice: RecordedOutputChoice
+    ) {
+        write(conversationID) {
+            $0.inputSegments = inputSegments
+            $0.output = nil
+            $0.label = nil
+            $0.status = .discarded(choice)
+        }
+    }
+
+    func resolveDiscarded(conversationID: UUID, output: String, label: String?) {
+        guard loadConversation(id: conversationID) != nil else { return }
+        write(conversationID) {
+            $0.output = output
+            $0.label = label
+            $0.status = .normal
+        }
+    }
+
+    private func write(_ conversationID: UUID, applying edit: (inout Conversation) -> Void) {
         let now = Date()
         let existing = loadConversation(id: conversationID)
-        let conversation: Conversation
-        let fileURL: URL
-
-        if let (prior, priorURL) = existing {
-            var updated = prior
-            updated.inputSegments = inputSegments
-            updated.output = output
-            updated.label = label
-            updated.lastUpdated = now
-            conversation = updated
-            fileURL = priorURL
-        } else {
-            conversation = Conversation(
-                id: conversationID,
-                inputSegments: inputSegments,
-                output: output,
-                label: label,
-                lastUpdated: now
-            )
-            fileURL = snapshotURL(id: conversationID, createdAt: now)
-        }
+        var conversation = existing?.0
+            ?? Conversation(id: conversationID, inputSegments: [], output: nil, label: nil, lastUpdated: now)
+        edit(&conversation)
+        conversation.lastUpdated = now
+        let fileURL = existing?.1 ?? snapshotURL(id: conversationID, createdAt: now)
 
         // Update in-memory state synchronously so UI reflects the new entry
         // immediately. Disk I/O is dispatched off MainActor below — blocking
         // here would stall Darwin handlers (settings sync) and the keyboard's
         // cross-process stateKey poll.
-        if let idx = conversations.firstIndex(where: { $0.id == conversationID }) {
-            conversations.remove(at: idx)
+        if let idx = loaded.firstIndex(where: { $0.id == conversationID }) {
+            loaded.remove(at: idx)
         }
-        conversations.insert(conversation, at: 0)
+        loaded.insert(conversation, at: 0)
         refreshIndexEntry(id: conversationID, url: fileURL, modifiedAt: now)
 
         let encoder = self.encoder
@@ -152,10 +174,10 @@ final class FileHistoryStore: HistoryStore {
         }
     }
 
-    func removeConversation(_ conversation: Conversation) {
+    func removeConversation(id: UUID) {
+        guard loaded.contains(where: { $0.id == id }) || index.contains(where: { $0.id == id }) else { return }
         let now = Date()
-        let id = conversation.id
-        conversations.removeAll { $0.id == id }
+        loaded.removeAll { $0.id == id }
         index.removeAll { $0.id == id }
         cursor = min(cursor, index.count)
 
@@ -168,11 +190,11 @@ final class FileHistoryStore: HistoryStore {
 
     func clearAll() {
         let now = Date()
-        var pending: [UUID] = conversations.map(\.id)
-        for entry in index where !conversations.contains(where: { $0.id == entry.id }) {
+        var pending: [UUID] = loaded.map(\.id)
+        for entry in index where !loaded.contains(where: { $0.id == entry.id }) {
             pending.append(entry.id)
         }
-        conversations.removeAll()
+        loaded.removeAll()
         index.removeAll()
         cursor = 0
 
@@ -187,19 +209,19 @@ final class FileHistoryStore: HistoryStore {
 
     func loadNextPage() {
         guard hasMorePages else { return }
-        // Cap loading so `conversations` never grows past `maxConversations`.
+        // Cap loading so `loaded` never grows past `maxConversations`.
         // Index entries beyond that point stay on disk but are invisible
         // until a future release exposes older history.
-        let displayCapSlack = Self.maxConversations - conversations.count
+        let displayCapSlack = Self.maxConversations - loaded.count
         let upper = min(cursor + Self.pageSize, cursor + displayCapSlack, index.count)
         guard cursor < upper else { return }
-        var loaded: [Conversation] = []
+        var page: [Conversation] = []
         for i in cursor..<upper {
-            guard !conversations.contains(where: { $0.id == index[i].id }),
+            guard !loaded.contains(where: { $0.id == index[i].id }),
                   let conv = readConversation(at: index[i].url) else { continue }
-            loaded.append(conv)
+            page.append(conv)
         }
-        conversations.append(contentsOf: loaded)
+        loaded.append(contentsOf: page)
         cursor = upper
     }
 
@@ -228,7 +250,7 @@ final class FileHistoryStore: HistoryStore {
     }
 
     private func loadConversation(id: UUID) -> (Conversation, URL)? {
-        if let inMemory = conversations.first(where: { $0.id == id }),
+        if let inMemory = loaded.first(where: { $0.id == id }),
            let entry = index.first(where: { $0.id == id }) {
             return (inMemory, entry.url)
         }

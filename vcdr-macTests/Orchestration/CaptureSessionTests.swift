@@ -320,21 +320,6 @@ struct CaptureSessionCancellationTests {
 
     private static let testRecordingDuration: Duration = .milliseconds(100)
 
-    @Test("Cancel during recording returns to idle without history")
-    @MainActor
-    func cancelDuringRecording() async {
-        let env = CaptureSessionTestEnvironment(
-            mockProvider: MockTranscriptionProvider(result: "should not land")
-        )
-        defer { env.cleanup() }
-
-        env.session.toggle()
-        #expect(await env.waitForPhase { $0 == .recording })
-        env.session.cancel()
-        #expect(await env.waitForPhase { $0 == .idle })
-        #expect(env.history.conversations.isEmpty)
-    }
-
     @Test("Cancel during transcription returns to idle without history")
     @MainActor
     func cancelDuringTranscription() async {

@@ -44,6 +44,7 @@ final class RecordingIndicatorPanel {
     private static let cancelledDisplayDuration: Duration = .seconds(1)
     private static let dismissedDisplayDuration: Duration = .seconds(1)
     private static let discardedDisplayDuration: Duration = .seconds(2)
+    private static let discardOutcomeDisplayDuration: Duration = .seconds(1.5)
     private static let successDisplayDuration: Duration = .seconds(1.5)
     private static let copiedDisplayDuration: Duration = .seconds(1.5)
     private static let copyErrorDisplayDuration: Duration = .seconds(2)
@@ -187,6 +188,13 @@ final class RecordingIndicatorPanel {
     /// showing the bare cancel mark.
     func showRecordingDiscarded() {
         showEphemeral(content: InfoPillView(icon: "trash", iconColor: .secondary, label: "Recording discarded"), duration: Self.discardedDisplayDuration)
+    }
+
+    /// Show the outcome of a ⇧⎋ Discard. Called only once the outcome is
+    /// known, so the pill never says "saved" before the save.
+    func showDiscarded(savedToHistory: Bool) {
+        let label = savedToHistory ? "Discarded · saved to History" : "Discarded"
+        showEphemeral(content: InfoPillView(icon: "xmark", iconColor: .secondary, label: label), duration: Self.discardOutcomeDisplayDuration)
     }
 
     // MARK: - Private Helpers

@@ -28,12 +28,16 @@ protocol RecordingStreamingSession: Sendable {
 final class RecordingRun {
     typealias Settings = TranscriptProcessor.Settings
 
-    private let conversationID = UUID()
+    let conversationID = UUID()
     let audioRecorder: any RecordingAudioCapturing
     let streaming: any RecordingStreamingSession
     private let transcriptProcessor: TranscriptProcessor
     private let completionAdapters: [any RecordingRunCompletionAdapter]
     let clock: HotMicClock
+    /// A discarded run that is still decoding. Transcription setup waits for
+    /// it, so two decodes never run at once (ADR-0010). The audio captured
+    /// meanwhile waits in the streaming session, as it does for a model load.
+    private let decodeInFlight: Task<Void, Never>?
     private let currentSettings: @MainActor () -> Settings
     private let currentCaptures: @MainActor () -> [String]
     private let currentSubstitutions: @MainActor () -> [Substitution]
@@ -56,6 +60,7 @@ final class RecordingRun {
         transcriptProcessor: TranscriptProcessor,
         completionAdapters: [any RecordingRunCompletionAdapter],
         clock: HotMicClock? = nil,
+        decodeInFlight: Task<Void, Never>? = nil,
         currentSettings: @escaping @MainActor () -> Settings,
         currentCaptures: @escaping @MainActor () -> [String],
         currentSubstitutions: @escaping @MainActor () -> [Substitution] = { [] },
@@ -71,6 +76,7 @@ final class RecordingRun {
         // Optional so the default can be built inside this `@MainActor` init —
         // default-argument expressions evaluate in a nonisolated context.
         self.clock = clock ?? SystemHotMicClock()
+        self.decodeInFlight = decodeInFlight
         self.currentSettings = currentSettings
         self.currentCaptures = currentCaptures
         self.currentSubstitutions = currentSubstitutions
@@ -83,7 +89,9 @@ final class RecordingRun {
     var isTerminal: Bool { terminalState != nil }
 
     func start() async -> Bool {
-        setupTask = Task.detached { [streaming] in
+        setupTask = Task.detached { [streaming, decodeInFlight] in
+            await decodeInFlight?.value
+            try Task.checkCancellation()
             try await streaming.start()
         }
 
@@ -122,6 +130,7 @@ final class RecordingRun {
         guard !captureEnded else { return }
         captureEnded = true
         cancelArmingDeadline()
+        updateTask?.cancel()
         audioRecorder.stopCapture()
     }
 
@@ -131,7 +140,6 @@ final class RecordingRun {
         }
 
         endCapture()
-        updateTask?.cancel()
 
         let waitStart = ContinuousClock.now
         onTranscribingMessage("Loading model — your recording is safe")
@@ -176,17 +184,28 @@ final class RecordingRun {
         return await finish(.cancellation)
     }
 
-    /// DEBUG / test-only: polls until this run reaches its terminal resting
-    /// state and returns the recorded outcome. Production code never reads it.
-    func waitForIdle(timeout: Duration = .seconds(10)) async -> RecordingRunTerminalState? {
-        let start = ContinuousClock.now
-        while start.duration(to: .now) < timeout {
-            if let terminalState {
-                return terminalState
-            }
-            try? await Task.sleep(for: Self.idlePollInterval)
+    /// Ends a discarded run and returns its verbatim transcript: the raw text
+    /// of the streaming session, with no Substitutions, no filler removal and
+    /// no AI. Empty when nothing was said or the transcription failed.
+    ///
+    /// No completion adapter and no callback hears of this ending. The
+    /// keyboard already has `cancelled`, and by now a later run can own the
+    /// wire and the screen.
+    func finishDiscarded() async -> String {
+        guard terminalState == nil else { return "" }
+        endCapture()
+        defer {
+            terminalState = .cancellation
+            Logger.recording.info("Run terminal state: discarded")
         }
-        return nil
+        do {
+            try await setupTask?.value
+            return try await streaming.finish().trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            await streaming.cancel()
+            Logger.recording.error("Discarded run was not transcribed: \(error)")
+            return ""
+        }
     }
 
     private func finishStreaming() async throws -> RecordingRunTerminalState {
@@ -241,25 +260,6 @@ final class RecordingRun {
         return terminal
     }
 
-    /// Every terminal branch — mic seizure, model-load throw, finalization
-    /// throw, Empty Result, cancellation, success — funnels through `finish`,
-    /// so logging here is what makes "which of the four states did this run
-    /// reach" answerable from a field report's log (ADR-0004). A Processing
-    /// Failure carries the same reason string the user is shown, at error
-    /// level; the other states are ordinary lifecycle facts at info.
-    private func logTerminal(_ terminal: RecordingRunTerminalState) {
-        switch terminal {
-        case .processingFailure(let failure):
-            Logger.recording.error("Run terminal state: \(terminal.logName) — \(failure.message)")
-        case .success(let success):
-            Logger.recording.info(
-                "Run terminal state: \(terminal.logName) (\(success.finalText.count) chars)"
-            )
-        case .emptyResult, .cancellation:
-            Logger.recording.info("Run terminal state: \(terminal.logName)")
-        }
-    }
-
     func cancelSetup() {
         updateTask?.cancel()
         setupTask?.cancel()
@@ -293,6 +293,5 @@ final class RecordingRun {
         }
     }
 
-    private static let idlePollInterval: Duration = .milliseconds(20)
     private static let transcriptUpdateInterval: Duration = .milliseconds(16)
 }

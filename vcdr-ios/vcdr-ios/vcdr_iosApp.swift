@@ -11,7 +11,10 @@ struct VCDRiOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RecordingView(coordinator: coordinator)
+            RecordingView(
+                coordinator: coordinator,
+                conversationReprocessor: appDelegate.dependencies.conversationReprocessor
+            )
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     appDelegate.dependencies.boot.launch()

@@ -7,6 +7,9 @@ struct RecordingTopBar: View {
     /// Passed to the Settings sheet and read nowhere here — this view's own
     /// body must stay clear of Transcription Readiness.
     let coordinator: RecordingFlowCoordinator
+    let conversationReprocessor: any ConversationReprocessor
+    /// A Discard note's VIEW asks for History through this.
+    let discardNotes: DiscardNoteCenter
     let history: (any HistoryStore)?
     let historySync: SyncReconciler?
     let substitutionStore: any SubstitutionStore
@@ -62,9 +65,17 @@ struct RecordingTopBar: View {
         } label: {
             topBarIcon("clock.arrow.circlepath")
         }
-        .sheet(isPresented: $showHistory) {
-            HistorySheet(history: history, historySync: historySync)
-                .preferredColorScheme(appearance.colorScheme)
+        .sheet(isPresented: $showHistory, onDismiss: { discardNotes.historyFocus = nil }) {
+            HistorySheet(
+                history: history,
+                historySync: historySync,
+                reprocessor: conversationReprocessor,
+                focus: discardNotes.historyFocus
+            )
+            .preferredColorScheme(appearance.colorScheme)
+        }
+        .onChange(of: discardNotes.historyFocus) { _, focus in
+            if focus != nil { showHistory = true }
         }
     }
 
@@ -103,6 +114,8 @@ struct RecordingTopBar: View {
 private struct HistorySheet: View {
     let history: (any HistoryStore)?
     let historySync: SyncReconciler?
+    let reprocessor: any ConversationReprocessor
+    let focus: UUID?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
 
@@ -110,7 +123,7 @@ private struct HistorySheet: View {
 
     var body: some View {
         if let history {
-            HistoryView(history: history, historySync: historySync)
+            HistoryView(history: history, historySync: historySync, reprocessor: reprocessor, focus: focus)
         } else {
             NavigationStack {
                 ProgressView()

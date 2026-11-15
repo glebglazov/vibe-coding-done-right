@@ -68,21 +68,15 @@ struct VCDRKeyboardView: View {
     }
 }
 
-/// The Full Keyboard's toolbar strip: one line carrying the status slot and
-/// the dictation controls. Lives in its own view rather than inline in the
-/// `toolbar:` builder because it holds the Discard Warning wash state — the
-/// strip is what reddens while the Stop pill is held, and the strip's own
-/// background is opaque, so the wash simply tints it.
+/// The Full Keyboard's toolbar strip: one line carrying the leading slot and
+/// the dictation controls.
 struct FullKeyboardToolbar: View {
     @ObservedObject var controller: KeyboardViewController
     @ObservedObject var reachability: KeyboardReachabilityMonitor
-    @State private var wash = DiscardWarningWashState()
-    @State private var narration = HoldNarrationState()
 
     var body: some View {
         HStack {
-            // Left: settings pills, yielding to the Discard Hint during a hold
-            KeyboardStripLeading(controller: controller, narration: narration)
+            KeyboardStripLeading(controller: controller)
                 .padding(.leading, 10)
 
             Spacer()
@@ -94,23 +88,9 @@ struct FullKeyboardToolbar: View {
                 captureCount: controller.captureCount,
                 onStart: { controller.startRecordingFromKeyboard() },
                 onStop: { controller.stopAndWaitForResult() },
-                onDiscard: {
-                    wash.beginDiscardUnwind()
-                    narration.end()
-                    controller.discardRecordingFromKeyboard()
-                },
                 onInsert: { controller.insertPendingText() },
                 onCapture: { controller.captureSelectedText() },
-                onShowFailure: { controller.showFailureReason() },
-                onHintBegan: { narration.beginHint() },
-                onWarningRamp: {
-                    wash.ramp(to: $0)
-                    narration.ramp(to: $0)
-                },
-                onWarningEnd: {
-                    wash.end()
-                    narration.end()
-                }
+                onShowFailure: { controller.showFailureReason() }
             )
 
             KeyboardModeToggleButton(direction: .collapse) {
@@ -120,15 +100,6 @@ struct FullKeyboardToolbar: View {
         }
         .padding(.top, 2)
         .padding(.bottom, 6)
-        .discardWarningWash(progress: wash.progress)
-        // Belt-and-braces: whatever ends the run, neither the wash nor the
-        // hold narration can outlive it.
-        .onChange(of: controller.dictationState) { _, newState in
-            if newState != .recording {
-                wash.end()
-                narration.end()
-            }
-        }
     }
 }
 
@@ -295,17 +266,9 @@ struct DictateActionButton: View {
     var captureCount: Int
     var onStart: () -> Void
     var onStop: () -> Void
-    var onDiscard: () -> Void
     var onInsert: () -> Void
     var onCapture: () -> Void
     var onShowFailure: () -> Void
-    /// Fires a quarter-second into a hold, before anything animates, so the
-    /// strip can put the Discard Hint where the settings pills sit.
-    var onHintBegan: () -> Void = {}
-    /// Forwarded from the Stop pill's hold so the surrounding strip — not the
-    /// pill under the thumb — can carry the Discard Warning.
-    var onWarningRamp: (CGFloat) -> Void = { _ in }
-    var onWarningEnd: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 8) {
@@ -316,17 +279,12 @@ struct DictateActionButton: View {
                 if showCapture {
                     DictateCaptureButton(captureCount: captureCount, onCapture: onCapture)
                 }
-                HoldToDiscardStopPill(
-                    text: "Stop",
-                    icon: "stop.fill",
-                    color: .red,
-                    onStop: onStop,
-                    onDiscard: onDiscard,
-                    onDiscardHaptic: { KeyboardHaptics.medium() },
-                    onHintBegan: onHintBegan,
-                    onWarningRamp: onWarningRamp,
-                    onWarningEnd: onWarningEnd
-                )
+                Button {
+                    KeyboardHaptics.medium()
+                    onStop()
+                } label: {
+                    actionPill("Stop", icon: "stop.fill", color: .red)
+                }
             case .transcribing:
                 actionPill("", icon: "ellipsis", color: .orange)
                     .phaseAnimator([false, true]) { content, phase in
@@ -344,7 +302,16 @@ struct DictateActionButton: View {
             case .emptyResult:
                 recordButton(color: .yellow)
             case .cancelled:
-                actionPill("CANCELLED", icon: "xmark", color: .gray)
+                // A tap here starts a run, as START does: the Discard never
+                // makes the user wait for the pill to go.
+                Button {
+                    KeyboardHaptics.medium()
+                    onStart()
+                } label: {
+                    actionPill("DISCARDED", icon: "xmark", color: .gray)
+                }
+                .accessibilityLabel("Discarded")
+                .accessibilityHint("Starts a new recording")
             case .failed:
                 // Red, and only "FAILED" — the reason lives in the app, which
                 // has room to show it in full (ADR-0004).
@@ -411,124 +378,6 @@ struct DictateActionButton: View {
         .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
 
         .contentShape(Capsule())
-    }
-}
-
-/// Stop pill with hold-to-Discard: release before the threshold stops.
-///
-/// The pill draws no warning of its own — a thumb covers it, so progress there
-/// cannot be read. It reports the ramp outwards via `onWarningRamp`/
-/// `onWarningEnd` and the strip around it carries the whole cue.
-struct HoldToDiscardStopPill: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillFont: CGFloat = 11
-    private static let pillBorder: CGFloat = 1.5
-
-    let text: String
-    let icon: String
-    let color: Color
-    let onStop: () -> Void
-    let onDiscard: () -> Void
-    let onDiscardHaptic: () -> Void
-    let onHintBegan: () -> Void
-    let onWarningEnd: () -> Void
-
-    @State private var holdController: HoldToDiscardController
-    @State private var isPressed = false
-    /// Boxed so the controller's ramp closure and the gesture can share it.
-    /// Held in `@State` (not a plain `let`) so re-inits of this view struct —
-    /// which happen ~60×/s while the ramp drives `DiscardWarningWashState`'s
-    /// progress — don't hand the gesture a fresh, disconnected box each render.
-    @State private var ladder: HapticLadderBox
-
-    init(
-        text: String,
-        icon: String,
-        color: Color,
-        onStop: @escaping () -> Void,
-        onDiscard: @escaping () -> Void,
-        onDiscardHaptic: @escaping () -> Void = {},
-        onHintBegan: @escaping () -> Void = {},
-        onWarningRamp: @escaping (CGFloat) -> Void = { _ in },
-        onWarningEnd: @escaping () -> Void = {}
-    ) {
-        self.text = text
-        self.icon = icon
-        self.color = color
-        self.onStop = onStop
-        self.onDiscard = onDiscard
-        self.onDiscardHaptic = onDiscardHaptic
-        self.onHintBegan = onHintBegan
-        self.onWarningEnd = onWarningEnd
-        let ladder = HapticLadderBox()
-        _ladder = State(initialValue: ladder)
-        _holdController = State(
-            initialValue: HoldToDiscardController(
-                onStop: onStop,
-                onDiscard: onDiscard,
-                onDiscardHaptic: onDiscardHaptic,
-                onWarningRamp: { progress in
-                    onWarningRamp(progress)
-                    // `KeyboardHaptics.light()` is a no-op when the user has
-                    // haptics off, so the ladder simply vanishes there.
-                    for _ in 0..<ladder.ticks(upTo: progress) { KeyboardHaptics.light() }
-                }
-            )
-        )
-    }
-
-    var body: some View {
-        @Bindable var hold = holdController
-
-        HStack(spacing: 5) {
-            Image(systemName: icon)
-                .font(.system(size: Self.pillFont, weight: .black))
-            Text(text.uppercased())
-                .font(.system(size: Self.pillFont, weight: .black))
-                .tracking(0.5)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 10)
-        .frame(height: Self.pillHeight)
-        .background(Capsule().fill(color))
-        .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
-        .contentShape(Capsule())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: "Discard recording") {
-            holdController.discardImmediately()
-        }
-        .onAppear { KeyboardHaptics.prepare() }
-        .onChange(of: hold.isHinting) { _, hinting in
-            if hinting { onHintBegan() }
-        }
-        .onChange(of: hold.isWarning) { _, warning in
-            if !warning {
-                ladder.reset()
-                onWarningEnd()
-            }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard !isPressed else { return }
-                    isPressed = true
-                    ladder.reset()
-                    holdController.touchDown()
-                }
-                .onEnded { _ in
-                    guard isPressed else { return }
-                    isPressed = false
-                    holdController.touchUp()
-                    // Fire the retreat straight from the release rather than
-                    // only from the `isWarning` `onChange` below, which lands
-                    // a render pass later. `onWarningEnd()` is idempotent, so
-                    // the `onChange` still firing afterward is a no-op.
-                    ladder.reset()
-                    onWarningEnd()
-                }
-        )
     }
 }
 

@@ -46,7 +46,8 @@ extension CaptureSession {
         }
 
         let clipboardMonitor = makeClipboardMonitor()
-        run = RunState(clipboardMonitor: clipboardMonitor)
+        let thisRun = RunState(clipboardMonitor: clipboardMonitor)
+        run = thisRun
 
         // ADR-0006: the hotkey is never refused for an unready model. Audio
         // starts now and the model catches up in the background; if it hasn't
@@ -72,6 +73,17 @@ extension CaptureSession {
             emit(.failed, finalText: nil, destinationID: nil, historyConversationID: nil)
             Logger.app.error("Failed to start recording: \(String(describing: failure))")
             resetErrorAfterDelay()
+            return
+        }
+
+        // ⇧⎋ during preparation discarded this run while the audio started.
+        // The microphone must not keep recording for a run that is gone, unless
+        // a newer run has started and owns it now.
+        guard case .preparingToRecord = status.phase, run?.conversationID == thisRun.conversationID else {
+            if run == nil, let audioURL = audio.stopRecording() {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+            Logger.app.info("Recording started after its run was discarded; stopped it")
             return
         }
 
@@ -167,13 +179,14 @@ extension CaptureSession {
         }
     }
 
-    /// Cancels an in-flight recording/transcription. Safe to call from any phase.
+    /// Ends a run that is preparing to record (nothing was said yet, so this is
+    /// a Discard that keeps nothing) or transcribing (a cancel). Safe to call
+    /// from any phase.
     func cancelRecording() {
         let wasTranscribing = (status.phase == .transcribing)
         let wasPreparing = (status.phase == .preparingToRecord)
-        let wasRecording = (status.phase == .recording)
 
-        guard wasTranscribing || wasPreparing || wasRecording else { return }
+        guard wasTranscribing || wasPreparing else { return }
 
         let wasWaitingForModel = (preparationNarrationTask != nil)
         preparationNarrationTask?.cancel()
@@ -184,10 +197,6 @@ extension CaptureSession {
         if wasTranscribing {
             processingTask?.cancel()
             processingTask = nil
-        } else if wasRecording {
-            if let audioURL = audio.stopRecording() {
-                try? FileManager.default.removeItem(at: audioURL)
-            }
         }
 
         Task { await media.resumeIfNeeded() }
@@ -201,13 +210,15 @@ extension CaptureSession {
         // Cancelling while the model is still preparing throws away audio the
         // user has already spoken — the pill names that loss instead of showing
         // the cancel mark that ends an ordinary run.
-        if wasTranscribing && wasWaitingForModel {
+        if wasPreparing {
+            indicator.showDiscarded(savedToHistory: false)
+        } else if wasWaitingForModel {
             indicator.showRecordingDiscarded()
         } else {
             indicator.showCancelled()
         }
 
-        emit(.cancelled, finalText: nil, destinationID: nil, historyConversationID: nil)
+        emit(wasPreparing ? .discarded : .cancelled, finalText: nil, destinationID: nil, historyConversationID: nil)
         Logger.app.info("\(wasTranscribing ? "Processing cancelled" : "Recording cancelled")")
     }
 
@@ -238,9 +249,8 @@ extension CaptureSession {
 
     /// Explicit cancel from the capture UI — removes the preview's conversation from history.
     func cancelCapture() {
-        if let pending = pendingPreview,
-           let conversation = history.conversations.first(where: { $0.id == pending.input.conversationID }) {
-            history.removeConversation(conversation)
+        if let pending = pendingPreview {
+            history.removeConversation(id: pending.input.conversationID)
             Logger.app.info("Capture cancelled and removed from history")
         }
         dismissOverlay(saveToHistory: false)

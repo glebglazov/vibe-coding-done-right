@@ -9,9 +9,10 @@ import Foundation
 /// the `structuredText` received on both calls is identical mechanically
 /// proves that the initial attempt and the retry share one code path.
 ///
-/// Implemented as an actor because `AIProcessingPort` is `Sendable` and this
-/// type holds mutable state.
-actor ScriptedAIProcessing: AIProcessingPort {
+/// Main-actor isolated, as the app module's default isolation makes
+/// `AIProcessingPort`; that isolation is also what makes it `Sendable`.
+@MainActor
+final class ScriptedAIProcessing: AIProcessingPort {
 
     struct ReceivedCall: Equatable, Sendable {
         let structuredText: String
@@ -24,7 +25,7 @@ actor ScriptedAIProcessing: AIProcessingPort {
     private var pending: [Result<String, Error>]
     private(set) var receivedCalls: [ReceivedCall] = []
 
-    init(results: [Result<String, Error>]) {
+    nonisolated init(results: [Result<String, Error>]) {
         self.pending = results
     }
 

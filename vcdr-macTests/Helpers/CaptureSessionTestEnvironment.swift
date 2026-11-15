@@ -35,6 +35,8 @@ struct CaptureSessionTestEnvironment {
     /// What the session actually claims through, so a test can suspend every
     /// claim the way the shortcut recorder does.
     let suspendableRegistry: SuspendableHotkeyRegistry
+    /// Where a ⇧⎋ Discard sends its recording, so a test can wait for the save.
+    let discardedCaptures: VerbatimDiscardedCaptureFinalizer
 
     private let userDefaultsSuiteName: String
 
@@ -121,6 +123,13 @@ struct CaptureSessionTestEnvironment {
 
         let preparedModels = PreparedModels()
         self.preparedModels = preparedModels
+        let decodeTurnstile = DecodeTurnstile()
+        let discardedCaptures = VerbatimDiscardedCaptureFinalizer(
+            history: history,
+            decodeTurnstile: decodeTurnstile,
+            modelReadinessPollingInterval: CaptureSession.modelReadinessPollingInterval
+        )
+        self.discardedCaptures = discardedCaptures
         self.session = CaptureSession(
             settings: settings,
             history: history,
@@ -137,7 +146,9 @@ struct CaptureSessionTestEnvironment {
                 textProcessor: textProcessor,
                 substitutionStore: SubstitutionStoreProxy(),
                 overrides: overrides,
-                styleProvider: { .casual }
+                styleProvider: { .casual },
+                discardedCaptures: discardedCaptures,
+                decodeTurnstile: decodeTurnstile
             )
         )
     }

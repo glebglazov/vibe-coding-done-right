@@ -36,7 +36,7 @@ final class IntentRecordingRemote: RecordingRunRemote {
         // another may have started, by the time it answers.
         guard let active = coordinator.activeRun, active.run === run, case .capturing = active.phase else { return }
         Logger.recording.error("Start Recording discarded: ActivityKit refused the card")
-        await coordinator.discardRecording()
+        await coordinator.cancelRecording()
         throw .cardUnavailable
     }
 

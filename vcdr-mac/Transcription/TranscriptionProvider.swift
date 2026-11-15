@@ -64,6 +64,20 @@ protocol TranscriptionProvider: Sendable {
 extension TranscriptionProvider {
     var name: String { model.displayName }
 
+    /// Holds a recording that started before the model was ready until it is
+    /// (`docs/adr/0006`). A Preparation Failure ends the wait instead: the
+    /// model is not coming, and the caller must say so rather than hold the
+    /// audio forever.
+    func waitUntilReady(pollingEvery interval: Duration) async throws {
+        while !(await isReady) {
+            if case .failed(let failure) = await initPhase {
+                throw TranscriptionError.initializationFailed(failure)
+            }
+            try Task.checkCancellation()
+            try await Task.sleep(for: interval)
+        }
+    }
+
     /// Runs a transcription attempt and puts its timing on the record: how
     /// long it took against how long the audio was, and which model this was
     /// — the numbers a person choosing between Whisper sizes needs, worded

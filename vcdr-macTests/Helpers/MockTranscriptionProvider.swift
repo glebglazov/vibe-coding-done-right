@@ -2,8 +2,10 @@ import Foundation
 @testable import vcdr_mac
 
 /// A configurable mock TranscriptionProvider for e2e tests.
-/// Uses actor isolation to satisfy the Sendable requirement.
-actor MockTranscriptionProvider: TranscriptionProvider {
+/// Main-actor isolated, as the app module's default isolation makes the
+/// protocol; that isolation is also what makes it Sendable.
+@MainActor
+final class MockTranscriptionProvider: TranscriptionProvider {
     let model: TranscriptionModel
     let name = "Mock"
 
@@ -50,7 +52,7 @@ actor MockTranscriptionProvider: TranscriptionProvider {
 
     var isReady: Bool { mockIsReady }
 
-    init(
+    nonisolated init(
         model: TranscriptionModel = .parakeetV3,
         isReady: Bool = true,
         preparationPhase: ModelPreparationPhase? = nil,

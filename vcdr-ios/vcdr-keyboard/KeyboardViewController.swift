@@ -15,7 +15,8 @@ enum DictationState {
     case ready
     /// Recording produced no speech — shown briefly before reverting to idle
     case emptyResult
-    /// Discard acknowledgement — shown briefly before reverting to idle
+    /// The app published `cancelled`: a Discard, or a stop during Arming. The
+    /// DISCARDED pill shows briefly, then START comes back.
     case cancelled
     /// The run failed to produce a transcript. The reason stays in the app; the
     /// pill only reports that a failure happened.
@@ -261,8 +262,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// state the user may want to act on, and the pill is the only place the
     /// keyboard reports it.
     private static let failedFlashDuration: TimeInterval = 5
-    /// Duration to show the cancelled flash after Discard (ADR-0003).
-    private static let cancelledFlashDuration: TimeInterval = HoldToDiscardController.cancelledFlashDuration
+    /// Duration to show the DISCARDED pill before START comes back.
+    private static let cancelledFlashDuration: TimeInterval = DiscardTiming.keyboardFlash
     /// Window to wait for the app to confirm a `startRecording` command by
     /// writing `state = .recording`. If nothing by then, fall back to URL.
     /// Tuned for Darwin roundtrip + a MainActor hop under CoreML load.
@@ -287,16 +288,6 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// we fall back to URL mid-poll. In both URL paths the keyboard returns
     /// without a result; the app's stop pipeline publishes bundled text and the
     /// next `viewWillAppear` auto-pastes it.
-    ///
-    /// Discard fires from `HoldToDiscardController` alone, at
-    /// `HoldToDiscardController.holdDuration`; the keyboard keeps no fire timer
-    /// of its own, so the threshold cannot drift between the two. It uses
-    /// `discardRecordingFromKeyboard()` instead —
-    /// no deep-link fallback, no acknowledgement wait (ADR-0003).
-    func discardRecordingFromKeyboard() {
-        keyboardChannel.cancelRecording()
-    }
-
     func stopAndWaitForResult() {
         switch keyboardChannel.stopRecording() {
         case .commandSent:
@@ -388,6 +379,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         refreshState()
     }
 
+    /// Discard: no deep-link fallback, no acknowledgement wait (ADR-0003). The
+    /// app answers with `cancelled`.
+    func discardRecordingFromKeyboard() {
+        keyboardChannel.cancelRecording()
+    }
+
     /// Foregrounds the app on the surface that already owns the failure
     /// reason. The URL is a route only: the reason remains app-owned and is
     /// neither duplicated into the URL nor sent through another channel.
@@ -418,14 +415,22 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         textStyle = SettingOverrides.effectiveTextStyle()
     }
 
+    /// AI mode and text style are fixed while a run listens (ADR-0010). The
+    /// wire's `recording` covers Arming and Capturing alike.
+    var areOutputChoicesLocked: Bool {
+        dictationState == .recording
+    }
+
     /// Cycles the AI mode through Verbatim → Dictation → Assistant → Verbatim.
     func cycleAIState() {
+        guard !areOutputChoicesLocked else { return }
         aiMode = aiMode.next
         SettingOverrides.setAIMode(aiMode)
         refreshSelectedTextIndicator()
     }
 
     func cycleTextStyle() {
+        guard !areOutputChoicesLocked else { return }
         textStyle = textStyle.next
         SettingOverrides.setTextStyle(textStyle)
     }
@@ -447,6 +452,10 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// optimistically flipped to `.recording` up front, which misled users
     /// into tapping Stop before anything had actually started.
     func startRecordingFromKeyboard() {
+        // A tap on the DISCARDED pill starts a run as START does. The flash
+        // must end first: while it shows, `refreshState` ignores the wire, and
+        // the app's `recording` would be lost.
+        if dictationState == .cancelled { dictationState = .idle }
         // Clear legacy single-capture key
         keyboardChannel.clearLegacySelectedText()
         // Initialize captures array — include current selection as first capture if available

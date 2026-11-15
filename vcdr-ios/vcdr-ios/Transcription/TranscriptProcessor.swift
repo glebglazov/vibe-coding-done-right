@@ -95,10 +95,13 @@ struct TranscriptProcessor {
 
     static func historyLabel(settings: Settings) -> String? {
         guard settings.promptMode != .verbatim else { return nil }
-        let mode = settings.promptMode.rawValue.capitalized
-        return settings.promptMode.appliesStyles
-            ? "\(mode) · \(settings.textStyle.rawValue.capitalized)"
-            : mode
+        return outputChoiceLabel(mode: settings.promptMode, style: settings.textStyle)
+    }
+
+    /// "Dictation · Casual", or the mode alone when it applies no style.
+    static func outputChoiceLabel(mode: AIPromptMode, style: TextStyle) -> String {
+        let modeName = mode.rawValue.capitalized
+        return mode.appliesStyles ? "\(modeName) · \(style.rawValue.capitalized)" : modeName
     }
 
     static func buildAIInput(_ localText: String, mode: AIPromptMode, captures: [String]) -> String {

@@ -14,7 +14,7 @@ struct RecordingToggleTests {
         #expect(RecordingToggle.command(for: nil) == .start)
         #expect(RecordingToggle.command(for: .arming) == .stop)
         #expect(RecordingToggle.command(for: Self.capturing) == .stop)
-        #expect(RecordingToggle.command(for: .cancellingArming) == .ignore)
+        #expect(RecordingToggle.command(for: .cancelling) == .ignore)
         #expect(RecordingToggle.command(for: .finalizing) == .ignore)
     }
 
@@ -23,7 +23,7 @@ struct RecordingToggleTests {
         #expect(RecordingToggle.stopCommand(for: nil) == .ignore)
         #expect(RecordingToggle.stopCommand(for: .arming) == .stop)
         #expect(RecordingToggle.stopCommand(for: Self.capturing) == .stop)
-        #expect(RecordingToggle.stopCommand(for: .cancellingArming) == .ignore)
+        #expect(RecordingToggle.stopCommand(for: .cancelling) == .ignore)
         #expect(RecordingToggle.stopCommand(for: .finalizing) == .ignore)
     }
 }

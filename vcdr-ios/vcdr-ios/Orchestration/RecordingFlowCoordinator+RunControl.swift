@@ -42,6 +42,7 @@ extension RecordingFlowCoordinator {
         isKeyboardRun = origin == .keyboard
         stoppedViaDeepLink = false
         aiProcessingStatus = .idle
+        discardNotes.dismiss()
         state = .arming
         setIdleTimerDisabled(true)
         Logger.app.info("[RecordTiming] state=arming set at +\(ContinuousClock.now - recordStart)")
@@ -106,7 +107,7 @@ extension RecordingFlowCoordinator {
     func stopActiveRun() async -> RecordingStopResult {
         guard let active = activeRun else { return .noRun }
         switch active.phase {
-        case .cancellingArming, .finalizing:
+        case .cancelling, .finalizing:
             Logger.app.info("[RecordTiming] stop ignored — run is \(String(describing: active.phase))")
             return .ignored
         case .arming:
@@ -125,44 +126,26 @@ extension RecordingFlowCoordinator {
         writeFailure(reason: Self.stopWithoutRunReason)
     }
 
-    func discardRecording() async {
-        guard let active = activeRun else { return }
-        switch active.phase {
-        case .arming:
-            Logger.app.info("[RecordTiming] discardRecording during Arming — cancelling")
-            clearCapturedTexts(for: active.origin)
-            abortArming()
-            flashCancelled(revertingTo: .idle)
-        case .capturing:
-            active.run.endCapture()
-            hotMicSession.recordingStopped()
-            setIdleTimerDisabled(false)
-            clearCapturedTexts(for: active.origin)
-
-            let terminalState = await active.run.cancel()
-            guard activeRun?.run === active.run else { return }
-            setActiveRun(nil)
-            switch terminalState {
-            case .cancellation:
-                flashCancelled(revertingTo: .ready)
-            default:
-                applyTerminalStateToUI(terminalState)
-            }
-        case .cancellingArming, .finalizing:
-            return
-        }
-    }
-
     func completionAdapters(for origin: RecordingRunOrigin) -> [any RecordingRunCompletionAdapter] {
         [KeyboardChannelRecordingRunCompletionAdapter(keyboardChannel: keyboardChannel, origin: origin), historyCompletionAdapter]
     }
 
     private func finalize(_ active: ActiveRecordingRun) async -> RecordingRunTerminalState {
         if isModelReady { recordHaptic.impactOccurred() }
+        endCapture(of: active)
+        return await transcribe(active)
+    }
+
+    /// Capture ends once per run, whether a stop or a Discard ends it: the Hot
+    /// Mic Session is told when the engine is really idle.
+    func endCapture(of active: ActiveRecordingRun) {
         active.run.endCapture()
         hotMicSession.recordingStopped()
         setIdleTimerDisabled(false)
+    }
 
+    /// Finalizing, from a run whose capture has already ended.
+    func transcribe(_ active: ActiveRecordingRun) async -> RecordingRunTerminalState {
         if active.origin.usesKeyboardCaptures {
             let texts = keyboardChannel.readCaptures()
             if !texts.isEmpty {

@@ -149,8 +149,11 @@ struct TextProcessingPipelineSpellingHintsTests {
     }
 }
 
-private actor CapturingLocalAgent: LocalAgentPort {
+@MainActor
+private final class CapturingLocalAgent: LocalAgentPort {
     private(set) var receivedText: String?
+
+    nonisolated init() {}
 
     func process(structuredText: String, mode: Mode, environment: [String: String]) async throws -> String {
         receivedText = structuredText
