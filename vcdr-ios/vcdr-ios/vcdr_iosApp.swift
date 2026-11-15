@@ -53,6 +53,7 @@ struct VCDRiOSApp: App {
                         // shows "LISTENING" — eliminates the flash of the previous state.
                         coordinator.prepareForDeepLinkRecording()
                         Task { await coordinator.handleRecordDeepLink() }
+                        appDelegate.dependencies.hostReturn.recordDeepLinkArrived()
                     case "stop":
                         Task { await coordinator.handleStopDeepLink() }
                     case "failure":

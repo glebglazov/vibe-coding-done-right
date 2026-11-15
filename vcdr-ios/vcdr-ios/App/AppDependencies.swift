@@ -8,6 +8,8 @@ import UIKit
 final class AppDependencies {
     let coordinator: RecordingFlowCoordinator
     let boot: AppBoot
+    let hostAppSource: any HostAppSource
+    let hostReturn: HostReturn
     private let remote: IntentRecordingRemote
 
     init() {
@@ -28,6 +30,12 @@ final class AppDependencies {
         )
         boot = AppBoot(steps: .coldLaunch(of: coordinator))
         remote = IntentRecordingRemote(boot: boot, coordinator: coordinator, card: card)
+        hostAppSource = RemoteKeyboardsHostAppSource(ownBundleID: Bundle.main.bundleIdentifier ?? "")
+        hostReturn = HostReturn(
+            source: hostAppSource,
+            runProgress: { [coordinator] in coordinator.hostReturnRunProgress },
+            openApp: HostAppLauncher.open
+        )
     }
 
     /// Makes the remote what `@AppDependency` resolves to in every intent.

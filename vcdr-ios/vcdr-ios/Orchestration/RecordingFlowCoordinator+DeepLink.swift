@@ -32,6 +32,18 @@ extension RecordingFlowCoordinator {
         }
     }
 
+    /// The run as a Host Return attempt sees it. Before `startRecording`
+    /// creates the run, `prepareForDeepLinkRecording` has already set Arming,
+    /// so no run with any other state means the run ended or never started.
+    var hostReturnRunProgress: HostReturnRunProgress {
+        switch activeRunPhase {
+        case .arming: .arming
+        case .capturing: .capturing
+        case .cancellingArming, .finalizing: .ended
+        case nil: state == .arming ? .arming : .ended
+        }
+    }
+
     func handleStopDeepLink() async {
         if RecordingToggle.stopCommand(for: activeRunPhase) == .stop {
             isKeyboardRun = true

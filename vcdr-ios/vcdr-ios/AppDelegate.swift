@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        dependencies.hostAppSource.start()
         if let url = launchOptions?[.url] as? URL,
            url.scheme == "vcdr-ios", url.host == "record" {
             dependencies.coordinator.prepareForDeepLinkRecording()
