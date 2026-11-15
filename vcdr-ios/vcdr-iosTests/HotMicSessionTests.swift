@@ -162,6 +162,20 @@ struct HotMicSessionTests {
         #expect(env.presence.startCalls == 0)
     }
 
+    @Test(".never keeps an engine that a cold Arming run warmed through a foreground renewal")
+    func neverPolicyKeepsArmingEngineOnRenewal() async {
+        let env = makeEnv(policy: .never)
+        env.engine.hasMicrophonePermission = true
+        env.session.recordIntentStarted()
+        env.engine.isHot = true
+
+        await env.session.renewIfAlive()
+        await settle()
+
+        #expect(env.engine.endHotSessionCalls == 0)
+        #expect(env.engine.isHot)
+    }
+
     @Test(".never releases the engine as soon as it hears that capture has ended")
     func neverPolicyTearsDownOnStop() async {
         let env = makeEnv(policy: .never)

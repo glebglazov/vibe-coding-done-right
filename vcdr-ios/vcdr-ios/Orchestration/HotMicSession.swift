@@ -97,6 +97,10 @@ final class HotMicSession {
     /// the engine before it is cancelled; that must be released, not converted
     /// into post-capture warmth.
     private var armingProtectedPriorSession = false
+    /// True from record intent until the run reaches Capturing or is cancelled.
+    /// A foreground renewal can land while a cold Arming run warms the engine,
+    /// and must not mistake that engine for an idle one.
+    private var recordIntentPending = false
 
     /// Cadence for the app-alive heartbeat. Small enough that the keyboard's
     /// freshness threshold can be ~3x this without false negatives, large
@@ -105,6 +109,8 @@ final class HotMicSession {
 
     /// Single source of truth: the session is alive ⇔ the engine is running.
     var isAlive: Bool { engine.isHot }
+
+    private var isInUse: Bool { engine.isRecording || recordIntentPending }
 
     deinit {
         idleTask?.cancel()
@@ -154,7 +160,7 @@ final class HotMicSession {
     func start() async {
         let timeout = policy()
         guard timeout != .never else {
-            if engine.isHot, !engine.isRecording { teardown() }
+            if engine.isHot, !isInUse { teardown() }
             return
         }
         guard await engine.startHotSession() else {
@@ -185,6 +191,7 @@ final class HotMicSession {
     }
 
     func recordIntentStarted() {
+        recordIntentPending = true
         guard engine.isHot else {
             armingProtectedPriorSession = false
             return
@@ -198,6 +205,7 @@ final class HotMicSession {
     /// already alive; this is not Post-Capture Warmth and must not earn a fresh
     /// timeout.
     func recordIntentCancelledBeforeCapture() {
+        recordIntentPending = false
         guard armingProtectedPriorSession else {
             teardown()
             return
@@ -207,6 +215,7 @@ final class HotMicSession {
     }
 
     func recordingStarted() {
+        recordIntentPending = false
         guard engine.isHot else { return }
         armingProtectedPriorSession = false
         idleTask?.cancel()
@@ -226,6 +235,7 @@ final class HotMicSession {
     /// does not earn or refresh a warm window; it force-withdraws readiness.
     func reset() {
         armingProtectedPriorSession = false
+        recordIntentPending = false
         teardown()
     }
 
@@ -274,7 +284,7 @@ final class HotMicSession {
         case .never:
             idleDeadline = nil
             idleStartedAt = nil
-            if !engine.isRecording { teardown() }
+            if !isInUse { teardown() }
             return
         case .always:
             // No inactivity Presence Deadline — readiness lives for as long as
