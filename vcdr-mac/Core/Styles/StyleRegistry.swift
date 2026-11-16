@@ -342,7 +342,6 @@ public actor StyleRegistry: StyleRegistryProtocol {
                             isBuiltIn: true,
                             isDefault: style.isDefault,
                             staticRules: correct.staticRules,
-                            dynamicPrompt: correct.dynamicPrompt,
                             associatedAppBundleIDs: style.associatedAppBundleIDs
                         )
                         currentStyles[index] = updated

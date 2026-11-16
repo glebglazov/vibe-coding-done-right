@@ -68,7 +68,6 @@ struct StyleModelTests {
             isBuiltIn: false,
             isDefault: false,
             staticRules: StaticStyleRules(capitalizeSentences: true, endingPunctuation: .preserve),
-            dynamicPrompt: "Make it fancy",
             associatedAppBundleIDs: ["com.test.app"]
         )
 

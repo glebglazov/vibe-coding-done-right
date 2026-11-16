@@ -21,7 +21,6 @@ private func makeStyle(
     isDefault: Bool = false,
     capitalizeSentences: Bool = false,
     endingPunctuation: PunctuationRule = .preserve,
-    dynamicPrompt: String? = nil,
     associatedAppBundleIDs: [String] = []
 ) -> Style {
     Style(
@@ -33,7 +32,6 @@ private func makeStyle(
             capitalizeSentences: capitalizeSentences,
             endingPunctuation: endingPunctuation
         ),
-        dynamicPrompt: dynamicPrompt,
         associatedAppBundleIDs: associatedAppBundleIDs
     )
 }
