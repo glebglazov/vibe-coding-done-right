@@ -3,7 +3,6 @@ import Foundation
 enum ProcessingType: String, Codable, CaseIterable {
     case none
     case cloudAI
-    case localAgent
     case bashScript
 }
 
@@ -29,44 +28,6 @@ enum PromptType: String, Codable, CaseIterable {
         }
     }
 }
-
-enum LocalAgentProvider: String, Codable, CaseIterable {
-    case claudeCode
-
-    var displayName: String {
-        switch self {
-        case .claudeCode: "Claude Code"
-        }
-    }
-
-    /// Shell command to check availability.
-    var availabilityCommand: String {
-        switch self {
-        case .claudeCode: "claude"
-        }
-    }
-
-    /// The CLI command template. Uses $VCDR_TEXT and $VCDR_PARAM_* env vars.
-    var command: String {
-        switch self {
-        case .claudeCode:
-            "zsh -ic 'set -o pipefail; cd /tmp && claude -p --model $VCDR_PARAM_MODEL --output-format stream-json --verbose --include-partial-messages \"$VCDR_TEXT\" 2>/dev/null | jq --unbuffered -rj \"select(.type == \\\"stream_event\\\" and .event.delta.type? == \\\"text_delta\\\") | .event.delta.text\"'"
-        }
-    }
-
-    /// Default parameters for this provider. Used to auto-populate user-created modes.
-    var defaultParameters: [ModeParameter] {
-        switch self {
-        case .claudeCode:
-            [ModeParameter(id: UUID(), name: "Model", options: [
-                ModeParameterOption(id: UUID(), label: "Haiku", value: "haiku"),
-                ModeParameterOption(id: UUID(), label: "Sonnet", value: "sonnet"),
-                ModeParameterOption(id: UUID(), label: "Opus", value: "opus"),
-            ])]
-        }
-    }
-}
-
 
 struct ModeParameterOption: Identifiable, Codable, Equatable {
     let id: UUID
@@ -121,26 +82,19 @@ struct Mode: Identifiable, Codable, Equatable {
     var aiProvider: AIProvider
     var promptType: PromptType
 
-    // Local Agent
-    var localAgentProvider: LocalAgentProvider
-    var localAgentPassVariables: Bool
-
     // Parameters
     private var bashScriptParameters: [ModeParameter]
-    private var localAgentParameters: [ModeParameter]
 
     var parameters: [ModeParameter] {
         get {
             switch processingType {
             case .none, .cloudAI: []
-            case .localAgent: localAgentParameters
             case .bashScript: bashScriptParameters
             }
         }
         set {
             switch processingType {
             case .none, .cloudAI: break
-            case .localAgent: localAgentParameters = newValue
             case .bashScript: bashScriptParameters = newValue
             }
         }
@@ -208,8 +162,6 @@ struct Mode: Identifiable, Codable, Equatable {
 
     mutating func resetParameters(to defaults: [ModeParameter]) {
         bashScriptParameters = processingType == .bashScript ? defaults : []
-        localAgentParameters = processingType == .localAgent && !defaults.isEmpty
-            ? defaults : localAgentProvider.defaultParameters
     }
 
     mutating func removeParameter(at index: Int) {
@@ -249,8 +201,6 @@ struct Mode: Identifiable, Codable, Equatable {
         systemPrompt: String = "",
         aiProvider: AIProvider = .anthropic,
         promptType: PromptType = .dictation,
-        localAgentProvider: LocalAgentProvider = .claudeCode,
-        localAgentPassVariables: Bool = false,
         defaultOutputDestinationID: UUID = OutputDestination.builtInPasteID,
         parameters: [ModeParameter] = [],
         transcriptionOverride: TranscriptionOverride = .none,
@@ -270,12 +220,8 @@ struct Mode: Identifiable, Codable, Equatable {
         self.systemPrompt = systemPrompt
         self.aiProvider = aiProvider
         self.promptType = promptType
-        self.localAgentProvider = localAgentProvider
-        self.localAgentPassVariables = localAgentPassVariables
         self.defaultOutputDestinationID = defaultOutputDestinationID
         self.bashScriptParameters = processingType == .bashScript ? parameters : []
-        self.localAgentParameters = processingType == .localAgent && !parameters.isEmpty
-            ? parameters : localAgentProvider.defaultParameters
         self.transcriptionOverride = transcriptionOverride
         self.showPreview = showPreview
         self.saveResultToClipboard = saveResultToClipboard
@@ -291,11 +237,10 @@ struct Mode: Identifiable, Codable, Equatable {
         case processingType, processingCommand
         case systemPromptEnabled, systemPrompt
         case aiProvider, promptType
-        case localAgentProvider, localAgentPassVariables
-        // Legacy keys (read-only, for migration)
-        case aiPromptType, localAgentPromptType, localAgentSystemPrompt
+        // Legacy key (read-only, for migration)
+        case aiPromptType
         case defaultOutputDestinationID
-        case parameters, bashScriptParameters, localAgentParameters
+        case parameters, bashScriptParameters
         case transcriptionOverride
         case showPreview
         case saveResultToClipboard
@@ -321,12 +266,9 @@ struct Mode: Identifiable, Codable, Equatable {
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(aiProvider, forKey: .aiProvider)
         try container.encode(promptType, forKey: .promptType)
-        try container.encode(localAgentProvider, forKey: .localAgentProvider)
-        try container.encode(localAgentPassVariables, forKey: .localAgentPassVariables)
         try container.encode(defaultOutputDestinationID, forKey: .defaultOutputDestinationID)
         try container.encode(parameters, forKey: .parameters)
         try container.encode(bashScriptParameters, forKey: .bashScriptParameters)
-        try container.encode(localAgentParameters, forKey: .localAgentParameters)
         try container.encode(transcriptionOverride, forKey: .transcriptionOverride)
         try container.encode(showPreview, forKey: .showPreview)
         try container.encode(saveResultToClipboard, forKey: .saveResultToClipboard)
@@ -396,34 +338,15 @@ struct Mode: Identifiable, Codable, Equatable {
             self.aiProvider = .anthropic
         }
 
-        // Local agent fields — backward-compatible defaults
-        localAgentProvider = try container.decodeIfPresent(LocalAgentProvider.self, forKey: .localAgentProvider) ?? .claudeCode
-        localAgentPassVariables = try container.decodeIfPresent(Bool.self, forKey: .localAgentPassVariables) ?? false
-
         let legacyParameters = try container.decodeIfPresent([ModeParameter].self, forKey: .parameters) ?? []
         bashScriptParameters = try container.decodeIfPresent([ModeParameter].self, forKey: .bashScriptParameters)
             ?? (processingType == .bashScript ? legacyParameters : [])
-        let savedLocalParameters = try container.decodeIfPresent([ModeParameter].self, forKey: .localAgentParameters)
-            ?? (processingType == .localAgent ? legacyParameters : [])
-        localAgentParameters = savedLocalParameters.isEmpty
-            ? localAgentProvider.defaultParameters : savedLocalParameters
 
         // Unified prompt type (new key takes precedence over legacy). A prompt
         // type this build no longer has, such as the retired "assistant", reads
         // as Dictation.
         if let rawPromptType = try container.decodeIfPresent(String.self, forKey: .promptType) {
             self.promptType = PromptType(rawValue: rawPromptType) ?? .dictation
-        } else if self.processingType == .localAgent {
-            // Legacy local agent migration
-            let oldLocalType = try container.decodeIfPresent(String.self, forKey: .localAgentPromptType) ?? "default"
-            if oldLocalType == "custom" {
-                self.promptType = .custom
-                // Migrate custom prompt text to the shared systemPrompt field
-                let legacyPrompt = try container.decodeIfPresent(String.self, forKey: .localAgentSystemPrompt) ?? ""
-                if !legacyPrompt.isEmpty { self.systemPrompt = legacyPrompt }
-            } else {
-                self.promptType = .dictation
-            }
         } else {
             // Legacy Cloud AI migration: "dictation" and "custom" raw values match PromptType
             let oldAIType = try container.decodeIfPresent(String.self, forKey: .aiPromptType) ?? "dictation"

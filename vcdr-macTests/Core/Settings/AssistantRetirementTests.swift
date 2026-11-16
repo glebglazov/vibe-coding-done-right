@@ -70,6 +70,25 @@ struct AssistantRetirementTests {
         ])
     }
 
+    @Test("A user Local Agent Mode is deleted and recorded as retired, whatever its prompt")
+    func localAgentModesRetire() throws {
+        let agent = UUID()
+        let customAgent = UUID()
+        try store(builtInModes + [
+            storedMode(agent, name: "Agent", processingType: "localAgent"),
+            storedMode(customAgent, name: "Translate", processingType: "localAgent", promptType: "custom"),
+        ], active: customAgent)
+
+        let settings = launch()
+
+        #expect(Set(settings.modes.map(\.id)) == [aiOff, aiOn])
+        #expect(settings.activeMode.id == aiOn)
+        #expect(settings.retiredModes.suffix(2) == [
+            RetiredMode(id: agent, name: "Agent"),
+            RetiredMode(id: customAgent, name: "Translate"),
+        ])
+    }
+
     @Test("An active Assistant Mode becomes AI on")
     func activeRetiredModeBecomesAIOn() throws {
         try store(builtInModes, active: remote)

@@ -47,7 +47,6 @@ struct ModeDetailView: View {
                 Picker("Type", selection: $mode.processingType) {
                     Text("None").tag(ProcessingType.none)
                     Text("Cloud AI").tag(ProcessingType.cloudAI)
-                    Text("Local Agent").tag(ProcessingType.localAgent)
                     Text("Bash Script").tag(ProcessingType.bashScript)
                 }
 
@@ -68,10 +67,6 @@ struct ModeDetailView: View {
                         }
                     }
 
-                    if !mode.parameters.isEmpty {
-                        providerParametersSection
-                    }
-
                     Picker("Prompt", selection: $mode.promptType) {
                         ForEach(PromptType.allCases, id: \.self) { promptType in
                             Text(promptType.displayName).tag(promptType)
@@ -83,31 +78,6 @@ struct ModeDetailView: View {
                             .font(.body)
                             .frame(minHeight: 80)
                     }
-                }
-
-                if mode.processingType == .localAgent {
-                    Picker("Provider", selection: $mode.localAgentProvider) {
-                        ForEach(LocalAgentProvider.allCases, id: \.self) { provider in
-                            Text(provider.displayName).tag(provider)
-                        }
-                    }
-
-                    localAgentParametersSection
-
-                    Picker("Prompt", selection: $mode.promptType) {
-                        ForEach(PromptType.allCases, id: \.self) { promptType in
-                            Text(promptType.displayName).tag(promptType)
-                        }
-                    }
-
-                    if mode.promptType == .custom {
-                        TextEditor(text: $mode.systemPrompt)
-                            .font(.body)
-                            .frame(minHeight: 80)
-                    }
-
-                    Toggle("Pass environment variables from Variables section", isOn: $mode.localAgentPassVariables)
-                        .help("When off (default), the local agent uses its own subscription credentials. When on, variables like ANTHROPIC_API_KEY are passed to the agent process, which may cause it to use your API key with token-based billing instead of the subscription.")
                 }
 
                 if mode.processingType == .bashScript {
@@ -196,36 +166,6 @@ struct ModeDetailView: View {
         settings.isProviderConfigured(provider)
             ? provider.displayName
             : "\(provider.displayName) — no key"
-    }
-
-    // MARK: - Local Agent Parameters (read-only)
-
-    @ViewBuilder
-    private var localAgentParametersSection: some View {
-        providerParametersSection
-    }
-
-    // MARK: - Cloud AI Provider Parameters (read-only)
-
-    @ViewBuilder
-    private var providerParametersSection: some View {
-        ForEach(mode.parameters) { parameter in
-            VStack(alignment: .leading, spacing: 4) {
-                Text(parameter.name)
-                    .fontWeight(.medium)
-                HStack(spacing: 4) {
-                    ForEach(parameter.options) { option in
-                        Text(option.label)
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.quaternary)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                    }
-                }
-            }
-            .padding(.vertical, 2)
-        }
     }
 
     // MARK: - Parameters

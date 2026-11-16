@@ -117,15 +117,4 @@ struct SubmissionPipelineStyleTests {
         #expect(result.hadExternalProcessing == true)
         #expect(result.processedText == "hello World ")
     }
-
-    @Test("Empty dynamicPrompt appends nothing in AI modes")
-    func emptyDynamicPromptAppendsNothing() async throws {
-        #expect(Style.casual.dynamicPrompt == nil)
-        #expect(Style.formal.dynamicPrompt == nil)
-
-        let systemPrompt = "You are a helpful assistant."
-        let result = AIStylePromptAppender.appendStylePrompt(to: systemPrompt, style: .casual)
-
-        #expect(result == systemPrompt)
-    }
 }

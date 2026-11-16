@@ -67,28 +67,6 @@ struct TextProcessingPipelineSpellingHintsTests {
         #expect(AIProcessingAdapter.systemPrompt(for: mode, spellingHints: call.spellingHints) == BuiltInPrompts.dictation)
     }
 
-    @Test("A Local Agent's input carries the mode prompt, the style prompt, then the hints")
-    func localAgentInputCarriesHintsAfterStylePrompt() async throws {
-        let mode = Mode(id: UUID(), name: "Agent", processingType: .localAgent, promptType: .dictation)
-        let style = Style(id: UUID(), name: "Pirate", isBuiltIn: false, isDefault: false,
-                          staticRules: .casual, dynamicPrompt: "Answer in pirate speak.")
-        let agent = CapturingLocalAgent()
-
-        _ = try await TextProcessingPipeline.run(
-            mode: mode,
-            text: "hi",
-            captures: [],
-            substitutions: Self.dictionary,
-            localAgentPort: agent,
-            style: style
-        )
-
-        let input = try #require(await agent.receivedText)
-        let prompt = BuiltInPrompts.dictation + "\n\nAnswer in pirate speak."
-        #expect(input.hasPrefix(prompt + "\n\n<spelling_hints>"))
-        #expect(input.contains(Self.hintsWithNotesSuffix + "\n\n<dictation>hi</dictation>"))
-    }
-
     @Test("A Bash Script's input carries its prompt but no hints")
     func bashScriptInputCarriesNoHints() async throws {
         // The script echoes its input back, so the result is exactly what it received.
@@ -127,17 +105,5 @@ struct TextProcessingPipelineSpellingHintsTests {
 
         #expect(await ai.receivedCalls.isEmpty)
         #expect(result.text == "hi")
-    }
-}
-
-@MainActor
-private final class CapturingLocalAgent: LocalAgentPort {
-    private(set) var receivedText: String?
-
-    nonisolated init() {}
-
-    func process(structuredText: String, mode: Mode, environment: [String: String]) async throws -> String {
-        receivedText = structuredText
-        return "done"
     }
 }

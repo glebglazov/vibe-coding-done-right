@@ -44,7 +44,6 @@ enum TextProcessingPipeline {
         aiAPIKey: ProviderAPIKey = .stored(""),
         removeFillerWords: Bool = false,
         aiPort: any AIProcessingPort = AIProcessingAdapter(),
-        localAgentPort: any LocalAgentPort = LocalAgentAdapter(),
         style: Style = .casual,
         cursorContext: CursorContext? = nil
     ) async throws -> PipelineResult {
@@ -80,8 +79,6 @@ enum TextProcessingPipeline {
             text: cleanedText,
             captures: capturesForPrompt,
             mode: mode,
-            style: style,
-            spellingHints: spellingHints,
             cursorContext: cursorContext
         )
         Logger.textTransform.debug("Structured input for \(mode.processingType.rawValue):\n\(structured)")
@@ -115,22 +112,6 @@ enum TextProcessingPipeline {
                     )
                 )
             }
-
-        case .localAgent:
-            let paramEnv = Dictionary(
-                uniqueKeysWithValues: parameterValues.map { ("VCDR_PARAM_\($0.key)", $0.value) }
-            )
-            // Only include user-defined variables if explicitly opted in, to avoid
-            // passing API keys that would override the agent's subscription credentials.
-            var combinedEnv = mode.localAgentPassVariables ? variableEnvironment : [:]
-            combinedEnv.merge(paramEnv) { _, param in param }
-            let processedText = try await localAgentPort.process(
-                structuredText: structured,
-                mode: mode,
-                environment: combinedEnv
-            )
-            Logger.textTransform.info("Local agent output: \"\(processedText)\"")
-            result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
 
         case .bashScript:
             let paramEnv = Dictionary(
@@ -193,15 +174,11 @@ enum TextProcessingPipeline {
 
     /// Shared interface: each processing type structures input for its consumer.
     /// Dispatches to the appropriate implementation based on processing type.
-    /// For a Local Agent, the system prompt inlined at the top carries the style
-    /// prompt and then the Spelling Hints. A Bash Script gets no hints: it is not
-    /// known to call an LLM.
+    /// A Bash Script gets no Spelling Hints: it is not known to call an LLM.
     private static func structureInput(
         text: String,
         captures: [CapturedContext],
         mode: Mode,
-        style: Style,
-        spellingHints: SpellingHints,
         cursorContext: CursorContext?
     ) -> String {
         switch mode.processingType {
@@ -211,16 +188,6 @@ enum TextProcessingPipeline {
             // Cloud AI: XML structure WITHOUT system prompt in the text
             // (system prompt is sent as a separate API parameter)
             return structureInputXML(text: text, captures: captures, systemPrompt: nil, cursorContext: cursorContext)
-        case .localAgent:
-            let prompt = AIProcessingAdapter.resolvePrompt(mode)
-            // Append style dynamic prompt only when mode applies styles
-            let styledPrompt = mode.appliesStyles
-                ? AIStylePromptAppender.appendStylePrompt(to: prompt, style: style)
-                : prompt
-            let finalPrompt = spellingHints.appended(to: styledPrompt, detail: mode.promptType.hintDetail)
-            return structureInputXML(text: text, captures: captures,
-                                     systemPrompt: finalPrompt.isEmpty ? nil : finalPrompt,
-                                     cursorContext: cursorContext)
         case .bashScript:
             let prompt = (mode.systemPromptEnabled && !mode.systemPrompt.isEmpty)
                 ? mode.systemPrompt : nil
@@ -243,7 +210,7 @@ enum TextProcessingPipeline {
         return text + "\n\n" + quoted
     }
 
-    /// XML input structuring for .cloudAI/.localAgent/.bashScript — <dictation> wrapping,
+    /// XML input structuring for .cloudAI/.bashScript — <dictation> wrapping,
     /// optional system prompt, cursor context, and XML capture tags for machine-parseable input.
     private static func structureInputXML(
         text: String,

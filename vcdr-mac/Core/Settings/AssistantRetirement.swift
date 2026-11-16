@@ -17,6 +17,9 @@ enum AssistantRetirement {
 
     /// The Mode Templates "Assistant (Remote)" and "Assistant (Local)".
     private static let retiredTemplateIDs: Set<String> = ["claude-code", "ollama"]
+    /// The Local Agent Processing Type. Its one provider ran the claude CLI,
+    /// which is an agent.
+    private static let retiredProcessingType = "localAgent"
     private static let retiredPromptType = "assistant"
     private static let retiredModesKey = "retiredModes"
     private static let retiredCachedPromptKey = "cachedPrompt_assistant"
@@ -27,10 +30,12 @@ enum AssistantRetirement {
         let id: UUID
         let name: String
         let templateID: String?
+        let processingType: String?
         let promptType: String?
 
         var isRetired: Bool {
             templateID.map(retiredTemplateIDs.contains) ?? false
+                || processingType == retiredProcessingType
         }
     }
 
@@ -41,7 +46,7 @@ enum AssistantRetirement {
         return retired
     }
 
-    /// Deletes the Assistant Modes from `modesKey`, records them as retired,
+    /// Deletes the Assistant and Local Agent Modes from `modesKey`, records them as retired,
     /// and moves an active retired Mode to the "AI on" Mode. A kept Mode whose
     /// prompt type was Assistant is written back with the Dictation prompt.
     static func run(in defaults: UserDefaults, modesKey: String, activeModeIDKey: String) {

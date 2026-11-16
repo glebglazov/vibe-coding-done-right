@@ -12,8 +12,6 @@ struct ModeTemplate {
     let systemPrompt: String
     let aiProvider: AIProvider
     let promptType: PromptType
-    let localAgentProvider: LocalAgentProvider
-    let localAgentPassVariables: Bool
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
     let showPreview: Bool
@@ -33,8 +31,6 @@ struct ModeTemplate {
             systemPrompt: systemPrompt,
             aiProvider: aiProvider,
             promptType: promptType,
-            localAgentProvider: localAgentProvider,
-            localAgentPassVariables: localAgentPassVariables,
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
             showPreview: showPreview,
@@ -53,8 +49,6 @@ struct ModeTemplate {
         mode.systemPrompt = systemPrompt
         mode.aiProvider = aiProvider
         mode.promptType = promptType
-        mode.localAgentProvider = localAgentProvider
-        mode.localAgentPassVariables = localAgentPassVariables
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.resetParameters(to: parameters)
         mode.showPreview = showPreview
@@ -84,8 +78,6 @@ extension ModeTemplate {
         systemPrompt: "",
         aiProvider: .anthropic,
         promptType: .dictation,
-        localAgentProvider: .claudeCode,
-        localAgentPassVariables: false,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
@@ -104,8 +96,6 @@ extension ModeTemplate {
         systemPrompt: "",
         aiProvider: .anthropic,
         promptType: .dictation,
-        localAgentProvider: .claudeCode,
-        localAgentPassVariables: false,
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
