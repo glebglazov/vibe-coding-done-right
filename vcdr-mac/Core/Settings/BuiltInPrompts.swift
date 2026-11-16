@@ -88,9 +88,6 @@ enum BuiltInPrompts {
         **QUOTED SPEECH:**
         - Wrap reported speech in quotes: he was like "yeah let's do it"
 
-        **CAPTURE TAGS:**
-        - Preserve <capture id="N">...</capture> blocks byte-for-byte
-
         **CURSOR CONTEXT:**
         - When <cursor_context> is present, use it to ensure the dictated text flows naturally with the surrounding text (capitalization, punctuation, grammar).
 
