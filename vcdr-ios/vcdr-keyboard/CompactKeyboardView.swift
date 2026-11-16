@@ -31,26 +31,27 @@ struct CompactKeyboardView: View {
         topPadding + pillHeight + bottomPadding
     }
 
-    @ObservedObject var controller: KeyboardViewController
+    @ObservedObject var model: KeyboardDictationModel
+    weak var controller: KeyboardViewController?
     @ObservedObject var reachability: KeyboardReachabilityMonitor
 
     var body: some View {
         HStack {
-            KeyboardStripLeading(controller: controller)
+            KeyboardStripLeading(model: model, controller: controller)
             Spacer()
             DictateActionButton(
-                dictationState: controller.dictationState,
+                dictationState: model.dictationState,
                 recordsInPlace: reachability.recordsInPlace,
-                showCapture: controller.aiMode.usesCaptures,
-                captureCount: controller.captureCount,
-                onStart: { controller.startRecordingFromKeyboard() },
-                onStop: { controller.stopAndWaitForResult() },
-                onInsert: { controller.insertPendingText() },
-                onCapture: { controller.captureSelectedText() },
-                onShowFailure: { controller.showFailureReason() }
+                showCapture: model.aiMode.usesCaptures,
+                captureCount: model.captureCount,
+                onStart: { controller?.startRecordingFromKeyboard() },
+                onStop: { controller?.stopAndWaitForResult() },
+                onInsert: { controller?.insertPendingText() },
+                onCapture: { controller?.captureSelectedText() },
+                onShowFailure: { controller?.showFailureReason() }
             )
             KeyboardModeToggleButton(direction: .expand) {
-                controller.expandKeyboard()
+                controller?.expandKeyboard()
             }
         }
         .padding(.horizontal, Self.horizontalPadding)

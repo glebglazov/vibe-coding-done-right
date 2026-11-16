@@ -8,15 +8,27 @@ import UIKit
 struct VCDRKeyboardView: View {
     var services: Keyboard.Services
     var state: Keyboard.State
-    @ObservedObject var controller: KeyboardViewController
+    let model: KeyboardDictationModel
+    let reachability: KeyboardReachabilityMonitor
+    /// Weak because the controller owns this view through its hosting view.
+    /// A strong reference would keep every controller alive.
+    weak var controller: KeyboardViewController?
 
     /// Observed so the view re-renders when keyboard case changes,
     /// ensuring `correctedLayout` is recomputed with the current shift state.
     @ObservedObject private var keyboardContext: KeyboardContext
 
-    init(services: Keyboard.Services, state: Keyboard.State, controller: KeyboardViewController) {
+    init(
+        services: Keyboard.Services,
+        state: Keyboard.State,
+        model: KeyboardDictationModel,
+        reachability: KeyboardReachabilityMonitor,
+        controller: KeyboardViewController
+    ) {
         self.services = services
         self.state = state
+        self.model = model
+        self.reachability = reachability
         self.controller = controller
         self._keyboardContext = ObservedObject(wrappedValue: state.keyboardContext)
     }
@@ -44,7 +56,7 @@ struct VCDRKeyboardView: View {
             buttonContent: { $0.view },
             buttonView: { $0.view },
             collapsedView: { _ in
-                CompactKeyboardView(controller: controller, reachability: controller.reachability)
+                CompactKeyboardView(model: model, controller: controller, reachability: reachability)
             },
             emojiKeyboard: { $0.view },
             toolbar: { _ in
@@ -54,7 +66,7 @@ struct VCDRKeyboardView: View {
                 if keyboardContext.isKeyboardCollapsed {
                     EmptyView()
                 } else {
-                    FullKeyboardToolbar(controller: controller, reachability: controller.reachability)
+                    FullKeyboardToolbar(model: model, controller: controller, reachability: reachability)
                 }
             }
         )
@@ -71,30 +83,31 @@ struct VCDRKeyboardView: View {
 /// The Full Keyboard's toolbar strip: one line carrying the leading slot and
 /// the dictation controls.
 struct FullKeyboardToolbar: View {
-    @ObservedObject var controller: KeyboardViewController
+    @ObservedObject var model: KeyboardDictationModel
+    weak var controller: KeyboardViewController?
     @ObservedObject var reachability: KeyboardReachabilityMonitor
 
     var body: some View {
         HStack {
-            KeyboardStripLeading(controller: controller)
+            KeyboardStripLeading(model: model, controller: controller)
                 .padding(.leading, 10)
 
             Spacer()
 
             DictateActionButton(
-                dictationState: controller.dictationState,
+                dictationState: model.dictationState,
                 recordsInPlace: reachability.recordsInPlace,
-                showCapture: controller.aiMode.usesCaptures,
-                captureCount: controller.captureCount,
-                onStart: { controller.startRecordingFromKeyboard() },
-                onStop: { controller.stopAndWaitForResult() },
-                onInsert: { controller.insertPendingText() },
-                onCapture: { controller.captureSelectedText() },
-                onShowFailure: { controller.showFailureReason() }
+                showCapture: model.aiMode.usesCaptures,
+                captureCount: model.captureCount,
+                onStart: { controller?.startRecordingFromKeyboard() },
+                onStop: { controller?.stopAndWaitForResult() },
+                onInsert: { controller?.insertPendingText() },
+                onCapture: { controller?.captureSelectedText() },
+                onShowFailure: { controller?.showFailureReason() }
             )
 
             KeyboardModeToggleButton(direction: .collapse) {
-                controller.collapseKeyboard()
+                controller?.collapseKeyboard()
             }
             .padding(.trailing, 10)
         }
@@ -109,7 +122,8 @@ struct DictateSettingsPills: View {
     private static let pillFont: CGFloat = 11
     private static let pillBorder: CGFloat = 1.5
 
-    @ObservedObject var controller: KeyboardViewController
+    @ObservedObject var model: KeyboardDictationModel
+    weak var controller: KeyboardViewController?
 
     /// All three labels of the AI mode pill, used to reserve a fixed pill width
     /// so cycling between states doesn't reflow the toolbar.
@@ -117,26 +131,26 @@ struct DictateSettingsPills: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if controller.aiConfigured {
+            if model.aiConfigured {
                 Button {
                     KeyboardHaptics.light()
-                    controller.cycleAIState()
+                    controller?.cycleAIState()
                 } label: {
                     sonicPill(
                         icon: "sparkles",
-                        text: controller.aiMode.displayName.uppercased(),
+                        text: model.aiMode.displayName.uppercased(),
                         sizingTexts: Self.aiModeLabels,
-                        filled: controller.aiMode != .verbatim
+                        filled: model.aiMode != .verbatim
                     )
                 }
             }
 
-            if controller.aiMode != .assistant {
+            if model.aiMode != .assistant {
                 Button {
                     KeyboardHaptics.light()
-                    controller.cycleTextStyle()
+                    controller?.cycleTextStyle()
                 } label: {
-                    sonicPill(text: controller.textStyle.displayName.uppercased())
+                    sonicPill(text: model.textStyle.displayName.uppercased())
                 }
             }
         }

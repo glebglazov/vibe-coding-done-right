@@ -15,20 +15,21 @@ struct KeyboardStripLeading: View {
     private static let discardIconSize: CGFloat = 12
     private static let discardBorder: CGFloat = 1.5
 
-    @ObservedObject var controller: KeyboardViewController
+    @ObservedObject var model: KeyboardDictationModel
+    weak var controller: KeyboardViewController?
 
     var body: some View {
-        if controller.areOutputChoicesLocked {
+        if model.areOutputChoicesLocked {
             discardButton
         } else {
-            DictateSettingsPills(controller: controller)
+            DictateSettingsPills(model: model, controller: controller)
         }
     }
 
     private var discardButton: some View {
         Button {
             KeyboardHaptics.medium()
-            controller.discardRecordingFromKeyboard()
+            controller?.discardRecordingFromKeyboard()
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: Self.discardIconSize, weight: .black))

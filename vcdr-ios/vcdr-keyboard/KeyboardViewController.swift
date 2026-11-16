@@ -23,35 +23,11 @@ enum DictationState {
     case failed
 }
 
-class KeyboardViewController: KeyboardInputViewController, ObservableObject {
+class KeyboardViewController: KeyboardInputViewController {
 
-    /// Current dictation state — drives the DictateBarView appearance.
-    ///
-    /// Re-warms the haptic engine on every transition into `.transcribing`
-    /// so the success impact fired from inside `stopAndWaitForResult`'s
-    /// `RunLoop.main.run(until:)` poll lands on a primed engine. The keyboard
-    /// extension's daemon connection goes cold quickly, so without this the
-    /// insertion haptic is the most likely to drop.
-    @Published var dictationState: DictationState = .idle {
-        didSet {
-            if dictationState == .transcribing, oldValue != .transcribing {
-                KeyboardHaptics.prepare()
-            }
-        }
-    }
-
-    // MARK: - Shared Settings (keyboard ↔ app)
-    @Published var aiConfigured: Bool = false
-    /// Source of truth for the AI/Verbatim pill. `.verbatim` ↔ "AI off".
-    @Published var aiMode: AIPromptMode = .verbatim
-    @Published var textStyle: SharedTextStyle = .casual
-
-    /// True when the text field has a non-empty selection and assistant mode is active.
-    /// Drives the selection indicator icon in the toolbar.
-    @Published var hasSelectedText: Bool = false
-
-    /// Number of text selections captured in the current recording session (assistant mode).
-    @Published var captureCount: Int = 0
+    /// What the keyboard's views render. The views observe this and never the
+    /// controller itself (see `KeyboardDictationModel`).
+    let model = KeyboardDictationModel()
 
     /// Text waiting to be inserted via tap-to-paste.
     private var pendingText: String?
@@ -109,16 +85,6 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         )
     }
 
-    override func selectionDidChange(_ textInput: UITextInput?) {
-        super.selectionDidChange(textInput)
-        refreshSelectedTextIndicator()
-    }
-
-    override func textDidChange(_ textInput: UITextInput?) {
-        super.textDidChange(textInput)
-        refreshSelectedTextIndicator()
-    }
-
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         // Mitigate the brownish background flash on keyboard load.
@@ -134,7 +100,6 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         SharedConstants.sharedDefaults.synchronize()
         refreshState()
         refreshSettings()
-        refreshSelectedTextIndicator()
 
         // First call here builds the long-lived generators bound to this
         // view's window/scene (iOS 17.5+ `init(view:style:)`); subsequent
@@ -175,7 +140,6 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     @objc private func handleSettingsChanged() {
         SharedConstants.sharedDefaults.synchronize()
         refreshSettings()
-        refreshSelectedTextIndicator()
         // The Settings UI may have toggled the haptics flag — refresh the
         // cached value the per-call hot path reads.
         KeyboardHaptics.refreshEnabled()
@@ -185,16 +149,16 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// Parses state bundling format: `"idle|transcription text"`.
     private func refreshState() {
         // Keep a wire-published cancellation visible for its full flash.
-        guard dictationState != .cancelled else { return }
+        guard model.dictationState != .cancelled else { return }
 
         switch keyboardChannel.readState() {
         case .bundledResult(let text):
             if !text.isEmpty {
                 pendingText = text
-                dictationState = .ready
+                model.dictationState = .ready
             } else {
                 pendingText = nil
-                dictationState = .idle
+                model.dictationState = .idle
             }
         case .emptyResult:
             flash(.emptyResult, for: Self.emptyResultFlashDuration)
@@ -206,14 +170,14 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
             flash(.failed, for: Self.failedFlashDuration)
         case .recording:
             pendingText = nil
-            dictationState = .recording
+            model.dictationState = .recording
         case .transcribing:
             pendingText = nil
-            dictationState = .transcribing
+            model.dictationState = .transcribing
         case .idle:
             pendingText = nil
-            captureCount = 0
-            dictationState = .idle
+            model.captureCount = 0
+            model.dictationState = .idle
         }
     }
 
@@ -223,12 +187,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// post would come back to this same process and end the flash immediately.
     private func flash(_ terminal: DictationState, for duration: TimeInterval) {
         pendingText = nil
-        captureCount = 0
-        dictationState = terminal
+        model.captureCount = 0
+        model.dictationState = terminal
         keyboardChannel.consumeState()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            guard self?.dictationState == terminal else { return }
-            self?.dictationState = .idle
+            guard self?.model.dictationState == terminal else { return }
+            self?.model.dictationState = .idle
         }
     }
 
@@ -243,8 +207,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         KeyboardHaptics.success()
         // Space is already added by TextPostProcessor.applyTerminator in the pipeline
         pendingText = nil
-        dictationState = .idle
-        captureCount = 0
+        model.dictationState = .idle
+        model.captureCount = 0
         // Clear the bundled text so it isn't re-inserted on next keyboard appearance
         keyboardChannel.clearResult()
     }
@@ -294,12 +258,12 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
             Logger.keyboard.info("Heartbeat verdict: command=stop fresh=true")
         case .openURL(let url):
             Logger.keyboard.info("Heartbeat verdict: command=stop fresh=false")
-            dictationState = .transcribing
+            model.dictationState = .transcribing
             openDeepLinkFallback(url, command: "stop", reason: "Heartbeat was stale")
             return
         }
 
-        dictationState = .transcribing
+        model.dictationState = .transcribing
 
         let postedAt = Date()
         let ackDeadline = postedAt.addingTimeInterval(Self.stopCommandAckTimeout)
@@ -339,8 +303,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 // terminal state it reached, and a run that reached one is
                 // handled by the cases above.
                 pendingText = nil
-                captureCount = 0
-                dictationState = .idle
+                model.captureCount = 0
+                model.dictationState = .idle
                 return
             case .recording:
                 // Ack window passed and state hasn't moved off `.recording` —
@@ -367,7 +331,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
                 // Space is already added by TextPostProcessor.applyTerminator in the pipeline
                 keyboardChannel.clearResult()
                 pendingText = nil
-                dictationState = .idle
+                model.dictationState = .idle
                 return
             }
         }
@@ -389,7 +353,7 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     /// reason. The URL is a route only: the reason remains app-owned and is
     /// neither duplicated into the URL nor sent through another channel.
     func showFailureReason() {
-        guard dictationState == .failed else { return }
+        guard model.dictationState == .failed else { return }
         Logger.keyboard.info("Opening the app to show the Processing Failure reason")
         openURL(KeyboardChannel.failureDeepLinkURL)
     }
@@ -410,29 +374,22 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     // MARK: - Settings
 
     private func refreshSettings() {
-        aiConfigured = SharedConstants.sharedDefaults.bool(forKey: SharedConstants.aiConfiguredKey)
-        aiMode = SettingOverrides.effectiveAIMode()
-        textStyle = SettingOverrides.effectiveTextStyle()
-    }
-
-    /// AI mode and text style are fixed while a run listens (ADR-0010). The
-    /// wire's `recording` covers Arming and Capturing alike.
-    var areOutputChoicesLocked: Bool {
-        dictationState == .recording
+        model.aiConfigured = SharedConstants.sharedDefaults.bool(forKey: SharedConstants.aiConfiguredKey)
+        model.aiMode = SettingOverrides.effectiveAIMode()
+        model.textStyle = SettingOverrides.effectiveTextStyle()
     }
 
     /// Cycles the AI mode through Verbatim → Dictation → Assistant → Verbatim.
     func cycleAIState() {
-        guard !areOutputChoicesLocked else { return }
-        aiMode = aiMode.next
-        SettingOverrides.setAIMode(aiMode)
-        refreshSelectedTextIndicator()
+        guard !model.areOutputChoicesLocked else { return }
+        model.aiMode = model.aiMode.next
+        SettingOverrides.setAIMode(model.aiMode)
     }
 
     func cycleTextStyle() {
-        guard !areOutputChoicesLocked else { return }
-        textStyle = textStyle.next
-        SettingOverrides.setTextStyle(textStyle)
+        guard !model.areOutputChoicesLocked else { return }
+        model.textStyle = model.textStyle.next
+        SettingOverrides.setTextStyle(model.textStyle)
     }
 
     // MARK: - Selected Text Capture
@@ -455,16 +412,16 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
         // A tap on the DISCARDED pill starts a run as START does. The flash
         // must end first: while it shows, `refreshState` ignores the wire, and
         // the app's `recording` would be lost.
-        if dictationState == .cancelled { dictationState = .idle }
+        if model.dictationState == .cancelled { model.dictationState = .idle }
         // Clear legacy single-capture key
         keyboardChannel.clearLegacySelectedText()
         // Initialize captures array — include current selection as first capture if available
         var captures: [String] = []
-        if aiMode.usesCaptures,
+        if model.aiMode.usesCaptures,
            let selected = textDocumentProxy.selectedText, !selected.isEmpty {
             captures.append(selected)
         }
-        captureCount = captures.count
+        model.captureCount = captures.count
 
         switch keyboardChannel.startRecording(captures: captures) {
         case .commandSent:
@@ -503,17 +460,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
     func captureSelectedText() {
         guard let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
         keyboardChannel.appendCapture(selected)
-        captureCount = keyboardChannel.readCaptures().count
+        model.captureCount = keyboardChannel.readCaptures().count
         KeyboardHaptics.light()
-    }
-
-    /// Refreshes the `hasSelectedText` flag based on current proxy state and mode.
-    func refreshSelectedTextIndicator() {
-        let selected = aiMode.usesCaptures
-            && !(textDocumentProxy.selectedText ?? "").isEmpty
-        if hasSelectedText != selected {
-            hasSelectedText = selected
-        }
     }
 
     /// Opens a URL from the keyboard extension using the system responder chain.
@@ -552,6 +500,8 @@ class KeyboardViewController: KeyboardInputViewController, ObservableObject {
             VCDRKeyboardView(
                 services: controller.services,
                 state: controller.state,
+                model: model,
+                reachability: reachability,
                 controller: self
             )
         }
