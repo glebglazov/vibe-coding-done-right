@@ -48,14 +48,14 @@ extension CaptureSession {
     }
 
     /// The Mode and Style this run would have used, so a later "Process with
-    /// AI" can use them too. A Mode that applies no style records none.
+    /// AI" can use them too.
     func recordedOutputChoice(for mode: Mode) -> RecordedOutputChoice {
-        let style = mode.appliesStyles ? styleProvider() : nil
+        let style = styleProvider()
         return RecordedOutputChoice(
             platform: .mac,
             modeID: mode.id.uuidString,
-            styleID: style?.id.uuidString,
-            displayLabel: [mode.name, style?.name].compactMap { $0 }.joined(separator: " · ")
+            styleID: style.id.uuidString,
+            displayLabel: "\(mode.name) · \(style.name)"
         )
     }
 

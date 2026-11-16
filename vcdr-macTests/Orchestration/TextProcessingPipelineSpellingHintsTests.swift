@@ -74,8 +74,7 @@ struct TextProcessingPipelineSpellingHintsTests {
             processingType: .bashScript,
             processingCommand: "printf '%s' \"$VCDR_TEXT\"",
             systemPromptEnabled: true,
-            systemPrompt: "Script prompt.",
-            appliesStyles: false
+            systemPrompt: "Script prompt."
         )
 
         let result = try await TextProcessingPipeline.run(
@@ -84,12 +83,12 @@ struct TextProcessingPipelineSpellingHintsTests {
             substitutions: Self.dictionary
         )
 
-        #expect(result.text == "Script prompt.\n\n<dictation>hi</dictation>")
+        #expect(result.text == "script prompt.\n\n<dictation>hi</dictation> ")
     }
 
     @Test("A Verbatim run with hints makes no AI call and adds no hints")
     func verbatimMakesNoCall() async throws {
-        let mode = Mode(id: UUID(), name: "Verbatim", processingType: .none, appliesStyles: false)
+        let mode = Mode(id: UUID(), name: "Verbatim", processingType: .none)
         let ai = ScriptedAIProcessing(results: [])
 
         let result = try await TextProcessingPipeline.run(
@@ -100,6 +99,6 @@ struct TextProcessingPipelineSpellingHintsTests {
         )
 
         #expect(await ai.receivedCalls.isEmpty)
-        #expect(result.text == "hi")
+        #expect(result.text == "hi ")
     }
 }

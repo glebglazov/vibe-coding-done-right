@@ -59,7 +59,7 @@ struct ModeSwitcherView: View {
 
             Spacer()
 
-            if isActive && mode.appliesStyles {
+            if isActive {
                 stylePill
             }
 

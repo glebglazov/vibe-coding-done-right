@@ -65,8 +65,7 @@ struct AIProviderFactoryTests {
             name: "AI",
             processingType: .cloudAI,
             aiProvider: .anthropic,
-            promptType: .dictation,
-            appliesStyles: false
+            promptType: .dictation
         )
 
         let result = try await TextProcessingPipeline.run(
@@ -77,7 +76,7 @@ struct AIProviderFactoryTests {
             style: .casual
         )
 
-        #expect(result.text == "Hello world")
+        #expect(result.text == "hello world ")
         #expect(result.hadExternalProcessing == false)
         #expect(result.aiProcessingFallback?.structuredText == "<dictation>Hello world</dictation>")
     }
@@ -87,7 +86,7 @@ struct AIProviderFactoryTests {
     func pipelineForwardsProviderKey() async throws {
         let mode = Mode(
             id: UUID(), name: "AI", processingType: .cloudAI,
-            aiProvider: .anthropic, promptType: .dictation, appliesStyles: false
+            aiProvider: .anthropic, promptType: .dictation
         )
         let capturing = KeyCapturingAIProcessing()
 

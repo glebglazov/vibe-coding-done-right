@@ -74,8 +74,6 @@ enum ProcessingDisposition {
     case preview(PreviewHandle)
     /// No speech detected.
     case empty
-    /// AI could not identify an actionable instruction in the dictation.
-    case noInstruction
 }
 
 struct ProcessedResult {
@@ -157,20 +155,10 @@ final class TextProcessor {
         guard !input.text.isEmpty else { return .empty }
 
         let context = makeContext(from: input)
-        let pipelineResult: SubmissionPipeline.Result
-        do {
-            pipelineResult = try await SubmissionPipeline.process(
-                context: context,
-                aiPort: ai
-            )
-        } catch {
-            throw error
-        }
-
-        // AI returned sentinel — no actionable instruction found.
-        if pipelineResult.processedText == TextProcessingPipeline.Constants.noInstructionSentinel {
-            return .noInstruction
-        }
+        let pipelineResult = try await SubmissionPipeline.process(
+            context: context,
+            aiPort: ai
+        )
 
         // AI processing failed — return preview with fallback text and retry info.
         if let fallback = pipelineResult.aiProcessingFallback {

@@ -134,20 +134,6 @@ struct TextProcessorHappyPathTests {
 @Suite("TextProcessor — AI Processing")
 struct TextProcessorAITests {
 
-    @Test("AI returning [NO_INSTRUCTION] sentinel yields .noInstruction disposition")
-    @MainActor
-    func noInstructionSentinel() async throws {
-        let (processor, history, _, _) = makeProcessor(aiResults: [.success("[NO_INSTRUCTION]")])
-        let input = makeInput(processingType: .cloudAI)
-        let disposition = try await processor.process(input)
-
-        guard case .noInstruction = disposition else {
-            Issue.record("Expected .noInstruction, got \(disposition)")
-            return
-        }
-        #expect(history.conversations.isEmpty)
-    }
-
     @Test("AI failure returns preview with error and retry context")
     @MainActor
     func aiFailureShowsPreviewWithRetry() async throws {

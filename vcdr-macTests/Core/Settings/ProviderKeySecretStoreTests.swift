@@ -103,7 +103,7 @@ struct ProviderKeySecretStoreTests {
         let settings = AppSettings(userDefaults: makeDefaults(), secretStore: store)
         let mode = Mode(
             id: UUID(), name: "AI", processingType: .cloudAI,
-            aiProvider: .anthropic, promptType: .dictation, appliesStyles: false
+            aiProvider: .anthropic, promptType: .dictation
         )
 
         // The mode stays usable — hiding it would present the failed read as an unset key.

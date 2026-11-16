@@ -182,77 +182,30 @@ struct TextProcessingPipelineStyleTests {
         #expect(result.text == "hello World ")
     }
 
-    // MARK: - appliesStyles=false Tests
+    // MARK: - Every Mode
 
-    @Test("Style transformation skipped when appliesStyles is false")
-    func styleSkippedWhenAppliesStylesFalse() async throws {
-        let mode = Mode(
-            id: UUID(),
-            name: "Assistant",
-            processingType: .none,
-            showPreview: false,
-            appliesStyles: false
-        )
-        let text = "Hello World."
-
-        let result = try await TextProcessingPipeline.run(
-            mode: mode,
-            text: text,
-            style: .casual
-        )
-
-        // Text should be unchanged — no lowercasing, no period removal
-        #expect(result.text == "Hello World.")
-    }
-
-    @Test("Formal style skipped when appliesStyles is false")
-    func formalStyleSkippedWhenAppliesStylesFalse() async throws {
-        let mode = Mode(
-            id: UUID(),
-            name: "Assistant",
-            processingType: .none,
-            showPreview: false,
-            appliesStyles: false
-        )
-        let text = "hello world"
-
-        let result = try await TextProcessingPipeline.run(
-            mode: mode,
-            text: text,
-            style: .formal
-        )
-
-        // Text should be unchanged — no capitalization, no period added
-        #expect(result.text == "hello world")
-    }
-
-    @Test("AI mode output unchanged when appliesStyles is false")
-    func aiModeOutputUnchangedWhenAppliesStylesFalse() async throws {
-        struct MockAI: AIProcessingPort {
+    @Test("Style applies in every Mode", arguments: [ProcessingType.none, .cloudAI, .bashScript])
+    func styleAppliesInEveryMode(processingType: ProcessingType) async throws {
+        struct EchoAI: AIProcessingPort {
             func process(structuredText: String, mode: Mode, spellingHints: SpellingHints, apiKey: String, parameterValues: [String: String]) async throws -> String {
-                return "Here is some code: let x = 42"
+                "hello world"
             }
         }
-
         let mode = Mode(
             id: UUID(),
-            name: "AI Assistant",
-            processingType: .cloudAI,
-            aiProvider: .anthropic,
-            showPreview: false,
-            appliesStyles: false
+            name: "Any",
+            processingType: processingType,
+            processingCommand: "printf 'hello world'"
         )
 
         let result = try await TextProcessingPipeline.run(
             mode: mode,
-            text: "test",
-            variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
-            aiPort: MockAI(),
+            text: "hello world",
+            aiAPIKey: .stored("test-key"),
+            aiPort: EchoAI(),
             style: .formal
         )
 
-        // AI output should not be modified by formal style (no capitalization/period)
-        #expect(result.text == "Here is some code: let x = 42")
-        #expect(result.hadExternalProcessing == true)
+        #expect(result.text == "Hello world. ")
     }
 }

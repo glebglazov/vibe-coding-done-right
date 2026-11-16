@@ -15,7 +15,6 @@ struct ModeTemplate {
     let parameters: [ModeParameter]
     let defaultOutputDestinationID: UUID
     let showPreview: Bool
-    let appliesStyles: Bool
     let contextAware: Bool
 
     func makeMode() -> Mode {
@@ -33,7 +32,6 @@ struct ModeTemplate {
             defaultOutputDestinationID: defaultOutputDestinationID,
             parameters: parameters,
             showPreview: showPreview,
-            appliesStyles: appliesStyles,
             contextAware: contextAware
         )
     }
@@ -50,7 +48,6 @@ struct ModeTemplate {
         mode.defaultOutputDestinationID = defaultOutputDestinationID
         mode.resetParameters(to: parameters)
         mode.showPreview = showPreview
-        mode.appliesStyles = appliesStyles
         mode.contextAware = contextAware
     }
 
@@ -78,7 +75,6 @@ extension ModeTemplate {
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
-        appliesStyles: true,
         contextAware: false
     )
 
@@ -95,7 +91,6 @@ extension ModeTemplate {
         parameters: [],
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
-        appliesStyles: true,
         contextAware: false
     )
 

@@ -96,9 +96,6 @@ final class PipelineConversationReprocessor: ConversationReprocessor {
         if let fallback = result.aiProcessingFallback {
             throw ReprocessingError.aiFailed(fallback.errorMessage)
         }
-        if result.processedText == TextProcessingPipeline.Constants.noInstructionSentinel {
-            throw ReprocessingError.noInstruction
-        }
         return result.processedText
     }
 
@@ -130,12 +127,10 @@ final class PipelineConversationReprocessor: ConversationReprocessor {
 
 enum ReprocessingError: LocalizedError {
     case aiFailed(String)
-    case noInstruction
 
     var errorDescription: String? {
         switch self {
         case .aiFailed(let message): message
-        case .noInstruction: "No instruction detected"
         }
     }
 }

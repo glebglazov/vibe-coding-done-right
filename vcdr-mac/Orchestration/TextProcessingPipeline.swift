@@ -22,11 +22,6 @@ struct AIProcessingFallback {
 
 enum TextProcessingPipeline {
 
-    enum Constants {
-        /// Sentinel AI output meaning the dictation contained no actionable instruction.
-        static let noInstructionSentinel = "[NO_INSTRUCTION]"
-    }
-
     /// Runs the three-stage text processing pipeline:
     /// 0. Substitution — swap Trigger Phrases for Replacements in the dictated
     ///    transcript (runs first, in all modes, on the transcript only)
@@ -119,25 +114,12 @@ enum TextProcessingPipeline {
             result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
         }
 
-        // MARK: Sentinel detection — AI returned [NO_INSTRUCTION]
-        if result.hadExternalProcessing
-            && result.text.trimmingCharacters(in: .whitespacesAndNewlines) == Constants.noInstructionSentinel {
-            Logger.textTransform.info("No instruction detected in input")
-            return PipelineResult(text: Constants.noInstructionSentinel, hadExternalProcessing: true, aiProcessingFallback: nil)
-        }
-
         // MARK: Style transformation — capitalization, punctuation (final step before terminator)
-        let styledText: String
-        if mode.appliesStyles {
-            styledText = StyleTransformer.transform(result.text, using: style.staticRules, cursorContext: cursorContext)
-            if styledText != result.text {
-                Logger.textTransform.info("After style transform: \"\(styledText)\"")
-            } else {
-                Logger.textTransform.debug("Style transform: no change")
-            }
+        let styledText = StyleTransformer.transform(result.text, using: style.staticRules, cursorContext: cursorContext)
+        if styledText != result.text {
+            Logger.textTransform.info("After style transform: \"\(styledText)\"")
         } else {
-            styledText = result.text
-            Logger.textTransform.debug("Style transform: skipped (mode.appliesStyles=false)")
+            Logger.textTransform.debug("Style transform: no change")
         }
 
         Logger.textTransform.info("Pipeline final output: \"\(styledText)\"")

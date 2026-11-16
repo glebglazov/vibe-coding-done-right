@@ -48,12 +48,11 @@ struct CaptureSessionDiscardTests {
         #expect(saved.count == 1)
         #expect(saved.first?.inputText == "um so the plan is uh done")
         #expect(saved.first?.output == nil)
-        let style: Style? = mode.appliesStyles ? .casual : nil
         let expectedChoice = RecordedOutputChoice(
             platform: .mac,
             modeID: mode.id.uuidString,
-            styleID: style?.id.uuidString,
-            displayLabel: [mode.name, style?.name].compactMap { $0 }.joined(separator: " · ")
+            styleID: Style.casual.id.uuidString,
+            displayLabel: "\(mode.name) · \(Style.casual.name)"
         )
         #expect(saved.first?.status == .discarded(expectedChoice))
     }
