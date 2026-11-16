@@ -4,7 +4,7 @@ import Testing
 
 @Suite("KeyboardChannel seam")
 struct KeyboardChannelSeamTests {
-    @Test("fake records publication command capture and heartbeat interactions")
+    @Test("fake records publication command and heartbeat interactions")
     func fakeRecordsProtocolInteractions() {
         let fake = FakeKeyboardChannel()
         let channel: any KeyboardChannelProtocol = fake
@@ -18,11 +18,6 @@ struct KeyboardChannelSeamTests {
         #expect(channel.readAndClearCommand() == nil)
         channel.clearCommand()
 
-        channel.replaceCaptures(["first", "second"])
-        #expect(channel.readCaptures() == ["first", "second"])
-        channel.clearCaptures()
-        #expect(channel.readCaptures() == [])
-
         #expect(!channel.isAppLikelyAlive(now: now))
         channel.writeHeartbeat(alive: true, now: now.addingTimeInterval(-5))
         #expect(channel.isAppLikelyAlive(now: now))
@@ -35,10 +30,6 @@ struct KeyboardChannelSeamTests {
             .readAndClearCommand,
             .readAndClearCommand,
             .clearCommand,
-            .replaceCaptures(["first", "second"]),
-            .readCaptures,
-            .clearCaptures,
-            .readCaptures,
             .isAppLikelyAlive(now: now),
             .writeHeartbeat(alive: true, now: now.addingTimeInterval(-5)),
             .isAppLikelyAlive(now: now),

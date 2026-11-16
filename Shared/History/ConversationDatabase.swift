@@ -70,6 +70,15 @@ nonisolated final class ConversationDatabase: Sendable {
         ) { decodeStamped($0) }.first ?? nil
     }
 
+    /// The ids of every stored conversation that `matches`, in no order.
+    /// Decodes every payload, so callers run it off the main actor.
+    func conversationIDs(matching matches: (Conversation) -> Bool) -> [UUID] {
+        read("SELECT payload, captured_at FROM conversations") { row -> UUID? in
+            guard let conversation = decodeStamped(row), matches(conversation) else { return nil }
+            return conversation.id
+        }.compactMap { $0 }
+    }
+
     func conversationCount(filter: HistoryFilter = .all) -> Int {
         read("SELECT COUNT(*) FROM conversations \(Self.condition(filter))") { Int($0.int(0)) }.first ?? 0
     }

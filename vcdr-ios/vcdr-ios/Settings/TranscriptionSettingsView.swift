@@ -42,10 +42,13 @@ struct TranscriptionSettingsView: View {
                     ),
                     spellingHints: SpellingHints(coordinator.substitutionStore.substitutions)
                 )
+                ForEach(AIPromptMode.allCases.reversed(), id: \.self) { mode in
+                    ModeTranscriptionRow(mode: mode, coordinator: coordinator)
+                }
             } header: {
                 Text("Model")
             } footer: {
-                Text("Transcription runs on this device. Choose from the models you have installed — the Library below is where models are installed and removed. The model and everything it is told are this device's own — neither is shared with your other devices.")
+                Text("Transcription runs on this device. Choose from the models you have installed — the Library below is where models are installed and removed. \"With AI On\" and \"With AI Off\" can pin another installed model. The model and everything it is told are this device's own — neither is shared with your other devices.")
             }
 
             LibrarySection(library: library)

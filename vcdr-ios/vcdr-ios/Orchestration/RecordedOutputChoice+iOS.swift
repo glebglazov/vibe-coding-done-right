@@ -7,7 +7,7 @@ extension RecordedOutputChoice {
         self.init(
             platform: .ios,
             modeID: mode.rawValue,
-            styleID: mode.appliesStyles ? style.rawValue : nil,
+            styleID: style.rawValue,
             displayLabel: TranscriptProcessor.outputChoiceLabel(mode: mode, style: style)
         )
     }

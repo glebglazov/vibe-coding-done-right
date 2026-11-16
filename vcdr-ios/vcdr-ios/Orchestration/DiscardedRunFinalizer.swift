@@ -5,8 +5,6 @@ import OSLog
 /// needs to keep its words.
 struct DiscardedRun {
     let run: RecordingRun
-    /// The keyboard Captures of the run, already read and cleared.
-    let captures: [String]
     let choice: RecordedOutputChoice
 }
 
@@ -61,13 +59,10 @@ final class HistoryDiscardedRunFinalizer: DiscardedRunFinalizer {
             Logger.recording.info("Discarded run had no words: nothing saved")
             return .nothingSaved
         }
-        let captures = discarded.captures
-            .filter { !$0.isEmpty }
-            .map { InputSegment(capture: CapturedContext(text: $0, source: .selection)) }
         let id = discarded.run.conversationID
         history.recordDiscarded(
             conversationID: id,
-            inputSegments: [InputSegment(text: text)] + captures,
+            inputSegments: [InputSegment(text: text)],
             choice: discarded.choice
         )
         Logger.recording.info("Discarded run saved to History (\(text.count) chars)")

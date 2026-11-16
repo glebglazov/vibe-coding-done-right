@@ -5,13 +5,6 @@ nonisolated enum RecordingRunOrigin: Equatable, Sendable {
     case keyboard
     case shortcut
 
-    var usesKeyboardCaptures: Bool {
-        switch self {
-        case .app, .keyboard: true
-        case .shortcut: false
-        }
-    }
-
     var deliversToKeyboard: Bool {
         switch self {
         case .keyboard: true

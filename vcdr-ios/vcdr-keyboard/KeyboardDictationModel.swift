@@ -24,12 +24,9 @@ final class KeyboardDictationModel: ObservableObject {
     }
 
     @Published var aiConfigured: Bool = false
-    /// Source of truth for the AI/Verbatim pill. `.verbatim` ↔ "AI off".
+    /// Source of truth for the AI pill.
     @Published var aiMode: AIPromptMode = .verbatim
     @Published var textStyle: SharedTextStyle = .casual
-
-    /// Number of text selections captured in the current recording session (assistant mode).
-    @Published var captureCount: Int = 0
 
     /// AI mode and text style are fixed while a run listens (ADR-0010). The
     /// wire's `recording` covers Arming and Capturing alike.

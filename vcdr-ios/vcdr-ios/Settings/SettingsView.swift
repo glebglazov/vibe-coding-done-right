@@ -16,6 +16,10 @@ struct SettingsView: View {
         SharedConstants.defaultAIModeKey,
         store: SharedConstants.sharedDefaults
     ) private var defaultModeRaw = AIPromptMode.verbatim.rawValue
+    @AppStorage(AIProcessingSettings.dictationProviderKey)
+    private var providerRaw = AIProvider.anthropic.rawValue
+    @AppStorage(AIProcessingSettings.dictationAfmFallbackKey)
+    private var appleFallback = false
     @AppStorage(
         SharedConstants.defaultTextStyleKey,
         store: SharedConstants.sharedDefaults
@@ -66,6 +70,9 @@ struct SettingsView: View {
                 if let mode = AIPromptMode(rawValue: val) {
                     DefaultSettings.setAIMode(mode)
                 }
+            }
+            .onChange(of: providerRaw) { _, _ in
+                DefaultSettings.setAIConfigured(AIProcessingSettings.hasAICapability)
             }
             .onChange(of: defaultStyleRaw) { _, val in
                 if let style = TextStyle(rawValue: val) {
@@ -296,15 +303,24 @@ struct SettingsView: View {
     // MARK: - AI Processing
 
     private var aiProcessingSection: some View {
-        Section {
-            Picker("Default Mode", selection: $defaultModeRaw) {
-                ForEach(AIPromptMode.availableModes, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode.rawValue)
+        let configured = AIProvider.configuredProviders
+
+        return Section {
+            Toggle("Start with AI On", isOn: startsWithAIOn)
+
+            Picker("Provider", selection: Binding(
+                get: { AIProvider(rawValue: providerRaw) ?? .anthropic },
+                set: { providerRaw = $0.rawValue }
+            )) {
+                ForEach(configured, id: \.self) { provider in
+                    Text(provider.displayName).tag(provider)
                 }
             }
+            .disabled(configured.isEmpty)
 
-            NavigationLink("Modes") {
-                ModesView(coordinator: coordinator)
+            if AIProcessingSettings.isAFMAvailable {
+                Toggle("Use Apple as Fallback", isOn: $appleFallback)
+                    .disabled(AIProvider(rawValue: providerRaw) == .apple)
             }
 
             NavigationLink("Providers") {
@@ -313,11 +329,18 @@ struct SettingsView: View {
         } header: {
             Text("AI Processing")
         } footer: {
-            if AIProvider.configuredProviders.isEmpty {
+            if configured.isEmpty {
                 Text("No providers configured. Tap \"Providers\" to add an API key.")
             } else {
-                Text("Enhances transcriptions using AI.")
+                Text("AI fixes punctuation and grammar. It never acts on what you say. The AI pill on the keyboard changes this for your next recordings.")
             }
         }
+    }
+
+    private var startsWithAIOn: Binding<Bool> {
+        Binding(
+            get: { defaultModeRaw == AIPromptMode.dictation.rawValue },
+            set: { defaultModeRaw = ($0 ? AIPromptMode.dictation : .verbatim).rawValue }
+        )
     }
 }

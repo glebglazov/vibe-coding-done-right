@@ -64,12 +64,11 @@ struct RecordingFlowCoordinatorRunControlTests {
         #expect(!hotMicSession.isAlive)
     }
 
-    @Test("a Shortcut run never reads or clears keyboard Captures and sends the keyboard idle")
-    func shortcutLeavesCapturesAlone() async {
+    @Test("a Shortcut run sends the keyboard idle")
+    func shortcutSendsTheKeyboardIdle() async {
         SettingOverrides.setAIMode(.verbatim)
         defer { SettingOverrides.clearAll() }
         let channel = FakeKeyboardChannel()
-        channel.replaceCaptures(["kept for the keyboard"])
         let coordinator = makeCoordinator(channel: channel) {
             FakeRecordingStreamingSession(result: .success("hello world"))
         }
@@ -82,13 +81,7 @@ struct RecordingFlowCoordinatorRunControlTests {
             Issue.record("Expected a successful run, got \(result)")
             return
         }
-        let interactions = channel.interactions
-        let touchedCaptures = interactions.contains {
-            $0 == .readCaptures || $0 == .clearCaptures || $0 == .clearLegacySelectedText
-        }
-        #expect(!touchedCaptures)
-        #expect(interactions.last == .publish(.idle))
-        #expect(channel.readCaptures() == ["kept for the keyboard"])
+        #expect(channel.interactions.last == .publish(.idle))
         #expect(coordinator.activeRunPhase == nil)
     }
 

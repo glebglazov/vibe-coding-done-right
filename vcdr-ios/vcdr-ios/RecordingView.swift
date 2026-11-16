@@ -476,13 +476,7 @@ struct RecordingView: View {
 
     private var sessionInfoView: some View {
         HStack(spacing: 12) {
-            if coordinator.selectedPromptMode != .verbatim {
-                sessionInfoPill(coordinator.selectedPromptMode.displayName.uppercased())
-            }
-            // Verbatim and dictation both apply styles; assistant does not.
-            if coordinator.selectedPromptMode.appliesStyles {
-                sessionInfoPill(coordinator.currentTextStyle.displayName.uppercased())
-            }
+            sessionInfoPill(coordinator.currentTextStyle.displayName.uppercased())
         }
     }
 
@@ -499,9 +493,9 @@ struct RecordingView: View {
             )
     }
 
-    /// All three labels of the AI mode pill, used to reserve a fixed pill width
-    /// so cycling between states doesn't reflow the row.
-    private static let aiModeSizingLabels = ["VERBATIM", "DICTATION", "ASSISTANT"]
+    /// Both labels of the AI pill, used to reserve a fixed pill width so a
+    /// toggle doesn't reflow the row.
+    private static let aiModeSizingLabels = AIPromptMode.allCases.map { $0.displayName.uppercased() }
     /// All three labels of the text style pill.
     private static let styleSizingLabels = ["CASUAL", "MESSAGING", "FORMAL"]
 
@@ -511,23 +505,22 @@ struct RecordingView: View {
     private var aiSessionToggle: some View {
         let locked = coordinator.areOutputChoicesLocked
         HStack(spacing: 10) {
-            // AI mode pill: cycles Verbatim → Dictation → Assistant
             if AIProcessingSettings.hasAICapability {
+                let aiOn = coordinator.selectedPromptMode == .dictation
                 Button {
-                    coordinator.cycleAIState()
+                    coordinator.toggleAIMode()
                 } label: {
                     sonicPill(
-                        icon: "sparkles",
+                        icon: aiOn ? "sparkles" : nil,
                         text: coordinator.selectedPromptMode.displayName.uppercased(),
                         sizingTexts: Self.aiModeSizingLabels,
-                        filled: coordinator.selectedPromptMode != .verbatim
+                        filled: aiOn
                     )
                 }
+                .accessibilityLabel("AI")
+                .accessibilityValue(aiOn ? "On" : "Off")
             }
 
-            // Style toggle pill: visually hidden in Assistant mode but keeps its
-            // slot in the layout so the AI pill doesn't reflow horizontally.
-            let styleVisible = coordinator.selectedPromptMode.appliesStyles
             Button {
                 coordinator.cycleTextStyle()
             } label: {
@@ -537,9 +530,6 @@ struct RecordingView: View {
                     filled: false
                 )
             }
-            .opacity(styleVisible ? 1 : 0)
-            .allowsHitTesting(styleVisible)
-            .accessibilityHidden(!styleVisible)
         }
         .opacity(locked ? Self.lockedPillOpacity : 1)
         .disabled(locked)

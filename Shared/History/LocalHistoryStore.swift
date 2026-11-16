@@ -141,6 +141,15 @@ final class LocalHistoryStore: HistoryStore, RecordFileSyncedStore {
         exportPendingRecords()
     }
 
+    /// Every stored conversation that `matches`, loaded or not. The whole
+    /// database is decoded on a GCD thread, so the list stays responsive.
+    func conversationIDs(matching matches: @escaping @Sendable (Conversation) -> Bool) async -> [UUID] {
+        let database = database
+        return await withBlockingTask(qos: .utility) {
+            database.conversationIDs(matching: matches)
+        }
+    }
+
     func clearAll() {
         database.deleteAll(deletedAt: Date())
         conversations.removeAll()

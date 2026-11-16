@@ -71,7 +71,7 @@ struct TranscriptionSettingsTests {
             TranscriptionSettings.defaultModelKey,
             TranscriptionSettings.modelSettingsKey,
             TranscriptionSettings.modeOverrideKey(for: .dictation),
-            TranscriptionSettings.modeOverrideKey(for: .assistant)
+            TranscriptionSettings.modeOverrideKey(for: .verbatim)
         ]
         let originals = keys.map { ($0, standard.string(forKey: $0)) }
         defer {
@@ -101,9 +101,9 @@ struct TranscriptionSettingsTests {
 
         // A mode that pins nothing takes the Default and the Default family's
         // own settings, untouched by the mode next to it.
-        let assistant = TranscriptionSettings.effectiveTranscription(for: .assistant)
-        #expect(assistant.model == .parakeetV3)
-        #expect(assistant.settings == .default)
+        let aiOff = TranscriptionSettings.effectiveTranscription(for: .verbatim)
+        #expect(aiOff.model == .parakeetV3)
+        #expect(aiOff.settings == .default)
 
         override[.whisper].clear(.languageHint)
         standard.set(override.rawValue, forKey: TranscriptionSettings.modeOverrideKey(for: .dictation))

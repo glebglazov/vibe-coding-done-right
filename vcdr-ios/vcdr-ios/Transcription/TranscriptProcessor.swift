@@ -27,12 +27,12 @@ struct TranscriptProcessor {
         let historyLabel: String?
     }
 
-    private let makeAIProvider: @MainActor (AIPromptMode) -> ProviderCascade
+    private let makeAIProvider: @MainActor () -> ProviderCascade
     private let onAIProcessingStatus: @MainActor (AIProcessingStatus) -> Void
     private let onAIInputText: @MainActor (String) -> Void
 
     init(
-        makeAIProvider: @escaping @MainActor (AIPromptMode) -> ProviderCascade,
+        makeAIProvider: @escaping @MainActor () -> ProviderCascade,
         onAIProcessingStatus: @escaping @MainActor (AIProcessingStatus) -> Void,
         onAIInputText: @escaping @MainActor (String) -> Void
     ) {
@@ -50,7 +50,6 @@ struct TranscriptProcessor {
         _ cleanedText: String,
         initialSettings: Settings,
         finalSettings: @MainActor () -> Settings,
-        captures: [String],
         spellingHints: SpellingHints
     ) async -> Output {
         let shouldUseAI = usesAI(initialSettings)
@@ -59,7 +58,6 @@ struct TranscriptProcessor {
             processedText = await processWithAI(
                 localText: cleanedText,
                 mode: initialSettings.promptMode,
-                captures: captures,
                 spellingHints: spellingHints
             )
         } else {
@@ -78,19 +76,17 @@ struct TranscriptProcessor {
     func processWithAI(
         localText: String,
         settings: Settings,
-        captures: [String],
         spellingHints: SpellingHints
     ) async -> String {
         await processWithAI(
             localText: localText,
             mode: settings.promptMode,
-            captures: captures,
             spellingHints: spellingHints
         )
     }
 
     static func finalize(_ text: String, settings: Settings) -> String {
-        TranscriptFinalizer.finalize(text, mode: settings.promptMode, style: settings.textStyle)
+        TranscriptFinalizer.finalize(text, style: settings.textStyle)
     }
 
     static func historyLabel(settings: Settings) -> String? {
@@ -98,19 +94,18 @@ struct TranscriptProcessor {
         return outputChoiceLabel(mode: settings.promptMode, style: settings.textStyle)
     }
 
-    /// "Dictation · Casual", or the mode alone when it applies no style.
+    /// "AI · Casual" or "AI off · Casual". History stores the label as text,
+    /// so entries made with older labels keep them.
     static func outputChoiceLabel(mode: AIPromptMode, style: TextStyle) -> String {
-        let modeName = mode.rawValue.capitalized
-        return mode.appliesStyles ? "\(modeName) · \(style.rawValue.capitalized)" : modeName
+        let modeName = switch mode {
+        case .dictation: "AI"
+        case .verbatim: "AI off"
+        }
+        return "\(modeName) · \(style.rawValue.capitalized)"
     }
 
-    static func buildAIInput(_ localText: String, mode: AIPromptMode, captures: [String]) -> String {
-        var wrapped = "<dictation>\(localText)</dictation>"
-        guard mode.usesCaptures else { return wrapped }
-        for (index, capture) in captures.enumerated() where !capture.isEmpty {
-            wrapped += "\n\n<capture id=\"\(index + 1)\">\(capture)</capture>"
-        }
-        return wrapped
+    static func buildAIInput(_ localText: String) -> String {
+        "<dictation>\(localText)</dictation>"
     }
 
     private func usesAI(_ settings: Settings) -> Bool {
@@ -120,23 +115,17 @@ struct TranscriptProcessor {
     private func processWithAI(
         localText: String,
         mode: AIPromptMode,
-        captures: [String],
         spellingHints: SpellingHints
     ) async -> String {
         onAIInputText(localText)
         onAIProcessingStatus(.processing)
 
         let systemPrompt = spellingHints.appended(to: BuiltInPrompts.prompt(for: mode), detail: mode.hintDetail)
-        let input = Self.buildAIInput(localText, mode: mode, captures: captures)
-        let provider = makeAIProvider(mode)
+        let input = Self.buildAIInput(localText)
+        let provider = makeAIProvider()
 
         Logger.ai.info("AI input [mode=\(mode.rawValue), provider=\(provider.displayName)]: \(input)")
         Logger.ai.debug("AI system prompt: \(systemPrompt.prefix(100))...")
-        if mode.usesCaptures {
-            for (index, capture) in captures.enumerated() where !capture.isEmpty {
-                Logger.ai.info("Capture \(index + 1) included in AI input (\(capture.count) chars)")
-            }
-        }
 
         let startTime = ContinuousClock.now
         do {

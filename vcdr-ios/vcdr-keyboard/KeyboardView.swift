@@ -97,12 +97,9 @@ struct FullKeyboardToolbar: View {
             DictateActionButton(
                 dictationState: model.dictationState,
                 recordsInPlace: reachability.recordsInPlace,
-                showCapture: model.aiMode.usesCaptures,
-                captureCount: model.captureCount,
                 onStart: { controller?.startRecordingFromKeyboard() },
                 onStop: { controller?.stopAndWaitForResult() },
                 onInsert: { controller?.insertPendingText() },
-                onCapture: { controller?.captureSelectedText() },
                 onShowFailure: { controller?.showFailureReason() }
             )
 
@@ -125,33 +122,33 @@ struct DictateSettingsPills: View {
     @ObservedObject var model: KeyboardDictationModel
     weak var controller: KeyboardViewController?
 
-    /// All three labels of the AI mode pill, used to reserve a fixed pill width
-    /// so cycling between states doesn't reflow the toolbar.
-    private static let aiModeLabels = ["VERBATIM", "DICTATION", "ASSISTANT"]
+    /// Both labels of the AI pill, used to reserve a fixed pill width so a
+    /// toggle doesn't reflow the toolbar.
+    private static let aiModeLabels = AIPromptMode.allCases.map { $0.displayName.uppercased() }
 
     var body: some View {
         HStack(spacing: 8) {
             if model.aiConfigured {
                 Button {
                     KeyboardHaptics.light()
-                    controller?.cycleAIState()
+                    controller?.toggleAIMode()
                 } label: {
                     sonicPill(
-                        icon: "sparkles",
+                        icon: model.aiMode == .dictation ? "sparkles" : nil,
                         text: model.aiMode.displayName.uppercased(),
                         sizingTexts: Self.aiModeLabels,
-                        filled: model.aiMode != .verbatim
+                        filled: model.aiMode == .dictation
                     )
                 }
+                .accessibilityLabel("AI")
+                .accessibilityValue(model.aiMode == .dictation ? "On" : "Off")
             }
 
-            if model.aiMode != .assistant {
-                Button {
-                    KeyboardHaptics.light()
-                    controller?.cycleTextStyle()
-                } label: {
-                    sonicPill(text: model.textStyle.displayName.uppercased())
-                }
+            Button {
+                KeyboardHaptics.light()
+                controller?.cycleTextStyle()
+            } label: {
+                sonicPill(text: model.textStyle.displayName.uppercased())
             }
         }
     }
@@ -231,42 +228,7 @@ struct KeyboardModeToggleButton: View {
     }
 }
 
-/// Capture button shown during recording: icon only for 0 captures,
-/// icon + ×N for 1+. Appends the current text selection to the session's
-/// captures; used by the Full toolbar strip and the Compact strip alike.
-struct DictateCaptureButton: View {
-    private static let pillHeight: CGFloat = 32
-    private static let pillFont: CGFloat = 11
-    private static let pillBorder: CGFloat = 1.5
-
-    var captureCount: Int
-    var onCapture: () -> Void
-
-    var body: some View {
-        Button {
-            onCapture()
-        } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 11, weight: .black))
-                if captureCount >= 1 {
-                    Text("×\(captureCount)")
-                        .font(.system(size: Self.pillFont, weight: .black))
-                        .tracking(0.5)
-                }
-            }
-            .foregroundStyle(captureCount > 0 ? .white : .white.opacity(0.7))
-            .padding(.horizontal, captureCount >= 1 ? 8 : 6)
-            .frame(height: Self.pillHeight)
-            .background(Capsule().fill(captureCount > 0 ? Color.blue : Color(.systemGray2)))
-            .overlay(Capsule().stroke(Color(.label), lineWidth: Self.pillBorder))
-            .contentShape(Capsule())
-        }
-    }
-}
-
-/// Action button (Start/Stop/transcribing/ready) in the toolbar,
-/// with an optional Capture button shown during recording in assistant mode.
+/// Action button (Start/Stop/transcribing/ready) in the toolbar.
 struct DictateActionButton: View {
     private static let pillHeight: CGFloat = 32
     private static let pillFont: CGFloat = 11
@@ -276,12 +238,9 @@ struct DictateActionButton: View {
     /// Whether a tap on the record control records in place, straight from the
     /// predicate the tap itself reads.
     var recordsInPlace: Bool
-    var showCapture: Bool
-    var captureCount: Int
     var onStart: () -> Void
     var onStop: () -> Void
     var onInsert: () -> Void
-    var onCapture: () -> Void
     var onShowFailure: () -> Void
 
     var body: some View {
@@ -290,9 +249,6 @@ struct DictateActionButton: View {
             case .idle:
                 recordButton(color: .blue)
             case .recording:
-                if showCapture {
-                    DictateCaptureButton(captureCount: captureCount, onCapture: onCapture)
-                }
                 Button {
                     KeyboardHaptics.medium()
                     onStop()

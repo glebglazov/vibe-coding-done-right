@@ -15,14 +15,14 @@ struct ConversationReprocessorTests {
         let discarded = env.recordDiscarded("um hello world", choice: Self.recorded)
 
         env.reprocessor.process(discarded, with: env.reprocessor.defaultChoice(for: discarded))
-        #expect(env.reprocessor.choiceInProgress(for: discarded.id) == ReprocessChoice(mode: .dictation, style: .formal))
+        #expect(env.reprocessor.choiceInProgress(for: discarded.id) == ReprocessChoice(style: .formal))
         await waitUntil { env.reprocessor.choiceInProgress(for: discarded.id) == nil }
 
         let resolved = try #require(env.history.conversations.first)
         #expect(resolved.id == discarded.id)
         #expect(resolved.status == .normal)
         #expect(resolved.output == "Hello world. ")
-        #expect(resolved.label == "Dictation · Formal")
+        #expect(resolved.label == "AI · Formal")
         #expect(resolved.inputText == "um hello world")
         #expect(resolved.capturedAt == discarded.capturedAt)
         #expect(env.history.discardedCount == 0)
@@ -55,9 +55,9 @@ struct ConversationReprocessorTests {
         #expect(env.reprocessor.failure(for: discarded.id) == AIConversationReprocessor.noAIMessage)
     }
 
-    @Test("a choice the Mac recorded uses the current iOS mode and style")
-    func macChoiceUsesTheCurrentIOSChoice() {
-        let env = Env(ai: .alwaysThrow, current: (.assistant, .messaging))
+    @Test("a choice the Mac recorded uses the current iOS style")
+    func macChoiceUsesTheCurrentIOSStyle() {
+        let env = Env(ai: .alwaysThrow, currentStyle: .messaging)
         let fromMac = env.recordDiscarded("hello", choice: RecordedOutputChoice(
             platform: .mac,
             modeID: UUID().uuidString,
@@ -65,15 +65,20 @@ struct ConversationReprocessorTests {
             displayLabel: "Email · Formal"
         ))
 
-        #expect(env.reprocessor.defaultChoice(for: fromMac) == ReprocessChoice(mode: .assistant, style: .messaging))
+        #expect(env.reprocessor.defaultChoice(for: fromMac) == ReprocessChoice(style: .messaging))
     }
 
-    @Test("a run recorded in Verbatim is processed with Dictation and its recorded style")
-    func verbatimChoiceBecomesDictation() {
-        let env = Env(ai: .alwaysThrow, current: (.verbatim, .casual))
-        let verbatim = env.recordDiscarded("hello", choice: RecordedOutputChoice(mode: .verbatim, style: .messaging))
+    @Test("a run recorded with AI off is processed with AI on and its recorded style")
+    func aiOffChoiceKeepsItsStyle() async throws {
+        let env = Env(ai: .alwaysSucceed(output: "Hello."), currentStyle: .casual)
+        let aiOff = env.recordDiscarded("hello", choice: RecordedOutputChoice(mode: .verbatim, style: .messaging))
 
-        #expect(env.reprocessor.defaultChoice(for: verbatim) == ReprocessChoice(mode: .dictation, style: .messaging))
+        let choice = env.reprocessor.defaultChoice(for: aiOff)
+        #expect(choice == ReprocessChoice(style: .messaging))
+        env.reprocessor.process(aiOff, with: choice)
+        await waitUntil { env.reprocessor.choiceInProgress(for: aiOff.id) == nil }
+
+        #expect(try #require(env.history.conversations.first).label == "AI · Messaging")
     }
 }
 
@@ -85,7 +90,7 @@ private final class Env {
     init(
         ai: FakeLLMProvider.Behavior,
         hasAI: Bool = true,
-        current: (mode: AIPromptMode, style: TextStyle) = (.dictation, .casual)
+        currentStyle: TextStyle = .casual
     ) {
         history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(
             storageRoot: FileManager.default.temporaryDirectory
@@ -95,9 +100,9 @@ private final class Env {
             history: history,
             backgroundTasks: SpyBackgroundTaskRunner(),
             substitutions: { [] },
-            currentChoice: { current },
+            currentStyle: { currentStyle },
             hasAICapability: { hasAI },
-            makeAIProvider: { _ in
+            makeAIProvider: {
                 ProviderCascade(
                     primary: FakeLLMProvider(behavior: ai),
                     fallback: nil,

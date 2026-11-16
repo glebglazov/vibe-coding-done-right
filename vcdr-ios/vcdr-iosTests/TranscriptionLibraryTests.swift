@@ -187,13 +187,13 @@ struct TranscriptionLibraryTests {
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.library.refresh()
         env.pin(.whisperTiny, on: .dictation)
-        env.pin(.whisperTiny, on: .assistant)
+        env.pin(.whisperTiny, on: .verbatim)
 
         let removal = env.library.pinnedModelRemoval(for: .whisperTiny)
 
-        #expect(removal?.pinningModes == [AIPromptMode.dictation.displayName,
-                                          AIPromptMode.assistant.displayName])
-        #expect(removal?.disclosure == "Dictation and Assistant pin Whisper Tiny. "
+        #expect(removal?.pinningModes == [AIPromptMode.verbatim.displayName,
+                                          AIPromptMode.dictation.displayName])
+        #expect(removal?.disclosure == "AI off and AI on pin Whisper Tiny. "
             + "Remove it and they will use Parakeet Multilingual v3 (the Default Model).")
         // Declining is having read it and stopped here: nothing has moved.
         #expect(await env.whisper.isInstalled)
@@ -210,7 +210,7 @@ struct TranscriptionLibraryTests {
         pinned.model = .whisperTiny
         pinned[.whisper].languageHint = .russian
         TranscriptionSettings.setOverride(pinned, for: .dictation)
-        env.pin(.whisperTiny, on: .assistant)
+        env.pin(.whisperTiny, on: .verbatim)
 
         #expect(await env.library.remove(.whisperTiny) == nil)
 

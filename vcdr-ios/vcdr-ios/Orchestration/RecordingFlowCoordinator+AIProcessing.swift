@@ -7,9 +7,7 @@ extension RecordingFlowCoordinator {
 
     func makeTranscriptProcessor() -> TranscriptProcessor {
         TranscriptProcessor(
-            makeAIProvider: { mode in
-                AIProviderFactory.make(for: mode)
-            },
+            makeAIProvider: { AIProviderFactory.make() },
             onAIProcessingStatus: { [weak self] status in
                 self?.aiProcessingStatus = AIProcessingStatus(status)
                 if status == .processing {
@@ -39,13 +37,10 @@ extension RecordingFlowCoordinator {
             let aiResult = await makeTranscriptProcessor().processWithAI(
                 localText: aiInputText,
                 settings: initialSettings,
-                captures: capturedTexts,
                 spellingHints: SpellingHints(substitutionStore.substitutions)
             )
             guard !Task.isCancelled else { return }
-            // Pick up any style/mode change the user made during the retry, then
-            // finalize. Assistant output is excluded; everything else (including
-            // verbatim if the user flipped AI off mid-retry) gets the style rules.
+            // Pick up any style change the user made during the retry, then finalize.
             resyncSettingsFromSharedDefaults()
             let finalSettings = TranscriptProcessor.Settings(
                 promptMode: selectedPromptMode,

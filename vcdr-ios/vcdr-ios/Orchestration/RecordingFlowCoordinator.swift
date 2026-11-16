@@ -109,14 +109,9 @@ final class RecordingFlowCoordinator {
         return phase.locksOutputChoices
     }
 
-    /// Cycles the AI state through Verbatim → Dictation → Assistant → Verbatim.
-    func cycleAIState() {
+    func toggleAIMode() {
         guard !areOutputChoicesLocked else { return }
-        switch selectedPromptMode {
-        case .verbatim: selectedPromptMode = .dictation
-        case .dictation: selectedPromptMode = .assistant
-        case .assistant: selectedPromptMode = .verbatim
-        }
+        selectedPromptMode = selectedPromptMode.toggled
         SettingOverrides.setAIMode(selectedPromptMode)
     }
 
@@ -193,9 +188,6 @@ final class RecordingFlowCoordinator {
     let discardNotes = DiscardNoteCenter()
     /// Text sent to AI processing — retained for the existing Done-page retry action.
     var aiInputText: String = ""
-    /// Text selections captured by the keyboard extension during recording (assistant mode only).
-    /// Populated from captures published through the Keyboard Channel.
-    var capturedTexts: [String] = []
     /// Tracks the in-flight AI retry so rapid taps cancel the previous attempt.
     var aiRetryTask: Task<Void, Never>?
     /// Token for the keyboard command NotificationCenter observer, stored so we can
@@ -330,6 +322,7 @@ final class RecordingFlowCoordinator {
             watcher: containerWatcher
         )
         Logger.app.info("[LaunchProbe] bootstrapHistory exit main=\(Thread.isMainThread)")
+        Task { await RetiredAssistantHistory.remove(from: history) }
     }
 
     /// Deferred Substitutions bootstrap, mirroring `bootstrapHistory`: opens the
@@ -577,13 +570,6 @@ final class RecordingFlowCoordinator {
         setIdleTimerDisabled(false)
     }
 
-    func clearCapturedTexts(for origin: RecordingRunOrigin) {
-        if origin.usesKeyboardCaptures {
-            keyboardChannel.clearCaptures()
-        }
-        capturedTexts = []
-    }
-
     func applyTerminalStateToUI(_ terminalState: RecordingRunTerminalState) {
         switch terminalState {
         case .success(let success):
@@ -652,9 +638,6 @@ final class RecordingFlowCoordinator {
                     hasAICapability: AIProcessingSettings.hasAICapability
                 )
             },
-            currentCaptures: { [weak self] in
-                self?.capturedTexts ?? []
-            },
             currentSubstitutions: { [weak self] in
                 self?.substitutionStore.substitutions ?? []
             },
@@ -697,7 +680,6 @@ final class RecordingFlowCoordinator {
         aiProcessingStatus = .idle
         selectedPromptMode = SettingOverrides.effectiveAIMode()
         currentTextStyle = SettingOverrides.effectiveTextStyle()
-        capturedTexts = []
         let run = activeRun?.run
         setActiveRun(nil)
         Task { await run?.cancel() }

@@ -5,7 +5,6 @@ struct RecordingRunSuccess: Equatable {
     let transcript: String
     let processed: String?
     let finalText: String
-    let captures: [String]
     let historyLabel: String?
 }
 

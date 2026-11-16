@@ -42,12 +42,9 @@ struct CompactKeyboardView: View {
             DictateActionButton(
                 dictationState: model.dictationState,
                 recordsInPlace: reachability.recordsInPlace,
-                showCapture: model.aiMode.usesCaptures,
-                captureCount: model.captureCount,
                 onStart: { controller?.startRecordingFromKeyboard() },
                 onStop: { controller?.stopAndWaitForResult() },
                 onInsert: { controller?.insertPendingText() },
-                onCapture: { controller?.captureSelectedText() },
                 onShowFailure: { controller?.showFailureReason() }
             )
             KeyboardModeToggleButton(direction: .expand) {

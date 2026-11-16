@@ -30,12 +30,6 @@ enum SharedConstants {
     static let settingsNotificationName = "glebglazov.vcdr-ios.settingsChanged"
     static let aiConfiguredKey = "shared_ai_configured"
 
-    // Selected text capture (keyboard → app) — written before recording starts in assistant mode
-    static let selectedTextKey = "shared_selected_text"
-
-    // Multi-capture (keyboard → app) — JSON array of captured text selections in assistant mode
-    static let capturedTextsKey = "shared_captured_texts"
-
     /// App → keyboard heartbeat (Double, `timeIntervalSince1970`). Refreshed
     /// periodically while the hot session is alive and on state changes. The
     /// keyboard reads this before deciding whether to try a Darwin command

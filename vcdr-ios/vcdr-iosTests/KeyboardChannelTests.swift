@@ -90,30 +90,16 @@ struct KeyboardChannelTests {
         #expect(notifications.isEmpty)
     }
 
-    @Test("captures roundtrip through JSON storage")
-    func capturesRoundtrip() {
-        let defaults = makeDefaults()
-        let channel = KeyboardChannel(defaults: defaults)
-
-        channel.replaceCaptures(["first"])
-        channel.appendCapture("second")
-
-        #expect(channel.readCaptures() == ["first", "second"])
-
-        channel.clearCaptures()
-        #expect(channel.readCaptures() == [])
-    }
-
     @Test("heartbeat drives command versus URL action")
     func heartbeatDrivesAction() {
         let defaults = makeDefaults()
         let fixedNow = Date(timeIntervalSince1970: 1_000)
         let channel = KeyboardChannel(defaults: defaults, heartbeatFreshnessWindow: 18)
 
-        #expect(channel.startRecording(captures: [], now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
+        #expect(channel.startRecording(now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
 
         channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-5))
-        #expect(channel.startRecording(captures: [], now: fixedNow) == .commandSent)
+        #expect(channel.startRecording(now: fixedNow) == .commandSent)
         #expect(channel.stopRecording(now: fixedNow) == .commandSent)
 
         channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-30))
@@ -132,18 +118,18 @@ struct KeyboardChannelTests {
         // Deep-Link Fallback — never a Darwin command that assumes the app is
         // listening.
         channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-19))
-        #expect(channel.startRecording(captures: [], now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
+        #expect(channel.startRecording(now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
         #expect(channel.stopRecording(now: fixedNow) == .openURL(KeyboardChannel.stopDeepLinkURL))
 
         // Fail-closed teardown clears the Heartbeat (alive: false → 0); the
         // keyboard reads that as stale and still falls back to the deep link.
         channel.writeHeartbeat(alive: false, now: fixedNow)
-        #expect(channel.startRecording(captures: [], now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
+        #expect(channel.startRecording(now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
         #expect(channel.stopRecording(now: fixedNow) == .openURL(KeyboardChannel.stopDeepLinkURL))
 
         // Only a beat inside the freshness window earns the fast Darwin path.
         channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-1))
-        #expect(channel.startRecording(captures: [], now: fixedNow) == .commandSent)
+        #expect(channel.startRecording(now: fixedNow) == .commandSent)
     }
 
     @Test("command is read once")

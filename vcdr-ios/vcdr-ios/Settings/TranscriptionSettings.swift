@@ -28,7 +28,7 @@ enum TranscriptionSettings {
     }
 
     /// Where a Prompt Mode's Transcription Override lives — one key per mode,
-    /// because iOS has three fixed modes rather than modes a person makes.
+    /// because iOS has two fixed modes rather than modes a person makes.
     /// Read and written through `@AppStorage` by that mode's own screen.
     static func modeOverrideKey(for mode: AIPromptMode) -> String {
         "transcription_mode_override_\(mode.rawValue)"

@@ -1,35 +1,5 @@
 import Foundation
 
-/// What a Prompt Mode can be told about AI processing — or, for a mode that
-/// processes nothing, why not. The two travel as one answer for the same
-/// reason `TranscriptionModelCapabilities` does: a screen built from the
-/// declaration can never render no controls and no explanation.
-enum AIProcessingCapabilities: Equatable {
-    /// This mode sends the transcript to an AI Provider, so it chooses one and
-    /// says whether Apple stands behind it.
-    case providerAndFallback
-    /// This mode sends the transcript nowhere, and this is what its screen says
-    /// instead.
-    case nothing(because: String)
-}
-
-extension AIPromptMode {
-    /// What this mode's screen offers for AI processing. Verbatim declares it
-    /// processes nothing rather than showing a Provider it would never call.
-    var aiProcessing: AIProcessingCapabilities {
-        switch self {
-        case .verbatim:
-            .nothing(because: """
-                Verbatim writes down what you said and sends it nowhere, so \
-                there is no AI Provider to choose. What it records with is \
-                below.
-                """)
-        case .dictation, .assistant:
-            .providerAndFallback
-        }
-    }
-}
-
 /// iOS AI provider selection. Cloud backends come from the shared seam; Apple
 /// remains an iOS-only backend registered when AFM is available.
 enum AIProvider: RawRepresentable, Codable, Hashable, Sendable {
@@ -130,63 +100,28 @@ enum AIProcessingSettings {
     static let enabledKey = "ai_processing_enabled"
     static let providerKey = "ai_processing_provider"
     static let dictationProviderKey = "ai_processing_dictation_provider"
-    static let assistantProviderKey = "ai_processing_assistant_provider"
-    static let afmFallbackEnabledKey = "ai_processing_afm_fallback_enabled"
     static let dictationAfmFallbackKey = "ai_processing_dictation_afm_fallback"
-    static let assistantAfmFallbackKey = "ai_processing_assistant_afm_fallback"
     /// Remembers the user's fallback preference so it can be restored when
     /// switching away from Apple as primary provider.
     static let afmFallbackRememberedKey = "ai_processing_afm_fallback_remembered"
-
-    /// Default mode as configured in Settings. Reads from `sharedDefaults` so
-    /// both the main app and keyboard extension see the same value; mutations
-    /// go through `DefaultSettings.setAIMode(_:)`.
-    static var defaultMode: AIPromptMode {
-        let raw = SharedConstants.sharedDefaults.string(forKey: SharedConstants.defaultAIModeKey) ?? ""
-        return AIPromptMode(rawValue: raw) ?? .verbatim
-    }
 
     static var enabled: Bool {
         UserDefaults.standard.bool(forKey: enabledKey)
     }
 
-    /// Provider for the current default mode. Used by hasAICapability / isConfigured checks.
+    /// The AI Provider that AI on calls. The key keeps its Dictation name
+    /// because it is a stored id.
     static var provider: AIProvider {
-        provider(for: defaultMode)
-    }
-
-    /// Where `mode`'s AI Provider lives. Verbatim doesn't call AI, but
-    /// capability checks read this; map it to the dictation provider since
-    /// that's the natural first AI mode.
-    static func providerKey(for mode: AIPromptMode) -> String {
-        switch mode {
-        case .verbatim, .dictation: dictationProviderKey
-        case .assistant: assistantProviderKey
-        }
-    }
-
-    /// Where `mode`'s Apple fallback preference lives.
-    static func afmFallbackKey(for mode: AIPromptMode) -> String {
-        switch mode {
-        case .verbatim, .dictation: dictationAfmFallbackKey
-        case .assistant: assistantAfmFallbackKey
-        }
-    }
-
-    static func provider(for mode: AIPromptMode) -> AIProvider {
-        let raw = UserDefaults.standard.string(forKey: providerKey(for: mode)) ?? ""
+        let raw = UserDefaults.standard.string(forKey: dictationProviderKey) ?? ""
         // Fall back to legacy global provider key for migration
         return AIProvider(rawValue: raw)
             ?? AIProvider(rawValue: UserDefaults.standard.string(forKey: providerKey) ?? "")
             ?? .anthropic
     }
 
-    static var afmFallbackEnabled: Bool {
-        UserDefaults.standard.bool(forKey: afmFallbackEnabledKey)
-    }
-
-    static func afmFallbackEnabled(for mode: AIPromptMode) -> Bool {
-        UserDefaults.standard.bool(forKey: afmFallbackKey(for: mode))
+    /// Whether Apple stands behind the Provider when it fails.
+    static var appleFallbackEnabled: Bool {
+        UserDefaults.standard.bool(forKey: dictationAfmFallbackKey)
     }
 
     /// Whether Apple Foundation Models are available on this device

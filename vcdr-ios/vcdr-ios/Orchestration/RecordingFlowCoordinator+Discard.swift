@@ -38,18 +38,15 @@ extension RecordingFlowCoordinator {
     }
 
     private func cancelArming(_ active: ActiveRecordingRun) {
-        clearCapturedTexts(for: active.origin)
         abortArming()
         state = readinessState
     }
 
     private func discardCapturing(_ active: ActiveRecordingRun) {
         endCapture(of: active)
-        let captures = takeCaptures(for: active.origin)
         resyncSettingsFromSharedDefaults()
         let discarded = DiscardedRun(
             run: active.run,
-            captures: captures,
             choice: RecordedOutputChoice(mode: selectedPromptMode, style: currentTextStyle)
         )
 
@@ -66,22 +63,13 @@ extension RecordingFlowCoordinator {
         }
     }
 
-    /// The run's Captures, read for the last time and cleared, so the next
-    /// run starts with none.
-    private func takeCaptures(for origin: RecordingRunOrigin) -> [String] {
-        let captures = origin.usesKeyboardCaptures ? keyboardChannel.readCaptures() : capturedTexts
-        clearCapturedTexts(for: origin)
-        return captures
-    }
-
-    /// The run terminates in cancellation: no Bundled Result, no Conversation,
-    /// captures cleared. The `.cancelling` phase keeps a stop that lands while
+    /// The run terminates in cancellation: no Bundled Result, no Conversation.
+    /// The `.cancelling` phase keeps a stop that lands while
     /// the run tears down from acting on it.
     private func cancel(_ active: ActiveRecordingRun) async {
         var cancelling = active
         cancelling.phase = .cancelling
         setActiveRun(cancelling)
-        clearCapturedTexts(for: active.origin)
         let terminalState = await active.run.cancel()
         guard activeRun?.run === active.run else { return }
         setActiveRun(nil)

@@ -47,18 +47,10 @@ extension RecordingFlowCoordinator {
         setIdleTimerDisabled(true)
         Logger.app.info("[RecordTiming] state=arming set at +\(ContinuousClock.now - recordStart)")
 
-        capturedTexts = []
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.selectedPromptMode = SettingOverrides.effectiveAIMode()
             self.currentTextStyle = SettingOverrides.effectiveTextStyle()
-            guard origin.usesKeyboardCaptures else { return }
-            let texts = self.keyboardChannel.readCaptures()
-            if !texts.isEmpty {
-                self.capturedTexts = texts
-                Logger.ai.info("Initial captures on start: \(texts.count) item(s)")
-            }
-            self.keyboardChannel.clearLegacySelectedText()
         }
 
         Task.detached { [weak self] in
@@ -146,15 +138,6 @@ extension RecordingFlowCoordinator {
 
     /// Finalizing, from a run whose capture has already ended.
     func transcribe(_ active: ActiveRecordingRun) async -> RecordingRunTerminalState {
-        if active.origin.usesKeyboardCaptures {
-            let texts = keyboardChannel.readCaptures()
-            if !texts.isEmpty {
-                capturedTexts = texts
-                Logger.ai.info("Final captures on stop: \(texts.count) item(s)")
-            }
-            keyboardChannel.clearCaptures()
-        }
-
         var finalizing = active
         finalizing.phase = .finalizing
         setActiveRun(finalizing)

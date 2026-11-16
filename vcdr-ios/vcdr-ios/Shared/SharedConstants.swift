@@ -42,12 +42,6 @@ enum SharedConstants {
     static let settingsNotificationName = "glebglazov.vcdr-ios.settingsChanged"
     static let aiConfiguredKey = "shared_ai_configured"
 
-    // Selected text capture (keyboard → app) — written before recording starts in assistant mode
-    static let selectedTextKey = "shared_selected_text"
-
-    // Multi-capture (keyboard → app) — JSON array of captured text selections in assistant mode
-    static let capturedTextsKey = "shared_captured_texts"
-
     /// App → keyboard heartbeat (Double, `timeIntervalSince1970`). Refreshed
     /// periodically while the hot session is alive and on state changes. The
     /// keyboard reads this before deciding whether to try a Darwin command
@@ -214,6 +208,19 @@ enum LegacySettingsMigrator {
     private static let legacySharedAIModeKey = "shared_ai_mode"
     private static let legacySharedTextStyleKey = "shared_text_style"
 
+    /// The retired Assistant mode's stored id and the keys only it used.
+    static let retiredAssistantModeID = "assistant"
+    private static let retiredAssistantSharedKeys = [
+        "shared_selected_text",
+        "shared_captured_texts",
+    ]
+    private static let retiredAssistantStandardKeys = [
+        "ai_processing_assistant_provider",
+        "ai_processing_assistant_afm_fallback",
+        "transcription_mode_override_assistant",
+        "cachedPrompt_assistant",
+    ]
+
     static func migrateIfNeeded() {
         let sd = SharedConstants.sharedDefaults
         let std = UserDefaults.standard
@@ -249,6 +256,19 @@ enum LegacySettingsMigrator {
         sd.removeObject(forKey: legacySharedAIModeKey)
         sd.removeObject(forKey: legacySharedTextStyleKey)
 
+        retireAssistantMode(shared: sd, standard: std)
+
         sd.synchronize()
+    }
+
+    /// A saved Assistant becomes AI on, the nearest mode that still calls AI.
+    /// Without this step the reader falls back to AI off without a word.
+    private static func retireAssistantMode(shared sd: UserDefaults, standard std: UserDefaults) {
+        for key in [SharedConstants.defaultAIModeKey, SharedConstants.aiModeOverrideKey]
+        where sd.string(forKey: key) == retiredAssistantModeID {
+            sd.set(AIPromptMode.dictation.rawValue, forKey: key)
+        }
+        retiredAssistantSharedKeys.forEach(sd.removeObject(forKey:))
+        retiredAssistantStandardKeys.forEach(std.removeObject(forKey:))
     }
 }

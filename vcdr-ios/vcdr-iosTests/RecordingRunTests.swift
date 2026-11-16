@@ -13,7 +13,7 @@ struct RecordingRunTests {
             audioRecorder: AudioRecorder(),
             streaming: FakeRecordingStreamingSession(),
             transcriptProcessor: TranscriptProcessor(
-                makeAIProvider: { _ in
+                makeAIProvider: {
                     ProviderCascade(
                         primary: FakeLLMProvider(behavior: .alwaysSucceed(output: "unused")),
                         fallback: nil,
@@ -32,7 +32,6 @@ struct RecordingRunTests {
                     hasAICapability: false
                 )
             },
-            currentCaptures: { [] },
             onLiveTranscript: { _ in },
             onInterimResult: { _ in },
             onTranscribingMessage: { _ in }
@@ -106,14 +105,13 @@ struct RecordingRunTests {
             transcript: "raw text",
             processed: "processed text",
             finalText: "final text",
-            captures: ["selected context"],
-            historyLabel: "Dictation · Casual"
+            historyLabel: "AI · Casual"
         )))
 
         let conversation = try! #require(history.conversations.first)
-        #expect(conversation.inputSegments.count == 2)
+        #expect(conversation.inputSegments.count == 1)
         #expect(conversation.output == "final text")
-        #expect(conversation.label == "Dictation · Casual")
+        #expect(conversation.label == "AI · Casual")
     }
 
     @Test("history adapter holds successful runs until bootstrap completes")
@@ -125,8 +123,7 @@ struct RecordingRunTests {
             transcript: "raw text",
             processed: "processed text",
             finalText: "pending text",
-            captures: ["selected context", ""],
-            historyLabel: "Dictation · Formal"
+            historyLabel: "AI · Formal"
         )
         await adapter.complete(.success(pendingSuccess))
         #expect(history.conversations.isEmpty)
@@ -136,11 +133,9 @@ struct RecordingRunTests {
         let conversation = try! #require(history.conversations.first)
         #expect(history.conversations.count == 1)
         #expect(conversation.id == pendingSuccess.conversationID)
-        #expect(conversation.inputSegments[0].text == "raw text")
-        #expect(conversation.inputSegments[1].capture?.text == "selected context")
-        #expect(conversation.inputSegments[1].capture?.source == .selection)
+        #expect(conversation.inputSegments.map(\.text) == ["raw text"])
         #expect(conversation.output == "pending text")
-        #expect(conversation.label == "Dictation · Formal")
+        #expect(conversation.label == "AI · Formal")
     }
 
     @Test("history adapter does not duplicate runs when bootstrap finishes first")
@@ -286,7 +281,7 @@ struct RecordingRunTests {
             audioRecorder: audioRecorder,
             streaming: FakeRecordingStreamingSession(),
             transcriptProcessor: TranscriptProcessor(
-                makeAIProvider: { _ in
+                makeAIProvider: {
                     ProviderCascade(
                         primary: FakeLLMProvider(behavior: .alwaysSucceed(output: "unused")),
                         fallback: nil,
@@ -306,7 +301,6 @@ struct RecordingRunTests {
                     hasAICapability: false
                 )
             },
-            currentCaptures: { [] },
             onLiveTranscript: { _ in },
             onInterimResult: { _ in },
             onTranscribingMessage: { _ in }
@@ -321,7 +315,6 @@ struct RecordingRunTests {
         transcript: String = "raw",
         processed: String? = nil,
         finalText: String = "final",
-        captures: [String] = [],
         historyLabel: String? = nil
     ) -> RecordingRunSuccess {
         RecordingRunSuccess(
@@ -329,7 +322,6 @@ struct RecordingRunTests {
             transcript: transcript,
             processed: processed,
             finalText: finalText,
-            captures: captures,
             historyLabel: historyLabel
         )
     }

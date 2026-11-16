@@ -1,18 +1,13 @@
 import Foundation
 import OSLog
 
-/// The AI Prompt Mode and Text Style a Discarded Conversation is processed
-/// with. The mode is never Verbatim: Verbatim calls no AI.
+/// The Text Style a Discarded Conversation is processed with. Processing
+/// always runs with AI on.
 struct ReprocessChoice: Equatable {
-    let mode: AIPromptMode
     let style: TextStyle
 
     var label: String {
-        TranscriptProcessor.outputChoiceLabel(mode: mode, style: style)
-    }
-
-    static var modes: [AIPromptMode] {
-        AIPromptMode.availableModes.filter { $0 != .verbatim }
+        TranscriptProcessor.outputChoiceLabel(mode: .dictation, style: style)
     }
 }
 
@@ -39,9 +34,9 @@ final class AIConversationReprocessor: ConversationReprocessor {
     private let history: any HistoryStore
     private let backgroundTasks: any BackgroundTaskRunner
     private let substitutions: @MainActor () -> [Substitution]
-    private let currentChoice: @MainActor () -> (mode: AIPromptMode, style: TextStyle)
+    private let currentStyle: @MainActor () -> TextStyle
     private let hasAICapability: @MainActor () -> Bool
-    private let makeAIProvider: @MainActor (AIPromptMode) -> ProviderCascade
+    private let makeAIProvider: @MainActor () -> ProviderCascade
 
     private var processing: [UUID: ReprocessChoice] = [:]
     private var failures: [UUID: String] = [:]
@@ -50,16 +45,14 @@ final class AIConversationReprocessor: ConversationReprocessor {
         history: any HistoryStore,
         backgroundTasks: any BackgroundTaskRunner,
         substitutions: @escaping @MainActor () -> [Substitution],
-        currentChoice: @escaping @MainActor () -> (mode: AIPromptMode, style: TextStyle) = {
-            (SettingOverrides.effectiveAIMode(), SettingOverrides.effectiveTextStyle())
-        },
+        currentStyle: @escaping @MainActor () -> TextStyle = { SettingOverrides.effectiveTextStyle() },
         hasAICapability: @escaping @MainActor () -> Bool = { AIProcessingSettings.hasAICapability },
-        makeAIProvider: @escaping @MainActor (AIPromptMode) -> ProviderCascade = { AIProviderFactory.make(for: $0) }
+        makeAIProvider: @escaping @MainActor () -> ProviderCascade = { AIProviderFactory.make() }
     ) {
         self.history = history
         self.backgroundTasks = backgroundTasks
         self.substitutions = substitutions
-        self.currentChoice = currentChoice
+        self.currentStyle = currentStyle
         self.hasAICapability = hasAICapability
         self.makeAIProvider = makeAIProvider
     }
@@ -73,17 +66,12 @@ final class AIConversationReprocessor: ConversationReprocessor {
     }
 
     /// A choice the Mac recorded has ids this device cannot read, so the
-    /// current iOS mode and style stand in. Verbatim gives way to Dictation,
-    /// the mode that rewrites what was said.
+    /// current iOS style stands in.
     func defaultChoice(for conversation: Conversation) -> ReprocessChoice {
-        let current = currentChoice()
-        guard case .discarded(let recorded) = conversation.status else {
-            return ReprocessChoice(mode: Self.aiMode(current.mode), style: current.style)
+        guard case .discarded(let recorded) = conversation.status, let style = recorded.iosStyle else {
+            return ReprocessChoice(style: currentStyle())
         }
-        return ReprocessChoice(
-            mode: Self.aiMode(recorded.iosMode ?? current.mode),
-            style: recorded.iosStyle ?? current.style
-        )
+        return ReprocessChoice(style: style)
     }
 
     func process(_ conversation: Conversation, with choice: ReprocessChoice) {
@@ -120,7 +108,6 @@ final class AIConversationReprocessor: ConversationReprocessor {
         let cleaned = TextPostProcessor.removeFillers(
             from: SubstitutionMatcher(substitutions: dictionary).apply(to: verbatim)
         )
-        let captures = choice.mode.usesCaptures ? conversation.inputSegments.compactMap { $0.capture?.text } : []
 
         let ai = AIStatusBox()
         let processor = TranscriptProcessor(
@@ -129,7 +116,7 @@ final class AIConversationReprocessor: ConversationReprocessor {
             onAIInputText: { _ in }
         )
         let settings = TranscriptProcessor.Settings(
-            promptMode: choice.mode,
+            promptMode: .dictation,
             textStyle: choice.style,
             hasAICapability: true
         )
@@ -137,7 +124,6 @@ final class AIConversationReprocessor: ConversationReprocessor {
             cleaned,
             initialSettings: settings,
             finalSettings: { settings },
-            captures: captures,
             spellingHints: SpellingHints(dictionary)
         )
         switch ai.status {
@@ -146,10 +132,6 @@ final class AIConversationReprocessor: ConversationReprocessor {
         case .error(let message): return .failure(ReprocessFailure(message: message))
         case .idle, .processing: return .failure(ReprocessFailure(message: Self.noAIMessage))
         }
-    }
-
-    private static func aiMode(_ mode: AIPromptMode) -> AIPromptMode {
-        mode == .verbatim ? .dictation : mode
     }
 }
 

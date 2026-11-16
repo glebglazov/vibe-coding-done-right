@@ -1,6 +1,6 @@
 import Foundation
 
-/// Assembles the `ProviderCascade` for a given mode from the persisted AI
+/// Assembles the `ProviderCascade` that AI on calls from the persisted AI
 /// settings: the primary adapter, an optional on-device AFM fallback, and the
 /// retry/timeout budget. Owns the budget constants that used to sit on the
 /// coordinator.
@@ -11,12 +11,12 @@ enum AIProviderFactory {
     static let cloudMaxAttempts = 3
 
     @MainActor
-    static func make(for mode: AIPromptMode) -> ProviderCascade {
-        let provider = AIProcessingSettings.provider(for: mode)
+    static func make() -> ProviderCascade {
+        let provider = AIProcessingSettings.provider
         return make(
             provider: provider,
             apiKey: AIProcessingSettings.apiKey(for: provider),
-            afmFallbackEnabled: AIProcessingSettings.afmFallbackEnabled(for: mode),
+            afmFallbackEnabled: AIProcessingSettings.appleFallbackEnabled,
             isAFMAvailable: AIProcessingSettings.isAFMAvailable
         )
     }

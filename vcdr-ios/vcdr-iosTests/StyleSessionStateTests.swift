@@ -118,16 +118,4 @@ struct StyleSessionStateTests {
         #expect(builtIn[1].id == Style.messagingID)
         #expect(builtIn[2].id == Style.formalID)
     }
-
-    // MARK: - appliesStyles Tests
-
-    @Test("Dictation mode applies styles")
-    func dictationModeAppliesStyles() {
-        #expect(AIPromptMode.dictation.appliesStyles == true)
-    }
-
-    @Test("Assistant mode does not apply styles")
-    func assistantModeDoesNotApplyStyles() {
-        #expect(AIPromptMode.assistant.appliesStyles == false)
-    }
 }

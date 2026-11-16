@@ -92,13 +92,8 @@ struct DiscardedConversationSheet: View {
 
     private var choiceMenu: some View {
         Menu {
-            Picker("Mode", selection: mode) {
-                ForEach(ReprocessChoice.modes, id: \.self) { Text($0.displayName).tag($0) }
-            }
-            if choice.mode.appliesStyles {
-                Picker("Style", selection: style) {
-                    ForEach(TextStyle.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                }
+            Picker("Style", selection: style) {
+                ForEach(TextStyle.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
         } label: {
             HStack(spacing: 4) {
@@ -111,20 +106,13 @@ struct DiscardedConversationSheet: View {
             .frame(height: Self.actionHeight)
             .contentShape(Rectangle())
         }
-        .accessibilityLabel("Mode and style: \(choice.label)")
-    }
-
-    private var mode: Binding<AIPromptMode> {
-        Binding(
-            get: { choice.mode },
-            set: { choice = ReprocessChoice(mode: $0, style: choice.style) }
-        )
+        .accessibilityLabel("Style: \(choice.label)")
     }
 
     private var style: Binding<TextStyle> {
         Binding(
             get: { choice.style },
-            set: { choice = ReprocessChoice(mode: choice.mode, style: $0) }
+            set: { choice = ReprocessChoice(style: $0) }
         )
     }
 

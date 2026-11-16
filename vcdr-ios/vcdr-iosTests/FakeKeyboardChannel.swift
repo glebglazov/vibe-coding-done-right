@@ -8,10 +8,6 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
         case publishFailure(String)
         case readAndClearCommand
         case clearCommand
-        case readCaptures
-        case replaceCaptures([String])
-        case clearCaptures
-        case clearLegacySelectedText
         case writeHeartbeat(alive: Bool, now: Date)
         case isAppLikelyAlive(now: Date)
         case isCancelStampFresh(now: Date)
@@ -20,7 +16,6 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private let heartbeatFreshnessWindow: TimeInterval
     private var command: KeyboardChannel.Command?
-    private var captures: [String] = []
     private var heartbeat: Date?
     /// Controls `isCancelStampFresh(now:)`. `nil` (the default) reports no
     /// queued cancel — tests that exercise a Discard set it explicitly to
@@ -74,31 +69,6 @@ final class FakeKeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
             recordedInteractions.append(.clearCommand)
             command = nil
         }
-    }
-
-    func readCaptures() -> [String] {
-        lock.withLock {
-            recordedInteractions.append(.readCaptures)
-            return captures
-        }
-    }
-
-    func replaceCaptures(_ captures: [String]) {
-        lock.withLock {
-            recordedInteractions.append(.replaceCaptures(captures))
-            self.captures = captures
-        }
-    }
-
-    func clearCaptures() {
-        lock.withLock {
-            recordedInteractions.append(.clearCaptures)
-            captures = []
-        }
-    }
-
-    func clearLegacySelectedText() {
-        record(.clearLegacySelectedText)
     }
 
     func writeHeartbeat(alive: Bool, now: Date) {

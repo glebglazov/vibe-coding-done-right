@@ -6,10 +6,6 @@ nonisolated protocol KeyboardChannelProtocol: Sendable {
     func publishFailure(reason: String)
     func readAndClearCommand() -> KeyboardChannel.Command?
     func clearCommand()
-    func readCaptures() -> [String]
-    func replaceCaptures(_ captures: [String])
-    func clearCaptures()
-    func clearLegacySelectedText()
     func writeHeartbeat(alive: Bool, now: Date)
     func isAppLikelyAlive(now: Date) -> Bool
     func isCancelStampFresh(now: Date) -> Bool
@@ -78,8 +74,6 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
         static let command = "command"
         static let commandCancelStamp = "command_cancel_stamp"
         static let state = "recordingState"
-        static let captures = "shared_captured_texts"
-        static let selectedText = "shared_selected_text"
         static let heartbeat = "app_heartbeat_at"
     }
 
@@ -126,8 +120,7 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     // MARK: - Keyboard-side commands
 
     @discardableResult
-    func startRecording(captures: [String], now: Date = Date()) -> Action {
-        replaceCaptures(captures)
+    func startRecording(now: Date = Date()) -> Action {
         if isAppLikelyAlive(now: now) {
             send(.startRecording)
             return .commandSent
@@ -257,35 +250,6 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
         let prefix = "\(state.rawValue)|"
         guard raw.hasPrefix(prefix) else { return nil }
         return String(raw.dropFirst(prefix.count))
-    }
-
-    // MARK: - Captures
-
-    func readCaptures() -> [String] {
-        defaults.synchronize()
-        guard let data = defaults.data(forKey: Keys.captures) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
-    }
-
-    func appendCapture(_ text: String) {
-        var captures = readCaptures()
-        captures.append(text)
-        replaceCaptures(captures)
-    }
-
-    func replaceCaptures(_ captures: [String]) {
-        if let data = try? JSONEncoder().encode(captures) {
-            defaults.set(data, forKey: Keys.captures)
-        }
-        defaults.synchronize()
-    }
-
-    func clearCaptures() {
-        defaults.removeObject(forKey: Keys.captures)
-    }
-
-    func clearLegacySelectedText() {
-        defaults.removeObject(forKey: Keys.selectedText)
     }
 
     // MARK: - Heartbeat

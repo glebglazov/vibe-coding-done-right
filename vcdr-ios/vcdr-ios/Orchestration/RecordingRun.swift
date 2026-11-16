@@ -39,7 +39,6 @@ final class RecordingRun {
     /// meanwhile waits in the streaming session, as it does for a model load.
     private let decodeInFlight: Task<Void, Never>?
     private let currentSettings: @MainActor () -> Settings
-    private let currentCaptures: @MainActor () -> [String]
     private let currentSubstitutions: @MainActor () -> [Substitution]
     private let onLiveTranscript: @MainActor (String) -> Void
     private let onInterimResult: @MainActor (String) -> Void
@@ -62,7 +61,6 @@ final class RecordingRun {
         clock: HotMicClock? = nil,
         decodeInFlight: Task<Void, Never>? = nil,
         currentSettings: @escaping @MainActor () -> Settings,
-        currentCaptures: @escaping @MainActor () -> [String],
         currentSubstitutions: @escaping @MainActor () -> [Substitution] = { [] },
         onLiveTranscript: @escaping @MainActor (String) -> Void,
         onInterimResult: @escaping @MainActor (String) -> Void,
@@ -78,7 +76,6 @@ final class RecordingRun {
         self.clock = clock ?? SystemHotMicClock()
         self.decodeInFlight = decodeInFlight
         self.currentSettings = currentSettings
-        self.currentCaptures = currentCaptures
         self.currentSubstitutions = currentSubstitutions
         self.onLiveTranscript = onLiveTranscript
         self.onInterimResult = onInterimResult
@@ -212,8 +209,7 @@ final class RecordingRun {
         let rawText = try await streaming.finish()
         // Substitution — first pre-processing step, before filler removal, on
         // the dictated transcript only, in every AI Prompt Mode (Verbatim
-        // included). Captures are never run through the matcher. The keyboard
-        // extension stays out of this: it receives the already-substituted
+        // included). The keyboard extension stays out of this: it receives the already-substituted
         // text via the Bundled Result on the Keyboard Channel.
         let dictionary = currentSubstitutions()
         let substitutedText = SubstitutionMatcher(substitutions: dictionary)
@@ -228,13 +224,10 @@ final class RecordingRun {
             return await finish(.emptyResult)
         }
 
-        let initialSettings = currentSettings()
-        let captures = initialSettings.promptMode.usesCaptures ? currentCaptures() : []
         let output = await transcriptProcessor.processFinalTranscript(
             cleanedText,
-            initialSettings: initialSettings,
+            initialSettings: currentSettings(),
             finalSettings: currentSettings,
-            captures: captures,
             spellingHints: SpellingHints(dictionary)
         )
         let terminal = RecordingRunTerminalState.success(RecordingRunSuccess(
@@ -242,7 +235,6 @@ final class RecordingRun {
             transcript: output.transcript,
             processed: output.processed,
             finalText: output.finalText,
-            captures: captures,
             historyLabel: output.historyLabel
         ))
         return await finish(terminal)

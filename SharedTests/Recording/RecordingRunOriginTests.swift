@@ -6,13 +6,6 @@ import Testing
 #endif
 
 struct RecordingRunOriginTests {
-    @Test("only a Shortcut run leaves keyboard Captures alone")
-    func captures() {
-        #expect(RecordingRunOrigin.app.usesKeyboardCaptures)
-        #expect(RecordingRunOrigin.keyboard.usesKeyboardCaptures)
-        #expect(!RecordingRunOrigin.shortcut.usesKeyboardCaptures)
-    }
-
     @Test("each origin delivers to exactly its own destination")
     func delivery() {
         #expect(RecordingRunOrigin.keyboard.deliversToKeyboard)

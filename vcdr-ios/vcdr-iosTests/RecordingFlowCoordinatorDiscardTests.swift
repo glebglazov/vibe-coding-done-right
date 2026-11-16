@@ -13,7 +13,7 @@ struct RecordingFlowCoordinatorDiscardTests {
 
     @Test("discard during Arming goes back to the readiness before Arming at once and saves nothing")
     func discardDuringArmingSavesNothing() async throws {
-        let env = Env(captures: ["mid-arming capture"], finishText: "never heard")
+        let env = Env(finishText: "never heard")
         // Widen the Arming window so the Discard lands before `startCapture`
         // returns and the run reaches Capturing.
         env.engine.startCaptureDelay = .milliseconds(200)
@@ -32,8 +32,6 @@ struct RecordingFlowCoordinatorDiscardTests {
         #expect(env.coordinator.state == .idle)
         #expect(env.coordinator.activeRunPhase == nil)
         #expect(!env.engine.isRecording)
-        #expect(env.coordinator.capturedTexts.isEmpty)
-        #expect(env.channel.readCaptures().isEmpty)
         #expect(env.history.conversations.isEmpty)
     }
 
@@ -90,12 +88,12 @@ struct RecordingFlowCoordinatorDiscardTests {
         #expect(env.channel.readState() == .recording)
     }
 
-    @Test("the saved Conversation is discarded, with the verbatim text, the captures and the recorded choice")
+    @Test("the saved Conversation is discarded, with the verbatim text and the recorded choice")
     func discardSavesTheVerbatimTranscript() async throws {
         SettingOverrides.setAIMode(.dictation)
         SettingOverrides.setTextStyle(.formal)
         defer { SettingOverrides.clearAll() }
-        let env = Env(captures: ["context"], finishText: "um hello world")
+        let env = Env(finishText: "um hello world")
 
         await env.coordinator.startRecording(origin: .keyboard)
         await env.coordinator.discardRecording()
@@ -106,20 +104,18 @@ struct RecordingFlowCoordinatorDiscardTests {
             platform: .ios,
             modeID: "dictation",
             styleID: "formal",
-            displayLabel: "Dictation · Formal"
+            displayLabel: "AI · Formal"
         )))
         #expect(conversation.output == nil)
         #expect(conversation.label == nil)
         // Fillers stay: no Substitutions, no filler removal, no AI.
-        #expect(conversation.inputSegments.first?.text == "um hello world")
-        #expect(conversation.inputSegments.compactMap(\.capture?.text) == ["context"])
+        #expect(conversation.inputSegments.map(\.text) == ["um hello world"])
         #expect(env.history.discardedCount == 1)
 
         #expect(env.coordinator.discardNotes.note == .saved(conversationID: conversation.id))
         #expect(env.coordinator.state == .ready)
         // Nothing is inserted: the keyboard gets `cancelled` and no Bundled Result.
         #expect(env.channel.readState() == .cancelled)
-        #expect(env.channel.readCaptures().isEmpty)
         // A keyboard run's app is in the background: the save must not depend
         // on the app staying awake.
         #expect(!env.backgroundTasks.names.isEmpty)
@@ -219,7 +215,7 @@ struct RecordingFlowCoordinatorDiscardTests {
         #expect(text.contains("hello world"))
     }
 
-    @Test("mode and style do not cycle during Arming or Capturing, and unlock in Finalizing")
+    @Test("AI and style do not change during Arming or Capturing, and unlock in Finalizing")
     func outputChoicesLockWhileTheRunListens() async throws {
         SettingOverrides.setAIMode(.verbatim)
         SettingOverrides.setTextStyle(.casual)
@@ -230,14 +226,14 @@ struct RecordingFlowCoordinatorDiscardTests {
 
         let startTask = Task { await env.coordinator.startRecording(origin: .app) }
         await waitUntil { env.coordinator.state == .arming }
-        env.coordinator.cycleAIState()
+        env.coordinator.toggleAIMode()
         env.coordinator.cycleTextStyle()
         #expect(SettingOverrides.effectiveAIMode() == .verbatim)
         #expect(SettingOverrides.effectiveTextStyle() == .casual)
 
         await startTask.value
         #expect(env.coordinator.state == .recording)
-        env.coordinator.cycleAIState()
+        env.coordinator.toggleAIMode()
         env.coordinator.cycleTextStyle()
         #expect(SettingOverrides.effectiveAIMode() == .verbatim)
         #expect(SettingOverrides.effectiveTextStyle() == .casual)
@@ -246,6 +242,10 @@ struct RecordingFlowCoordinatorDiscardTests {
         await waitUntil { env.coordinator.state == .transcribing }
         env.coordinator.cycleTextStyle()
         #expect(SettingOverrides.effectiveTextStyle() != .casual)
+        env.coordinator.toggleAIMode()
+        #expect(SettingOverrides.effectiveAIMode() == .dictation)
+        env.coordinator.toggleAIMode()
+        #expect(SettingOverrides.effectiveAIMode() == .verbatim)
 
         await gate.release()
         _ = await stopTask.value
@@ -262,18 +262,18 @@ private final class Env {
     let backgroundTasks = SpyBackgroundTaskRunner()
     let coordinator: RecordingFlowCoordinator
 
-    convenience init(captures: [String] = [], finishText: String = "", gate: FinalizingGate? = nil) {
+    convenience init(finishText: String = "", gate: FinalizingGate? = nil) {
         let gate = gate ?? FinalizingGate(released: true)
-        self.init(captures: captures, makeSession: { GatedStreamingSession(gate: gate, finishText: finishText) })
+        self.init(makeSession: { GatedStreamingSession(gate: gate, finishText: finishText) })
     }
 
     /// Hands the sessions out in order, one per Recording Run.
     convenience init(sessions: [ScriptedSession]) {
         var remaining = sessions
-        self.init(captures: [], makeSession: { remaining.removeFirst() })
+        self.init(makeSession: { remaining.removeFirst() })
     }
 
-    private init(captures: [String], makeSession: @escaping () -> any RecordingStreamingSession) {
+    private init(makeSession: @escaping () -> any RecordingStreamingSession) {
         ParakeetProviderTestSupport.reset()
         ParakeetProviderTestSupport.bypassRealMLLoad = true
         engine.hasMicrophonePermission = true
@@ -282,7 +282,6 @@ private final class Env {
         let defaults = UserDefaults(suiteName: suite) ?? .standard
         defaults.removePersistentDomain(forName: suite)
         channel = KeyboardChannel(defaults: defaults)
-        if !captures.isEmpty { channel.replaceCaptures(captures) }
 
         history = FileHistoryStore(snapshot: FileHistoryStore.loadSnapshot(
             storageRoot: FileManager.default.temporaryDirectory.appendingPathComponent(suite)

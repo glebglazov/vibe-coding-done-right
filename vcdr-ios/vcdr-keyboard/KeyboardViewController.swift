@@ -176,7 +176,6 @@ class KeyboardViewController: KeyboardInputViewController {
             model.dictationState = .transcribing
         case .idle:
             pendingText = nil
-            model.captureCount = 0
             model.dictationState = .idle
         }
     }
@@ -187,7 +186,6 @@ class KeyboardViewController: KeyboardInputViewController {
     /// post would come back to this same process and end the flash immediately.
     private func flash(_ terminal: DictationState, for duration: TimeInterval) {
         pendingText = nil
-        model.captureCount = 0
         model.dictationState = terminal
         keyboardChannel.consumeState()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
@@ -208,7 +206,6 @@ class KeyboardViewController: KeyboardInputViewController {
         // Space is already added by TextPostProcessor.applyTerminator in the pipeline
         pendingText = nil
         model.dictationState = .idle
-        model.captureCount = 0
         // Clear the bundled text so it isn't re-inserted on next keyboard appearance
         keyboardChannel.clearResult()
     }
@@ -303,7 +300,6 @@ class KeyboardViewController: KeyboardInputViewController {
                 // terminal state it reached, and a run that reached one is
                 // handled by the cases above.
                 pendingText = nil
-                model.captureCount = 0
                 model.dictationState = .idle
                 return
             case .recording:
@@ -379,10 +375,9 @@ class KeyboardViewController: KeyboardInputViewController {
         model.textStyle = SettingOverrides.effectiveTextStyle()
     }
 
-    /// Cycles the AI mode through Verbatim → Dictation → Assistant → Verbatim.
-    func cycleAIState() {
+    func toggleAIMode() {
         guard !model.areOutputChoicesLocked else { return }
-        model.aiMode = model.aiMode.next
+        model.aiMode = model.aiMode.toggled
         SettingOverrides.setAIMode(model.aiMode)
     }
 
@@ -392,7 +387,7 @@ class KeyboardViewController: KeyboardInputViewController {
         SettingOverrides.setTextStyle(model.textStyle)
     }
 
-    // MARK: - Selected Text Capture
+    // MARK: - Recording
 
     /// Starts recording, picking the best transport based on the app's heartbeat.
     ///
@@ -413,17 +408,8 @@ class KeyboardViewController: KeyboardInputViewController {
         // must end first: while it shows, `refreshState` ignores the wire, and
         // the app's `recording` would be lost.
         if model.dictationState == .cancelled { model.dictationState = .idle }
-        // Clear legacy single-capture key
-        keyboardChannel.clearLegacySelectedText()
-        // Initialize captures array — include current selection as first capture if available
-        var captures: [String] = []
-        if model.aiMode.usesCaptures,
-           let selected = textDocumentProxy.selectedText, !selected.isEmpty {
-            captures.append(selected)
-        }
-        model.captureCount = captures.count
 
-        switch keyboardChannel.startRecording(captures: captures) {
+        switch keyboardChannel.startRecording() {
         case .commandSent:
             Logger.keyboard.info("Heartbeat verdict: command=start fresh=true")
             scheduleStartAckFallback()
@@ -454,14 +440,6 @@ class KeyboardViewController: KeyboardInputViewController {
                 reason: "Command Acknowledgement timed out"
             )
         }
-    }
-
-    /// Captures the currently selected text and appends it to the captures array.
-    func captureSelectedText() {
-        guard let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
-        keyboardChannel.appendCapture(selected)
-        model.captureCount = keyboardChannel.readCaptures().count
-        KeyboardHaptics.light()
     }
 
     /// Opens a URL from the keyboard extension using the system responder chain.

@@ -8,14 +8,12 @@ import Testing
 struct RecordingRunTerminalOutcomeTests {
     @Test("success records payload and publishes bundled keyboard result")
     func success() async {
-        let settings = Self.makeSettings(promptMode: .assistant)
-        let captures = ["selected context"]
+        let settings = Self.makeSettings(promptMode: .dictation)
         let rawTranscript = "hello world"
         let cleanedTranscript = TextPostProcessor.removeFillers(from: rawTranscript)
         let (run, keyboard) = makeRun(
             streaming: FakeRecordingStreamingSession(result: .success(rawTranscript)),
-            settings: settings,
-            captures: captures
+            settings: settings
         )
 
         #expect(await run.start())
@@ -28,26 +26,7 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(success.transcript == cleanedTranscript)
         #expect(success.processed == nil)
         #expect(success.finalText == TranscriptProcessor.finalize(cleanedTranscript, settings: settings))
-        #expect(success.captures == captures)
         #expect(keyboard.interactions == [.publishBundledResult(success.finalText)])
-    }
-
-    @Test("a run outside Assistant drops its Captures")
-    func verbatimDropsCaptures() async {
-        let (run, _) = makeRun(
-            streaming: FakeRecordingStreamingSession(result: .success("hello world")),
-            settings: Self.makeSettings(promptMode: .verbatim),
-            captures: ["selected context"]
-        )
-
-        #expect(await run.start())
-        _ = await run.stop()
-
-        guard case .success(let success) = await run.waitForIdle(timeout: .seconds(1)) else {
-            Issue.record("Expected success outcome")
-            return
-        }
-        #expect(success.captures.isEmpty)
     }
 
     @Test("substitution rewrites the transcript before output and keyboard delivery")
@@ -139,7 +118,6 @@ struct RecordingRunTerminalOutcomeTests {
     private func makeRun(
         streaming: any RecordingStreamingSession,
         settings: RecordingRun.Settings? = nil,
-        captures: [String] = [],
         substitutions: [Substitution] = []
     ) -> (RecordingRun, FakeKeyboardChannel) {
         let settings = settings ?? Self.makeSettings()
@@ -148,7 +126,7 @@ struct RecordingRunTerminalOutcomeTests {
             audioRecorder: FakeRecordingAudioCapture(),
             streaming: streaming,
             transcriptProcessor: TranscriptProcessor(
-                makeAIProvider: { _ in
+                makeAIProvider: {
                     ProviderCascade(
                         primary: FakeLLMProvider(behavior: .alwaysSucceed(output: "unused")),
                         fallback: nil,
@@ -166,7 +144,6 @@ struct RecordingRunTerminalOutcomeTests {
                 )
             ],
             currentSettings: { settings },
-            currentCaptures: { captures },
             currentSubstitutions: { substitutions },
             onLiveTranscript: { _ in },
             onInterimResult: { _ in },
