@@ -21,10 +21,6 @@ public struct Style: Codable, Equatable, Identifiable, Sendable {
     /// Static text transformation rules applied to all outputs.
     public let staticRules: StaticStyleRules
     
-    /// Optional dynamic prompt appended to AI mode system prompts.
-    /// For v1, this is always nil/empty. Reserved for future LLM-based styles.
-    public let dynamicPrompt: String?
-    
     /// Bundle IDs of applications associated with this style (macOS only).
     /// When the frontmost app matches a bundle ID here, this style is selected.
     public var associatedAppBundleIDs: [String]
@@ -36,7 +32,6 @@ public struct Style: Codable, Equatable, Identifiable, Sendable {
     ///   - isBuiltIn: Whether this is a built-in, immutable style
     ///   - isDefault: Whether this is the default/catch-all style
     ///   - staticRules: Static text transformation rules
-    ///   - dynamicPrompt: Optional LLM prompt for dynamic styling (v2 feature)
     ///   - associatedAppBundleIDs: Associated application bundle IDs
     public init(
         id: UUID,
@@ -44,7 +39,6 @@ public struct Style: Codable, Equatable, Identifiable, Sendable {
         isBuiltIn: Bool,
         isDefault: Bool,
         staticRules: StaticStyleRules,
-        dynamicPrompt: String? = nil,
         associatedAppBundleIDs: [String] = []
     ) {
         self.id = id
@@ -52,7 +46,6 @@ public struct Style: Codable, Equatable, Identifiable, Sendable {
         self.isBuiltIn = isBuiltIn
         self.isDefault = isDefault
         self.staticRules = staticRules
-        self.dynamicPrompt = dynamicPrompt
         self.associatedAppBundleIDs = associatedAppBundleIDs
     }
 }
@@ -80,7 +73,6 @@ extension Style {
         isBuiltIn: true,
         isDefault: true,
         staticRules: .casual,
-        dynamicPrompt: nil,
         associatedAppBundleIDs: []
     )
 
@@ -93,7 +85,6 @@ extension Style {
         isBuiltIn: true,
         isDefault: false,
         staticRules: .messaging,
-        dynamicPrompt: nil,
         associatedAppBundleIDs: []
     )
 
@@ -105,7 +96,6 @@ extension Style {
         isBuiltIn: true,
         isDefault: false,
         staticRules: .formal,
-        dynamicPrompt: nil,
         associatedAppBundleIDs: []
     )
 
