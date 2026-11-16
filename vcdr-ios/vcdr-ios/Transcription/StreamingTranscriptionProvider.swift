@@ -4,7 +4,7 @@ import Foundation
 /// that is the only path a recording takes on this platform, which is why the
 /// protocol is worded as a live session rather than as a file to transcribe the
 /// way the macOS one is.
-protocol StreamingTranscriptionProvider: Sendable {
+nonisolated protocol StreamingTranscriptionProvider: Sendable {
     /// Which Transcription Model this provider runs, so a caller can key
     /// settings and Library membership by it rather than by its wording.
     var model: TranscriptionModel { get }

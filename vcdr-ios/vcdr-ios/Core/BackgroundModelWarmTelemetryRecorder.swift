@@ -1,6 +1,6 @@
 import Foundation
 
-protocol BackgroundModelWarmTelemetryRecording: Sendable {
+nonisolated protocol BackgroundModelWarmTelemetryRecording: Sendable {
     func latestRecord() async -> LaunchTelemetryRecord?
     func recordBackgroundWarm(outcome: LaunchLoadOutcome) async
 }

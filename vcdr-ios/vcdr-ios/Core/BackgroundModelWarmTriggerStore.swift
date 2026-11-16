@@ -9,7 +9,7 @@ enum BackgroundModelWarmTriggerReason: String, Sendable {
     case reschedule
 }
 
-protocol BackgroundModelWarmTriggerStoring: Sendable {
+nonisolated protocol BackgroundModelWarmTriggerStoring: Sendable {
     func hasPendingPurgeTrigger() async -> Bool
     func markPurgeTrigger(_ reason: BackgroundModelWarmTriggerReason) async
     func clearPendingPurgeTrigger() async

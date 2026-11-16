@@ -2,7 +2,7 @@ import FluidAudio
 import Foundation
 import OSLog
 
-protocol ModelCacheWarmer: Sendable {
+nonisolated protocol ModelCacheWarmer: Sendable {
     func warmParakeetCache() async throws -> LaunchLoadOutcome?
 }
 

@@ -343,14 +343,11 @@ private final class FinalizingGate {
 
 /// Never prepares a model — these tests need no real model load, only control
 /// over when `RecordingRun.stop()`'s wait on `setupTask` resolves.
-/// A main-actor class rather than an actor: Swift 6.4 rejects an actor
-/// conforming to the main-actor-isolated protocol from this test target.
-@MainActor
-private final class GatedStreamingSession: RecordingStreamingSession, @unchecked Sendable {
+private actor GatedStreamingSession: RecordingStreamingSession {
     private let gate: FinalizingGate
     private let finishText: String
 
-    nonisolated init(gate: FinalizingGate, finishText: String) {
+    init(gate: FinalizingGate, finishText: String) {
         self.gate = gate
         self.finishText = finishText
     }
@@ -387,22 +384,21 @@ private final class SessionLog {
 
 /// Logs when its model setup and its final decode run, and can hold the final
 /// decode open, so a test can see what a later run does meanwhile.
-@MainActor
-private final class ScriptedSession: RecordingStreamingSession, @unchecked Sendable {
+private actor ScriptedSession: RecordingStreamingSession {
     private let name: String
     private let finishText: String
-    private let finishGate: FinalizingGate
+    private let finishGate: FinalizingGate?
     private let log: SessionLog
 
     init(name: String, finishText: String, finishGate: FinalizingGate? = nil, log: SessionLog) {
         self.name = name
         self.finishText = finishText
-        self.finishGate = finishGate ?? FinalizingGate(released: true)
+        self.finishGate = finishGate
         self.log = log
     }
 
     func start() async throws {
-        log.note("\(name).start")
+        await log.note("\(name).start")
     }
 
     nonisolated func streamAudio(_ buffer: AVAudioPCMBuffer) {}
@@ -410,9 +406,9 @@ private final class ScriptedSession: RecordingStreamingSession, @unchecked Senda
     func cancel() async {}
 
     func finish() async throws -> String {
-        log.note("\(name).finish.begin")
-        await finishGate.awaitRelease()
-        log.note("\(name).finish.end")
+        await log.note("\(name).finish.begin")
+        await finishGate?.awaitRelease()
+        await log.note("\(name).finish.end")
         return finishText
     }
 

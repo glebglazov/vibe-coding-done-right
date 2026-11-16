@@ -11,7 +11,7 @@ protocol RecordingAudioCapturing: AnyObject {
 
 extension AudioRecorder: RecordingAudioCapturing {}
 
-protocol RecordingStreamingSession: Sendable {
+nonisolated protocol RecordingStreamingSession: Sendable {
     /// Prepares the model this session runs and begins consuming the buffers
     /// captured so far. The session already knows its provider — it was made by
     /// one (`docs/adr/0022`).
