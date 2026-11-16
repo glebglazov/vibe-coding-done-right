@@ -208,22 +208,22 @@ final class AppSettings {
         return isProviderConfigured(mode.aiProvider)
     }
 
-    /// Modes shown in the settings modes list. Excludes disabled and unavailable templates,
+    /// Modes shown in the settings modes list. Excludes disabled modes,
     /// but INCLUDES unconfigured AI modes (so users can see the warning).
     var visibleModes: [Mode] {
-        modeConfig.modes.filter { mode in
-            guard !mode.isDisabled else { return false }
-            if let templateID = mode.templateID {
-                return modeConfig.availableTemplateIDs.contains(templateID)
-            }
-            return true
-        }
+        modeConfig.modes.filter { !$0.isDisabled }
     }
 
-    /// Modes shown in the mode switcher. Excludes disabled, unavailable template tools,
+    /// Modes shown in the mode switcher. Excludes disabled modes
     /// AND unconfigured AI modes (missing API key).
     var switcherModes: [Mode] {
         visibleModes.filter { isModeConfigured($0) }
+    }
+
+    /// The Modes that the removal of the Assistant deleted. The History cleanup
+    /// reads them at every launch.
+    var retiredModes: [RetiredMode] {
+        AssistantRetirement.retiredModes(in: userDefaults)
     }
 
     /// Active mode looked up by ID, falling back to first switcher mode, then first mode overall
@@ -387,6 +387,7 @@ final class AppSettings {
         )
 
         // Load modes (with legacy migration)
+        AssistantRetirement.run(in: userDefaults, modesKey: Keys.modes, activeModeIDKey: Keys.activeModeID)
         let loadedModes: [Mode]
         if let modesData = userDefaults.data(forKey: Keys.modes),
            let decoded = try? JSONDecoder().decode([Mode].self, from: modesData),
@@ -406,8 +407,8 @@ final class AppSettings {
                     processingCommand: oldBashCommand
                 )]
             } else {
-                // Fresh install: start empty; refreshTemplateAvailability() seeds
-                // the built-in templates (Transcription, Dictation, Assistant x2).
+                // Fresh install: start empty; restoreTemplateModes() seeds
+                // the built-in templates (AI off, AI on).
                 loadedModes = []
             }
         }
@@ -620,10 +621,9 @@ final class AppSettings {
         Logger.settings.info("Settings saved")
     }
 
-    /// Creates template modes for newly available tools and refreshes availability state.
-    func refreshTemplateAvailability() async {
-        modeConfig.availableTemplateIDs = await ToolAvailabilityChecker.checkAll()
-
+    /// Makes every missing built-in Mode, and gives a built-in Mode the current
+    /// default name when its name is still an earlier default.
+    func restoreTemplateModes() {
         for i in modeConfig.modes.indices {
             guard let legacyID = modeConfig.modes[i].templateID,
                   let currentID = ModeTemplate.legacyTemplateIDs[legacyID] else { continue }
@@ -631,21 +631,16 @@ final class AppSettings {
             Logger.settings.info("Migrated \(legacyID) template mode to \(currentID)")
         }
 
-        // Align plain-template mode names with the current default ("Verbatim").
-        // Covers legacy "Dictation", intermediate "Plain", and prior "Transcription".
-        for i in modeConfig.modes.indices where modeConfig.modes[i].templateID == "plain" {
-            let currentName = modeConfig.modes[i].name
-            if currentName == "Dictation" || currentName == "Plain" || currentName == "Transcription" {
-                modeConfig.modes[i].name = "Verbatim"
-            }
+        for i in modeConfig.modes.indices {
+            guard let template = modeConfig.modes[i].templateID.flatMap(ModeTemplate.template(for:)),
+                  template.earlierDefaultNames.contains(modeConfig.modes[i].name) else { continue }
+            modeConfig.modes[i].name = template.defaultName
         }
 
-        // Create missing template modes for available tools
-        for template in ModeTemplate.all where modeConfig.availableTemplateIDs.contains(template.id) {
-            if !modeConfig.modes.contains(where: { $0.templateID == template.id }) {
-                modeConfig.modes.append(template.makeMode())
-                Logger.settings.info("Created template mode: \(template.defaultName)")
-            }
+        for template in ModeTemplate.all
+        where !modeConfig.modes.contains(where: { $0.templateID == template.id }) {
+            modeConfig.modes.append(template.makeMode())
+            Logger.settings.info("Created template mode: \(template.defaultName)")
         }
 
         // Auto-switch if active mode is no longer in the switcher

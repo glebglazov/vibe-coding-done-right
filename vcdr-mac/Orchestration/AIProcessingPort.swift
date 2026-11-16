@@ -57,7 +57,6 @@ struct AIProcessingAdapter: AIProcessingPort {
     static func resolvePrompt(_ mode: Mode) -> String {
         switch mode.promptType {
         case .dictation: BuiltInPrompts.dictation
-        case .assistant: BuiltInPrompts.assistant
         case .custom: mode.systemPrompt
         }
     }

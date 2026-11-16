@@ -36,10 +36,9 @@ struct TextProcessingPipelineSpellingHintsTests {
         #expect(systemPrompt.hasSuffix(Self.hintsWithNotesSuffix))
     }
 
-    @Test("A Cloud AI run with an Assistant or Custom prompt is told the spellings without their Notes",
-          arguments: [PromptType.assistant, .custom])
-    func cloudAIWritingPromptGetsNoNotes(promptType: PromptType) async throws {
-        let mode = Mode(id: UUID(), name: "AI", processingType: .cloudAI, systemPrompt: "Do what I ask.", promptType: promptType)
+    @Test("A Cloud AI run with a Custom prompt is told the spellings without their Notes")
+    func cloudAICustomPromptGetsNoNotes() async throws {
+        let mode = Mode(id: UUID(), name: "AI", processingType: .cloudAI, systemPrompt: "Do what I ask.", promptType: .custom)
         let ai = ScriptedAIProcessing(results: [.success("done")])
 
         _ = try await TextProcessingPipeline.run(
@@ -88,24 +87,6 @@ struct TextProcessingPipelineSpellingHintsTests {
         let prompt = BuiltInPrompts.dictation + "\n\nAnswer in pirate speak."
         #expect(input.hasPrefix(prompt + "\n\n<spelling_hints>"))
         #expect(input.contains(Self.hintsWithNotesSuffix + "\n\n<dictation>hi</dictation>"))
-    }
-
-    @Test("A Local Agent with an Assistant prompt is told the spellings without their Notes")
-    func localAgentAssistantGetsNoNotes() async throws {
-        let mode = Mode(id: UUID(), name: "Agent", processingType: .localAgent, promptType: .assistant, appliesStyles: false)
-        let agent = CapturingLocalAgent()
-
-        _ = try await TextProcessingPipeline.run(
-            mode: mode,
-            text: "hi",
-            captures: [],
-            substitutions: Self.dictionary,
-            localAgentPort: agent
-        )
-
-        let input = try #require(await agent.receivedText)
-        #expect(input.contains(Self.spellingsOnlySuffix + "\n\n<dictation>hi</dictation>"))
-        #expect(!input.contains("my surname"))
     }
 
     @Test("A Bash Script's input carries its prompt but no hints")

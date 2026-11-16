@@ -199,7 +199,7 @@ final class AppDependencies {
     }
 
     func initialize() async {
-        await settings.refreshTemplateAvailability()
+        settings.restoreTemplateModes()
 
         Task.detached {
             await PromptFetcher.refreshIfNeeded()
@@ -336,6 +336,13 @@ final class AppDependencies {
 
         let store = LocalHistoryStore(snapshot: snapshot)
         await transcriptionHistory.setRealStore(store)
+        Task { [settings] in
+            await RetiredModeHistory.remove(
+                from: store,
+                retiredModes: settings.retiredModes,
+                keptModeNames: Set(settings.modes.map(\.name))
+            )
+        }
 
         historySync = SyncReconciler.startIfEnabled(
             store: store,

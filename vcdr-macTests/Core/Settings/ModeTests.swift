@@ -190,12 +190,6 @@ struct ModeCaptureUseTests {
         #expect(sending.captureUse == .sentAsInput)
     }
 
-    @Test("An Assistant Mode with the legacy append flag appends captures to output")
-    func assistantModeKeepsLegacyAppend() throws {
-        let mode = try decodeSavedMode(templateID: "claude-code", captureField: "\"appendCapturesToOutput\":true")
-        #expect(mode.captureUse == .appendedToOutput)
-    }
-
     @Test("An unknown stored capture use does not drop the saved Modes")
     @MainActor
     func unknownCaptureUseKeepsModes() throws {
@@ -208,14 +202,6 @@ struct ModeCaptureUseTests {
 
         #expect(settings.modes.map(\.name) == ["Saved", "Saved"])
         #expect(settings.modes.map(\.captureUse) == [.sentAsInput, .appendedToOutput])
-    }
-
-    @Test("Assistant templates send captures as input and let the user change it")
-    func assistantTemplatesSendCaptures() {
-        var mode = ModeTemplate.claudeCode.makeMode()
-        #expect(mode.captureUse == .sentAsInput)
-        mode.captureUse = .appendedToOutput
-        #expect(mode.captureUse == .appendedToOutput)
     }
 
     @Test("A user-created Mode round-trips its capture use")

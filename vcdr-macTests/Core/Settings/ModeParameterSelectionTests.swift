@@ -5,10 +5,14 @@ import Testing
 @Suite("Mode parameter selection")
 @MainActor
 struct ModeParameterSelectionTests {
-    @Test("Cloud providers and None never show local model choices", arguments: AIProvider.allCases)
+    private static let modelParameter = ModeParameter(id: UUID(), name: "Model", options: [
+        ModeParameterOption(id: UUID(), label: "Small", value: "small"),
+        ModeParameterOption(id: UUID(), label: "Large", value: "large"),
+    ])
+
+    @Test("Cloud providers and None never show a Bash Script's parameters", arguments: AIProvider.allCases)
     func cloudSwitches(provider: AIProvider) throws {
-        var mode = ModeTemplate.claudeCode.makeMode()
-        let localParameters = mode.parameters
+        var mode = Mode(id: UUID(), name: "Script", processingType: .bashScript, parameters: [Self.modelParameter])
         for _ in 0..<3 {
             mode.processingType = .cloudAI
             mode.aiProvider = provider
@@ -16,14 +20,14 @@ struct ModeParameterSelectionTests {
             #expect(mode.defaultParameterLabels == nil)
             mode.processingType = .none
             #expect(mode.parameters.isEmpty)
-            mode.processingType = .localAgent
-            #expect(mode.parameters == localParameters)
+            mode.processingType = .bashScript
+            #expect(mode.parameters == [Self.modelParameter])
         }
     }
 
-    @Test("Saved Cloud AI Modes discard stale Haiku labels", arguments: AIProvider.allCases)
+    @Test("Saved Cloud AI Modes discard stale parameter labels", arguments: AIProvider.allCases)
     func staleCloudMode(provider: AIProvider) throws {
-        let legacy = try savedMode(type: .cloudAI, parameters: ModeTemplate.claudeCode.parameters, provider: provider)
+        let legacy = try savedMode(type: .cloudAI, parameters: [Self.modelParameter], provider: provider)
         let mode = try JSONDecoder().decode(Mode.self, from: legacy)
         #expect(mode.defaultParameterLabels == nil)
         #expect(mode.parameters.isEmpty)
@@ -33,17 +37,12 @@ struct ModeParameterSelectionTests {
 
     @Test("Bash Script parameters survive provider switches and restart")
     func scriptParametersSurvive() throws {
-        let custom = ModeTemplate.ollama.parameters
+        let custom = [Self.modelParameter]
         var mode = Mode(id: UUID(), name: "Custom", processingType: .bashScript, parameters: custom)
-        mode.processingType = .localAgent
-        #expect(mode.defaultParameterLabels == "Haiku")
-        let local = mode.parameters
         mode.processingType = .cloudAI
         mode.aiProvider = .gemini
         mode = try roundTrip(mode)
         #expect(mode.parameters.isEmpty)
-        mode.processingType = .localAgent
-        #expect(mode.parameters == local)
         mode.processingType = .bashScript
         #expect(mode.parameters == custom)
         mode.parameters[0].options.reverse()
@@ -54,51 +53,40 @@ struct ModeParameterSelectionTests {
         #expect(mode.parameters == edited)
     }
 
-    @Test("Local parameter IDs keep Session Overrides through switches and restart")
+    @Test("Bash Script parameter IDs keep Session Overrides through switches and restart")
     func stableSessionOverrides() throws {
-        var mode = Mode(id: UUID(), name: "Local", processingType: .localAgent)
-        let parameter = try #require(mode.parameters.first)
+        var mode = Mode(id: UUID(), name: "Script", processingType: .bashScript, parameters: [Self.modelParameter])
         let overrides = SessionOverrides()
-        overrides.parameterOverrides[parameter.id] = "sonnet"
-        #expect(overrides.resolvedParameterLabels(for: mode) == "Sonnet")
+        overrides.parameterOverrides[Self.modelParameter.id] = "large"
+        #expect(overrides.resolvedParameterLabels(for: mode) == "Large")
         mode.processingType = .cloudAI
         #expect(overrides.resolvedParameterValues(for: mode).isEmpty)
         mode = try roundTrip(mode)
-        mode.processingType = .localAgent
-        #expect(mode.parameters.first?.id == parameter.id)
-        #expect(overrides.resolvedParameterLabels(for: mode) == "Sonnet")
-        #expect(overrides.resolvedParameterValues(for: mode) == ["MODEL": "sonnet"])
+        mode.processingType = .bashScript
+        #expect(mode.parameters.first?.id == Self.modelParameter.id)
+        #expect(overrides.resolvedParameterLabels(for: mode) == "Large")
+        #expect(overrides.resolvedParameterValues(for: mode) == ["MODEL": "large"])
     }
 
-    @Test("Legacy script and local parameters retain IDs and option order", arguments: [ProcessingType.bashScript, .localAgent])
-    func legacyParameters(type: ProcessingType) throws {
-        var parameters = ModeTemplate.claudeCode.parameters
+    @Test("Legacy script parameters retain IDs and option order")
+    func legacyParameters() throws {
+        var parameters = [Self.modelParameter]
         parameters[0].options.reverse()
-        var mode = try JSONDecoder().decode(Mode.self, from: savedMode(type: type, parameters: parameters))
+        var mode = try JSONDecoder().decode(Mode.self, from: savedMode(type: .bashScript, parameters: parameters))
         #expect(mode.parameters == parameters)
         mode.processingType = .cloudAI
         mode = try roundTrip(mode)
-        mode.processingType = type
+        mode.processingType = .bashScript
         #expect(mode.parameters == parameters)
-    }
-
-    @Test("Empty saved local parameters receive stable defaults")
-    func emptyLegacyLocal() throws {
-        let mode = try JSONDecoder().decode(Mode.self, from: savedMode(type: .localAgent, parameters: []))
-        #expect(mode.defaultParameterLabels == "Haiku")
-        #expect(try roundTrip(mode) == mode)
     }
 
     @Test("New parameter banks take precedence over legacy active parameters")
     func newBanksTakePrecedence() throws {
-        let legacy = try savedMode(type: .bashScript, parameters: ModeTemplate.ollama.parameters)
+        let legacy = try savedMode(type: .bashScript, parameters: [Self.modelParameter])
         var json = try #require(JSONSerialization.jsonObject(with: legacy) as? [String: Any])
         json["bashScriptParameters"] = []
-        json["localAgentParameters"] = []
-        var mode = try JSONDecoder().decode(Mode.self, from: JSONSerialization.data(withJSONObject: json))
+        let mode = try JSONDecoder().decode(Mode.self, from: JSONSerialization.data(withJSONObject: json))
         #expect(mode.parameters.isEmpty)
-        mode.processingType = .localAgent
-        #expect(mode.defaultParameterLabels == "Haiku")
     }
 
     @Test("Template reset clears inactive parameters without changing preserved fields", arguments: ModeTemplate.all.map(\.id))
@@ -110,8 +98,6 @@ struct ModeParameterSelectionTests {
         mode.saveResultToClipboard = true
         mode.processingType = .bashScript
         mode.parameters = [ModeParameter(id: UUID(), name: "Custom", options: [])]
-        mode.processingType = .localAgent
-        mode.parameters = [ModeParameter(id: UUID(), name: "Other", options: [])]
         template.resetMode(&mode)
         #expect(mode.id == id)
         #expect(mode.isDisabled)
@@ -121,12 +107,6 @@ struct ModeParameterSelectionTests {
         mode = try roundTrip(mode)
         mode.processingType = .bashScript
         #expect(mode.parameters == (template.processingType == .bashScript ? template.parameters : []))
-        mode.processingType = .localAgent
-        if template.processingType == .localAgent {
-            #expect(mode.parameters == template.parameters)
-        } else {
-            #expect(mode.defaultParameterLabels == "Haiku")
-        }
     }
 
     private func roundTrip(_ mode: Mode) throws -> Mode {

@@ -35,6 +35,4 @@ struct TranscriptionSettings: Codable, Equatable {
 struct ModeConfiguration: Equatable {
     var modes: [Mode]
     var activeModeID: UUID
-    /// Template IDs whose CLI tools are currently available. Not persisted.
-    var availableTemplateIDs: Set<String> = []
 }

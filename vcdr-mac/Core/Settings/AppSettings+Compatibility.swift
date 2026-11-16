@@ -14,11 +14,6 @@ extension AppSettings {
         set { modeConfig.activeModeID = newValue }
     }
 
-    var availableTemplateIDs: Set<String> {
-        get { modeConfig.availableTemplateIDs }
-        set { modeConfig.availableTemplateIDs = newValue }
-    }
-
     var modeSwitcherHotkey: HotkeyBinding {
         get { hotkeySettings.modeSwitcherHotkey }
         set { hotkeySettings.modeSwitcherHotkey = newValue }

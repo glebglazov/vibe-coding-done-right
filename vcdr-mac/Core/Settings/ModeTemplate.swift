@@ -3,8 +3,9 @@ import Foundation
 struct ModeTemplate {
     let id: String
     let defaultName: String
-    /// Shell command to check availability. `nil` means always available.
-    let availabilityCommand: String?
+    /// Names this template gave its Mode before `defaultName`. A saved Mode
+    /// that still carries one of them was never renamed by the user.
+    let earlierDefaultNames: Set<String>
     let processingType: ProcessingType
     let processingCommand: String
     let systemPromptEnabled: Bool
@@ -73,23 +74,10 @@ struct ModeTemplate {
 // MARK: - Template Definitions
 
 extension ModeTemplate {
-    // MARK: - Fixed UUIDs for template parameters
-
-    // Claude Code parameter IDs
-    private static let claudeCodeModelParamID = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
-    private static let claudeCodeHaikuOptionID = UUID(uuidString: "10000000-0000-0000-0000-000000000011")!
-    private static let claudeCodeSonnetOptionID = UUID(uuidString: "10000000-0000-0000-0000-000000000012")!
-    private static let claudeCodeOpusOptionID = UUID(uuidString: "10000000-0000-0000-0000-000000000013")!
-
-    // Ollama parameter IDs
-    private static let ollamaModelParamID = UUID(uuidString: "10000000-0000-0000-0000-000000000002")!
-    private static let ollamaQwen35_08bOptionID = UUID(uuidString: "10000000-0000-0000-0000-000000000021")!
-    private static let ollamaQwen35_4bOptionID = UUID(uuidString: "10000000-0000-0000-0000-000000000022")!
-
     static let plain = ModeTemplate(
         id: "plain",
-        defaultName: "Verbatim",
-        availabilityCommand: nil,
+        defaultName: "AI off",
+        earlierDefaultNames: ["Dictation", "Plain", "Transcription", "Verbatim"],
         processingType: .none,
         processingCommand: "",
         systemPromptEnabled: false,
@@ -108,8 +96,8 @@ extension ModeTemplate {
 
     static let aiDictation = ModeTemplate(
         id: "ai-dictation",
-        defaultName: "Dictation",
-        availabilityCommand: nil,
+        defaultName: "AI on",
+        earlierDefaultNames: ["Dictation"],
         processingType: .cloudAI,
         processingCommand: "",
         systemPromptEnabled: false,
@@ -126,56 +114,5 @@ extension ModeTemplate {
         capturePolicy: .fixed(.ignored)
     )
 
-    static let claudeCode = ModeTemplate(
-        id: "claude-code",
-        defaultName: "Assistant (Remote)",
-        availabilityCommand: "claude",
-        processingType: .localAgent,
-        processingCommand: "",
-        systemPromptEnabled: false,
-        systemPrompt: "",
-        aiProvider: .anthropic,
-        promptType: .assistant,
-        localAgentProvider: .claudeCode,
-        localAgentPassVariables: false,
-        parameters: [
-            ModeParameter(id: claudeCodeModelParamID, name: "Model", options: [
-                ModeParameterOption(id: claudeCodeHaikuOptionID, label: "Haiku", value: "haiku"),
-                ModeParameterOption(id: claudeCodeSonnetOptionID, label: "Sonnet", value: "sonnet"),
-                ModeParameterOption(id: claudeCodeOpusOptionID, label: "Opus", value: "opus"),
-            ]),
-        ],
-        defaultOutputDestinationID: OutputDestination.builtInPasteID,
-        showPreview: false,
-        appliesStyles: false,
-        contextAware: false,
-        capturePolicy: .editable(default: .sentAsInput)
-    )
-
-    static let ollama = ModeTemplate(
-        id: "ollama",
-        defaultName: "Assistant (Local)",
-        availabilityCommand: "ollama",
-        processingType: .bashScript,
-        processingCommand: "zsh -ic 'TERM=dumb ollama run --hidethinking --nowordwrap $VCDR_PARAM_MODEL \"$VCDR_TEXT\" 2>/dev/null'",
-        systemPromptEnabled: true,
-        systemPrompt: "Act immediately on the user's request. Produce only the requested output — no follow-up questions, no preamble, no commentary. The user's input is voice-dictated (inside <dictation> tags) and may contain minor transcription errors — interpret the intent.",
-        aiProvider: .anthropic,
-        promptType: .assistant,
-        localAgentProvider: .claudeCode,
-        localAgentPassVariables: false,
-        parameters: [
-            ModeParameter(id: ollamaModelParamID, name: "Model", options: [
-                ModeParameterOption(id: ollamaQwen35_08bOptionID, label: "Qwen3.5 - 0.8B", value: "qwen3.5:0.8b"),
-                ModeParameterOption(id: ollamaQwen35_4bOptionID, label: "Qwen3.5 - 4B", value: "qwen3.5:4b"),
-            ]),
-        ],
-        defaultOutputDestinationID: OutputDestination.builtInPasteID,
-        showPreview: false,
-        appliesStyles: false,
-        contextAware: false,
-        capturePolicy: .editable(default: .sentAsInput)
-    )
-
-    static let all: [ModeTemplate] = [.plain, .aiDictation, .claudeCode, .ollama]
+    static let all: [ModeTemplate] = [.plain, .aiDictation]
 }

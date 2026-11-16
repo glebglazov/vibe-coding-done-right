@@ -11,24 +11,21 @@ typealias AIProvider = CloudAIBackend
 
 enum PromptType: String, Codable, CaseIterable {
     case dictation
-    case assistant
     case custom
 
     var displayName: String {
         switch self {
         case .dictation: "Dictation"
-        case .assistant: "Assistant"
         case .custom: "Custom"
         }
     }
 
     /// Only Dictation rewrites what was said, so only it is told each Note.
-    /// Assistant writes new text and would use a Note as material, and the app
-    /// cannot tell what a Custom prompt does (ADR-0026).
+    /// The app cannot tell what a Custom prompt does (ADR-0026).
     var hintDetail: SpellingHints.Detail {
         switch self {
         case .dictation: .withNotes
-        case .assistant, .custom: .spellingsOnly
+        case .custom: .spellingsOnly
         }
     }
 }
@@ -411,7 +408,9 @@ struct Mode: Identifiable, Codable, Equatable {
         localAgentParameters = savedLocalParameters.isEmpty
             ? localAgentProvider.defaultParameters : savedLocalParameters
 
-        // Unified prompt type (new key takes precedence over legacy)
+        // Unified prompt type (new key takes precedence over legacy). A prompt
+        // type this build no longer has, such as the retired "assistant", reads
+        // as Dictation.
         if let rawPromptType = try container.decodeIfPresent(String.self, forKey: .promptType) {
             self.promptType = PromptType(rawValue: rawPromptType) ?? .dictation
         } else if self.processingType == .localAgent {
@@ -423,7 +422,7 @@ struct Mode: Identifiable, Codable, Equatable {
                 let legacyPrompt = try container.decodeIfPresent(String.self, forKey: .localAgentSystemPrompt) ?? ""
                 if !legacyPrompt.isEmpty { self.systemPrompt = legacyPrompt }
             } else {
-                self.promptType = .assistant
+                self.promptType = .dictation
             }
         } else {
             // Legacy Cloud AI migration: "dictation" and "custom" raw values match PromptType

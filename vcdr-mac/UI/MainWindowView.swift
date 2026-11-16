@@ -246,9 +246,6 @@ struct MainWindowView: View {
         .environment(\.suspendHotkeys) {
             dependencies.suspendHotkeys()
         }
-        .task {
-            await dependencies.settings.refreshTemplateAvailability()
-        }
         .onChange(of: selection) {
             // Reset push navigation when switching tabs
             path = NavigationPath()
