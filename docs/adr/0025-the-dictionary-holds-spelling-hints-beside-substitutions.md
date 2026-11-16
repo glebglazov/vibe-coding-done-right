@@ -1,7 +1,7 @@
 # The Dictionary holds Spelling Hints beside Substitutions
 
 > **Amended by [ADR-0026](0026-a-dictionary-note-reaches-only-modes-that-rewrite-what-was-said.md):** a Dictionary Entry can
-> hold a Note. It goes with its spelling to Dictation prompts only. Assistant and Custom prompts and
+> hold a Note. It goes with its spelling to Dictation prompts only. Custom prompts and
 > every Transcription Model still get the spellings alone.
 
 Users want the app to spell some words right without first finding out how the engine misspells them: their name, a phone number, a product name. That is a list of words the user means, and every Replacement already is one. So there is one list, the **Dictionary**, and not a second list beside Substitutions. A Trigger Phrase becomes optional: a Dictionary Entry with no Trigger Phrases is a Spelling Hint only, and an entry with Trigger Phrases is a Spelling Hint and is also substituted exactly. This reverses "a Substitution has one or more Trigger Phrases".

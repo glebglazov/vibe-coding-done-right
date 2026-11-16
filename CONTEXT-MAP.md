@@ -25,7 +25,7 @@ Glossary: `vcdr-mac/CONTEXT.md`
 ADRs: `vcdr-mac/docs/adr/`
 
 Owns macOS-specific language for the menu bar app, hotkeys, capture panel,
-Accessibility-based text capture, transcription flow, and output delivery.
+Accessibility-based Cursor Context, transcription flow, and output delivery.
 
 Create `vcdr-mac/CONTEXT.md` lazily when the first macOS-specific term is
 resolved.

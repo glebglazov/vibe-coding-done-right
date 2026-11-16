@@ -22,4 +22,4 @@ VCDR on iOS is a dictation tool. The Assistant mode made it an agent: it did wha
 
 ## Follow-ups (the Mac change)
 
-The Mac still has its Assistant (Remote) and Assistant (Local) templates and the `assistant` prompt type. The server still serves the `assistant` prompt (`vcdr-server/prompts.go`), and `evals/assistant_prompts` still measures it. The iOS build ignores that prompt. Remove them, and the Assistant half of [ADR-0026](../../../docs/adr/0026-a-dictionary-note-reaches-only-modes-that-rewrite-what-was-said.md), when the Mac change ships.
+Done in [vcdr-mac ADR-0003](../../../vcdr-mac/docs/adr/0003-the-mac-is-a-dictation-tool-no-assistant.md). The Mac has no Assistant templates and no `assistant` prompt type. [ADR-0026](../../../docs/adr/0026-a-dictionary-note-reaches-only-modes-that-rewrite-what-was-said.md) no longer has an Assistant rule. The server drops the `assistant` prompt and `evals/assistant_prompts` goes in a separate change, after the Mac build ships. The Mac History cleanup also deletes the Mac Assistant entries from iOS.

@@ -1,6 +1,6 @@
 # VCDR macOS Context
 
-VCDR macOS is a menu bar dictation product that records speech, captures surrounding app context, processes text through a selected mode, and delivers the result to a chosen destination. This context records macOS-specific language for capture, mode processing, style resolution, preview, and output delivery.
+VCDR macOS is a menu bar dictation product that records speech, reads the text around the cursor, processes text through a selected mode, and delivers the result to a chosen destination. This context records macOS-specific language for the Capture Session, mode processing, style resolution, preview, and output delivery.
 
 ## Language
 
@@ -134,9 +134,6 @@ _Avoid_: turn, message, text chunk
 
 ## Flagged Ambiguities
 
-**Capture**:
-Use Capture Session for the full recording lifecycle and Capture for contextual text included with the dictation.
-
 **Session**:
 Do not use "session" by itself. Say Capture Session for one macOS dictation lifecycle and Session Override for temporary per-Capture-Session choices. Style Override spans the app run, not a single Capture Session.
 
@@ -144,7 +141,7 @@ Do not use "session" by itself. Say Capture Session for one macOS dictation life
 Processing Type transforms text before delivery; Output Destination delivers the processed text afterward. Do not call a destination a processing action.
 
 **Style vs Mode**:
-Mode decides the processing recipe; Style decides final text shape. A Mode may opt out of Style entirely.
+Mode decides the processing recipe; Style decides final text shape. Every Mode applies the Style.
 
 **Style Override vs Detected Style**:
 Style Override masks Detected Style for output but does not stop Detected Style from updating. Clearing Style Override restores the current Detected Style, not the one from when the override was set.
@@ -154,10 +151,6 @@ Style Override masks Detected Style for output but does not stop Detected Style 
 Dev: "The user pressed the destination hotkey while recording in a preview Mode."
 
 Domain expert: "That creates a Destination Override. The Capture Session should skip Preview and execute the selected Output Destination directly."
-
-Dev: "The Mode is Assistant (Remote), and the user selected two clipboard captures during recording."
-
-Domain expert: "Those are Captures. Include them as Input Segments in the Conversation, and structure them for the Mode's Processing Type."
 
 Dev: "The frontmost app changed from Safari to Mail during recording."
 

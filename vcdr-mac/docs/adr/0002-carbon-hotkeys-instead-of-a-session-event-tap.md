@@ -48,7 +48,7 @@ computing, per keycode, which destination wins each of the 16 modifier combinati
 registering only the winners. `matchBinding` stays the core of that computation.
 
 **Accessibility stops gating hotkey liveness.** `RegisterEventHotKey` needs no grant, so the
-`AXIsProcessTrusted()` guard goes. Accessibility is still required for paste and AX capture,
+`AXIsProcessTrusted()` guard goes. Accessibility is still required for paste and the Cursor Context read,
 so the app's only one-shot prompt moves to the first untrusted paste; the Home tab already
 carries the standing notice.
 

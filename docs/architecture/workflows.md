@@ -77,7 +77,7 @@
 ## Permissions Required
 
 1. **Microphone** — for audio recording (`NSMicrophoneUsageDescription` in Info.plist)
-2. **Accessibility** — for simulated paste (Cmd+V via CGEvent) and selection capture. Carbon hotkey claims need no grant, so every hotkey works without it. Nothing asks for the grant at launch: the first paste that finds the process untrusted shows the system dialog once (`AccessibilityGrant`), and the Home tab carries the standing notice.
+2. **Accessibility** — for simulated paste (Cmd+V via CGEvent) and the Cursor Context read. Carbon hotkey claims need no grant, so every hotkey works without it. Nothing asks for the grant at launch: the first paste that finds the process untrusted shows the system dialog once (`AccessibilityGrant`), and the Home tab carries the standing notice.
 3. **No App Sandbox** — required for the Accessibility APIs and for posting the simulated Cmd+V
 
 ## Things to Watch Out For
