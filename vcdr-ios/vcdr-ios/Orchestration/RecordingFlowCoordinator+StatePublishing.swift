@@ -6,20 +6,6 @@ import OSLog
 /// read it, plus the stale-result cleanup that returns the channel to idle.
 extension RecordingFlowCoordinator {
 
-    /// Writes recording state to App Group so the keyboard extension can read it.
-    /// When `bundledText` is provided, the value is written as `"idle|text"` so the
-    /// keyboard can reliably receive the transcription via the same key that syncs state.
-    func writeState(_ recordingState: RecordingState, bundledText: String? = nil) {
-        writeStateRaw(recordingState, bundledText: bundledText)
-    }
-
-    /// Non-MainActor version so callers can dispatch disk-flush + Darwin post
-    /// off the critical path. Shared UserDefaults + DarwinNotificationCenter
-    /// are thread-safe. Performs no instance state reads.
-    nonisolated func writeStateAsync(_ recordingState: RecordingState, bundledText: String? = nil) async {
-        writeStateRaw(recordingState, bundledText: bundledText)
-    }
-
     /// Publishes a Processing Failure the coordinator itself detected, before
     /// or without a Recording Run to route it through its completion adapters.
     /// Carries the same reason the app surface shows, the way the Bundled
@@ -29,12 +15,20 @@ extension RecordingFlowCoordinator {
         keyboardChannel.publishFailure(reason: reason)
     }
 
+    /// Writes recording state to App Group so the keyboard extension can read it.
+    /// When `bundledText` is provided, the value is written as `"idle|text"` so the
+    /// keyboard can reliably receive the transcription via the same key that syncs state.
+    ///
+    /// Runs on the main actor, as every other state write does. The main actor
+    /// gives the writes their order, so a later write always replaces an
+    /// earlier one on the wire (ADR-0004).
+    ///
     /// Logs every value it writes: this and the completion adapters are the
     /// only two writers on the wire, so logging both makes the published state
     /// sequence for a run reconstructable from the log alone (ADR-0004). The
     /// Bundled Result is logged by length — the transcript itself is already
     /// logged once, by the run.
-    private nonisolated func writeStateRaw(_ recordingState: RecordingState, bundledText: String? = nil) {
+    func writeState(_ recordingState: RecordingState, bundledText: String? = nil) {
         if let bundledText, recordingState == .idle {
             Logger.recording.info("Wire state written: bundledResult (\(bundledText.count) chars)")
             keyboardChannel.publishBundledResult(bundledText)

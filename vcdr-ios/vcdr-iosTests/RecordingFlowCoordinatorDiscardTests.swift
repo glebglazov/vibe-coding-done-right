@@ -35,6 +35,42 @@ struct RecordingFlowCoordinatorDiscardTests {
         #expect(env.history.conversations.isEmpty)
     }
 
+    @Test("the keyboard reads recording when capture starts, and a Discard during Arming leaves cancelled on the wire")
+    func discardDuringArmingLeavesCancelledOnTheWire() async throws {
+        let env = Env(finishText: "never heard")
+        env.engine.startCaptureDelay = .milliseconds(200)
+        var wireAtCaptureStart: KeyboardChannel.State?
+        env.engine.onStartCapture = { wireAtCaptureStart = env.channel.readState() }
+
+        var startTask: Task<RecordingStartResult, Never>?
+        await whileTheCooperativePoolIsBusy {
+            startTask = Task { await env.coordinator.startRecording(origin: .keyboard) }
+            await waitUntil { env.coordinator.activeRunPhase == .arming }
+            await env.coordinator.discardRecording()
+        }
+        _ = await startTask?.value
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(wireAtCaptureStart == .recording)
+        #expect(env.channel.readState() == .cancelled)
+    }
+
+    @Test("a Discard right after Capturing starts leaves cancelled on the wire")
+    func discardRightAfterCapturingLeavesCancelledOnTheWire() async throws {
+        let env = Env(finishText: "hello world")
+        var wireAtCaptureStart: KeyboardChannel.State?
+        env.engine.onStartCapture = { wireAtCaptureStart = env.channel.readState() }
+
+        await whileTheCooperativePoolIsBusy {
+            #expect(await env.coordinator.startRecording(origin: .keyboard) == .capturing)
+            await env.coordinator.discardRecording()
+        }
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(wireAtCaptureStart == .recording)
+        #expect(env.channel.readState() == .cancelled)
+    }
+
     @Test("discard during Arming while the model downloads shows the download again, not Ready")
     func discardDuringArmingKeepsTheModelDownloadShowing() async throws {
         let env = Env(finishText: "never heard")
@@ -313,6 +349,28 @@ private func waitUntil(
 @MainActor
 private func settleMainActor() async {
     for _ in 0..<10 { await Task.yield() }
+}
+
+/// Holds every thread of the cooperative pool while `body` runs on the main
+/// actor, as a busy app does. Work sent to the pool during `body` runs only
+/// after it, so a wire write made off the main actor lands late.
+@MainActor
+private func whileTheCooperativePoolIsBusy(_ body: @MainActor () async -> Void) async {
+    let width = ProcessInfo.processInfo.activeProcessorCount
+    let holding = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+    let holders = (0..<width).map { _ in
+        Task.detached {
+            holding.signal()
+            release.wait()
+        }
+    }
+    for _ in 0..<width where holding.wait(timeout: .now() + 2) == .timedOut {
+        Issue.record("The cooperative pool has fewer threads than \(width)")
+    }
+    await body()
+    for _ in 0..<width { release.signal() }
+    for holder in holders { await holder.value }
 }
 
 // MARK: - Finalizing gate

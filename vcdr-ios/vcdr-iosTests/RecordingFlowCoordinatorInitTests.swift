@@ -435,6 +435,9 @@ final class SpyWarmRecordingEngine: RecordingEngine {
     /// Widens the window between `state = .arming` and Capturing so tests can
     /// land a concurrent action (e.g. Discard) mid-Arming deterministically.
     var startCaptureDelay: Duration = .zero
+    /// Runs when `startCapture` is entered, before any delay, so a test can
+    /// read what the keyboard sees at the moment the engine starts.
+    var onStartCapture: (() -> Void)?
 
     private var enginePrepared = false
 
@@ -473,6 +476,7 @@ final class SpyWarmRecordingEngine: RecordingEngine {
 
     func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
         _ = onBuffer
+        onStartCapture?()
         if startCaptureDelay > .zero {
             try? await Task.sleep(for: startCaptureDelay)
         }

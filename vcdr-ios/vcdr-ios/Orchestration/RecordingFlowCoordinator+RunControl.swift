@@ -53,9 +53,7 @@ extension RecordingFlowCoordinator {
             self.currentTextStyle = SettingOverrides.effectiveTextStyle()
         }
 
-        Task.detached { [weak self] in
-            await self?.writeStateAsync(.recording)
-        }
+        writeState(.recording)
 
         hotMicSession.recordIntentStarted()
 
