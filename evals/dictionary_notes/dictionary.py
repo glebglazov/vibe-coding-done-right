@@ -19,7 +19,7 @@ REPO = HERE.parent.parent
 # copy only when it has never reached the server.
 SERVED_PROMPTS = REPO / "vcdr-server" / "prompts.go"
 
-MODES = {"dictation": "dictation.json", "assistant": "assistant.json"}
+MODES = {"dictation": "dictation.json"}
 # Why a sounds_alike case might tempt the model, so false insertions can be read per cause.
 TRAPS = ("other_person", "self_name", "note_topic", "common_word", "topic_other_thing")
 

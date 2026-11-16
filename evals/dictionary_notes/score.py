@@ -122,7 +122,13 @@ def main():
     arguments = parser.parse_args()
     ledger = HERE / arguments.ledger
 
-    run_dirs = sorted(p for p in ledger.iterdir() if (p / "manifest.json").exists())
+    # The ledger keeps the runs of the retired Assistant mode as evidence for
+    # REPORT.md; their eval set is gone, so they are not scored again.
+    run_dirs = sorted(
+        p for p in ledger.iterdir()
+        if (p / "manifest.json").exists()
+        and json.loads((p / "manifest.json").read_text())["eval_set"]["name"] in MODES.values()
+    )
     scored_runs = [score_run(run_dir) for run_dir in run_dirs]
     drop_unprompted_notes(scored_runs)
     runs = defaultdict(list)
