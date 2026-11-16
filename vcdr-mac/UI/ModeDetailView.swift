@@ -134,20 +134,6 @@ struct ModeDetailView: View {
 
             }
 
-            Section {
-                Picker("Captures", selection: $mode.captureUse) {
-                    ForEach(CaptureUse.allCases, id: \.self) { use in
-                        Text(use.displayName).tag(use)
-                    }
-                }
-                .disabled(mode.capturePolicy.isFixed)
-            } header: {
-                Text("Captures")
-            } footer: {
-                if mode.capturePolicy.isFixed && !mode.usesCaptures {
-                    Text("This built-in mode does not process captures. Selected text and text you copy during recording are not included.")
-                }
-            }
         }
         .formStyle(.grouped)
         .navigationTitle(mode.name)

@@ -25,7 +25,6 @@ struct TextProcessingPipelineSpellingHintsTests {
         _ = try await TextProcessingPipeline.run(
             mode: mode,
             text: "hi",
-            captures: [],
             substitutions: Self.dictionary,
             aiPort: ai
         )
@@ -44,7 +43,6 @@ struct TextProcessingPipelineSpellingHintsTests {
         _ = try await TextProcessingPipeline.run(
             mode: mode,
             text: "hi",
-            captures: [],
             substitutions: Self.dictionary,
             aiPort: ai
         )
@@ -60,7 +58,7 @@ struct TextProcessingPipelineSpellingHintsTests {
         let mode = Mode(id: UUID(), name: "AI", processingType: .cloudAI, promptType: .dictation)
         let ai = ScriptedAIProcessing(results: [.success("done")])
 
-        _ = try await TextProcessingPipeline.run(mode: mode, text: "hi", captures: [], aiPort: ai)
+        _ = try await TextProcessingPipeline.run(mode: mode, text: "hi", aiPort: ai)
 
         let call = try #require(await ai.receivedCalls.first)
         #expect(call.spellingHints == .none)
@@ -83,7 +81,6 @@ struct TextProcessingPipelineSpellingHintsTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "hi",
-            captures: [],
             substitutions: Self.dictionary
         )
 
@@ -98,7 +95,6 @@ struct TextProcessingPipelineSpellingHintsTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "hi",
-            captures: [],
             substitutions: Self.dictionary,
             aiPort: ai
         )

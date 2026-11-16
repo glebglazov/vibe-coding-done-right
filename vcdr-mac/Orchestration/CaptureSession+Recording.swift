@@ -6,7 +6,7 @@ extension CaptureSession {
 
     // MARK: - Recording Lifecycle
 
-    /// Begins a new capture run: resets UI, captures the current selection, pauses media,
+    /// Begins a new capture run: resets UI, reads the Cursor Context, pauses media,
     /// starts audio capture, arms the destination hotkeys. On any failure this
     /// rolls back to `.idle` or `.error` and fires an outcome.
     func startRecording() async {
@@ -45,8 +45,7 @@ extension CaptureSession {
             }
         }
 
-        let clipboardMonitor = makeClipboardMonitor()
-        let thisRun = RunState(clipboardMonitor: clipboardMonitor)
+        let thisRun = RunState()
         run = thisRun
 
         // ADR-0006: the hotkey is never refused for an unready model. Audio
@@ -56,16 +55,10 @@ extension CaptureSession {
 
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         run?.previousActiveApp = frontmostApp
-        Logger.recording.info("Capturing selection from app: \(frontmostApp?.bundleIdentifier ?? "unknown")")
+        Logger.recording.info("Reading Cursor Context from app: \(frontmostApp?.bundleIdentifier ?? "unknown")")
 
-        // Start audio FIRST, then kick off capture. Capture fallbacks (Layer 3 osascript
-        // `set volume alert volume`) write CoreAudio HAL properties that serialize at
-        // coreaudiod against our own `setSystemDefaultInputDevice`. Running capture in
-        // parallel with audio start made the input-device switch wait behind Layer 3's
-        // HAL writes — adding ~400ms on AX-less apps (Ghostty, Telegram). Serializing
-        // audio-first means HAL is empty during our input switch. Capture then runs
-        // after, doesn't affect perceived recording start, and merges at transcription
-        // time in `processTranscription`.
+        // Audio starts first, so the Cursor Context read never delays the start
+        // of recording. `processTranscription` waits for the read to finish.
         if case .failure(let failure) = await audio.startRecording(deviceUID: settings.audioSettings.preferredInputDeviceID) {
             setStatus(.error(failure.message))
             panel.setError(failure.message)
@@ -97,36 +90,25 @@ extension CaptureSession {
         startPreparationNarration()
         recordingStartInstant = .now
 
-        // Detached so blocking work inside the capturer (osascript Process.waitUntilExit,
-        // AX round-trips) runs off MainActor — otherwise it queues ahead of UI updates
-        // that happen during recording.
-        let capturer = selectionCapturer
+        // Detached so the AX round-trips run off MainActor — otherwise they
+        // queue ahead of UI updates that happen during recording.
+        let reader = cursorContextReader
         let bundleID = frontmostApp?.bundleIdentifier
         let pid = frontmostApp?.processIdentifier
-        run?.captureTask = Task.detached { [weak self] in
-            let result = await capturer.capture(bundleIdentifier: bundleID, pid: pid)
+        run?.cursorContextTask = Task.detached { [weak self] in
+            let cursorContext = reader.read(bundleIdentifier: bundleID, pid: pid)
 
-            // Store cursor context immediately (will be nil if unavailable)
             await MainActor.run {
-                self?.run?.cursorContext = result.cursorContext
+                self?.run?.cursorContext = cursorContext
                 // Report availability to the panel for UI indicator
-                let isAvailable = result.cursorContext != nil
+                let isAvailable = cursorContext != nil
                 self?.panel.setCursorContextAvailable(isAvailable)
                 Logger.recording.info("Cursor context capture: \(isAvailable ? "available" : "unavailable")")
 
                 // Set up observer for app switches during recording
                 self?.setupAppSwitchObserver(initialBundleID: bundleID)
             }
-
-            guard let text = result.selectedText else {
-                Logger.recording.info("Toggle-record: no selection captured")
-                return nil
-            }
-            Logger.recording.info("Toggle-record: storing captured selection (\(text.count) chars)")
-            return CapturedContext(text: text, source: .selection)
         }
-
-        startClipboardMonitor(clipboardMonitor, afterSelectionCapture: run?.captureTask)
 
         // Pause media in the background now that audio is capturing. The
         // controller stores the in-flight task and resumeIfNeeded awaits it,
@@ -270,34 +252,7 @@ extension CaptureSession {
     // MARK: - Helpers
 
     func endRun() {
-        let clipboardMonitor = run?.clipboardMonitor
         run = nil
-        Task { await clipboardMonitor?.stop() }
-    }
-
-    func startClipboardMonitor(
-        _ clipboardMonitor: ClipboardMonitor,
-        afterSelectionCapture captureTask: Task<CapturedContext?, Never>?
-    ) {
-        Task { @MainActor [weak self] in
-            let captured = await captureTask?.value
-            guard let self, self.isRecording(monitoredBy: clipboardMonitor) else { return }
-            if captured != nil, self.settings.activeMode.usesCaptures {
-                self.panel.signalClipboardCapture()
-            }
-            let freshBaseline = NSPasteboard.general.changeCount
-            await clipboardMonitor.start(baselineChangeCount: freshBaseline) { [weak self] text in
-                guard let self, self.isRecording(monitoredBy: clipboardMonitor) else { return }
-                if self.settings.activeMode.usesCaptures {
-                    self.panel.signalClipboardCapture()
-                }
-                self.run?.captures.append(CapturedContext(text: text, source: .clipboard))
-            }
-        }
-    }
-
-    func isRecording(monitoredBy clipboardMonitor: ClipboardMonitor) -> Bool {
-        status.phase == .recording && run?.clipboardMonitor === clipboardMonitor
     }
 
     func scheduleAutoDismiss(after duration: Duration) {

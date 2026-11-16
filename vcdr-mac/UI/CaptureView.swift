@@ -23,8 +23,6 @@ struct CaptureView: View {
 
     private static let pillIconSize: CGFloat = 14
     private static let pillSpacing: CGFloat = 6
-    private static let captureBadgeSize: CGFloat = 12
-    private static let captureCountFontSize: CGFloat = 9
     private static let cursorContextIconSize: CGFloat = 10
     var body: some View {
         if viewModel.isMinimized {
@@ -47,10 +45,8 @@ struct CaptureView: View {
                     .font(.system(size: Self.pillIconSize))
                     .foregroundStyle(.secondary)
             case .recording:
-                captureBadge
                 AudioWaveformView(audioLevels: viewModel.audioRecorder?.audioLevels ?? [])
             case .processing:
-                captureBadge
                 AnimatedDotsView()
             case .error:
                 Image(systemName: "xmark")
@@ -70,7 +66,6 @@ struct CaptureView: View {
         .pillShape()
         .modifier(ShakeEffect(shakeCount: viewModel.feedbackCounters.rejectCount))
         .animation(.default, value: viewModel.feedbackCounters.rejectCount)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.feedbackCounters.clipboardCaptureCount)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onTapGesture {
             viewModel.onPillTapped()
@@ -94,23 +89,6 @@ struct CaptureView: View {
             return "Cursor context capture is active. The app will use surrounding text for smart formatting."
         } else {
             return "Cursor context capture is unavailable for this app. Smart formatting will use default behavior."
-        }
-    }
-
-    @ViewBuilder
-    private var captureBadge: some View {
-        if viewModel.feedbackCounters.clipboardCaptureCount > 0 {
-            HStack(spacing: 1) {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: Self.captureBadgeSize, weight: .medium))
-                    .foregroundStyle(.secondary)
-                if viewModel.feedbackCounters.clipboardCaptureCount > 1 {
-                    Text("×\(viewModel.feedbackCounters.clipboardCaptureCount)")
-                        .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .transition(.opacity)
         }
     }
 

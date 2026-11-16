@@ -26,7 +26,6 @@ final class FakeCapturePanel: CapturePanelSurface {
         case showPreview(text: String, modeName: String?)
         case setError(String)
         case setAIProcessingError(String)
-        case signalClipboardCapture
         case setSuspendedForModeSwitcher(Bool)
         case setCursorContextAvailable(Bool)
     }
@@ -96,10 +95,6 @@ final class FakeCapturePanel: CapturePanelSurface {
     func setAIProcessingError(_ message: String) {
         calls.append(.setAIProcessingError(message))
         lastAIErrorMessage = message
-    }
-
-    func signalClipboardCapture() {
-        calls.append(.signalClipboardCapture)
     }
 
     func setSuspendedForModeSwitcher(_ suspended: Bool) {

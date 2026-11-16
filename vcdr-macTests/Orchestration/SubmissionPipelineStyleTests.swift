@@ -12,7 +12,6 @@ struct SubmissionPipelineStyleTests {
         let context = SubmissionPipeline.Context(
             text: "Hello World. How Are You?",
             mode: Mode(id: UUID(), name: "Test", processingType: .none, showPreview: false),
-            captures: [],
             conversationID: UUID(),
             parameterValues: [:],
             variableEnvironment: [:],
@@ -34,7 +33,6 @@ struct SubmissionPipelineStyleTests {
         let context = SubmissionPipeline.Context(
             text: "hello world",
             mode: Mode(id: UUID(), name: "Test", processingType: .none, showPreview: false),
-            captures: [],
             conversationID: UUID(),
             parameterValues: [:],
             variableEnvironment: [:],
@@ -68,7 +66,6 @@ struct SubmissionPipelineStyleTests {
                 aiProvider: .anthropic,
                 showPreview: false
             ),
-            captures: [],
             conversationID: UUID(),
             parameterValues: [:],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
@@ -100,7 +97,6 @@ struct SubmissionPipelineStyleTests {
                 processingCommand: "echo -n \"$VCDR_TEXT\" | sed 's/<[^>]*>//g'",
                 showPreview: false
             ),
-            captures: [],
             conversationID: UUID(),
             parameterValues: [:],
             variableEnvironment: [:],

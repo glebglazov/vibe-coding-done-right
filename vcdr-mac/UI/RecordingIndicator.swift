@@ -20,15 +20,6 @@ final class IndicatorPhaseState {
     var errorMessage: String?
 }
 
-// MARK: - Indicator Capture State
-
-/// Tracks mid-recording clipboard captures for visual feedback (badge flash).
-@Observable
-@MainActor
-final class IndicatorCaptureState {
-    var captureCount: Int = 0
-}
-
 // MARK: - Panel
 
 @MainActor
@@ -51,7 +42,6 @@ final class RecordingIndicatorPanel {
 
     private var panel: NSPanel?
     private let phaseState = IndicatorPhaseState()
-    private let captureState = IndicatorCaptureState()
     private let settings: AppSettings
     private let overrides: SessionOverrides
     private let audioRecorder: AudioRecorder
@@ -71,7 +61,6 @@ final class RecordingIndicatorPanel {
     func show(topOffset: CGFloat = 0) {
         phaseState.phase = .recording
         phaseState.errorMessage = nil
-        captureState.captureCount = 0
         currentTopOffset = topOffset
 
         // Always recreate the panel — the existing one may be a CancelledIndicatorView
@@ -80,7 +69,6 @@ final class RecordingIndicatorPanel {
 
         let hostingView = NSHostingView(rootView: RecordingIndicatorView(
             phaseState: phaseState,
-            captureState: captureState,
             settings: settings,
             overrides: overrides,
             audioRecorder: audioRecorder
@@ -118,11 +106,6 @@ final class RecordingIndicatorPanel {
 
     var currentPhase: IndicatorPhase {
         phaseState.phase
-    }
-
-    /// Triggers a brief clipboard icon flash on the recording indicator
-    func signalClipboardCapture() {
-        captureState.captureCount += 1
     }
 
     func hide() {

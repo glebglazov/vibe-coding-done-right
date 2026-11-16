@@ -37,7 +37,6 @@ enum TextProcessingPipeline {
     static func run(
         mode: Mode,
         text: String,
-        captures: [CapturedContext],
         substitutions: [Substitution] = [],
         parameterValues: [String: String] = [:],
         variableEnvironment: [String: String] = [:],
@@ -50,7 +49,6 @@ enum TextProcessingPipeline {
         Logger.textTransform.info("Pipeline input: \"\(text)\"")
 
         // MARK: Substitution — first pass, all modes, dictated transcript only.
-        // Captures are never run through the matcher: they stay byte-exact.
         let substitutedText = SubstitutionMatcher(substitutions: substitutions).apply(to: text)
         if substitutedText != text {
             Logger.textTransform.info("After substitutions: \"\(substitutedText)\"")
@@ -69,15 +67,9 @@ enum TextProcessingPipeline {
         }
 
         // MARK: External processing — content processing
-        // Appended captures bypass the prompt because the LLM mutates or drops `<capture>` tags.
-        let appendCapturesAfterProcessing = mode.captureUse == .appendedToOutput
-            && mode.processingType != .none
-            && !captures.isEmpty
-        let capturesForPrompt = appendCapturesAfterProcessing ? [] : captures
         let spellingHints = SpellingHints(substitutions)
         let structured = structureInput(
             text: cleanedText,
-            captures: capturesForPrompt,
             mode: mode,
             cursorContext: cursorContext
         )
@@ -102,9 +94,8 @@ enum TextProcessingPipeline {
                 result = PipelineResult(text: processedText, hadExternalProcessing: true, aiProcessingFallback: nil)
             } catch {
                 Logger.app.warning("AI processing failed, falling back to raw text: \(error)")
-                let fallbackText = structureInputPlaintext(text: cleanedText, captures: captures)
                 result = PipelineResult(
-                    text: fallbackText,
+                    text: cleanedText,
                     hadExternalProcessing: false,
                     aiProcessingFallback: AIProcessingFallback(
                         structuredText: structured,
@@ -149,22 +140,10 @@ enum TextProcessingPipeline {
             Logger.textTransform.debug("Style transform: skipped (mode.appliesStyles=false)")
         }
 
-        // Captures are appended verbatim after style transform so the AI text is styled
-        // but capture content stays byte-exact. Sentinel result is returned untouched above.
-        // Skip when external processing didn't happen — the AI-failure fallback already
-        // re-includes captures via `structureInputPlaintext`.
-        let finalText: String
-        if appendCapturesAfterProcessing && result.hadExternalProcessing {
-            finalText = styledText + "\n\n" + Mode.formatCaptures(captures)
-            Logger.textTransform.info("Appended \(captures.count) capture(s) to output")
-        } else {
-            finalText = styledText
-        }
-
-        Logger.textTransform.info("Pipeline final output: \"\(finalText)\"")
+        Logger.textTransform.info("Pipeline final output: \"\(styledText)\"")
 
         return PipelineResult(
-            text: finalText,
+            text: styledText,
             hadExternalProcessing: result.hadExternalProcessing,
             aiProcessingFallback: result.aiProcessingFallback
         )
@@ -177,44 +156,27 @@ enum TextProcessingPipeline {
     /// A Bash Script gets no Spelling Hints: it is not known to call an LLM.
     private static func structureInput(
         text: String,
-        captures: [CapturedContext],
         mode: Mode,
         cursorContext: CursorContext?
     ) -> String {
         switch mode.processingType {
         case .none:
-            return structureInputPlaintext(text: text, captures: captures)
+            return text
         case .cloudAI:
             // Cloud AI: XML structure WITHOUT system prompt in the text
             // (system prompt is sent as a separate API parameter)
-            return structureInputXML(text: text, captures: captures, systemPrompt: nil, cursorContext: cursorContext)
+            return structureInputXML(text: text, systemPrompt: nil, cursorContext: cursorContext)
         case .bashScript:
             let prompt = (mode.systemPromptEnabled && !mode.systemPrompt.isEmpty)
                 ? mode.systemPrompt : nil
-            return structureInputXML(text: text, captures: captures, systemPrompt: prompt, cursorContext: cursorContext)
+            return structureInputXML(text: text, systemPrompt: prompt, cursorContext: cursorContext)
         }
     }
 
-    /// Plaintext input structuring for .none — messenger-style quoted captures.
-    /// Output goes directly to human-readable destinations (messengers, text fields).
-    private static func structureInputPlaintext(
-        text: String,
-        captures: [CapturedContext]
-    ) -> String {
-        guard !captures.isEmpty else { return text }
-        let quoted = captures.map { capture in
-            capture.text.components(separatedBy: .newlines)
-                .map { "> \($0)" }
-                .joined(separator: "\n")
-        }.joined(separator: "\n\n")
-        return text + "\n\n" + quoted
-    }
-
     /// XML input structuring for .cloudAI/.bashScript — <dictation> wrapping,
-    /// optional system prompt, cursor context, and XML capture tags for machine-parseable input.
+    /// optional system prompt and cursor context.
     private static func structureInputXML(
         text: String,
-        captures: [CapturedContext],
         systemPrompt: String?,
         cursorContext: CursorContext?
     ) -> String {
@@ -231,9 +193,6 @@ enum TextProcessingPipeline {
 
         if let prompt = systemPrompt, !prompt.isEmpty {
             result = prompt + "\n\n" + result
-        }
-        if !captures.isEmpty {
-            result += "\n\n" + Mode.formatCaptures(captures)
         }
         return result
     }

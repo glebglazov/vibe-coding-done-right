@@ -10,10 +10,6 @@ struct DiscardedCapture: Sendable {
     let provider: any TranscriptionProvider
     let transcriptionSettings: TranscriptionModelSettings
     let spellingHints: SpellingHints
-    /// The clipboard captures taken while recording, when the Mode uses captures.
-    let captures: [CapturedContext]
-    /// The selection capture, still running when the user discarded early.
-    let pendingSelection: Task<CapturedContext?, Never>?
     let choice: RecordedOutputChoice
 }
 
@@ -101,13 +97,9 @@ final class VerbatimDiscardedCaptureFinalizer: DiscardedCaptureFinalizer {
             return .nothingSaved
         }
 
-        var captures = capture.captures
-        if let selection = await capture.pendingSelection?.value {
-            captures.insert(selection, at: 0)
-        }
         history.recordDiscarded(
             conversationID: capture.conversationID,
-            inputSegments: CaptureSession.makeSegments(text: text, captures: captures),
+            inputSegments: [InputSegment(text: text)],
             choice: capture.choice
         )
         Logger.app.info("Discarded recording saved to History")

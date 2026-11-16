@@ -43,7 +43,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "test dictation",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: context
@@ -70,7 +69,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "test dictation",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: nil
@@ -104,7 +102,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "middle",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: context
@@ -135,7 +132,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "dictation",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: context
@@ -166,7 +162,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "dictation",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: context
@@ -197,7 +192,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "dictation",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: context
@@ -231,7 +225,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "test",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: context
@@ -261,7 +254,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "test",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: context
@@ -291,7 +283,6 @@ struct TextProcessingPipelineCursorContextTests {
         _ = try? await TextProcessingPipeline.run(
             mode: mode,
             text: "middle",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: mockAI,
             cursorContext: context
@@ -324,7 +315,6 @@ struct TextProcessingPipelineCursorContextTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "test",
-            captures: [],
             cursorContext: context
         )
 
@@ -348,7 +338,6 @@ struct TextProcessingPipelineCursorContextTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "test",
-            captures: [],
             cursorContext: nil
         )
 
@@ -357,44 +346,4 @@ struct TextProcessingPipelineCursorContextTests {
     }
 
     // MARK: - Combined with Captures Tests
-
-    @Test("Cursor context appears before dictation when captures are present")
-    func cursorContextBeforeDictationWithCaptures() async throws {
-        let mockAI = CapturingMockAI()
-        let mode = Mode(
-            id: UUID(),
-            name: "AI",
-            processingType: .cloudAI,
-            aiProvider: .anthropic,
-            showPreview: false
-        )
-        let context = CursorContext(
-            beforeText: "Context",
-            afterText: nil,
-            sourceBundleID: "com.test.app"
-        )
-        let capture = CapturedContext(text: "captured text", source: .selection)
-
-        _ = try? await TextProcessingPipeline.run(
-            mode: mode,
-            text: "dictation",
-            captures: [capture],
-            variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
-            aiPort: mockAI,
-            cursorContext: context
-        )
-
-        let captured = try #require(mockAI.capturedText)
-        // Verify order: cursor_context, then dictation, then captures
-        let cursorRange = captured.range(of: "<cursor_context>")
-        let dictationRange = captured.range(of: "<dictation>")
-        let captureRange = captured.range(of: "<capture")
-
-        let cursorIndex = cursorRange?.lowerBound.utf16Offset(in: captured)
-        let dictationIndex = dictationRange?.lowerBound.utf16Offset(in: captured)
-        let captureIndex = captureRange?.lowerBound.utf16Offset(in: captured)
-
-        #expect(cursorIndex! < dictationIndex!)
-        #expect(dictationIndex! < captureIndex!)
-    }
 }

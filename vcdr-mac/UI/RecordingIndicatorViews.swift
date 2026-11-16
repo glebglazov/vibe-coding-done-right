@@ -140,11 +140,8 @@ struct RecordingIndicatorView: View {
     private static let errorPillVPadding: CGFloat = 3
     private static let errorPillCornerRadius: CGFloat = 6
     private static let errorPillFontSize: CGFloat = 11
-    private static let captureBadgeSize: CGFloat = 12
-    private static let captureCountFontSize: CGFloat = 9
 
     let phaseState: IndicatorPhaseState
-    let captureState: IndicatorCaptureState
     let settings: AppSettings
     let overrides: SessionOverrides
     let audioRecorder: AudioRecorder
@@ -154,20 +151,6 @@ struct RecordingIndicatorView: View {
             HStack(spacing: Self.pillSpacing) {
                 switch phaseState.phase {
                 case .recording:
-                    if captureState.captureCount > 0 {
-                        HStack(spacing: 1) {
-                            Image(systemName: "doc.on.clipboard")
-                                .font(.system(size: Self.captureBadgeSize, weight: .medium))
-                                .foregroundStyle(.secondary)
-                            if captureState.captureCount > 1 {
-                                Text("×\(captureState.captureCount)")
-                                    .font(.system(size: Self.captureCountFontSize, weight: .medium).monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .transition(.opacity)
-                    }
-
                     AudioWaveformView(audioLevels: audioRecorder.audioLevels)
                         .transition(.opacity)
 
@@ -223,6 +206,5 @@ struct RecordingIndicatorView: View {
         .modifier(ShakeEffect(shakeCount: phaseState.rejectCount))
         .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: phaseState.phase)
         .animation(.default, value: phaseState.rejectCount)
-        .animation(.easeInOut(duration: Self.phaseTransitionDuration), value: captureState.captureCount)
     }
 }

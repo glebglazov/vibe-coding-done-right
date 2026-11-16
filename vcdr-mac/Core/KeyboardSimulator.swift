@@ -1,11 +1,6 @@
 import ApplicationServices
 
 enum KeyboardSimulator {
-    /// Simulates Cmd+C via CGEvent posted to the HID event tap.
-    static func simulateCmdC() {
-        simulateCommandKeystroke(keyCode: KeyCodeMap.cKeyCode)
-    }
-
     /// Simulates Cmd+V via CGEvent posted to the HID event tap.
     static func simulateCmdV() {
         simulateCommandKeystroke(keyCode: KeyCodeMap.vKeyCode)

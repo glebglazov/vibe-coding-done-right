@@ -3,7 +3,7 @@ import Foundation
 /// Lets one transcription decode at a time. A run and a discarded recording
 /// can both want to decode at once, and two decodes together on the shared
 /// CoreML models are unproven. Only the decode takes a turn: a wait for a
-/// model to download, or for a selection capture, happens before or after it,
+/// model to download, or for the Cursor Context read, happens before or after it,
 /// so it never holds up the other side.
 @MainActor
 final class DecodeTurnstile {

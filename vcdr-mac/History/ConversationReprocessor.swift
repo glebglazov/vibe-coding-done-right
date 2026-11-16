@@ -78,11 +78,9 @@ final class PipelineConversationReprocessor: ConversationReprocessor {
         style: Style,
         conversationID: UUID
     ) async throws -> String {
-        let captures = mode.usesCaptures ? segments.compactMap(\.capture) : []
         let context = SubmissionPipeline.Context(
             text: segments.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n"),
             mode: mode,
-            captures: captures,
             substitutions: substitutionStore.substitutions,
             conversationID: conversationID,
             parameterValues: Self.defaultParameterValues(for: mode),

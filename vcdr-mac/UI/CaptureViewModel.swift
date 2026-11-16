@@ -23,7 +23,6 @@ final class CaptureViewModel {
     }
 
     struct FeedbackCounters {
-        var clipboardCaptureCount: Int = 0
         var rejectCount: Int = 0
     }
 

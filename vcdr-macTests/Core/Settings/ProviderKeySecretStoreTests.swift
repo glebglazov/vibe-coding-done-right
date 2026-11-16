@@ -112,7 +112,6 @@ struct ProviderKeySecretStoreTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "hello",
-            captures: [],
             aiAPIKey: settings.storedAPIKey(for: .anthropic),
             aiPort: UnreachableAIProcessing(),
             style: .casual

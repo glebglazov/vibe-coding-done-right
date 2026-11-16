@@ -45,7 +45,6 @@ protocol CapturePanelSurface: AnyObject {
     func showPreview(text: String, modeName: String?)
     func setError(_ message: String)
     func setAIProcessingError(_ message: String)
-    func signalClipboardCapture()
     func setSuspendedForModeSwitcher(_ suspended: Bool)
     func setCursorContextAvailable(_ available: Bool)
 
@@ -131,10 +130,6 @@ final class CapturePanelAdapter: CapturePanelSurface {
         // The view model may have been (re)built by setAIProcessingError's internal path;
         // rewire the retry callback so the user's "Retry" tap reaches the session.
         panel.viewModel?.onRetryAIProcessing = { [weak self] in self?.onRetryAIProcessing?() }
-    }
-
-    func signalClipboardCapture() {
-        panel.signalClipboardCapture()
     }
 
     func setSuspendedForModeSwitcher(_ suspended: Bool) {

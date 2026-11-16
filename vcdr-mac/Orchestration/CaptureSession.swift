@@ -126,8 +126,7 @@ final class CaptureSession {
         let hotkeyRegistry: any HotkeyRegistry
         let audio: AudioRecorder
         let media: MediaPlaybackController
-        let selectionCapturer: SelectionCapturer
-        let makeClipboardMonitor: @MainActor @Sendable () -> ClipboardMonitor
+        let cursorContextReader: CursorContextReader
         let indicator: RecordingIndicatorPanel
         let panel: any CapturePanelSurface
         let textProcessor: TextProcessor
@@ -182,8 +181,7 @@ final class CaptureSession {
     let hotkeyRegistry: any HotkeyRegistry
     let audio: AudioRecorder
     let media: MediaPlaybackController
-    let selectionCapturer: SelectionCapturer
-    let makeClipboardMonitor: @MainActor @Sendable () -> ClipboardMonitor
+    let cursorContextReader: CursorContextReader
     let indicator: RecordingIndicatorPanel
     let panel: any CapturePanelSurface
     let textProcessor: TextProcessor
@@ -225,11 +223,10 @@ final class CaptureSession {
     // MARK: - Per-run state (cleared on terminal transitions)
 
     struct RunState {
-        let clipboardMonitor: ClipboardMonitor
         var previousActiveApp: NSRunningApplication?
-        var captureTask: Task<CapturedContext?, Never>?
+        /// The Cursor Context read, which finishes after recording starts.
+        var cursorContextTask: Task<Void, Never>?
         var cursorContext: CursorContext?
-        var captures: [CapturedContext] = []
         var destinationOverrideID: UUID?
         var hadDestinationOverride: Bool = false
         var conversationID: UUID = UUID()
@@ -277,8 +274,7 @@ final class CaptureSession {
         self.hotkeyRegistry = deps.hotkeyRegistry
         self.audio = deps.audio
         self.media = deps.media
-        self.selectionCapturer = deps.selectionCapturer
-        self.makeClipboardMonitor = deps.makeClipboardMonitor
+        self.cursorContextReader = deps.cursorContextReader
         self.indicator = deps.indicator
         self.panel = deps.panel
         self.textProcessor = deps.textProcessor

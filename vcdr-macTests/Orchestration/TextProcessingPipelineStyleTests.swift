@@ -22,7 +22,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
-            captures: [],
             style: .casual
         )
 
@@ -44,7 +43,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
-            captures: [],
             style: .formal
         )
 
@@ -69,7 +67,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
-            captures: [],
             variableEnvironment: [:],
             style: .casual
         )
@@ -101,7 +98,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: MockAI(),
             style: .casual
@@ -132,7 +128,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: MockAI(),
             style: .formal
@@ -158,7 +153,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
-            captures: [],
             removeFillerWords: true,
             style: .casual
         )
@@ -181,8 +175,7 @@ struct TextProcessingPipelineStyleTests {
 
         let result = try await TextProcessingPipeline.run(
             mode: mode,
-            text: text,
-            captures: []
+            text: text
         )
 
         // Default (casual) style: lowercase start, preserve internal caps, no final period, trailing space
@@ -205,7 +198,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
-            captures: [],
             style: .casual
         )
 
@@ -227,7 +219,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: text,
-            captures: [],
             style: .formal
         )
 
@@ -255,7 +246,6 @@ struct TextProcessingPipelineStyleTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "test",
-            captures: [],
             variableEnvironment: ["ANTHROPIC_API_KEY": "test-key"],
             aiPort: MockAI(),
             style: .formal

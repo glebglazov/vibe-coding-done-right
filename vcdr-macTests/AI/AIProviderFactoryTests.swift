@@ -72,7 +72,6 @@ struct AIProviderFactoryTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "Hello world",
-            captures: [],
             aiAPIKey: .stored("secret-key"),
             aiPort: TimedOutAIProcessing(),
             style: .casual
@@ -95,7 +94,6 @@ struct AIProviderFactoryTests {
         _ = try await TextProcessingPipeline.run(
             mode: mode,
             text: "hi",
-            captures: [],
             // A bash-only Variable value must never reach the AI call.
             variableEnvironment: ["ANTHROPIC_API_KEY": "bash-only"],
             aiAPIKey: .stored("provider-key"),

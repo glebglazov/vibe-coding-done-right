@@ -9,7 +9,6 @@ enum SubmissionPipeline {
     struct Context {
         let text: String
         let mode: Mode
-        let captures: [CapturedContext]
         /// Substitutions applied to the dictated transcript as the pipeline's first step.
         let substitutions: [Substitution]
         let conversationID: UUID
@@ -30,7 +29,6 @@ enum SubmissionPipeline {
         init(
             text: String,
             mode: Mode,
-            captures: [CapturedContext],
             substitutions: [Substitution] = [],
             conversationID: UUID,
             parameterValues: [String: String],
@@ -45,7 +43,6 @@ enum SubmissionPipeline {
         ) {
             self.text = text
             self.mode = mode
-            self.captures = captures
             self.substitutions = substitutions
             self.conversationID = conversationID
             self.parameterValues = parameterValues
@@ -100,7 +97,6 @@ enum SubmissionPipeline {
         let pipelineResult = try await TextProcessingPipeline.run(
             mode: context.mode,
             text: context.text,
-            captures: context.captures,
             substitutions: context.substitutions,
             parameterValues: context.parameterValues,
             variableEnvironment: context.variableEnvironment,

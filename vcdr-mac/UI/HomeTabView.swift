@@ -41,7 +41,7 @@ struct HomeTabView: View {
                             .controlSize(.small)
                         } label: {
                             Text("Accessibility")
-                            Text("Required to paste transcribed text into active apps.")
+                            Text("Required to paste transcribed text into active apps and to read the text around the cursor.")
                         }
                     }
                 } header: {

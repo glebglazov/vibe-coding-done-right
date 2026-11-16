@@ -4,7 +4,7 @@ import Foundation
 /// The Accessibility grant, as the code that needs it sees it: whether the
 /// process has it, and the app's one request for it.
 ///
-/// Nothing asks at launch. The grant buys pasting and reading the selection —
+/// Nothing asks at launch. The grant buys pasting and reading the text around the cursor —
 /// hotkeys need none of it — so the ask belongs to the first paste that finds the
 /// process untrusted, where the user can see what it is for.
 ///

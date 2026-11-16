@@ -38,8 +38,6 @@ extension CaptureSession {
             provider: resolveTranscription(effective.model),
             transcriptionSettings: effective.settings,
             spellingHints: SpellingHints(substitutionStore.substitutions),
-            captures: mode.usesCaptures ? runState.captures : [],
-            pendingSelection: mode.usesCaptures ? runState.captureTask : nil,
             choice: recordedOutputChoice(for: mode)
         )
         let finalization = discardedCaptures.finalize(capture)

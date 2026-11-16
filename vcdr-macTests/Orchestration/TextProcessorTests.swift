@@ -47,7 +47,6 @@ private func makeInput(
     return TranscriptionInput(
         text: text,
         mode: m,
-        captures: [],
         conversationID: UUID(),
         destination: destination,
         targetAppPID: nil,

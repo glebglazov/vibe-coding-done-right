@@ -9,7 +9,6 @@ import OSLog
 struct TranscriptionInput: Sendable {
     let text: String
     let mode: Mode
-    let captures: [CapturedContext]
     let conversationID: UUID
     let destination: OutputDestination
     let targetAppPID: pid_t?
@@ -32,7 +31,6 @@ struct TranscriptionInput: Sendable {
     init(
         text: String,
         mode: Mode,
-        captures: [CapturedContext],
         conversationID: UUID,
         destination: OutputDestination,
         targetAppPID: pid_t?,
@@ -49,7 +47,6 @@ struct TranscriptionInput: Sendable {
     ) {
         self.text = text
         self.mode = mode
-        self.captures = captures
         self.conversationID = conversationID
         self.destination = destination
         self.targetAppPID = targetAppPID
@@ -315,7 +312,6 @@ final class TextProcessor {
         SubmissionPipeline.Context(
             text: input.text,
             mode: input.mode,
-            captures: input.captures,
             substitutions: input.substitutions,
             conversationID: input.conversationID,
             parameterValues: input.parameterValues,
@@ -357,7 +353,6 @@ extension TranscriptionInput {
         TranscriptionInput(
             text: text,
             mode: mode,
-            captures: captures,
             conversationID: conversationID,
             destination: destination,
             targetAppPID: targetAppPID,

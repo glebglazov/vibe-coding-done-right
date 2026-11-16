@@ -165,10 +165,6 @@ final class CapturePanel {
         }
     }
 
-    func signalClipboardCapture() {
-        viewModel?.feedbackCounters.clipboardCaptureCount += 1
-    }
-
     // MARK: - Panel Resize
 
     private func resizePanelToMinimized() {

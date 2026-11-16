@@ -23,7 +23,6 @@ struct TextProcessingPipelineSubstitutionTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "I said oh my zsh today",
-            captures: [],
             substitutions: Self.substitutions,
             style: .casual
         )
@@ -41,7 +40,6 @@ struct TextProcessingPipelineSubstitutionTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "oh my zsh",
-            captures: [],
             substitutions: disabled,
             style: .casual
         )
@@ -50,20 +48,16 @@ struct TextProcessingPipelineSubstitutionTests {
         #expect(!result.text.contains("oh my gosh"))
     }
 
-    // MARK: - Cloud AI: flows into prompt, Captures untouched
+    // MARK: - Cloud AI: flows into prompt
 
-    @Test("Substitution flows into the AI prompt and leaves Captures byte-exact")
-    func appliesInCloudAIAndSpareCaptures() async throws {
+    @Test("Substitution flows into the AI prompt")
+    func appliesInCloudAI() async throws {
         let mode = Mode(id: UUID(), name: "AI", processingType: .cloudAI, showPreview: false)
-        // The Capture text deliberately contains the Trigger Phrase: it must NOT
-        // be rewritten, proving substitution touches the transcript only.
-        let captures = [CapturedContext(text: "literally oh my zsh", source: .selection)]
         let scripted = ScriptedAIProcessing(results: [.success("done")])
 
         _ = try await TextProcessingPipeline.run(
             mode: mode,
             text: "please oh my zsh it",
-            captures: captures,
             substitutions: Self.substitutions,
             aiPort: scripted,
             style: .casual
@@ -73,8 +67,6 @@ struct TextProcessingPipelineSubstitutionTests {
         let prompt = try #require(calls.first).structuredText
         // Dictation portion was substituted before it reached the AI.
         #expect(prompt.contains("<dictation>please oh my gosh it</dictation>"))
-        // Capture portion is preserved verbatim — the matcher never ran on it.
-        #expect(prompt.contains("literally oh my zsh"))
     }
 
     // MARK: - Bash script (external processing)
@@ -94,7 +86,6 @@ struct TextProcessingPipelineSubstitutionTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "ran oh my zsh here",
-            captures: [],
             substitutions: Self.substitutions,
             style: .casual
         )
@@ -116,7 +107,6 @@ struct TextProcessingPipelineSubstitutionTests {
         let result = try await TextProcessingPipeline.run(
             mode: mode,
             text: "intro now",
-            captures: [],
             substitutions: subs,
             removeFillerWords: true,
             style: .casual

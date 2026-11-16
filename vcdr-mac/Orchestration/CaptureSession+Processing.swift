@@ -6,7 +6,7 @@ extension CaptureSession {
 
     // MARK: - Transcription
 
-    /// Transcribes the recorded audio, merges captures, runs the pipeline via TextProcessor,
+    /// Transcribes the recorded audio, runs the pipeline via TextProcessor,
     /// and maps the resulting disposition to UI transitions. Cancellation-aware at every await.
     func processTranscription(audioURL: URL) async {
         do {
@@ -43,16 +43,9 @@ extension CaptureSession {
 
             try? FileManager.default.removeItem(at: audioURL)
 
-            // Absorb the selection capture task's result into the run's captures list.
-            var runState = run ?? RunState(clipboardMonitor: makeClipboardMonitor())
-            if let captureTask = runState.captureTask {
-                if let captured = await captureTask.value {
-                    runState.captures.insert(captured, at: 0)
-                }
-                runState.captureTask = nil
-            }
-            await runState.clipboardMonitor.stop()
-            Logger.recording.info("Captures: \(runState.captures.count) items")
+            // The run state is read after the Cursor Context read has stored its result.
+            await run?.cursorContextTask?.value
+            var runState = run ?? RunState()
 
             // Consume a destination override smuggled in by the destination hotkey.
             if let override = runState.destinationOverrideID {
@@ -311,13 +304,10 @@ extension CaptureSession {
     ) -> TranscriptionInput {
         let destinationID = overrides.resolvedDestinationID(for: mode)
         let destination = settings.outputDestination(for: destinationID)
-        let captures = mode.usesCaptures ? runState.captures : []
-        let segments = Self.makeSegments(text: text, captures: captures)
         let effectiveStyle = styleProvider()
         return TranscriptionInput(
             text: text,
             mode: mode,
-            captures: captures,
             conversationID: runState.conversationID,
             destination: destination,
             targetAppPID: runState.previousActiveApp?.processIdentifier,
@@ -325,23 +315,12 @@ extension CaptureSession {
             parameterValues: overrides.resolvedParameterValues(for: mode),
             variableEnvironment: settings.variableEnvironment,
             aiAPIKey: settings.storedAPIKey(for: mode.aiProvider),
-            inputSegments: segments,
+            inputSegments: [InputSegment(text: text)],
             hadDestinationOverride: runState.hadDestinationOverride,
             removeFillerWords: settings.removeFillerWords,
             style: effectiveStyle,
             saveResultToClipboard: mode.saveResultToClipboard,
             substitutions: substitutionStore.substitutions
         )
-    }
-
-    static func makeSegments(text: String, captures: [CapturedContext]) -> [InputSegment] {
-        guard let first = captures.first else {
-            return [InputSegment(text: text)]
-        }
-        var result = [InputSegment(text: text, capture: first)]
-        for capture in captures.dropFirst() {
-            result.append(InputSegment(capture: capture))
-        }
-        return result
     }
 }

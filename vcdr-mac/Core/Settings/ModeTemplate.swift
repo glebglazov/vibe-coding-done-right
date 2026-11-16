@@ -17,7 +17,6 @@ struct ModeTemplate {
     let showPreview: Bool
     let appliesStyles: Bool
     let contextAware: Bool
-    let capturePolicy: CapturePolicy
 
     func makeMode() -> Mode {
         Mode(
@@ -35,8 +34,7 @@ struct ModeTemplate {
             parameters: parameters,
             showPreview: showPreview,
             appliesStyles: appliesStyles,
-            contextAware: contextAware,
-            chosenCaptureUse: capturePolicy.initialUse
+            contextAware: contextAware
         )
     }
 
@@ -54,7 +52,6 @@ struct ModeTemplate {
         mode.showPreview = showPreview
         mode.appliesStyles = appliesStyles
         mode.contextAware = contextAware
-        mode.captureUse = capturePolicy.initialUse
     }
 
     static let legacyTemplateIDs: [String: String] = ["dictation": "plain"]
@@ -82,8 +79,7 @@ extension ModeTemplate {
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
         appliesStyles: true,
-        contextAware: false,
-        capturePolicy: .fixed(.ignored)
+        contextAware: false
     )
 
     static let aiDictation = ModeTemplate(
@@ -100,8 +96,7 @@ extension ModeTemplate {
         defaultOutputDestinationID: OutputDestination.builtInPasteID,
         showPreview: false,
         appliesStyles: true,
-        contextAware: false,
-        capturePolicy: .fixed(.ignored)
+        contextAware: false
     )
 
     static let all: [ModeTemplate] = [.plain, .aiDictation]
