@@ -17,57 +17,36 @@ nonisolated enum TranscriptionModelRoot {
         FileHistoryStore.localStorageRoot.appendingPathComponent("models", isDirectory: true)
     }
 
-    /// The directory inside the root that holds this model's files, having
-    /// moved `existingDownload` into it when that is still where the SDK left
-    /// it. Someone who already ran an older build keeps the 461 MB they paid
-    /// for rather than fetching it a second time.
-    ///
-    /// Resolving is the whole migration: the filesystem is what remembers it
-    /// happened, so a second launch finds nothing at the older path and says
-    /// nothing, and a device that never downloaded falls through to a normal
-    /// download into the returned directory.
-    ///
-    /// The SDK's own folder name is kept, because `AsrModels` recomputes the
-    /// repo path from the parent directory and would not find files under any
-    /// other name. When an SDK update renames that folder, `folderName` is the
-    /// new name, and the older download is moved under it so the SDK fetches
-    /// only the files the new release adds.
-    static func adopting(
-        _ existingDownload: URL,
-        renamedTo folderName: String? = nil,
-        into root: URL = url
-    ) -> URL {
-        let fm = FileManager.default
-        let destination = directory(named: folderName ?? existingDownload.lastPathComponent, in: root)
-
-        do {
-            try fm.createDirectory(at: root, withIntermediateDirectories: true)
-        } catch {
-            Logger.transcription.error("Could not create the model root at \(root.path): \(error)")
-            return destination
+    /// Deletes the folders of the models `model` replaced, once `model` has
+    /// loaded. This is the one delete the app does without a remove command:
+    /// the person never chose the replaced model, so nothing else would ever
+    /// give its space back. A folder already gone is the end state, so a second
+    /// call does nothing. Only names directly inside `root` are touched.
+    static func removeDownloads(replacedBy model: TranscriptionModel, in root: URL = url) {
+        for folderName in folderNamesReplaced(by: model) {
+            let folder = directory(named: folderName, in: root)
+            guard FileManager.default.fileExists(atPath: folder.path) else { continue }
+            do {
+                try TranscriptionModelFiles(directory: folder).remove()
+                Logger.transcription.info("Removed \(folder.path), which \(model.displayName) replaced")
+            } catch {
+                Logger.transcription.error("Could not remove \(folder.path): \(error)")
+            }
         }
+    }
 
-        // The root is authoritative once it holds the model. An older build run
-        // since the move would have refilled the SDK's cache, and that copy is
-        // left where it is rather than deleted to tidy up after a downgrade.
-        guard !fm.fileExists(atPath: destination.path),
-              fm.fileExists(atPath: existingDownload.path)
-        else { return destination }
-
-        do {
-            try fm.moveItem(at: existingDownload, to: destination)
-            Logger.transcription.info("Moved \(existingDownload.path) into the model root at \(destination.path)")
-        } catch {
-            // A download into the returned directory is the fallback, which is
-            // what a device without the older copy does anyway.
-            Logger.transcription.error("Could not move \(existingDownload.path) to \(destination.path): \(error)")
+    /// The folders Parakeet v3 was kept in: `parakeet-tdt-0.6b-v3` from
+    /// FluidAudio 0.18, and `parakeet-tdt-0.6b-v3-coreml` from builds on 0.12
+    /// that were never run on 0.18.
+    private static func folderNamesReplaced(by model: TranscriptionModel) -> [String] {
+        switch model {
+        case .parakeetUltra: ["parakeet-tdt-0.6b-v3", "parakeet-tdt-0.6b-v3-coreml"]
+        case .whisperTiny, .whisperBase, .whisperSmall, .whisperMedium, .whisperLargeV3, .whisperLargeV3Turbo: []
         }
-        return destination
     }
 
     /// The directory inside the root that holds the model whose files an SDK
-    /// names `folderName`. The Library asks this to size and delete an install
-    /// without running the migration `adopting(_:renamedTo:into:)` performs.
+    /// names `folderName`.
     static func directory(named folderName: String, in root: URL = url) -> URL {
         root.appendingPathComponent(folderName, isDirectory: true)
     }

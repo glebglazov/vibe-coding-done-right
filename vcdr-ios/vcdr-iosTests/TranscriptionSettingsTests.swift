@@ -54,7 +54,11 @@ struct TranscriptionSettingsTests {
         }
 
         standard.removeObject(forKey: key)
-        #expect(TranscriptionSettings.defaultModel == .parakeetV3)
+        #expect(TranscriptionSettings.defaultModel == .parakeetUltra)
+
+        // What a build before Parakeet Ultra stored.
+        standard.set("parakeet-v3", forKey: key)
+        #expect(TranscriptionSettings.defaultModel == .parakeetUltra)
 
         standard.set(TranscriptionModel.whisperLargeV3Turbo.rawValue, forKey: key)
         #expect(TranscriptionSettings.defaultModel == .whisperLargeV3Turbo)
@@ -102,7 +106,7 @@ struct TranscriptionSettingsTests {
         // A mode that pins nothing takes the Default and the Default family's
         // own settings, untouched by the mode next to it.
         let aiOff = TranscriptionSettings.effectiveTranscription(for: .verbatim)
-        #expect(aiOff.model == .parakeetV3)
+        #expect(aiOff.model == .parakeetUltra)
         #expect(aiOff.settings == .default)
 
         override[.whisper].clear(.languageHint)

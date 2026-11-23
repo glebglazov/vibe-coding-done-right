@@ -12,14 +12,14 @@ final class TranscriptionProviderRegistry {
     /// which is the order someone hunting for one their phone keeps up with
     /// reads in. Not derived from `TranscriptionModel`'s cases: a case existing
     /// is not a claim that this platform has a provider for it.
-    static let offeredModels: [TranscriptionModel] = [.parakeetV3] + WhisperCheckpoint.allCases.map(\.model)
+    static let offeredModels: [TranscriptionModel] = [.parakeetUltra] + WhisperCheckpoint.allCases.map(\.model)
 
     private var providers: [TranscriptionModel: any StreamingTranscriptionProvider] = [:]
 
     func provider(for model: TranscriptionModel) -> any StreamingTranscriptionProvider {
         if let resident = providers[model] { return resident }
         let provider: any StreamingTranscriptionProvider = switch model {
-        case .parakeetV3: ParakeetProvider()
+        case .parakeetUltra: ParakeetProvider()
         case .whisperTiny: WhisperProvider(checkpoint: .tiny)
         case .whisperBase: WhisperProvider(checkpoint: .base)
         case .whisperSmall: WhisperProvider(checkpoint: .small)

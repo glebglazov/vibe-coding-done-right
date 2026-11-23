@@ -326,7 +326,7 @@ private final class Env {
             presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
-            transcriptionProvider: ParakeetProvider(),
+            transcriptionProvider: ParakeetProvider.inScratchModelRoot(),
             backgroundTasks: backgroundTasks,
             discardedRunFinalizer: HistoryDiscardedRunFinalizer(history: history, backgroundTasks: backgroundTasks),
             makeStreamingSession: makeSession

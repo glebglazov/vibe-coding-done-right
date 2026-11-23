@@ -28,7 +28,7 @@ struct TranscriptionModelSettingsTests {
 
         // Parakeet accepts neither, and is told neither: the settings a run
         // carries are the running model's own, not the ones last configured.
-        env.settings.transcriptionSettings.defaultModel = .parakeetV3
+        env.settings.transcriptionSettings.defaultModel = .parakeetUltra
         await record(with: env)
         #expect(await env.mockProvider.receivedSettings == TranscriptionModelSettings.default)
     }
@@ -121,7 +121,7 @@ struct TranscriptionModelSettingsTests {
 
         settings.transcriptionSettings.modelSettings[.whisper] = configured
         settings.transcriptionSettings.defaultModel = .whisperLargeV3Turbo
-        settings.transcriptionSettings.defaultModel = .parakeetV3
+        settings.transcriptionSettings.defaultModel = .parakeetUltra
 
         // Parakeet being the Default gives it nothing of Whisper's.
         #expect(settings.transcriptionSettings.modelSettings[.parakeet] == .default)

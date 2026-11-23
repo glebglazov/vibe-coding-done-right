@@ -15,8 +15,8 @@ struct TranscriptionLibraryTests {
         await env.library.refresh()
 
         #expect(env.library.entries.map(\.model) == TranscriptionProviderRegistry.offeredModels)
-        #expect(env.state(of: .parakeetV3) == .installed(bytes: 2048))
-        #expect(env.state(of: .parakeetV3)?.label(for: .parakeetV3).localizedCaseInsensitiveContains("2 kb") == true)
+        #expect(env.state(of: .parakeetUltra) == .installed(bytes: 2048))
+        #expect(env.state(of: .parakeetUltra)?.label(for: .parakeetUltra).localizedCaseInsensitiveContains("2 kb") == true)
         #expect(env.state(of: .whisperTiny) == .notInstalled)
     }
 
@@ -39,7 +39,7 @@ struct TranscriptionLibraryTests {
         // downloading, which is the elapsed wait rather than a percentage.
         await env.parakeet.beginDownload()
         #expect(await waitFor {
-            guard case .downloading(let progress) = env.state(of: .parakeetV3) else { return false }
+            guard case .downloading(let progress) = env.state(of: .parakeetUltra) else { return false }
             return progress.fraction == nil && progress.label.hasPrefix("Downloading model")
         })
 
@@ -77,12 +77,12 @@ struct TranscriptionLibraryTests {
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.library.refresh()
         // The Default names Parakeet, and this phone does not have it.
-        #expect(TranscriptionSettings.defaultModel == .parakeetV3)
-        #expect(env.state(of: .parakeetV3) == .notInstalled)
+        #expect(TranscriptionSettings.defaultModel == .parakeetUltra)
+        #expect(env.state(of: .parakeetUltra) == .notInstalled)
 
         // The Default Model select: what is here, and what it is already
         // showing — dropping the latter would repoint the Default silently.
-        #expect(env.library.selectableModels(holding: .parakeetV3) == [.parakeetV3, .whisperTiny])
+        #expect(env.library.selectableModels(holding: .parakeetUltra) == [.parakeetUltra, .whisperTiny])
 
         // A Prompt Mode's select, pinning nothing of its own, offers only what
         // is here.
@@ -140,7 +140,7 @@ struct TranscriptionLibraryTests {
         #expect(await waitFor { await env.parakeet.preparationsBegun == 1 })
         env.installFiles(for: env.parakeet, bytes: 2048)
         await env.parakeet.becomeReady()
-        #expect(await waitFor { env.state(of: .parakeetV3) == .ready(bytes: 2048) })
+        #expect(await waitFor { env.state(of: .parakeetUltra) == .ready(bytes: 2048) })
         #expect(await env.parakeet.preparationsBegun == 1)
     }
 
@@ -160,7 +160,7 @@ struct TranscriptionLibraryTests {
 
         #expect(env.state(of: .whisperTiny) == .notInstalled)
         #expect(await env.whisper.isInstalled == false)
-        #expect(env.state(of: .parakeetV3) == .installed(bytes: 1024))
+        #expect(env.state(of: .parakeetUltra) == .installed(bytes: 1024))
         #expect(TranscriptionSettings.settings(for: .whisper) == toldBefore)
     }
 
@@ -170,14 +170,14 @@ struct TranscriptionLibraryTests {
         defer { env.cleanup() }
         env.installFiles(for: env.parakeet, bytes: 1024)
         await env.library.refresh()
-        #expect(TranscriptionSettings.defaultModel == .parakeetV3)
+        #expect(TranscriptionSettings.defaultModel == .parakeetUltra)
 
-        let refusal = await env.library.remove(.parakeetV3)
+        let refusal = await env.library.remove(.parakeetUltra)
 
         #expect(refusal == .isDefaultModel)
         #expect(refusal?.message.contains("Default Model") == true)
         #expect(await env.parakeet.isInstalled)
-        #expect(env.state(of: .parakeetV3) == .installed(bytes: 1024))
+        #expect(env.state(of: .parakeetUltra) == .installed(bytes: 1024))
     }
 
     @Test("Removing a model Prompt Modes pin discloses those modes, the model and what they will use instead — and until it is agreed to, removes nothing")
@@ -194,7 +194,7 @@ struct TranscriptionLibraryTests {
         #expect(removal?.pinningModes == [AIPromptMode.verbatim.displayName,
                                           AIPromptMode.dictation.displayName])
         #expect(removal?.disclosure == "AI off and AI on pin Whisper Tiny. "
-            + "Remove it and they will use Parakeet Multilingual v3 (the Default Model).")
+            + "Remove it and they will use Parakeet Ultra (the Default Model).")
         // Declining is having read it and stopped here: nothing has moved.
         #expect(await env.whisper.isInstalled)
         #expect(TranscriptionSettings.override(for: .dictation).model == .whisperTiny)
@@ -222,7 +222,7 @@ struct TranscriptionLibraryTests {
         #expect(env.relaunched().pinnedModelRemoval(for: .whisperTiny) == nil)
 
         // Those modes follow the Default now, and move with it.
-        #expect(TranscriptionSettings.effectiveTranscription(for: .dictation).model == .parakeetV3)
+        #expect(TranscriptionSettings.effectiveTranscription(for: .dictation).model == .parakeetUltra)
         env.defaults.set(TranscriptionModel.whisperTiny.rawValue,
                          forKey: TranscriptionSettings.defaultModelKey)
         #expect(TranscriptionSettings.effectiveTranscription(for: .dictation).model == .whisperTiny)
@@ -238,7 +238,7 @@ struct TranscriptionLibraryTests {
 
         await env.library.refresh()
         #expect(env.state(of: .whisperTiny) == .unsupported)
-        #expect(env.state(of: .parakeetV3) == .installabilityUnknown)
+        #expect(env.state(of: .parakeetUltra) == .installabilityUnknown)
 
         // A second launch on a phone that can no longer reach the backend: the
         // answer it was given is drawn from what it already knows, and the one
@@ -248,7 +248,7 @@ struct TranscriptionLibraryTests {
         await relaunched.refresh()
 
         #expect(relaunched.entry(for: .whisperTiny).state == .unsupported)
-        #expect(relaunched.entry(for: .parakeetV3).state == .installabilityUnknown)
+        #expect(relaunched.entry(for: .parakeetUltra).state == .installabilityUnknown)
         // This phone's own fact: nothing about it travels to another device.
         #expect(SharedConstants.sharedDefaults.object(forKey: ModelInstallabilityCache.storageKey) == nil)
     }
@@ -328,7 +328,7 @@ private struct LibraryEnvironment {
                 ))
             }
         )
-        parakeet = providers[.parakeetV3]!
+        parakeet = providers[.parakeetUltra]!
         whisper = providers[.whisperTiny]!
         let defaults = defaults
         namingBefore = Dictionary(

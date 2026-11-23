@@ -27,7 +27,7 @@ struct TranscriptionSettings: Codable, Equatable {
 
     static let `default` = TranscriptionSettings(
         removeFillerWords: true,
-        defaultModel: .parakeetV3,
+        defaultModel: .parakeetUltra,
         modelSettings: TranscriptionModelSettingsStore()
     )
 }

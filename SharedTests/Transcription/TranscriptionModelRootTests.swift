@@ -6,17 +6,15 @@ import Testing
 @testable import vcdr_ios
 #endif
 
-/// What a device finds when it asks the model root where Parakeet is. Someone
-/// upgrading has 461 MB sitting where FluidAudio put it and must not pay for it
-/// again, and the answer has to be the same on every launch after that. One
-/// source tree compiled into both `vcdr-macTests` and `vcdr-iosTests`.
+/// What the model root gives back once Parakeet Ultra has loaded. Someone
+/// updating has Parakeet v3's ~470 MB on disk that nothing reads any more, and
+/// the app must return it without touching anything else. One source tree
+/// compiled into both `vcdr-macTests` and `vcdr-iosTests`.
 @Suite("Transcription model root")
 struct TranscriptionModelRootTests {
 
-    private let folderName = "parakeet-tdt-0.6b-v3-coreml"
-
-    /// A fresh temporary directory to hold both the SDK's cache and the root,
-    /// so neither test touches the paths the app really uses.
+    /// A fresh temporary directory to hold the root and its neighbours, so no
+    /// test touches the paths the app really uses.
     private func makeScratch() -> URL {
         let scratch = FileManager.default.temporaryDirectory
             .appendingPathComponent("vcdr-model-root-\(UUID().uuidString)", isDirectory: true)
@@ -24,80 +22,68 @@ struct TranscriptionModelRootTests {
         return scratch
     }
 
-    private func makeModelDirectory(at url: URL, weights: String) {
+    private func makeModelDirectory(at url: URL) {
         try! FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        try! weights.write(to: url.appendingPathComponent("Encoder.mlmodelc"), atomically: true, encoding: .utf8)
+        try! "weights".write(to: url.appendingPathComponent("Encoder.mlmodelc"), atomically: true, encoding: .utf8)
     }
 
-    private func weights(in directory: URL) -> String? {
-        try? String(contentsOf: directory.appendingPathComponent("Encoder.mlmodelc"), encoding: .utf8)
+    private func exists(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path)
     }
 
-    @Test("an existing download moves into the root instead of being fetched again")
-    func adoptsAnExistingDownload() {
-        let scratch = makeScratch()
-        let existing = scratch.appendingPathComponent(folderName, isDirectory: true)
-        let root = scratch.appendingPathComponent("models", isDirectory: true)
-        makeModelDirectory(at: existing, weights: "the 461 MB")
+    @Test("Parakeet v3's folders go once Ultra has loaded, and Ultra and the Whispers stay")
+    func removesWhatUltraReplaced() {
+        let root = makeScratch().appendingPathComponent("models", isDirectory: true)
+        let v3 = root.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true)
+        let v3FromAnOlderSDK = root.appendingPathComponent("parakeet-tdt-0.6b-v3-coreml", isDirectory: true)
+        let ultra = root.appendingPathComponent("parakeet-ultra", isDirectory: true)
+        let whisper = root.appendingPathComponent("models/argmaxinc", isDirectory: true)
+        for directory in [v3, v3FromAnOlderSDK, ultra, whisper] {
+            makeModelDirectory(at: directory)
+        }
 
-        let directory = TranscriptionModelRoot.adopting(existing, into: root)
+        TranscriptionModelRoot.removeDownloads(replacedBy: .parakeetUltra, in: root)
 
-        #expect(directory == root.appendingPathComponent(folderName, isDirectory: true))
-        #expect(weights(in: directory) == "the 461 MB")
-        #expect(!FileManager.default.fileExists(atPath: existing.path))
+        #expect(!exists(v3))
+        #expect(!exists(v3FromAnOlderSDK))
+        #expect(exists(ultra))
+        #expect(exists(whisper))
     }
 
-    @Test("a second launch leaves the root as the first one left it")
+    @Test("a second removal finds nothing to do and changes nothing")
     func isIdempotent() {
-        let scratch = makeScratch()
-        let existing = scratch.appendingPathComponent(folderName, isDirectory: true)
-        let root = scratch.appendingPathComponent("models", isDirectory: true)
-        makeModelDirectory(at: existing, weights: "the 461 MB")
-        _ = TranscriptionModelRoot.adopting(existing, into: root)
+        let root = makeScratch().appendingPathComponent("models", isDirectory: true)
+        let ultra = root.appendingPathComponent("parakeet-ultra", isDirectory: true)
+        makeModelDirectory(at: root.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true))
+        makeModelDirectory(at: ultra)
+        TranscriptionModelRoot.removeDownloads(replacedBy: .parakeetUltra, in: root)
 
-        let directory = TranscriptionModelRoot.adopting(existing, into: root)
+        TranscriptionModelRoot.removeDownloads(replacedBy: .parakeetUltra, in: root)
 
-        #expect(weights(in: directory) == "the 461 MB")
+        #expect(try! FileManager.default.contentsOfDirectory(atPath: root.path) == ["parakeet-ultra"])
     }
 
-    @Test("a download under an SDK's earlier folder name moves under the new name")
-    func adoptsADownloadAnSDKUpdateRenamed() {
+    @Test("a v3 folder outside the model root is left where it is")
+    func leavesEverythingOutsideTheRoot() {
         let scratch = makeScratch()
-        let existing = scratch.appendingPathComponent(folderName, isDirectory: true)
         let root = scratch.appendingPathComponent("models", isDirectory: true)
-        makeModelDirectory(at: existing, weights: "the 461 MB")
+        let sdkCache = scratch.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true)
+        makeModelDirectory(at: sdkCache)
+        try! FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
-        let directory = TranscriptionModelRoot.adopting(existing, renamedTo: "parakeet-tdt-0.6b-v3", into: root)
+        TranscriptionModelRoot.removeDownloads(replacedBy: .parakeetUltra, in: root)
 
-        #expect(directory == root.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true))
-        #expect(weights(in: directory) == "the 461 MB")
-        #expect(!FileManager.default.fileExists(atPath: existing.path))
+        #expect(exists(sdkCache))
     }
 
-    @Test("an earlier download is left alone once the root holds the model under the new name")
-    func keepsTheRootWhenItIsAlreadyFilled() {
-        let scratch = makeScratch()
-        let root = scratch.appendingPathComponent("models", isDirectory: true)
-        let existing = root.appendingPathComponent(folderName, isDirectory: true)
-        makeModelDirectory(at: existing, weights: "the 461 MB")
-        makeModelDirectory(at: root.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true), weights: "the new download")
+    @Test("a Whisper replaced nothing, so loading one removes nothing")
+    func whisperRemovesNothing() {
+        let root = makeScratch().appendingPathComponent("models", isDirectory: true)
+        let v3 = root.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true)
+        makeModelDirectory(at: v3)
 
-        let directory = TranscriptionModelRoot.adopting(existing, renamedTo: "parakeet-tdt-0.6b-v3", into: root)
+        TranscriptionModelRoot.removeDownloads(replacedBy: .whisperLargeV3Turbo, in: root)
 
-        #expect(weights(in: directory) == "the new download")
-        #expect(weights(in: existing) == "the 461 MB")
-    }
-
-    @Test("no existing download leaves an empty root to download into")
-    func fallsThroughWhenNothingWasDownloaded() {
-        let scratch = makeScratch()
-        let existing = scratch.appendingPathComponent(folderName, isDirectory: true)
-        let root = scratch.appendingPathComponent("models", isDirectory: true)
-
-        let directory = TranscriptionModelRoot.adopting(existing, into: root)
-
-        #expect(directory == root.appendingPathComponent(folderName, isDirectory: true))
-        #expect(!FileManager.default.fileExists(atPath: directory.path))
-        #expect(FileManager.default.fileExists(atPath: root.path))
+        #expect(exists(v3))
     }
 }

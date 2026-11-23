@@ -40,7 +40,7 @@ struct ModeTranscriptionSection: View {
     }
 
     private var defaultModel: TranscriptionModel {
-        TranscriptionModel(rawValue: storedDefault) ?? .parakeetV3
+        TranscriptionModel(rawValue: storedDefault) ?? .parakeetUltra
     }
 
     // MARK: - Pinning a model

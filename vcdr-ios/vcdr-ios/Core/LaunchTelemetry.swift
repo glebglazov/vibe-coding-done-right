@@ -1,4 +1,3 @@
-import FluidAudio
 import Foundation
 import OSLog
 
@@ -160,7 +159,7 @@ enum LaunchTelemetry {
         if let cached = cachedPredictedVerdict { return cached }
         let predicted = await withBlockingTask(qos: .userInitiated) {
             predictVerdict(
-                artifactsOnDisk: AsrModels.modelsExist(at: ParakeetModelDirectory.url(), version: .v3),
+                artifactsOnDisk: ParakeetModelDirectory.holdsModel(),
                 lastVerdict: loadRecordsSync().last?.verdict,
                 rebootedSinceLastRecord: rebootedSinceLastRecordSync()
             )

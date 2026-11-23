@@ -24,7 +24,7 @@ enum TranscriptionSettings {
     static var defaultModel: TranscriptionModel {
         UserDefaults.standard.string(forKey: defaultModelKey)
             .flatMap(TranscriptionModel.init(rawValue:))
-            ?? .parakeetV3
+            ?? .parakeetUltra
     }
 
     /// Where a Prompt Mode's Transcription Override lives — one key per mode,

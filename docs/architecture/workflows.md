@@ -84,7 +84,7 @@
 
 - **Clipboard operations may not be instant.** After `NSPasteboard.setString`, add a small delay before simulating Cmd+V. Document the delay with a comment.
 - **Focus restoration timing.** After `NSRunningApplication.activate()`, a small delay is needed before sending keyboard events to that app.
-- **Parakeet model is large (~1.2GB).** First launch downloads it. Don't assume the model is ready — always check initialization state.
+- **Parakeet model is large** (its size is `TranscriptionModel.approximateSizeOnDisk`). First launch downloads it. Don't assume the model is ready — always check initialization state.
 - **CGEvent requires accessibility.** Simulated paste won't work until the user grants accessibility permissions. Handle this gracefully with polling.
 - **Audio recording at 16kHz mono.** This is Parakeet's native format. Don't change the sample rate — it avoids resampling overhead.
 

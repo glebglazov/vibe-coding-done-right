@@ -15,7 +15,7 @@ struct ParakeetProviderTests {
             loadEvents.append(name)
         }
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         try await provider.loadCoreModels(predictedVerdict: .coldSpecialize)
         let coreEventCount = loadEvents.count
         #expect(coreEventCount == 3)
@@ -45,7 +45,7 @@ struct ParakeetProviderTests {
             await gate.arrive(name)
         }
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         try await provider.loadCoreModels(predictedVerdict: .warm)
 
         let started = await gate.startedNames()
@@ -73,7 +73,7 @@ struct ParakeetProviderTests {
             "Encoder": 4000
         ]
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         try await provider.loadCoreModels(predictedVerdict: .warm)
         try await provider.finishWithEncoder()
 
@@ -90,7 +90,7 @@ struct ParakeetProviderTests {
         ParakeetProviderTestSupport.bypassRealMLLoad = true
         ParakeetProviderTestSupport.simulateCoreLoadDuration = .milliseconds(150)
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         async let first = provider.initialize()
         async let second = provider.initialize()
         try await first
@@ -109,7 +109,7 @@ struct ParakeetProviderTests {
         ParakeetProviderTestSupport.bypassRealMLLoad = true
         ParakeetProviderTestSupport.recordInitPhases = true
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         try await provider.initialize()
 
         let observed = ParakeetProviderTestSupport.recordedInitPhases
@@ -121,6 +121,47 @@ struct ParakeetProviderTests {
 
         ParakeetProviderTestSupport.reset()
     }
+
+    /// Parakeet v3's folder is the only fallback someone updating has, so it
+    /// goes when Ultra has loaded and never before.
+    @Test("Parakeet v3 is deleted after Ultra loads, and kept when the download or the load fails")
+    func v3IsDeletedOnlyAfterUltraLoads() async throws {
+        for failure in [UltraLoadFailure.download, .load, nil] {
+            ParakeetProviderTestSupport.reset()
+            ParakeetProviderTestSupport.bypassRealMLLoad = true
+            ParakeetProviderTestSupport.failDownload = failure == .download
+            ParakeetProviderTestSupport.failFinishWithEncoder = failure == .load
+            let root = ParakeetProvider.scratchModelRoot()
+            let v3 = root.appending(path: "parakeet-tdt-0.6b-v3", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: v3, withIntermediateDirectories: true)
+
+            let provider = ParakeetProvider(modelRoot: root)
+            let loaded = (try? await provider.initialize()) != nil
+
+            #expect(loaded == (failure == nil))
+            #expect(FileManager.default.fileExists(atPath: v3.path) == (failure != nil), "failure: \(String(describing: failure))")
+        }
+        ParakeetProviderTestSupport.reset()
+    }
+}
+
+extension ParakeetProvider {
+    /// A load deletes what Ultra replaced from its model root, and these tests
+    /// run inside the real app. A provider on a fresh temporary root keeps
+    /// every test load out of the app's own container.
+    static func inScratchModelRoot() -> ParakeetProvider {
+        ParakeetProvider(modelRoot: scratchModelRoot())
+    }
+
+    static func scratchModelRoot() -> URL {
+        FileManager.default.temporaryDirectory
+            .appending(path: "vcdr-parakeet-\(UUID().uuidString)/models", directoryHint: .isDirectory)
+    }
+}
+
+private enum UltraLoadFailure {
+    case download
+    case load
 }
 
 private actor ModelStartGate {

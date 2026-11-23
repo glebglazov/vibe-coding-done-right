@@ -53,7 +53,7 @@ final class MockTranscriptionProvider: TranscriptionProvider {
     var isReady: Bool { mockIsReady }
 
     nonisolated init(
-        model: TranscriptionModel = .parakeetV3,
+        model: TranscriptionModel = .parakeetUltra,
         isReady: Bool = true,
         preparationPhase: ModelPreparationPhase? = nil,
         result: String = "Hello world",

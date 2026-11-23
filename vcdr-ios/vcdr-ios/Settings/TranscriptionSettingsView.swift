@@ -13,7 +13,7 @@ struct TranscriptionSettingsView: View {
     private var storedModel = TranscriptionSettings.defaultModel.rawValue
 
     private var model: TranscriptionModel {
-        TranscriptionModel(rawValue: storedModel) ?? .parakeetV3
+        TranscriptionModel(rawValue: storedModel) ?? .parakeetUltra
     }
 
     /// The one Library the app has, so a model preparing for a recording moves

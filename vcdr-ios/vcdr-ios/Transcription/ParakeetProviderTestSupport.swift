@@ -25,6 +25,9 @@ enum ParakeetProviderTestSupport {
     /// Forces `finishWithEncoder` to fail after any configured delay/hooks.
     static var failFinishWithEncoder = false
 
+    /// Forces `loadCoreModels` to fail where it would download the model.
+    static var failDownload = false
+
     /// Invoked when `finishWithEncoder` begins (after the core phase barrier).
     static var onFinishWithEncoderEntered: (@Sendable () async -> Void)?
 
@@ -53,6 +56,7 @@ enum ParakeetProviderTestSupport {
         simulatePerModelLoadDuration = .zero
         simulateEncoderLoadDuration = .zero
         failFinishWithEncoder = false
+        failDownload = false
         onFinishWithEncoderEntered = nil
         modelLoadInvocationCount = 0
         stubModelLoadMilliseconds = [:]

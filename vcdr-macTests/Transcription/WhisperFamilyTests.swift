@@ -77,7 +77,7 @@ struct WhisperFamilyTests {
             env.settings.transcriptionSettings.defaultModel = whisper
             #expect(env.library.removalRefusal(for: whisper) == .isDefaultModel)
 
-            env.settings.transcriptionSettings.defaultModel = .parakeetV3
+            env.settings.transcriptionSettings.defaultModel = .parakeetUltra
             #expect(await env.library.remove(whisper) == nil)
             #expect(env.state(of: whisper) == .notInstalled)
         }

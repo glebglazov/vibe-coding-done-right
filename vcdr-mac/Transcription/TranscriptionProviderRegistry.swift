@@ -14,7 +14,7 @@ final class TranscriptionProviderRegistry {
     /// not a claim that this platform can run it — the Whispers come from the
     /// checkpoints this platform has a provider for, smallest first, which is
     /// the order someone hunting for one their Mac keeps up with reads in.
-    static let offeredModels: [TranscriptionModel] = [.parakeetV3] + WhisperCheckpoint.allCases.map(\.model)
+    static let offeredModels: [TranscriptionModel] = [.parakeetUltra] + WhisperCheckpoint.allCases.map(\.model)
 
     private var providers: [TranscriptionModel: any TranscriptionProvider] = [:]
 
@@ -26,7 +26,7 @@ final class TranscriptionProviderRegistry {
     func provider(for model: TranscriptionModel) -> any TranscriptionProvider {
         if let resident = providers[model] { return resident }
         let provider: any TranscriptionProvider = switch model {
-        case .parakeetV3: ParakeetProvider(preparationQueue: preparationQueue)
+        case .parakeetUltra: ParakeetProvider(preparationQueue: preparationQueue)
         case .whisperTiny: WhisperProvider(checkpoint: .tiny, preparationQueue: preparationQueue)
         case .whisperBase: WhisperProvider(checkpoint: .base, preparationQueue: preparationQueue)
         case .whisperSmall: WhisperProvider(checkpoint: .small, preparationQueue: preparationQueue)

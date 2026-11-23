@@ -4,19 +4,18 @@ import FluidAudio
 import OSLog
 
 actor ParakeetProvider: StreamingTranscriptionProvider {
-    let model = TranscriptionModel.parakeetV3
+    let model = TranscriptionModel.parakeetUltra
 
-    /// Where FluidAudio's files live under the owned model root — the same
-    /// directory the provider downloads into, asked for without running the
-    /// migration `ParakeetModelDirectory` performs, because the Library only
-    /// sizes and deletes what is there.
-    nonisolated var installedDirectory: URL {
-        TranscriptionModelRoot.directory(named: AsrModels.defaultCacheDirectory(for: .v3).lastPathComponent)
+    /// The model root this provider installs into, and deletes what Ultra replaced from.
+    private let modelRoot: URL
+
+    init(modelRoot: URL = TranscriptionModelRoot.url) {
+        self.modelRoot = modelRoot
     }
 
-    nonisolated var isInstalled: Bool {
-        AsrModels.modelsExist(at: installedDirectory, version: .v3)
-    }
+    nonisolated var installedDirectory: URL { ParakeetModelDirectory.url(in: modelRoot) }
+
+    nonisolated var isInstalled: Bool { ParakeetModelDirectory.holdsModel(in: modelRoot) }
 
     /// FluidAudio can report download progress, but this provider does not
     /// pass it a handler yet, so the Library shows the time spent instead.
@@ -110,24 +109,22 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
 
         isInitializing = true
         let totalStart = ContinuousClock.now
-        Logger.transcription.info("Initializing Parakeet v3 CoreML model (core phase)...")
+        Logger.transcription.info("Initializing Parakeet Ultra CoreML model (core phase)...")
 
-        modelsOnDiskAtInit = ParakeetProviderTestSupport.stubModelsOnDiskAtInit
-            ?? AsrModels.modelsExist(at: ParakeetModelDirectory.url(), version: .v3)
+        modelsOnDiskAtInit = ParakeetProviderTestSupport.stubModelsOnDiskAtInit ?? isInstalled
         Logger.transcription.info("[InitTiming] artifacts onDisk=\(self.modelsOnDiskAtInit) before download")
 
         do {
             initPhase = .downloadingModel
             Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=downloading set main=\(Thread.isMainThread)")
             let downloadStart = ContinuousClock.now
-            let modelDir = ParakeetModelDirectory.url()
+            let modelDir = installedDirectory
             Logger.transcription.info("[LaunchProbe] ParakeetProvider before download main=\(Thread.isMainThread)")
-            if !ParakeetProviderTestSupport.bypassRealMLLoad,
-               !AsrModels.modelsExist(at: modelDir, version: .v3)
-            {
+            if ParakeetProviderTestSupport.failDownload { throw TranscriptionError.initializationFailed("Test download failure") }
+            if !ParakeetProviderTestSupport.bypassRealMLLoad, !isInstalled {
                 // Download only: the loads below are this provider's own
                 // two-phase work, which `AsrModels.download` would repeat.
-                try await ModelHub.download(.parakeetV3, to: modelDir.deletingLastPathComponent())
+                try await ModelHub.download(ParakeetModelDirectory.repo, to: modelRoot)
             }
             Logger.transcription.info("[LaunchProbe] ParakeetProvider after download main=\(Thread.isMainThread)")
             downloadMs = self.elapsedMilliseconds(since: downloadStart)
@@ -245,40 +242,34 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
                 )
             }
 
-            let aneConfig = MLModelConfiguration()
-            aneConfig.allowLowPrecisionAccumulationOnGPU = true
-            aneConfig.computeUnits = .cpuAndNeuralEngine
+            if !core.isTestStub {
+                guard let preprocessor = core.preprocessor,
+                      let decoder = core.decoder,
+                      let joint = core.joint
+                else {
+                    throw TranscriptionError.initializationFailed("Core models are incomplete")
+                }
 
-            if core.isTestStub {
-                self.isReady = true
-                self.initPhase = .ready
-                self.loadedCore = nil
-                self.completeInitialization(totalStart: totalStart)
-                return
+                guard let encoder = encoderResult.model else {
+                    throw TranscriptionError.initializationFailed("Encoder model failed to load")
+                }
+
+                let aneConfig = MLModelConfiguration()
+                aneConfig.allowLowPrecisionAccumulationOnGPU = true
+                aneConfig.computeUnits = .cpuAndNeuralEngine
+
+                self.loadedModels = AsrModels(
+                    encoder: encoder,
+                    preprocessor: preprocessor,
+                    decoder: decoder,
+                    joint: joint,
+                    configuration: aneConfig,
+                    vocabulary: core.vocabulary,
+                    version: ParakeetModelDirectory.version
+                )
             }
 
-            guard let preprocessor = core.preprocessor,
-                  let decoder = core.decoder,
-                  let joint = core.joint
-            else {
-                throw TranscriptionError.initializationFailed("Core models are incomplete")
-            }
-
-            guard let encoder = encoderResult.model else {
-                throw TranscriptionError.initializationFailed("Encoder model failed to load")
-            }
-
-            let models = AsrModels(
-                encoder: encoder,
-                preprocessor: preprocessor,
-                decoder: decoder,
-                joint: joint,
-                configuration: aneConfig,
-                vocabulary: core.vocabulary,
-                version: .v3
-            )
-
-            self.loadedModels = models
+            TranscriptionModelRoot.removeDownloads(replacedBy: model, in: modelRoot)
             self.isReady = true
             self.initPhase = .ready
             self.loadedCore = nil
@@ -324,7 +315,7 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
 
     private func completeInitialization(totalStart: ContinuousClock.Instant) {
         isInitializing = false
-        Logger.transcription.info("Parakeet v3 ready (total: \(self.elapsedMs(since: totalStart)))")
+        Logger.transcription.info("Parakeet Ultra ready (total: \(self.elapsedMs(since: totalStart)))")
         for continuation in initInProgress {
             continuation.resume()
         }

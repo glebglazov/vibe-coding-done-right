@@ -36,7 +36,7 @@ extension TranscriptionModelFamily {
     /// settings by itself.
     private var keyBeforeFamilies: String {
         switch self {
-        case .parakeet: TranscriptionModel.parakeetV3.rawValue
+        case .parakeet: TranscriptionModel.parakeetV3Key
         case .whisper: TranscriptionModel.whisperLargeV3Turbo.rawValue
         }
     }

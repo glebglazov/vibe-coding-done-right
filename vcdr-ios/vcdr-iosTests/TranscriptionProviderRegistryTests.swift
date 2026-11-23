@@ -14,11 +14,11 @@ struct TranscriptionProviderRegistryTests {
     func switchingBackReturnsTheSameProvider() {
         let registry = TranscriptionProviderRegistry()
 
-        let parakeet = registry.provider(for: .parakeetV3)
+        let parakeet = registry.provider(for: .parakeetUltra)
         let whisper = registry.provider(for: .whisperLargeV3Turbo)
-        let parakeetAgain = registry.provider(for: .parakeetV3)
+        let parakeetAgain = registry.provider(for: .parakeetUltra)
 
-        #expect(parakeet.model == .parakeetV3)
+        #expect(parakeet.model == .parakeetUltra)
         #expect(whisper.model == .whisperLargeV3Turbo)
         #expect(parakeetAgain as AnyObject === parakeet as AnyObject)
     }

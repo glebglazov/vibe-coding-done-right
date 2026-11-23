@@ -14,9 +14,9 @@ struct TranscriptionLibraryTests {
 
         await env.library.refresh()
 
-        #expect(env.library.entries.map(\.model) == [.parakeetV3, .whisperLargeV3Turbo])
-        #expect(env.state(of: .parakeetV3) == .installed(bytes: 2048))
-        #expect(env.state(of: .parakeetV3)?.label(for: .parakeetV3).localizedCaseInsensitiveContains("2 kb") == true)
+        #expect(env.library.entries.map(\.model) == [.parakeetUltra, .whisperLargeV3Turbo])
+        #expect(env.state(of: .parakeetUltra) == .installed(bytes: 2048))
+        #expect(env.state(of: .parakeetUltra)?.label(for: .parakeetUltra).localizedCaseInsensitiveContains("2 kb") == true)
         #expect(env.state(of: .whisperLargeV3Turbo) == .notInstalled)
     }
 
@@ -32,7 +32,7 @@ struct TranscriptionLibraryTests {
         // queue that is already running, so the test starts them that way too.
         env.library.install(.whisperLargeV3Turbo, urgency: .unawaited)
         #expect(await waitFor { await env.whisper.hasTakenItsTurn })
-        env.library.install(.parakeetV3, urgency: .unawaited)
+        env.library.install(.parakeetUltra, urgency: .unawaited)
 
         await env.whisper.beginDownload(progress: 0.5)
         #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .downloading(.fraction(0.5)) })
@@ -40,7 +40,7 @@ struct TranscriptionLibraryTests {
         // The second model is not downloading beside the first: it is held
         // back, and its row says so rather than looking stalled.
         #expect(await waitFor {
-            guard case .waitingItsTurn(let label) = env.state(of: .parakeetV3) else { return false }
+            guard case .waitingItsTurn(let label) = env.state(of: .parakeetUltra) else { return false }
             return label.hasPrefix("Waiting its turn")
         })
 
@@ -51,10 +51,10 @@ struct TranscriptionLibraryTests {
         // Its turn came the moment the first finished: the row stopped being a
         // queued one. A backend that reports no fraction still has to say it is
         // downloading, which is the elapsed wait rather than a percentage.
-        #expect(await waitFor { env.state(of: .parakeetV3) == .notInstalled })
+        #expect(await waitFor { env.state(of: .parakeetUltra) == .notInstalled })
         await env.parakeet.beginDownload()
         #expect(await waitFor {
-            guard case .downloading(let progress) = env.state(of: .parakeetV3) else { return false }
+            guard case .downloading(let progress) = env.state(of: .parakeetUltra) else { return false }
             return progress.fraction == nil && progress.label.hasPrefix("Downloading model")
         })
 
@@ -71,12 +71,12 @@ struct TranscriptionLibraryTests {
         env.installFiles(for: env.whisper, bytes: 1024)
         await env.library.refresh()
         // The Default names Parakeet, and this Mac does not have it.
-        #expect(env.settings.transcriptionSettings.defaultModel == .parakeetV3)
-        #expect(env.state(of: .parakeetV3) == .notInstalled)
+        #expect(env.settings.transcriptionSettings.defaultModel == .parakeetUltra)
+        #expect(env.state(of: .parakeetUltra) == .notInstalled)
 
         // The Default Model select: what is here, and what it is already
         // showing — dropping the latter would repoint the Default silently.
-        #expect(env.library.selectableModels(holding: .parakeetV3) == [.parakeetV3, .whisperLargeV3Turbo])
+        #expect(env.library.selectableModels(holding: .parakeetUltra) == [.parakeetUltra, .whisperLargeV3Turbo])
 
         // A Mode's select, pinning nothing of its own, offers only what is here.
         #expect(env.library.selectableModels(holding: nil) == [.whisperLargeV3Turbo])
@@ -108,7 +108,7 @@ struct TranscriptionLibraryTests {
         #expect(await waitFor { await env.parakeet.hasTakenItsTurn })
         env.installFiles(for: env.parakeet, bytes: 2048)
         await env.parakeet.becomeReady()
-        #expect(await waitFor { env.state(of: .parakeetV3) == .ready(bytes: 2048) })
+        #expect(await waitFor { env.state(of: .parakeetUltra) == .ready(bytes: 2048) })
     }
 
     @Test("A model that is not the Default can be removed, and its settings survive")
@@ -127,7 +127,7 @@ struct TranscriptionLibraryTests {
 
         #expect(env.state(of: .whisperLargeV3Turbo) == .notInstalled)
         #expect(await env.whisper.isInstalled == false)
-        #expect(env.state(of: .parakeetV3) == .installed(bytes: 1024))
+        #expect(env.state(of: .parakeetUltra) == .installed(bytes: 1024))
         #expect(env.settings.transcriptionSettings == settingsBefore)
     }
 
@@ -137,14 +137,14 @@ struct TranscriptionLibraryTests {
         defer { env.cleanup() }
         env.installFiles(for: env.parakeet, bytes: 1024)
         await env.library.refresh()
-        #expect(env.settings.transcriptionSettings.defaultModel == .parakeetV3)
+        #expect(env.settings.transcriptionSettings.defaultModel == .parakeetUltra)
 
-        let refusal = await env.library.remove(.parakeetV3)
+        let refusal = await env.library.remove(.parakeetUltra)
 
         #expect(refusal == .isDefaultModel)
         #expect(refusal?.message.contains("Default Model") == true)
         #expect(await env.parakeet.isInstalled)
-        #expect(env.state(of: .parakeetV3) == .installed(bytes: 1024))
+        #expect(env.state(of: .parakeetUltra) == .installed(bytes: 1024))
     }
 
     @Test("A model whose installability is not known yet still has a row that says so")
@@ -175,7 +175,7 @@ struct TranscriptionLibraryTests {
 
         await env.library.refresh()
         #expect(env.state(of: .whisperLargeV3Turbo) == .unsupported)
-        #expect(env.state(of: .parakeetV3) == .installabilityUnknown)
+        #expect(env.state(of: .parakeetUltra) == .installabilityUnknown)
 
         // A second launch on a Mac that can no longer reach the backend: the
         // answer it was given is drawn from what it already knows, and the one
@@ -185,7 +185,7 @@ struct TranscriptionLibraryTests {
         await relaunched.refresh()
 
         #expect(relaunched.entry(for: .whisperLargeV3Turbo).state == .unsupported)
-        #expect(relaunched.entry(for: .parakeetV3).state == .installabilityUnknown)
+        #expect(relaunched.entry(for: .parakeetUltra).state == .installabilityUnknown)
     }
 
     @Test("A remembered answer is asked again at the next launch, and a wrong one is replaced")
@@ -222,7 +222,7 @@ struct TranscriptionLibraryTests {
         await env.whisper.fail(.offline)
         #expect(await waitFor { env.state(of: .whisperLargeV3Turbo) == .failed(.offline) })
         #expect(env.state(of: .whisperLargeV3Turbo)?.installTitle == "Try Again")
-        #expect(env.state(of: .parakeetV3) == .notInstalled)
+        #expect(env.state(of: .parakeetUltra) == .notInstalled)
 
         await env.whisper.prepareAgain()
         env.library.install(.whisperLargeV3Turbo, urgency: .unawaited)

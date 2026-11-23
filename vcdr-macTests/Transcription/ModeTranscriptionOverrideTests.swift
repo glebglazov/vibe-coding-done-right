@@ -26,7 +26,7 @@ struct ModeTranscriptionOverrideTests {
         env.overrideActiveMode(with: .whisperLargeV3Turbo) { $0.languageHint = .russian }
 
         #expect(await record(with: env)?.finalText == "from whisper ")
-        #expect(env.settings.transcriptionSettings.defaultModel == .parakeetV3)
+        #expect(env.settings.transcriptionSettings.defaultModel == .parakeetUltra)
         #expect(await env.mockProvider.transcribeCallCount == 0)
         #expect(await env.alternateProvider.receivedSettings?.languageHint == .russian)
         // Unset here, so it followed the family's own value all the way down.
@@ -47,7 +47,7 @@ struct ModeTranscriptionOverrideTests {
         mode.transcriptionOverride.model = .whisperLargeV3Turbo
         mode.transcriptionOverride[.whisper].languageHint = .russian
 
-        mode.transcriptionOverride.model = .parakeetV3
+        mode.transcriptionOverride.model = .parakeetUltra
         mode.transcriptionOverride.model = nil
         mode.transcriptionOverride.model = .whisperLargeV3Turbo
 
@@ -146,7 +146,7 @@ struct ModeTranscriptionOverrideTests {
 
         #expect(removal?.pinningModes == ["Email", "Notes"])
         #expect(removal?.disclosure == "Email and Notes pin Whisper Large v3 Turbo. "
-            + "Remove it and they will use Parakeet Multilingual v3 (the Default Model).")
+            + "Remove it and they will use Parakeet Ultra (the Default Model).")
         // Declining is having read it and stopped here: nothing has moved.
         #expect(await env.whisper.isInstalled)
         #expect(env.settings.modes == modes)
@@ -171,7 +171,7 @@ struct ModeTranscriptionOverrideTests {
 
         // Those Modes follow the Default now, and move with it.
         let unpinned = env.settings.modes[0]
-        #expect(env.settings.transcriptionSettings.effectiveTranscription(for: unpinned).model == .parakeetV3)
+        #expect(env.settings.transcriptionSettings.effectiveTranscription(for: unpinned).model == .parakeetUltra)
         env.settings.transcriptionSettings.defaultModel = .whisperLargeV3Turbo
         #expect(env.settings.transcriptionSettings.effectiveTranscription(for: unpinned).model
             == .whisperLargeV3Turbo)

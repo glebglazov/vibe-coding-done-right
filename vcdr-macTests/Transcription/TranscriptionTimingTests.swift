@@ -49,7 +49,7 @@ struct TranscriptionTimingTests {
 
     @Test("A failed transcription reads as a failure, not as a slow success")
     func failedLineIsDistinguishableFromSucceeded() {
-        let sameNumbers = (model: TranscriptionModel.parakeetV3, audioDuration: Duration.seconds(10), elapsed: Duration.seconds(10))
+        let sameNumbers = (model: TranscriptionModel.parakeetUltra, audioDuration: Duration.seconds(10), elapsed: Duration.seconds(10))
         let succeeded = TranscriptionTiming.succeededLine(
             model: sameNumbers.model,
             audioDuration: sameNumbers.audioDuration,

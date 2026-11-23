@@ -28,7 +28,7 @@ struct LibraryEnvironment {
         let settings = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
         self.settings = settings
         parakeet = MockTranscriptionProvider(
-            model: .parakeetV3,
+            model: .parakeetUltra,
             isReady: false,
             preparationPhase: .preparing,
             installedDirectory: root.appending(path: "parakeet"),
@@ -46,7 +46,7 @@ struct LibraryEnvironment {
         let providers = [parakeet, whisper]
         let make: @MainActor () -> TranscriptionLibrary = {
             TranscriptionLibrary(
-                models: [.parakeetV3, .whisperLargeV3Turbo],
+                models: [.parakeetUltra, .whisperLargeV3Turbo],
                 provider: { model in providers.first { $0.model == model }! },
                 settings: settings,
                 installability: ModelInstallabilityCache(defaults: defaults)

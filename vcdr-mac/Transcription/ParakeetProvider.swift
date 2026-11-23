@@ -3,25 +3,36 @@ import FluidAudio
 import OSLog
 
 actor ParakeetProvider: TranscriptionProvider {
-    let model = TranscriptionModel.parakeetV3
+    let model = TranscriptionModel.parakeetUltra
+
+    /// The FluidAudio build `model` names.
+    private static let version: AsrModelVersion = .ultra
 
     /// The queue every provider shares, so this model's preparation waits for
     /// another model's rather than competing with it for the neural engine.
     private let preparationQueue: ModelPreparationQueue
 
-    init(preparationQueue: ModelPreparationQueue) {
+    /// The model root this provider installs into, and deletes what Ultra
+    /// replaced from.
+    private let modelRoot: URL
+
+    init(preparationQueue: ModelPreparationQueue, modelRoot: URL = TranscriptionModelRoot.url) {
         self.preparationQueue = preparationQueue
+        self.modelRoot = modelRoot
     }
 
     /// Where FluidAudio's files live under the owned model root. The SDK's own
     /// folder name is kept, because `AsrModels` recomputes the repo path from
     /// the parent directory and would not find files under any other name.
     nonisolated var installedDirectory: URL {
-        TranscriptionModelRoot.directory(named: AsrModels.defaultCacheDirectory(for: .v3).lastPathComponent)
+        TranscriptionModelRoot.directory(
+            named: AsrModels.defaultCacheDirectory(for: Self.version).lastPathComponent,
+            in: modelRoot
+        )
     }
 
     nonisolated var isInstalled: Bool {
-        AsrModels.modelsExist(at: installedDirectory, version: .v3)
+        AsrModels.modelsExist(at: installedDirectory, version: Self.version)
     }
 
     /// FluidAudio can report download progress, but this provider does not
@@ -85,7 +96,7 @@ actor ParakeetProvider: TranscriptionProvider {
     private func prepare() async throws {
         initPhase = .preparing
         let totalStart = ContinuousClock.now
-        Logger.transcription.info("Initializing Parakeet v3 CoreML model...")
+        Logger.transcription.info("Initializing Parakeet Ultra CoreML model...")
 
         do {
             // Phase 1: Fetch the artifacts, unless the model root already
@@ -93,17 +104,17 @@ actor ParakeetProvider: TranscriptionProvider {
             // entering the downloading phase there would announce a download
             // that never happens.
             let downloadStart = ContinuousClock.now
-            let modelDir = Self.adoptingEarlierDownloads()
+            let modelDir = installedDirectory
             if !isInstalled {
                 initPhase = .downloadingModel
             }
-            _ = try await AsrModels.download(to: modelDir, version: .v3)
+            _ = try await AsrModels.download(to: modelDir, version: Self.version)
             Logger.transcription.info("Model download/cache check completed in \(self.elapsedMs(since: downloadStart))")
 
             // Phase 2: Compile CoreML models for Neural Engine (the slow part)
             initPhase = .loadingModel
             let compileStart = ContinuousClock.now
-            let models = try await AsrModels.load(from: modelDir, version: .v3)
+            let models = try await AsrModels.load(from: modelDir, version: Self.version)
             Logger.transcription.info("Model compilation completed in \(self.elapsedMs(since: compileStart))")
 
             let initStart = ContinuousClock.now
@@ -114,7 +125,8 @@ actor ParakeetProvider: TranscriptionProvider {
             self.asr = manager
             self.isReady = true
             initPhase = .ready
-            Logger.transcription.info("Parakeet v3 ready (total: \(self.elapsedMs(since: totalStart)))")
+            Logger.transcription.info("Parakeet Ultra ready (total: \(self.elapsedMs(since: totalStart)))")
+            TranscriptionModelRoot.removeDownloads(replacedBy: model, in: modelRoot)
         } catch {
             // Classified here, where the failing step and the backend's own
             // error are both still in hand; the raw text goes to the log and
@@ -124,29 +136,6 @@ actor ParakeetProvider: TranscriptionProvider {
             Logger.transcription.error("Failed to initialize Parakeet: \(error)")
             throw TranscriptionError.initializationFailed(failure)
         }
-    }
-
-    /// The model root's Parakeet folder, after moving an earlier build's
-    /// download into it. FluidAudio 0.12 named the folder
-    /// `parakeet-tdt-0.6b-v3-coreml`; 0.18 names it `parakeet-tdt-0.6b-v3` and
-    /// also needs `JointDecisionv3.mlmodelc` in it. Renaming keeps the 461 MB already on disk, so
-    /// `AsrModels.download` fetches only what 0.18 adds. The earlier download
-    /// is in the model root, or in the SDK's own cache for builds older than
-    /// the root. The first move fills the destination, and the later calls
-    /// find it full and leave their source alone.
-    nonisolated private static func adoptingEarlierDownloads() -> URL {
-        let sdkCache = AsrModels.defaultCacheDirectory(for: .v3)
-        let folderName = sdkCache.lastPathComponent
-        let earlierFolderName = "parakeet-tdt-0.6b-v3-coreml"
-        let earlierDownloads = [
-            TranscriptionModelRoot.directory(named: earlierFolderName),
-            sdkCache.deletingLastPathComponent().appendingPathComponent(earlierFolderName, isDirectory: true),
-            sdkCache,
-        ]
-        for earlierDownload in earlierDownloads {
-            _ = TranscriptionModelRoot.adopting(earlierDownload, renamedTo: folderName)
-        }
-        return TranscriptionModelRoot.directory(named: folderName)
     }
 
     /// `settings` and `spellingHints` are unread: Parakeet declares no

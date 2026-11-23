@@ -35,7 +35,7 @@ struct TranscriptionModelInstallSizeTests {
 
     @Test("an installed row shows the size measured on disk, not the declared one")
     func installedStatesTheMeasuredSize() {
-        let label = TranscriptionModelState.installed(bytes: 461_000_000).label(for: .parakeetV3)
+        let label = TranscriptionModelState.installed(bytes: 461_000_000).label(for: .parakeetUltra)
         #expect(label == "Installed · 461 MB")
     }
 

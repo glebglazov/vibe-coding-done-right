@@ -17,7 +17,7 @@ struct DefaultTranscriptionModelTests {
     func choicePersists() {
         let defaults = makeDefaults()
         let settings = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
-        #expect(settings.transcriptionSettings.defaultModel == .parakeetV3)
+        #expect(settings.transcriptionSettings.defaultModel == .parakeetUltra)
 
         settings.transcriptionSettings.defaultModel = .whisperLargeV3Turbo
 
@@ -25,15 +25,27 @@ struct DefaultTranscriptionModelTests {
         #expect(relaunched.transcriptionSettings.defaultModel == .whisperLargeV3Turbo)
     }
 
+    @Test("A Default stored as Parakeet v3 is Parakeet Ultra after the update, and is saved as Ultra")
+    func defaultOnV3BecomesUltra() {
+        let defaults = makeDefaults()
+        defaults.set("parakeet-v3", forKey: "defaultTranscriptionModel")
+
+        let updated = AppSettings(userDefaults: defaults, secretStore: InMemorySecretStore())
+        #expect(updated.transcriptionSettings.defaultModel == .parakeetUltra)
+
+        updated.transcriptionSettings.removeFillerWords.toggle()
+        #expect(defaults.string(forKey: "defaultTranscriptionModel") == "parakeet-ultra")
+    }
+
     @Test("A model that has been loaded stays loaded: switching away and back finds the same provider")
     func providersStayResident() {
         let registry = TranscriptionProviderRegistry()
 
-        let parakeet = registry.provider(for: .parakeetV3)
+        let parakeet = registry.provider(for: .parakeetUltra)
         let whisper = registry.provider(for: .whisperLargeV3Turbo)
         #expect(whisper.model == .whisperLargeV3Turbo)
 
-        #expect(registry.provider(for: .parakeetV3) as AnyObject === parakeet as AnyObject)
+        #expect(registry.provider(for: .parakeetUltra) as AnyObject === parakeet as AnyObject)
         #expect(registry.provider(for: .whisperLargeV3Turbo) as AnyObject === whisper as AnyObject)
     }
 

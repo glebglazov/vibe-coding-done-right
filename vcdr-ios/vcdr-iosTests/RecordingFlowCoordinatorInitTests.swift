@@ -13,7 +13,7 @@ struct RecordingFlowCoordinatorInitTests {
         ParakeetProviderTestSupport.bypassRealMLLoad = true
         ParakeetProviderTestSupport.simulateEncoderLoadDuration = .seconds(1)
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: SpyWarmRecordingEngine(),
@@ -39,7 +39,7 @@ struct RecordingFlowCoordinatorInitTests {
         ParakeetProviderTestSupport.bypassRealMLLoad = true
         ParakeetProviderTestSupport.simulateEncoderLoadDuration = .seconds(1)
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: SpyWarmRecordingEngine(),
@@ -71,7 +71,7 @@ struct RecordingFlowCoordinatorInitTests {
         let engine = SpyWarmRecordingEngine()
         engine.hasMicrophonePermission = true
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: engine,
@@ -105,7 +105,7 @@ struct RecordingFlowCoordinatorInitTests {
         ParakeetProviderTestSupport.bypassRealMLLoad = true
         ParakeetProviderTestSupport.failFinishWithEncoder = true
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: SpyWarmRecordingEngine(),
@@ -142,7 +142,7 @@ struct RecordingFlowCoordinatorInitTests {
             events.append("encoder")
         }
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: engine,
@@ -179,7 +179,7 @@ struct RecordingFlowCoordinatorInitTests {
             encoderEntered.set()
         }
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: engine,
@@ -222,7 +222,7 @@ struct RecordingFlowCoordinatorInitTests {
             events.append("encoder")
         }
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: engine,
@@ -255,7 +255,7 @@ struct RecordingFlowCoordinatorInitTests {
             encoderEntered.set()
         }
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: engine,
@@ -290,7 +290,7 @@ struct RecordingFlowCoordinatorInitTests {
         let engine = SpyWarmRecordingEngine()
         engine.hasMicrophonePermission = false
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             recordingEngine: engine,
@@ -326,7 +326,7 @@ struct RecordingFlowCoordinatorInitTests {
             policy: { .fiveMinutes }
         )
 
-        let provider = ParakeetProvider()
+        let provider = ParakeetProvider.inScratchModelRoot()
         let coordinator = RecordingFlowCoordinator(
             presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
@@ -375,7 +375,7 @@ struct RecordingFlowCoordinatorInitTests {
             presence: SpyMicPresenceCard(),
             keyboardChannel: channel,
             recordingEngine: engine,
-            transcriptionProvider: ParakeetProvider(),
+            transcriptionProvider: ParakeetProvider.inScratchModelRoot(),
             hotMicSession: hotMicSession
         )
 
