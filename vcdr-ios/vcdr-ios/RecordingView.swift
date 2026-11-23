@@ -165,7 +165,7 @@ struct RecordingView: View {
             VStack(spacing: 12) {
                 recordButton
                 // The recording flow already supports starting before init
-                // completes — audio buffers queue in StreamingAsrManager and
+                // completes — audio buffers queue in the live session and
                 // drain once the model is ready. The button has always been
                 // wired; users just don't realize tapping during PREPARING
                 // is fine.

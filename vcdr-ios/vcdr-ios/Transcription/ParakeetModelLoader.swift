@@ -58,7 +58,7 @@ enum ParakeetModelLoader {
 
         let preprocessorURL = repoDirectory.appendingPathComponent(ModelNames.ASR.preprocessorFile)
         let decoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.decoderFile)
-        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointFile)
+        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointV3File)
         let vocabularyURL = repoDirectory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
 
         let preprocessorResult = try await timedLoadModel(
@@ -118,7 +118,7 @@ enum ParakeetModelLoader {
 
         let preprocessorURL = repoDirectory.appendingPathComponent(ModelNames.ASR.preprocessorFile)
         let decoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.decoderFile)
-        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointFile)
+        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointV3File)
         let encoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.encoderFile)
         let vocabularyURL = repoDirectory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
 
@@ -195,7 +195,7 @@ enum ParakeetModelLoader {
         let preprocessorURL = repoDirectory.appendingPathComponent(ModelNames.ASR.preprocessorFile)
         let encoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.encoderFile)
         let decoderURL = repoDirectory.appendingPathComponent(ModelNames.ASR.decoderFile)
-        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointFile)
+        let jointURL = repoDirectory.appendingPathComponent(ModelNames.ASR.jointV3File)
 
         async let preprocessorResult = timedLoadModel(
             name: "Preprocessor", url: preprocessorURL, computeUnits: .cpuAndNeuralEngine, qos: qos

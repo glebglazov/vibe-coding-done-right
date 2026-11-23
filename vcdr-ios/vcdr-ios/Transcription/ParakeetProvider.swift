@@ -18,18 +18,16 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
         AsrModels.modelsExist(at: installedDirectory, version: .v3)
     }
 
-    /// FluidAudio 0.12 reports nothing while it downloads — its own progress
-    /// handler is documented unused — so the only honest number for Parakeet is
-    /// the time spent, which the Library shows instead.
+    /// FluidAudio can report download progress, but this provider does not
+    /// pass it a handler yet, so the Library shows the time spent instead.
     nonisolated var downloadProgress: Double? { nil }
 
     /// FluidAudio publishes one build for every phone this app runs on and no
     /// support table to consult, so this needs neither the network nor a maybe.
     func isInstallableOnThisDevice() async throws -> Bool { true }
 
-    private var asr: AsrManager?
     private(set) var isReady = false
-    /// Loaded models — shared with StreamingAsrManager to avoid duplicate CoreML compilation
+    /// Loaded models — shared with each live session's SlidingWindowAsrManager to avoid duplicate CoreML compilation
     private(set) var loadedModels: AsrModels?
     /// Prevents duplicate initialization from actor reentrancy.
     /// Swift actors interleave at await points, so two callers can both pass
@@ -115,7 +113,7 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
         Logger.transcription.info("Initializing Parakeet v3 CoreML model (core phase)...")
 
         modelsOnDiskAtInit = ParakeetProviderTestSupport.stubModelsOnDiskAtInit
-            ?? AsrModels.modelsExist(at: ParakeetModelDirectory.url())
+            ?? AsrModels.modelsExist(at: ParakeetModelDirectory.url(), version: .v3)
         Logger.transcription.info("[InitTiming] artifacts onDisk=\(self.modelsOnDiskAtInit) before download")
 
         do {
@@ -123,13 +121,15 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
             Logger.transcription.info("[LaunchProbe] ParakeetProvider phase=downloading set main=\(Thread.isMainThread)")
             let downloadStart = ContinuousClock.now
             let modelDir = ParakeetModelDirectory.url()
-            Logger.transcription.info("[LaunchProbe] ParakeetProvider before downloadRepo main=\(Thread.isMainThread)")
+            Logger.transcription.info("[LaunchProbe] ParakeetProvider before download main=\(Thread.isMainThread)")
             if !ParakeetProviderTestSupport.bypassRealMLLoad,
-               !AsrModels.modelsExist(at: modelDir)
+               !AsrModels.modelsExist(at: modelDir, version: .v3)
             {
-                try await DownloadUtils.downloadRepo(.parakeet, to: modelDir.deletingLastPathComponent())
+                // Download only: the loads below are this provider's own
+                // two-phase work, which `AsrModels.download` would repeat.
+                try await ModelHub.download(.parakeetV3, to: modelDir.deletingLastPathComponent())
             }
-            Logger.transcription.info("[LaunchProbe] ParakeetProvider after downloadRepo main=\(Thread.isMainThread)")
+            Logger.transcription.info("[LaunchProbe] ParakeetProvider after download main=\(Thread.isMainThread)")
             downloadMs = self.elapsedMilliseconds(since: downloadStart)
             Logger.transcription.info("Model download/cache check completed in \(String(format: "%.0fms", self.downloadMs))")
 
@@ -171,7 +171,7 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
     }
 
     /// Phase 2: load the encoder alone (the heavy ANE specialization), then
-    /// construct `AsrManager` and reach Transcription Readiness.
+    /// assemble `AsrModels` and reach Transcription Readiness.
     func finishWithEncoder() async throws {
         Logger.transcription.info("[LaunchProbe] ParakeetProvider.finishWithEncoder entry main=\(Thread.isMainThread)")
         guard !isReady else { return }
@@ -278,12 +278,6 @@ actor ParakeetProvider: StreamingTranscriptionProvider {
                 version: .v3
             )
 
-            let initStart = ContinuousClock.now
-            let manager = AsrManager(config: .default)
-            try await manager.initialize(models: models)
-            Logger.transcription.info("ASR manager initialized in \(self.elapsedMs(since: initStart))")
-
-            self.asr = manager
             self.loadedModels = models
             self.isReady = true
             self.initPhase = .ready

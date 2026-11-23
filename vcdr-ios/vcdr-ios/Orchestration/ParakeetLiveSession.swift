@@ -8,7 +8,7 @@ import Foundation
 /// (`docs/adr/0022`).
 actor ParakeetLiveSession: RecordingStreamingSession {
     private let provider: ParakeetProvider
-    private let streaming = StreamingAsrManager(config: .streaming)
+    private let streaming = SlidingWindowAsrManager(config: .streaming)
     private let audio = CapturedAudioPipeline()
 
     init(provider: ParakeetProvider) {
@@ -20,7 +20,8 @@ actor ParakeetLiveSession: RecordingStreamingSession {
         guard let models = await provider.loadedModels else {
             throw TranscriptionError.providerUnavailable
         }
-        try await streaming.start(models: models, source: .microphone)
+        try await streaming.loadModels(models)
+        try await streaming.startStreaming(source: .microphone)
         audio.drain { [streaming] buffer in
             await streaming.streamAudio(buffer)
         }
@@ -46,11 +47,11 @@ actor ParakeetLiveSession: RecordingStreamingSession {
         let updates = await streaming.transcriptionUpdates
         return AsyncStream { continuation in
             let task = Task {
-                for await _ in updates {
+                for await update in updates {
                     guard !Task.isCancelled else { break }
                     let live = LiveTranscript(
-                        settled: await streaming.confirmedTranscript,
-                        volatile: await streaming.volatileTranscript
+                        settled: update.confirmedTranscript,
+                        volatile: update.volatileTranscript
                     )
                     continuation.yield(live.text)
                 }

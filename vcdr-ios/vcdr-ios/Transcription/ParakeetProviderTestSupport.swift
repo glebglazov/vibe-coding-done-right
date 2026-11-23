@@ -7,8 +7,9 @@ enum ParakeetProviderTestSupport {
     static var onModelLoadStarted: (@Sendable (String) async -> Void)?
 
     /// When true, `timedLoadModel` records the load and returns a stub timing
-    /// without calling `MLModel(contentsOf:)`. `finishWithEncoder` skips
-    /// `AsrManager` construction so init-lock tests stay hermetic.
+    /// without calling `MLModel(contentsOf:)`. `loadCoreModels` skips the
+    /// download and `finishWithEncoder` skips assembling `AsrModels`, so
+    /// init-lock tests stay hermetic.
     static var bypassRealMLLoad = false
 
     /// Artificial delay inside `loadCoreModels` (after download) for reentrancy tests.
