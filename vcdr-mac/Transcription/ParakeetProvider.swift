@@ -24,9 +24,8 @@ actor ParakeetProvider: TranscriptionProvider {
         AsrModels.modelsExist(at: installedDirectory, version: .v3)
     }
 
-    /// FluidAudio 0.12 reports nothing while it downloads — its own progress
-    /// handler is documented unused — so the only honest number for Parakeet is
-    /// the time spent, which the Library shows instead.
+    /// FluidAudio can report download progress, but this provider does not
+    /// pass it a handler yet, so the Library shows the time spent instead.
     nonisolated var downloadProgress: Double? { nil }
 
     /// FluidAudio publishes one build for every Apple Silicon Mac and no
@@ -94,7 +93,7 @@ actor ParakeetProvider: TranscriptionProvider {
             // entering the downloading phase there would announce a download
             // that never happens.
             let downloadStart = ContinuousClock.now
-            let modelDir = TranscriptionModelRoot.adopting(AsrModels.defaultCacheDirectory(for: .v3))
+            let modelDir = Self.adoptingEarlierDownloads()
             if !isInstalled {
                 initPhase = .downloadingModel
             }
@@ -109,7 +108,7 @@ actor ParakeetProvider: TranscriptionProvider {
 
             let initStart = ContinuousClock.now
             let manager = AsrManager(config: .default)
-            try await manager.initialize(models: models)
+            try await manager.loadModels(models)
             Logger.transcription.info("ASR manager initialized in \(self.elapsedMs(since: initStart))")
 
             self.asr = manager
@@ -125,6 +124,29 @@ actor ParakeetProvider: TranscriptionProvider {
             Logger.transcription.error("Failed to initialize Parakeet: \(error)")
             throw TranscriptionError.initializationFailed(failure)
         }
+    }
+
+    /// The model root's Parakeet folder, after moving an earlier build's
+    /// download into it. FluidAudio 0.12 named the folder
+    /// `parakeet-tdt-0.6b-v3-coreml`; 0.18 names it `parakeet-tdt-0.6b-v3` and
+    /// also needs `JointDecisionv3.mlmodelc` in it. Renaming keeps the 461 MB already on disk, so
+    /// `AsrModels.download` fetches only what 0.18 adds. The earlier download
+    /// is in the model root, or in the SDK's own cache for builds older than
+    /// the root. The first move fills the destination, and the later calls
+    /// find it full and leave their source alone.
+    nonisolated private static func adoptingEarlierDownloads() -> URL {
+        let sdkCache = AsrModels.defaultCacheDirectory(for: .v3)
+        let folderName = sdkCache.lastPathComponent
+        let earlierFolderName = "parakeet-tdt-0.6b-v3-coreml"
+        let earlierDownloads = [
+            TranscriptionModelRoot.directory(named: earlierFolderName),
+            sdkCache.deletingLastPathComponent().appendingPathComponent(earlierFolderName, isDirectory: true),
+            sdkCache,
+        ]
+        for earlierDownload in earlierDownloads {
+            _ = TranscriptionModelRoot.adopting(earlierDownload, renamedTo: folderName)
+        }
+        return TranscriptionModelRoot.directory(named: folderName)
     }
 
     /// `settings` and `spellingHints` are unread: Parakeet declares no
@@ -143,7 +165,10 @@ actor ParakeetProvider: TranscriptionProvider {
 
         return try await loggingTranscriptionTiming(audioFileURL: audioFileURL) {
             do {
-                let result = try await asr.transcribe(audioFileURL, source: .system)
+                // A fresh state per recording, so no decoder context from one
+                // transcript carries into the next.
+                var decoderState = TdtDecoderState.make(decoderLayers: await asr.decoderLayerCount)
+                let result = try await asr.transcribe(audioFileURL, decoderState: &decoderState)
                 return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             } catch {
                 throw TranscriptionError.transcriptionFailed(error.localizedDescription)

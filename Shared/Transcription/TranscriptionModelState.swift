@@ -114,10 +114,11 @@ enum TranscriptionModelState: Equatable {
     }
 }
 
-/// How far a download has got. WhisperKit reports a fraction of the whole;
-/// FluidAudio reports nothing, so Parakeet's honest answer is the Preparation
-/// Heartbeat — the time it has spent — which is the same choice the recording
-/// pill already made for it.
+/// How far a download has got. WhisperKit reports a fraction of the whole.
+/// Parakeet's providers report nothing: FluidAudio can report download
+/// progress, but neither the iOS nor the Mac provider passes it a handler. So
+/// Parakeet's honest answer is the Preparation Heartbeat — the time it has
+/// spent — which is the same choice the recording pill already made for it.
 enum DownloadProgress: Equatable {
     case fraction(Double)
     case elapsed(label: String)

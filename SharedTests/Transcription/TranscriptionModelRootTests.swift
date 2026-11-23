@@ -60,6 +60,34 @@ struct TranscriptionModelRootTests {
         #expect(weights(in: directory) == "the 461 MB")
     }
 
+    @Test("a download under an SDK's earlier folder name moves under the new name")
+    func adoptsADownloadAnSDKUpdateRenamed() {
+        let scratch = makeScratch()
+        let existing = scratch.appendingPathComponent(folderName, isDirectory: true)
+        let root = scratch.appendingPathComponent("models", isDirectory: true)
+        makeModelDirectory(at: existing, weights: "the 461 MB")
+
+        let directory = TranscriptionModelRoot.adopting(existing, renamedTo: "parakeet-tdt-0.6b-v3", into: root)
+
+        #expect(directory == root.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true))
+        #expect(weights(in: directory) == "the 461 MB")
+        #expect(!FileManager.default.fileExists(atPath: existing.path))
+    }
+
+    @Test("an earlier download is left alone once the root holds the model under the new name")
+    func keepsTheRootWhenItIsAlreadyFilled() {
+        let scratch = makeScratch()
+        let root = scratch.appendingPathComponent("models", isDirectory: true)
+        let existing = root.appendingPathComponent(folderName, isDirectory: true)
+        makeModelDirectory(at: existing, weights: "the 461 MB")
+        makeModelDirectory(at: root.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true), weights: "the new download")
+
+        let directory = TranscriptionModelRoot.adopting(existing, renamedTo: "parakeet-tdt-0.6b-v3", into: root)
+
+        #expect(weights(in: directory) == "the new download")
+        #expect(weights(in: existing) == "the 461 MB")
+    }
+
     @Test("no existing download leaves an empty root to download into")
     func fallsThroughWhenNothingWasDownloaded() {
         let scratch = makeScratch()

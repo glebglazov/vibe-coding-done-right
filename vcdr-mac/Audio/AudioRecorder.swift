@@ -59,7 +59,7 @@ final class AudioRecorder {
     private static let levelDecayFactor: Float = 0.3
     /// Parakeet's native sample rate — all recordings use this to avoid resampling
     private static let sampleRate: Double = 16000
-    /// Minimum frames Parakeet can process (1 second at 16kHz)
+    /// The length a short recording is padded to (1 second at 16kHz)
     private static let minimumFrameCount: AVAudioFrameCount = 16000
     /// Duration threshold below which silence padding is needed
     private static let minimumRecordingDuration: Duration = .seconds(1)
@@ -182,9 +182,10 @@ final class AudioRecorder {
 
     // MARK: - Silence Padding
 
-    /// Pads a short recording with silence so Parakeet can process it.
-    /// Parakeet requires at least 1 second of audio; quick utterances like
-    /// "yes" or "no" may be shorter. Silence is zero-valued PCM samples.
+    /// Pads a recording shorter than 1 second with silence, which older
+    /// FluidAudio releases needed before Parakeet would transcribe it. The
+    /// 0.18 provider takes shorter audio, so this is no longer required by
+    /// any backend. Silence is zero-valued PCM samples.
     private func padToMinimumDuration(fileURL: URL) {
         do {
             let inputFile = try AVAudioFile(forReading: fileURL)

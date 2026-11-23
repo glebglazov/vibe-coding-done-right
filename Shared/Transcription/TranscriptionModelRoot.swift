@@ -29,10 +29,16 @@ nonisolated enum TranscriptionModelRoot {
     ///
     /// The SDK's own folder name is kept, because `AsrModels` recomputes the
     /// repo path from the parent directory and would not find files under any
-    /// other name.
-    static func adopting(_ existingDownload: URL, into root: URL = url) -> URL {
+    /// other name. When an SDK update renames that folder, `folderName` is the
+    /// new name, and the older download is moved under it so the SDK fetches
+    /// only the files the new release adds.
+    static func adopting(
+        _ existingDownload: URL,
+        renamedTo folderName: String? = nil,
+        into root: URL = url
+    ) -> URL {
         let fm = FileManager.default
-        let destination = directory(named: existingDownload.lastPathComponent, in: root)
+        let destination = directory(named: folderName ?? existingDownload.lastPathComponent, in: root)
 
         do {
             try fm.createDirectory(at: root, withIntermediateDirectories: true)
@@ -61,7 +67,7 @@ nonisolated enum TranscriptionModelRoot {
 
     /// The directory inside the root that holds the model whose files an SDK
     /// names `folderName`. The Library asks this to size and delete an install
-    /// without running the migration `adopting(_:into:)` performs.
+    /// without running the migration `adopting(_:renamedTo:into:)` performs.
     static func directory(named folderName: String, in root: URL = url) -> URL {
         root.appendingPathComponent(folderName, isDirectory: true)
     }
