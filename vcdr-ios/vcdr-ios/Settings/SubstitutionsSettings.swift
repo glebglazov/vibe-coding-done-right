@@ -28,6 +28,14 @@ struct SubstitutionsSettings: View {
 
         Form {
             Section {
+                Button {
+                    drafted = DraftedSubstitution(id: viewModel.add())
+                } label: {
+                    Label("Add Entry", systemImage: "plus")
+                }
+            }
+
+            Section {
                 Text(SubstitutionCopy.overview)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -59,14 +67,6 @@ struct SubstitutionsSettings: View {
             if let sync {
                 Section {
                     SyncIndicator(reconciler: sync)
-                }
-            }
-
-            Section {
-                Button {
-                    drafted = DraftedSubstitution(id: viewModel.add())
-                } label: {
-                    Label("Add Entry", systemImage: "plus")
                 }
             }
         }
