@@ -18,16 +18,20 @@ extension RecordingFlowCoordinator {
     /// Begins a keyboard run at once, so the first frame and the Host Return
     /// attempt both see it Arming. A command the app already took, by its
     /// Darwin command or an earlier link, starts nothing, and neither does a
-    /// link while a run is current. True when the link was taken.
+    /// link while a run is current. True while a keyboard run is Arming or
+    /// Capturing after the link, whichever path started it: the keyboard
+    /// opened VCDR, so Host Return still owes the user the trip back.
     @discardableResult
     func handleRecordDeepLink(_ command: CommandID) -> Bool {
-        guard keyboardWire.claim(command) else {
-            Logger.app.info("Record deep link ignored — its command was already taken")
-            return false
+        if keyboardWire.claim(command) {
+            if let run = beginRecording(origin: .keyboard) {
+                Task { await armUntilCapturing(run) }
+            }
+        } else {
+            Logger.app.info("Record deep link: its command was already taken")
         }
-        guard let run = beginRecording(origin: .keyboard) else { return true }
-        Task { await armUntilCapturing(run) }
-        return true
+        guard activeRun?.origin == .keyboard else { return false }
+        return RecordingToggle.stopCommand(for: activeRunPhase) == .stop
     }
 
     /// The run as a Host Return attempt sees it.

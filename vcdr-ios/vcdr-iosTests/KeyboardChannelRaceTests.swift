@@ -40,6 +40,18 @@ struct KeyboardChannelRaceTests {
         #expect(env.app.readPhase() == .ended(.emptyResult))
     }
 
+    @Test("a record link that follows its own Darwin start still sends the user back, and starts no second run")
+    func lateRecordDeepLinkDuringItsRunStillReturns() async throws {
+        let env = TwoProcesses(transcript: "")
+        let start = try #require(env.sendStart())
+        let run = try await env.keyboardSees { if case .recording(let run) = $0 { run } else { nil } }
+
+        #expect(env.coordinator.handleRecordDeepLink(start))
+
+        #expect(env.coordinator.activeRun?.run.id == run)
+        #expect(env.app.readSnapshot()?.run?.id == run)
+    }
+
     /// Race R5: a stop that crossed a Discard finds the run already ended.
     @Test("a stop for a run that already ended changes nothing and reports no failure")
     func stopAfterTheRunEndedIsIgnored() async throws {

@@ -34,6 +34,12 @@ final class AudioRecorder {
     private var prepareSessionTask: Task<Bool, Never>?
     @ObservationIgnored
     private var startHotSessionTask: Task<Bool, Never>?
+    /// Moves on at every `endHotSession`. A hot start remembers the epoch it
+    /// began in and gives up after any await that a teardown overtook, so a
+    /// Record that follows a teardown never joins, or inherits the failure
+    /// of, a start that teardown already made stale.
+    @ObservationIgnored
+    private var hotSessionEpoch: UInt64 = 0
     /// Route notifications can arrive in bursts while an engine restart is
     /// suspended in audio setup. Keep one worker alive and collapse any burst
     /// into at most one follow-up restart against the latest route.
@@ -304,24 +310,37 @@ final class AudioRecorder {
             return await inflight.value
         }
 
+        let epoch = hotSessionEpoch
         let task = Task<Bool, Never> { [weak self] in
             guard let self else { return false }
-            return await self._performStartHotSession()
+            return await self._performStartHotSession(epoch: epoch)
         }
         startHotSessionTask = task
         let result = await task.value
-        startHotSessionTask = nil
+        if startHotSessionTask == task { startHotSessionTask = nil }
         return result
     }
 
-    private func _performStartHotSession() async -> Bool {
+    /// False once a teardown has overtaken the start that began in `epoch`.
+    /// Gives the session back when no newer start is using it, so a late
+    /// activation does not leave the microphone on with no run and no timer.
+    private func isCurrent(_ epoch: UInt64) -> Bool {
+        guard epoch != hotSessionEpoch else { return true }
+        Logger.recording.info("startHotSession: a teardown overtook this start — giving up")
+        if startHotSessionTask == nil { deactivateSession() }
+        return false
+    }
+
+    private func _performStartHotSession(epoch: UInt64) async -> Bool {
         guard await requestMicrophonePermission() else {
             Logger.recording.warning("Microphone permission denied")
             return false
         }
+        guard isCurrent(epoch) else { return false }
 
         if !audioSessionConfigured {
             await prepareAudioSession()
+            guard isCurrent(epoch) else { return false }
             guard audioSessionConfigured else {
                 Logger.recording.error("Failed to configure audio session for hot session")
                 return false
@@ -336,10 +355,12 @@ final class AudioRecorder {
                 try await withThrowingBlockingTask(qos: .userInitiated) {
                     try Self.activateMixingSession()
                 }
+                guard isCurrent(epoch) else { return false }
             } catch {
                 Logger.recording.warning("Failed to re-activate audio session: \(error)")
                 audioSessionConfigured = false
                 await prepareAudioSession()
+                guard isCurrent(epoch) else { return false }
                 guard audioSessionConfigured else {
                     Logger.recording.error("Failed to configure audio session for hot session")
                     return false
@@ -499,6 +520,8 @@ final class AudioRecorder {
     func endHotSession() throws {
         let wasRunning = isHot
 
+        hotSessionEpoch += 1
+        startHotSessionTask = nil
         engineSlot.release()
         _ = captureSink.closeAll()
         isRecording = false
