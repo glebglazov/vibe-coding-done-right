@@ -8,6 +8,7 @@ struct AIProviderTests {
         "anthropic",
         "openai",
         "gemini",
+        "openrouter",
         "apple"
     ])
     func persistedValueRoundTrip(rawValue: String) throws {
@@ -42,7 +43,8 @@ struct AIProviderFactoryTests {
     @Test("cloud primaries use shared adapters", arguments: [
         (AIProvider.anthropic, "AnthropicAdapter"),
         (AIProvider.openai, "OpenAIAdapter"),
-        (AIProvider.gemini, "GeminiAdapter")
+        (AIProvider.gemini, "GeminiAdapter"),
+        (AIProvider.openrouter, "OpenRouterAdapter")
     ])
     func cloudPrimaryUsesSharedAdapter(provider: AIProvider, expectedType: String) {
         let cascade = AIProviderFactory.make(

@@ -26,7 +26,7 @@ struct AIProviderFactoryTests {
         #expect(provider.timeout == AIProviderFactory.processingTimeout)
     }
 
-    @Test("factory uses shared adapters for OpenAI and Gemini")
+    @Test("factory uses shared adapters for OpenAI, Gemini and OpenRouter")
     @MainActor
     func sharedCloudAdaptersAreWired() {
         let openAIMode = Mode(
@@ -44,6 +44,14 @@ struct AIProviderFactoryTests {
             promptType: .dictation
         )
 
+        let openRouterMode = Mode(
+            id: UUID(),
+            name: "OpenRouter",
+            processingType: .cloudAI,
+            aiProvider: .openrouter,
+            promptType: .dictation
+        )
+
         let openAI = AIProviderFactory.make(
             for: openAIMode,
             apiKey: "secret-key"
@@ -55,6 +63,7 @@ struct AIProviderFactoryTests {
 
         #expect(openAI.primary is OpenAIAdapter)
         #expect(gemini.primary is GeminiAdapter)
+        #expect(AIProviderFactory.make(for: openRouterMode, apiKey: "secret-key").primary is OpenRouterAdapter)
     }
 
     @Test("hung provider times out and pipeline substitutes local text")

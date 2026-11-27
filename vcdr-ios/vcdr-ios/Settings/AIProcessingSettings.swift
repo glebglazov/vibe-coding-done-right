@@ -9,6 +9,7 @@ enum AIProvider: RawRepresentable, Codable, Hashable, Sendable {
     static let anthropic = AIProvider.cloud(.anthropic)
     static let openai = AIProvider.cloud(.openai)
     static let gemini = AIProvider.cloud(.gemini)
+    static let openrouter = AIProvider.cloud(.openrouter)
 
     init?(rawValue: String) {
         if let cloud = CloudAIBackend(rawValue: rawValue) {

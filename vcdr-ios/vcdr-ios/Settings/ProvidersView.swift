@@ -6,6 +6,7 @@ struct ProvidersView: View {
             providerRow(.anthropic)
             providerRow(.openai)
             providerRow(.gemini)
+            providerRow(.openrouter)
             if AIProcessingSettings.isAFMAvailable {
                 appleRow
             }

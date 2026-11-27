@@ -263,6 +263,7 @@ final class AppSettings {
         static let anthropicAPIKey = "ai_processing_anthropic_api_key"
         static let openaiAPIKey = "ai_processing_openai_api_key"
         static let geminiAPIKey = "ai_processing_gemini_api_key"
+        static let openrouterAPIKey = "ai_processing_openrouter_api_key"
         /// Persisted flag gating the one-shot Reserved Variable → Provider key migration.
         static let didMigrateProviderKeys = "didMigrateProviderKeys"
         /// Persisted flag gating the one-shot Provider key → Secret Store migration.
@@ -287,6 +288,7 @@ final class AppSettings {
         case .anthropic: Keys.anthropicAPIKey
         case .openai: Keys.openaiAPIKey
         case .gemini: Keys.geminiAPIKey
+        case .openrouter: Keys.openrouterAPIKey
         }
     }
 
