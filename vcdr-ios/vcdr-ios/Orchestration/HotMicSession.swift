@@ -21,6 +21,8 @@ protocol WarmEngine: AnyObject {
     /// teardown has already completed. The Hot Mic Session withdraws readiness
     /// regardless — see `teardown()`.
     func endHotSession() throws
+    /// Every engine loss from now on: the engine stopped without a teardown.
+    func engineLosses() -> AsyncStream<EngineLoss>
 }
 
 /// Production recording + hot-mic engine. `AudioRecorder` is the adapter;
@@ -92,6 +94,7 @@ final class HotMicSession {
     /// Token for the UserDefaults-change observer that re-evaluates the live
     /// timer the moment the user picks a different timeout value.
     private var timeoutObserverToken: (any NSObjectProtocol)?
+    private var engineLossTask: Task<Void, Never>?
     /// True only while an Arming Recording Run is protecting a Hot Mic Session
     /// that was already alive before record intent. A cold Arming path may warm
     /// the engine before it is cancelled; that must be released, not converted
@@ -115,6 +118,7 @@ final class HotMicSession {
     deinit {
         idleTask?.cancel()
         heartbeatTask?.cancel()
+        engineLossTask?.cancel()
         if let timeoutObserverToken {
             NotificationCenter.default.removeObserver(timeoutObserverToken)
         }
@@ -141,6 +145,12 @@ final class HotMicSession {
         self.policy = policy ?? { HotSessionTimeout.current() }
         self.now = now ?? { Date() }
         installTimeoutObserver()
+        let losses = engine.engineLosses()
+        engineLossTask = Task { [weak self] in
+            for await loss in losses {
+                self?.engineLost(loss)
+            }
+        }
     }
 
     // MARK: - Interface
@@ -317,12 +327,21 @@ final class HotMicSession {
         idleTask = Task { [weak self, clock] in
             await clock.sleep(for: .seconds(remaining))
             guard !Task.isCancelled, let self else { return }
-            guard self.engine.isHot, !self.engine.isRecording else { return }
+            // A dead engine still owes the teardown: Heartbeat and presence.
+            guard !self.engine.isRecording else { return }
             self.idleDeadline = nil
             self.idleStartedAt = nil
             self.teardown()
             Logger.app.info("Hot session auto-ended after \(timeout.rawValue)s inactivity")
         }
+    }
+
+    /// Readiness Fail-Closed: a lost engine can no longer honor a keyboard
+    /// start, so readiness comes down at once. A run the loss cut is the
+    /// coordinator's to end.
+    private func engineLost(_ loss: EngineLoss) {
+        Logger.app.warning("HotMicSession: engine lost (\(loss.reason)) — withdrawing readiness")
+        teardown()
     }
 
     /// Readiness Fail-Closed: audio release can report a partial failure (e.g.

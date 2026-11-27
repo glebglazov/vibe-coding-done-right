@@ -202,6 +202,77 @@ struct RecordingFlowCoordinatorRunControlTests {
         #expect(!engine.isRecording)
         #expect(channel.interactions.contains(.publish(.cancelled)))
     }
+
+    /// The Arming Deadline (5 s, real clock) fails the run while a cold
+    /// `startCapture` is still warming the engine. The late engine start must
+    /// not open the capture, or the mic stays on and every later Record is
+    /// ignored.
+    @Test("an Arming Deadline during a slow engine start leaves the mic closed, and the next Record captures")
+    func armingDeadlineDuringSlowStartLeavesMicClosed() async {
+        let engine = SpyWarmRecordingEngine()
+        engine.startCaptureDelay = .seconds(6)
+        let hotMicSession = HotMicSession(
+            engine: engine,
+            presence: SpyPresence(),
+            keyboard: FakeKeyboardChannel(),
+            clock: TestClock(),
+            heartbeatClock: TestClock(),
+            policy: { .never }
+        )
+        let coordinator = makeCoordinator(engine: engine, hotMicSession: hotMicSession) {
+            FakeRecordingStreamingSession(result: .success("hello"))
+        }
+
+        let first = await coordinator.startRecording(origin: .app)
+        #expect(first == .failed(RecordingRun.armingDeadlineFailureMessage))
+        #expect(coordinator.activeRunPhase == nil)
+        #expect(!engine.isRecording)
+
+        engine.startCaptureDelay = .zero
+        #expect(await coordinator.startRecording(origin: .app) == .capturing)
+    }
+
+    @Test("a capture lost while Capturing ends the run like a stop, and delivers what was said")
+    func captureLostWhileCapturingFinalizes() async {
+        SettingOverrides.setAIMode(.verbatim)
+        defer { SettingOverrides.clearAll() }
+        let engine = SpyWarmRecordingEngine()
+        let channel = FakeKeyboardChannel()
+        let coordinator = makeCoordinator(channel: channel, engine: engine) {
+            FakeRecordingStreamingSession(result: .success("hello world"))
+        }
+
+        #expect(await coordinator.startRecording(origin: .keyboard) == .capturing)
+        engine.loseEngine()
+        await waitUntil { coordinator.activeRunPhase == nil }
+
+        #expect(coordinator.activeRunPhase == nil)
+        let bundled = channel.interactions.contains {
+            if case .publishBundledResult(let text) = $0 { return text.localizedCaseInsensitiveContains("hello world") }
+            return false
+        }
+        #expect(bundled)
+        #expect(await coordinator.startRecording(origin: .keyboard) == .capturing)
+    }
+
+    @Test("a capture lost while Arming ends the run in a Processing Failure")
+    func captureLostWhileArmingFails() async {
+        let engine = SpyWarmRecordingEngine()
+        engine.startCaptureDelay = .milliseconds(200)
+        let coordinator = makeCoordinator(engine: engine) { FakeRecordingStreamingSession() }
+
+        let start = Task { await coordinator.startRecording(origin: .app) }
+        await waitUntil { coordinator.activeRunPhase == .arming }
+        engine.loseEngine()
+        let result = await start.value
+
+        guard case .failed = result else {
+            Issue.record("Expected a Processing Failure, got \(result)")
+            return
+        }
+        #expect(coordinator.activeRunPhase == nil)
+        #expect(!engine.isRecording)
+    }
 }
 
 @MainActor

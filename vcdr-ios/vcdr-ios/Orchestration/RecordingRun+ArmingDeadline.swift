@@ -45,8 +45,8 @@ extension RecordingRun {
         _ = await finish(.processingFailure(
             RecordingRunFailure(message: Self.armingDeadlineFailureMessage)
         ))
-        // Stop capture after claiming the terminal state so a hung
-        // `startCapture` cannot race ahead of `finish` and report success.
-        audioRecorder.stopCapture()
+        // Revoke the capture after claiming the terminal state, so a hung
+        // `startCapture` returns no lease and leaves the microphone closed.
+        audioRecorder.stopCapture(for: id)
     }
 }

@@ -194,6 +194,7 @@ final class RecordingFlowCoordinator {
     /// remove it before re-registering to prevent observer accumulation on scene re-entry.
     var commandObserverToken: (any NSObjectProtocol)?
     var settingsObserverToken: (any NSObjectProtocol)?
+    @ObservationIgnored private var engineLossTask: Task<Void, Never>?
 
     init(
         presence: any MicPresence & RecordingRunPresence,
@@ -228,6 +229,16 @@ final class RecordingFlowCoordinator {
         self.discardedRunFinalizer = discardedRunFinalizer
             ?? HistoryDiscardedRunFinalizer(history: historyWrites, backgroundTasks: backgroundTasks)
         self.makeStreamingSession = makeStreamingSession
+        let losses = engine.engineLosses()
+        engineLossTask = Task { [weak self] in
+            for await loss in losses {
+                await self?.captureLost(loss)
+            }
+        }
+    }
+
+    deinit {
+        engineLossTask?.cancel()
     }
 
     /// The provider for the Default Transcription Model as it stands right now.

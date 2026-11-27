@@ -362,17 +362,20 @@ private final class ControllableRecordingAudioCapture: RecordingAudioCapturing {
         self.hangUntilStopped = hangUntilStopped
     }
 
-    func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
+    func startCapture(
+        for run: RunID,
+        onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void
+    ) async -> CaptureLease? {
         self.onBuffer = onBuffer
         if hangUntilStopped {
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                 hangContinuation = cont
             }
         }
-        return startResult
+        return startResult ? CaptureLease(run: run) : nil
     }
 
-    func stopCapture() {
+    func stopCapture(for run: RunID) {
         if let hangContinuation {
             self.hangContinuation = nil
             hangContinuation.resume()

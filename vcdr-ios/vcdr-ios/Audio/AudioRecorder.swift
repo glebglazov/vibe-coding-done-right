@@ -7,17 +7,23 @@ import OSLog
 final class AudioRecorder {
     private(set) var isRecording = false
     /// True while the audio engine is running with the tap installed — ready
-    /// to accept a `bufferHandler` and flip `isRecording` without another
+    /// to open a capture and flip `isRecording` without another
     /// `engine.start()` round-trip. Derived from `AVAudioEngine.isRunning`
     /// so it cannot drift from reality: iOS can stop the engine on us
     /// (interruption, background suspension, audio session deactivation by
     /// another process) and this property immediately reflects that, so any
     /// start-path check against it is always truthful.
-    var isHot: Bool { audioEngine?.isRunning == true }
+    var isHot: Bool { engineSlot.isRunning }
     /// Rolling buffer of recent audio level samples (0.0–1.0), one per meter tick.
     private(set) var audioLevels: [Float] = Array(repeating: 0, count: levelSampleCount)
 
-    private var audioEngine: AVAudioEngine?
+    @ObservationIgnored
+    private let engineSlot = AudioEngineSlot<AVAudioEngine>()
+    /// Where the tap hands buffers, and which run holds the capture.
+    @ObservationIgnored
+    private let captureSink = CaptureSink()
+    @ObservationIgnored
+    private let engineLossFeed = EngineLossFeed()
     private var audioSessionConfigured = false
     /// In-flight setup tasks. Concurrent callers join the same Task instead of
     /// running duplicate AVAudioSession / engine setup bodies. Without these,
@@ -27,8 +33,6 @@ final class AudioRecorder {
     @ObservationIgnored
     private var prepareSessionTask: Task<Bool, Never>?
     @ObservationIgnored
-    private var prepareEngineTask: Task<AVAudioEngine?, Never>?
-    @ObservationIgnored
     private var startHotSessionTask: Task<Bool, Never>?
     /// Route notifications can arrive in bursts while an engine restart is
     /// suspended in audio setup. Keep one worker alive and collapse any burst
@@ -37,23 +41,6 @@ final class AudioRecorder {
     private var routeRestartTask: Task<Void, Never>?
     @ObservationIgnored
     private var routeRestartPending = false
-    /// nonisolated(unsafe) because the audio tap callback reads this from the audio thread.
-    /// Safe: only set before starting the engine, cleared after stopping it.
-    @ObservationIgnored
-    private nonisolated(unsafe) var bufferHandler: (@Sendable (AVAudioPCMBuffer) -> Void)?
-    /// What this run handed to the buffer handler, summarized when capture stops.
-    /// nonisolated(unsafe) for the same reason as `bufferHandler`: the audio
-    /// render thread is the only writer, and the main actor reads it in
-    /// `stopCapture()` after clearing the handler, so no tap can still be
-    /// counting into it.
-    @ObservationIgnored
-    private nonisolated(unsafe) var captureTally = CaptureTally()
-    /// One-shot diagnostic: logs once when the first audio buffer arrives from
-    /// the input tap. If recording shows zero waveform / zero timer, the
-    /// absence of this log line tells us the engine never actually fired the
-    /// render callback (engine.start succeeded but HAL didn't deliver audio).
-    @ObservationIgnored
-    private nonisolated(unsafe) var hasLoggedFirstBuffer = false
     /// Notification observer tokens for audio session interruption and route change.
     @ObservationIgnored
     private var interruptionObservers: [Any] = []
@@ -263,86 +250,45 @@ final class AudioRecorder {
     /// They run off the main actor so the PREPARING UI stays responsive.
     func prepareEngine() async {
         Logger.app.info("[LaunchProbe] prepareEngine entry main=\(Thread.isMainThread)")
-        _ = await ensureEngine()
+        _ = await engineSlot.prepared { [weak self] in await self?.buildEngine() }
         Logger.app.info("[LaunchProbe] prepareEngine exit main=\(Thread.isMainThread)")
     }
 
-    /// Single source of engine construction. Returns a prepared engine — tap
-    /// installed and `prepare()`d, but NOT started, so no microphone indicator
-    /// lights (vcdr-ios ADR-0001). Concurrent callers — the launch prewarm
-    /// (`prepareEngine`) and the record path (`startEngine`) — join the same
-    /// in-flight build via `prepareEngineTask`, so exactly ONE `AVAudioEngine`
-    /// is ever constructed and assigned to `audioEngine`.
-    ///
-    /// This single-builder guarantee is load-bearing. Without it, a cold-launch
-    /// record tap racing the prewarm build constructs a *second* engine, and
-    /// whichever path assigns `audioEngine` last wins. The prewarm's engine is
-    /// never started, so when it lands last it overwrites — and, being the sole
-    /// strong reference, ARC-deallocates — the live engine mid-recording. The
-    /// mic then dies while `isRecording`/state stay set: the timer keeps ticking
-    /// and the waveform freezes, and the run ends in an Empty Result. Do NOT
-    /// re-split this into per-path builds (see vcdr-ios ADR-0001).
-    private func ensureEngine() async -> AVAudioEngine? {
-        if let engine = audioEngine { return engine }
-        if let inflight = prepareEngineTask {
-            Logger.app.info("[LaunchProbe] ensureEngine joining in-flight")
-            return await inflight.value
-        }
+    /// Builds one prepared engine: tap installed and `prepare()`d, but NOT
+    /// started, so no microphone indicator lights (vcdr-ios ADR-0001). Only
+    /// `engineSlot` calls it, so concurrent callers — the launch prewarm and
+    /// the record path — join one build and exactly ONE engine is assigned.
+    /// A second engine would overwrite, and ARC-deallocate, the live one
+    /// mid-recording. Do NOT re-split this into per-path builds.
+    private func buildEngine() async -> AVAudioEngine? {
         guard audioSessionConfigured else {
-            Logger.app.info("[LaunchProbe] ensureEngine skip: session not configured")
+            Logger.app.info("[LaunchProbe] buildEngine skip: session not configured")
             return nil
         }
-
-        let task = Task<AVAudioEngine?, Never> { [weak self] in
-            // First `inputNode` access lazily inits the input audio unit, a
-            // blocking HAL call that can take many seconds cold. Off the
-            // cooperative pool so it can't freeze the shell (gesture-gate timeout).
-            let engine = await withBlockingTask(qos: .userInitiated) { [weak self] () -> AVAudioEngine in
-                Logger.app.info("[LaunchProbe] ensureEngine build body start main=\(Thread.isMainThread)")
-                let engine = AVAudioEngine()
-                let inputNode = engine.inputNode
-                let format = inputNode.outputFormat(forBus: 0)
-                Logger.app.info("[LaunchProbe] ensureEngine after outputFormat main=\(Thread.isMainThread)")
-
-                inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) {
-                    buffer, _ in
-                    guard let self else { return }
-
-                    if !self.hasLoggedFirstBuffer {
-                        self.hasLoggedFirstBuffer = true
-                        Logger.app.info("[LaunchProbe] first audio buffer from tap handler=\(self.bufferHandler != nil)")
-                    }
-
-                    let level = AudioLevelMeter.level(of: buffer)
-                    Task { @MainActor [weak self] in
-                        self?.appendLevel(level)
-                    }
-
-                    // Tally only what is actually handed off, and reuse the
-                    // level the waveform already needed — the audio thread
-                    // walks these samples once per buffer, not twice.
-                    guard let handler = self.bufferHandler else { return }
-                    self.captureTally.record(frames: Int(buffer.frameLength), level: level)
-                    handler(buffer)
+        // First `inputNode` access lazily inits the input audio unit, a
+        // blocking HAL call that can take many seconds cold. Off the
+        // cooperative pool so it can't freeze the shell (gesture-gate timeout).
+        return await withBlockingTask(qos: .userInitiated) { [weak self, captureSink] () -> AVAudioEngine in
+            Logger.app.info("[LaunchProbe] buildEngine body start main=\(Thread.isMainThread)")
+            let engine = AVAudioEngine()
+            let inputNode = engine.inputNode
+            let format = inputNode.outputFormat(forBus: 0)
+            inputNode.installTap(onBus: 0, bufferSize: Self.tapBufferSize, format: format) { buffer, _ in
+                let level = AudioLevelMeter.level(of: buffer)
+                Task { @MainActor [weak self] in
+                    self?.appendLevel(level)
                 }
-                Logger.app.info("[LaunchProbe] ensureEngine after installTap main=\(Thread.isMainThread)")
-
-                engine.prepare()
-                Logger.recording.info("Audio engine prepared (format: \(format))")
-                return engine
+                captureSink.deliver(buffer, level: level)
             }
-            self?.audioEngine = engine
+            engine.prepare()
+            Logger.recording.info("Audio engine prepared (format: \(format))")
             return engine
         }
-        prepareEngineTask = task
-        let engine = await task.value
-        prepareEngineTask = nil
-        return engine
     }
 
     /// Brings the audio engine online and keeps it running with the tap
     /// installed so the very next `startCapture` is instantaneous.
-    /// `bufferHandler` remains nil — buffers are discarded until capture begins,
+    /// No capture is open — buffers are discarded until capture begins,
     /// so no audio is written anywhere, but the system mic indicator is visible.
     /// Safe to call repeatedly; a no-op once the engine is running. Because
     /// `isHot` is derived from `AVAudioEngine.isRunning`, the early-return
@@ -411,66 +357,47 @@ final class AudioRecorder {
         return true
     }
 
-    /// Begins forwarding captured audio buffers to `onBuffer`.
+    /// Begins forwarding captured audio buffers to `onBuffer` for `run`.
     /// Starts a hot session on demand if one isn't already running, so deep
     /// links and other cold-start paths still work without a separate call.
     /// - Parameter onBuffer: Called on the audio render thread with each
     ///   captured buffer. Must be lightweight — enqueue for processing elsewhere.
-    /// - Returns: true if capture started successfully.
-    func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
+    /// - Returns: the run's capture lease, or nil when the engine did not come
+    ///   up or `stopCapture(for: run)` revoked the claim while it was starting.
+    func startCapture(
+        for run: RunID,
+        onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void
+    ) async -> CaptureLease? {
         Logger.app.info("[LaunchProbe] startCapture entry isHot=\(self.isHot)")
-        if !isHot {
-            guard await startHotSession() else {
-                Logger.recording.error("startCapture: startHotSession() failed")
-                return false
-            }
+        captureSink.claim(for: run)
+        if !isHot, !(await startHotSession()) {
+            Logger.recording.error("startCapture: startHotSession() failed")
+            _ = captureSink.close(for: run)
+            return nil
         }
-        captureTally = CaptureTally()
-        bufferHandler = onBuffer
+        guard isHot, let lease = captureSink.open(for: run, handler: onBuffer) else {
+            Logger.recording.warning("startCapture: the run let go of the capture while the engine started")
+            _ = captureSink.close(for: run)
+            return nil
+        }
         isRecording = true
-        Logger.recording.info("Capture started (isHot=\(self.isHot)) engineRunning=\(self.audioEngine?.isRunning == true)")
-        return true
+        Logger.recording.info("Capture started (isHot=\(self.isHot))")
+        return lease
     }
 
     // MARK: - Engine Lifecycle
 
-    /// Starts the audio engine. Reuses a pre-prepared engine if available,
-    /// otherwise creates one from scratch. The blocking `engine.start()` call
-    /// runs on a background QoS queue so it does not stall MainActor —
-    /// `engine.start()` can take 100-500ms, or several seconds under CoreML load.
-    /// Returns true on success. Does NOT flip `isRecording` — that's the
-    /// caller's decision, since hot-session startup runs with no buffer handler.
+    /// Starts the audio engine, reusing the prepared one when there is one.
+    /// The blocking `engine.start()` runs on a background QoS queue so it
+    /// does not stall MainActor. Does NOT open a capture — hot-session
+    /// startup runs with no run holding the capture.
     private func startEngine() async -> Bool {
-        Logger.app.info("[LaunchProbe] startEngine entry preExistingEngine=\(self.audioEngine != nil)")
-        // Get the one shared engine (built here or joined from an in-flight
-        // prewarm). `ensureEngine` builds it off the cooperative pool at
-        // `.userInitiated`, so the HAL warm outranks the concurrent `.utility`
-        // ANE compile and the mic arms fast (vcdr-ios ADR-0001, ADR-0003).
-        guard let engine = await ensureEngine() else {
-            Logger.recording.error("startEngine: engine build failed")
-            return false
-        }
-        if engine.isRunning { return true }
-        if await Self.startEngineOffMain(engine) {
-            Logger.recording.info("Audio engine started")
-            return true
-        }
-
-        // Start failed — the built engine may be bound to a stale route/HAL
-        // state. Discard it and rebuild once through the same single-builder
-        // path on a clean slate.
-        Logger.recording.warning("Engine failed to start, rebuilding once")
-        engine.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
-        guard let fresh = await ensureEngine() else { return false }
-        if await Self.startEngineOffMain(fresh) {
-            Logger.recording.info("Audio engine started (rebuilt)")
-            return true
-        }
-        fresh.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
-        Logger.recording.error("startEngine: rebuilt engine failed to start")
-        return false
+        let started = await engineSlot.start(
+            building: { [weak self] in await self?.buildEngine() },
+            starting: Self.startEngineOffMain
+        )
+        if started { Logger.recording.info("Audio engine started") }
+        return started
     }
 
     /// Runs `engine.start()` on a `.userInitiated` background task so MainActor
@@ -493,21 +420,32 @@ final class AudioRecorder {
     /// Called when the audio route changes while the hot session is up (which
     /// includes any active recording).
     private func restartEngine() async {
-        guard let oldEngine = audioEngine else { return }
-
-        oldEngine.inputNode.removeTap(onBus: 0)
-        oldEngine.stop()
-        audioEngine = nil
+        guard engineSlot.engine != nil else { return }
+        engineSlot.release()
 
         applyPreferredInput()
 
         if await startEngine() {
             Logger.recording.info("Audio engine restarted after route change")
         } else {
-            isRecording = false
-            deactivateSession()
             Logger.recording.error("Failed to restart audio engine after route change")
+            loseEngine(reason: "The microphone stopped after an audio route change")
+            deactivateSession()
         }
+    }
+
+    /// The engine stopped without a teardown. The run it cut, and the Hot
+    /// Mic Session, hear of it through `engineLosses()`.
+    private func loseEngine(reason: String) {
+        let cut = captureSink.closeAll()
+        isRecording = false
+        audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
+        engineLossFeed.send(EngineLoss(lease: cut, reason: reason))
+    }
+
+    /// Every engine loss from now on. Each call returns its own stream.
+    func engineLosses() -> AsyncStream<EngineLoss> {
+        engineLossFeed.stream()
     }
 
     private func requestRouteRestart() {
@@ -532,9 +470,10 @@ final class AudioRecorder {
     /// Stops consuming audio buffers but leaves the engine running so the
     /// next capture starts immediately. Use `endHotSession()` to fully
     /// release the microphone.
-    func stopCapture() {
-        bufferHandler = nil
-        let tally = captureTally
+    /// No-op for a run that holds no capture; revokes the claim of a run
+    /// whose capture is still starting.
+    func stopCapture(for run: RunID) {
+        guard let tally = captureSink.close(for: run) else { return }
         isRecording = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
         // Emitted on every run, not only failing ones: an empty transcript is
@@ -560,12 +499,8 @@ final class AudioRecorder {
     func endHotSession() throws {
         let wasRunning = isHot
 
-        if let engine = audioEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-            audioEngine = nil
-        }
-        bufferHandler = nil
+        engineSlot.release()
+        _ = captureSink.closeAll()
         isRecording = false
         audioLevels = Array(repeating: 0, count: Self.levelSampleCount)
 
@@ -655,16 +590,12 @@ final class AudioRecorder {
         switch type {
         case .began:
             // iOS stops the engine for us during interruption and deactivates
-            // the audio session. Drop our reference AND reset the configured
+            // the audio session. Drop our engine AND reset the configured
             // flag so the next start path re-activates the session cleanly.
             Logger.recording.warning("Audio session interrupted — dropping engine reference (was isHot=\(self.isHot), isRecording=\(self.isRecording))")
-            if let engine = audioEngine {
-                engine.inputNode.removeTap(onBus: 0)
-            }
-            audioEngine = nil
-            bufferHandler = nil
-            isRecording = false
+            engineSlot.release()
             audioSessionConfigured = false
+            loseEngine(reason: "Audio was interrupted")
 
         case .ended:
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue ?? 0)

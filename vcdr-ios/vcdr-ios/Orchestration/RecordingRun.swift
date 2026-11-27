@@ -5,8 +5,15 @@ import OSLog
 
 @MainActor
 protocol RecordingAudioCapturing: AnyObject {
-    func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool
-    func stopCapture()
+    /// Nil when the engine did not come up, or when `stopCapture(for: run)`
+    /// revoked the claim while it was starting; the capture never opened.
+    func startCapture(
+        for run: RunID,
+        onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void
+    ) async -> CaptureLease?
+    /// Ends `run`'s capture, or revokes its claim while it is still starting.
+    /// No-op for a run that holds neither.
+    func stopCapture(for run: RunID)
 }
 
 extension AudioRecorder: RecordingAudioCapturing {}
@@ -28,6 +35,7 @@ nonisolated protocol RecordingStreamingSession: Sendable {
 final class RecordingRun {
     typealias Settings = TranscriptProcessor.Settings
 
+    let id = RunID()
     let conversationID = UUID()
     let audioRecorder: any RecordingAudioCapturing
     let streaming: any RecordingStreamingSession
@@ -99,7 +107,7 @@ final class RecordingRun {
         // `startCapture` returning — a hung engine start must still fail honest.
         startArmingDeadline()
 
-        let started = await audioRecorder.startCapture { [streaming] buffer in
+        let lease = await audioRecorder.startCapture(for: id) { [streaming] buffer in
             Task { @MainActor [weak self] in
                 self?.noteFirstAudioBuffer()
             }
@@ -107,10 +115,11 @@ final class RecordingRun {
         }
 
         if isTerminal {
+            audioRecorder.stopCapture(for: id)
             return false
         }
 
-        if !started {
+        if lease == nil {
             cancelArmingDeadline()
             cancelSetup()
             _ = await finish(.processingFailure(
@@ -128,7 +137,7 @@ final class RecordingRun {
         captureEnded = true
         cancelArmingDeadline()
         updateTask?.cancel()
-        audioRecorder.stopCapture()
+        audioRecorder.stopCapture(for: id)
     }
 
     func stop() async -> RecordingRunTerminalState {

@@ -440,6 +440,10 @@ final class SpyWarmRecordingEngine: RecordingEngine {
     var onStartCapture: (() -> Void)?
 
     private var enginePrepared = false
+    /// The production claim-and-lease handoff, so the coordinator's runs hit
+    /// the same revocation rules as on a device.
+    private let captureSink = CaptureSink()
+    private let engineLossFeed = EngineLossFeed()
 
     func requestMicrophonePermission() async -> Bool {
         hasMicrophonePermission = true
@@ -474,20 +478,26 @@ final class SpyWarmRecordingEngine: RecordingEngine {
         return true
     }
 
-    func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
-        _ = onBuffer
+    func startCapture(
+        for run: RunID,
+        onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void
+    ) async -> CaptureLease? {
         onStartCapture?()
+        captureSink.claim(for: run)
         if startCaptureDelay > .zero {
             try? await Task.sleep(for: startCaptureDelay)
         }
-        if !isHot {
-            guard await startHotSession() else { return false }
+        if !isHot, !(await startHotSession()) {
+            _ = captureSink.close(for: run)
+            return nil
         }
+        guard let lease = captureSink.open(for: run, handler: onBuffer) else { return nil }
         isRecording = true
-        return true
+        return lease
     }
 
-    func stopCapture() {
+    func stopCapture(for run: RunID) {
+        guard captureSink.close(for: run) != nil else { return }
         isRecording = false
     }
 
@@ -496,6 +506,19 @@ final class SpyWarmRecordingEngine: RecordingEngine {
         isHot = false
         isRecording = false
         enginePrepared = false
+        _ = captureSink.closeAll()
+    }
+
+    func engineLosses() -> AsyncStream<EngineLoss> {
+        engineLossFeed.stream()
+    }
+
+    /// What `AudioRecorder` does on an interruption: iOS has stopped the
+    /// engine, the open capture closes, and the loss is reported.
+    func loseEngine(reason: String = "Audio was interrupted") {
+        isHot = false
+        isRecording = false
+        engineLossFeed.send(EngineLoss(lease: captureSink.closeAll(), reason: reason))
     }
 }
 

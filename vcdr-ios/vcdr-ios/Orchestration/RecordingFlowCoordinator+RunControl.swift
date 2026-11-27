@@ -116,6 +116,17 @@ extension RecordingFlowCoordinator {
         writeFailure(reason: Self.stopWithoutRunReason)
     }
 
+    /// An interruption or a failed route restart cut the capture. A Capturing
+    /// run ends as if the user stopped it, so the words captured so far are
+    /// transcribed. A run still Arming holds no lease yet: its `startCapture`
+    /// returns none, and the run ends in a Processing Failure on its own.
+    func captureLost(_ loss: EngineLoss) async {
+        guard let lease = loss.lease, let active = activeRun, active.run.id == lease.run,
+              case .capturing = active.phase else { return }
+        Logger.recording.warning("Capture lost (\(loss.reason)) — stopping the run")
+        _ = await stopActiveRun()
+    }
+
     func completionAdapters(for origin: RecordingRunOrigin) -> [any RecordingRunCompletionAdapter] {
         [KeyboardChannelRecordingRunCompletionAdapter(keyboardChannel: keyboardChannel, origin: origin), historyCompletionAdapter]
     }

@@ -163,11 +163,14 @@ struct RecordingRunTerminalOutcomeTests {
 
 @MainActor
 private final class FakeRecordingAudioCapture: RecordingAudioCapturing {
-    func startCapture(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void) async -> Bool {
-        true
+    func startCapture(
+        for run: RunID,
+        onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void
+    ) async -> CaptureLease? {
+        CaptureLease(run: run)
     }
 
-    func stopCapture() {}
+    func stopCapture(for run: RunID) {}
 }
 
 private struct ForcedFailure: LocalizedError {
