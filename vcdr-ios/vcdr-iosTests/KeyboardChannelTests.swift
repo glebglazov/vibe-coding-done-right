@@ -4,90 +4,50 @@ import Testing
 
 @Suite("KeyboardChannel")
 struct KeyboardChannelTests {
-    @Test("decodes recording states and bundled result")
-    func decodeState() {
-        #expect(KeyboardChannel.decodeState("idle") == .idle)
-        #expect(KeyboardChannel.decodeState("recording") == .recording)
-        #expect(KeyboardChannel.decodeState("transcribing") == .transcribing)
-        #expect(KeyboardChannel.decodeState("emptyResult") == .emptyResult)
-        #expect(KeyboardChannel.decodeState("idle|hello world ") == .bundledResult("hello world "))
-        #expect(KeyboardChannel.decodeState("unknown") == .idle)
+    @Test("deep links carry their command, and the stop link its run")
+    func deepLinksRoundTrip() throws {
+        let command = CommandID()
+        let run = RunID()
+
+        let record = try #require(KeyboardDeepLink.record(command).url)
+        let stop = try #require(KeyboardDeepLink.stop(command, run: run).url)
+        #expect(record.scheme == "vcdr-ios")
+        #expect(record.host == "record")
+        #expect(KeyboardDeepLink(url: record) == .record(command))
+        #expect(KeyboardDeepLink(url: stop) == .stop(command, run: run))
     }
 
-    @Test("all four terminal states are distinguishable on the wire")
-    func terminalStatesAreDistinct() {
-        // The point of the widened protocol: Empty Result, cancellation and a
-        // Processing Failure are three different wire values, and none of them
-        // is idle. A run's success is the fourth (a bundled result).
-        let wireValues = [
-            KeyboardChannel.encodeBundledResult("hello"),
-            KeyboardChannel.RecordingState.emptyResult.rawValue,
-            KeyboardChannel.RecordingState.cancelled.rawValue,
-            KeyboardChannel.encodeFailure(reason: "Transcription unavailable: model load failed")
-        ]
-        #expect(Set(wireValues).count == wireValues.count)
-        #expect(!wireValues.contains(KeyboardChannel.RecordingState.idle.rawValue))
-
-        #expect(KeyboardChannel.decodeState(wireValues[0]) == .bundledResult("hello"))
-        #expect(KeyboardChannel.decodeState(wireValues[1]) == .emptyResult)
-        #expect(KeyboardChannel.decodeState(wireValues[2]) == .cancelled)
-        #expect(
-            KeyboardChannel.decodeState(wireValues[3])
-                == .failed("Transcription unavailable: model load failed")
-        )
-    }
-
-    @Test("encodes payload states with the same prefix scheme")
-    func encodePayloadStates() {
-        #expect(KeyboardChannel.encodeBundledResult("hello") == "idle|hello")
-        #expect(KeyboardChannel.encodeFailure(reason: "mic seized") == "failed|mic seized")
-        // A reason containing the separator survives — only the first `|` splits.
-        #expect(KeyboardChannel.decodeState("failed|a|b") == .failed("a|b"))
-        // A bare token stays a failure rather than degrading to idle.
-        #expect(KeyboardChannel.decodeState("failed") == .failed(""))
+    @Test("a deep link without its command is not a deep link")
+    func incompleteDeepLinksAreRejected() throws {
+        #expect(KeyboardDeepLink(url: try #require(URL(string: "vcdr-ios://record"))) == nil)
+        #expect(KeyboardDeepLink(url: try #require(URL(string: "vcdr-ios://stop?cmd=\(UUID().uuidString)"))) == nil)
+        #expect(KeyboardDeepLink(url: try #require(URL(string: "other://record?cmd=\(UUID().uuidString)"))) == nil)
     }
 
     @Test("failure reason route uses the existing app URL scheme")
-    func failureReasonDeepLink() {
-        #expect(KeyboardChannel.failureDeepLinkURL.scheme == "vcdr-ios")
-        #expect(KeyboardChannel.failureDeepLinkURL.host == "failure")
+    func failureReasonDeepLink() throws {
+        let url = try #require(KeyboardDeepLink.failure.url)
+        #expect(url.scheme == "vcdr-ios")
+        #expect(url.host == "failure")
+        #expect(KeyboardDeepLink(url: url) == .failure)
     }
 
-    @Test("publishes and reads state")
-    func publishAndReadState() {
+    @Test("the snapshot the app publishes is the snapshot the keyboard reads")
+    func snapshotRoundTrip() {
         let defaults = makeDefaults()
-        let channel = KeyboardChannel(defaults: defaults)
+        let app = KeyboardChannel(defaults: defaults)
+        let keyboard = KeyboardChannel(defaults: defaults)
+        let snapshot = KeyboardWireSnapshot(
+            appSession: UUID(),
+            seq: 3,
+            run: KeyboardWireRun(id: RunID(), phase: .ended(.failed(reason: "mic seized"))),
+            handledCommands: [CommandID()],
+            writtenAt: Date(timeIntervalSince1970: 1_000)
+        )
 
-        channel.publish(.recording)
-        #expect(channel.readState() == .recording)
-
-        channel.publishBundledResult("done ")
-        #expect(channel.readState() == .bundledResult("done "))
-
-        channel.publishEmptyResult()
-        #expect(channel.readState() == .emptyResult)
-
-        channel.publish(.cancelled)
-        #expect(channel.readState() == .cancelled)
-
-        channel.publishFailure(reason: "Transcription failed: forced failure")
-        #expect(channel.readState() == .failed("Transcription failed: forced failure"))
-    }
-
-    @Test("the keyboard consumes a rendered terminal state without notifying")
-    func consumeStateIsSilent() {
-        let defaults = makeDefaults()
-        var notifications: [String] = []
-        let channel = KeyboardChannel(defaults: defaults) { notifications.append($0) }
-
-        channel.publishFailure(reason: "mic seized")
-        notifications.removeAll()
-
-        // The keyboard is the only reader; a post here would return to the same
-        // process and cut short the flash it has just started rendering.
-        channel.consumeState()
-        #expect(channel.readState() == .idle)
-        #expect(notifications.isEmpty)
+        #expect(keyboard.readSnapshot() == nil)
+        app.publish(snapshot)
+        #expect(keyboard.readSnapshot() == snapshot)
     }
 
     @Test("heartbeat drives command versus URL action")
@@ -95,15 +55,25 @@ struct KeyboardChannelTests {
         let defaults = makeDefaults()
         let fixedNow = Date(timeIntervalSince1970: 1_000)
         let channel = KeyboardChannel(defaults: defaults, heartbeatFreshnessWindow: 18)
+        let run = RunID()
 
-        #expect(channel.startRecording(now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
+        guard case .openURL(.record) = channel.startRecording(now: fixedNow) else {
+            Issue.record("Expected the record deep link with no Heartbeat")
+            return
+        }
 
         channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-5))
-        #expect(channel.startRecording(now: fixedNow) == .commandSent)
-        #expect(channel.stopRecording(now: fixedNow) == .commandSent)
+        guard case .commandSent = channel.startRecording(now: fixedNow),
+              case .commandSent = channel.stopRecording(run, now: fixedNow) else {
+            Issue.record("Expected Darwin commands with a fresh Heartbeat")
+            return
+        }
 
         channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-30))
-        #expect(channel.stopRecording(now: fixedNow) == .openURL(KeyboardChannel.stopDeepLinkURL))
+        guard case .openURL(.stop(_, run: run)) = channel.stopRecording(run, now: fixedNow) else {
+            Issue.record("Expected the stop deep link for the shown run with a stale Heartbeat")
+            return
+        }
     }
 
     @Test("stale heartbeat prefers Deep-Link Fallback over trusting visible readiness")
@@ -118,84 +88,59 @@ struct KeyboardChannelTests {
         // Deep-Link Fallback — never a Darwin command that assumes the app is
         // listening.
         channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-19))
-        #expect(channel.startRecording(now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
-        #expect(channel.stopRecording(now: fixedNow) == .openURL(KeyboardChannel.stopDeepLinkURL))
+        #expect(!channel.isAppLikelyAlive(now: fixedNow))
+        #expect(isDeepLink(channel.startRecording(now: fixedNow)))
 
         // Fail-closed teardown clears the Heartbeat (alive: false → 0); the
         // keyboard reads that as stale and still falls back to the deep link.
         channel.writeHeartbeat(alive: false, now: fixedNow)
-        #expect(channel.startRecording(now: fixedNow) == .openURL(KeyboardChannel.recordDeepLinkURL))
-        #expect(channel.stopRecording(now: fixedNow) == .openURL(KeyboardChannel.stopDeepLinkURL))
+        #expect(isDeepLink(channel.startRecording(now: fixedNow)))
 
         // Only a beat inside the freshness window earns the fast Darwin path.
         channel.writeHeartbeat(alive: true, now: fixedNow.addingTimeInterval(-1))
-        #expect(channel.startRecording(now: fixedNow) == .commandSent)
+        #expect(!isDeepLink(channel.startRecording(now: fixedNow)))
+        // A deep link never puts a command on the list: the URL carries it.
+        #expect(channel.readCommands().count == 1)
     }
 
-    @Test("command is read once")
-    func commandReadOnce() {
+    @Test("commands queue in order, and one older than the retention drops off")
+    func commandsQueueAndAgeOut() {
         let defaults = makeDefaults()
-        let channel = KeyboardChannel(defaults: defaults)
-
-        channel.send(.startRecording)
-
-        #expect(channel.readAndClearCommand() == .startRecording)
-        #expect(channel.readAndClearCommand() == nil)
-    }
-
-    @Test("cancel command carries a wall-clock stamp read back by the app")
-    func cancelRecordingWritesCommandAndStamp() {
-        let defaults = makeDefaults()
-        let channel = KeyboardChannel(defaults: defaults)
+        let keyboard = KeyboardChannel(defaults: defaults)
+        let app = KeyboardChannel(defaults: defaults)
         let fixedNow = Date(timeIntervalSince1970: 1_000)
+        let run = RunID()
+        keyboard.writeHeartbeat(alive: true, now: fixedNow)
 
-        channel.cancelRecording(now: fixedNow)
+        _ = keyboard.startRecording(now: fixedNow.addingTimeInterval(-KeyboardChannel.commandRetention - 1))
+        keyboard.discardRecording(run, now: fixedNow.addingTimeInterval(-1))
+        _ = keyboard.stopRecording(run, now: fixedNow)
 
-        #expect(channel.readAndClearCommand() == .cancelRecording)
-        #expect(channel.isCancelStampFresh(now: fixedNow))
+        #expect(app.readCommands().map(\.kind) == [.discard(run), .stop(run)])
     }
 
-    @Test("a cancel stamp inside the freshness window is applied, an older one is dropped")
-    func cancelStampFreshnessWindow() {
-        let defaults = makeDefaults()
-        let fixedNow = Date(timeIntervalSince1970: 1_000)
-        let channel = KeyboardChannel(defaults: defaults, cancelFreshnessWindow: 10)
-
-        channel.cancelRecording(now: fixedNow.addingTimeInterval(-9))
-        #expect(channel.isCancelStampFresh(now: fixedNow))
-
-        channel.cancelRecording(now: fixedNow.addingTimeInterval(-11))
-        #expect(!channel.isCancelStampFresh(now: fixedNow))
-    }
-
-    @Test("a stale cancel is dropped for good and cannot affect a later run")
-    func staleCancelStampIsClearedNotJustRejected() {
-        let defaults = makeDefaults()
-        let fixedNow = Date(timeIntervalSince1970: 1_000)
-        let channel = KeyboardChannel(defaults: defaults, cancelFreshnessWindow: 10)
-
-        channel.cancelRecording(now: fixedNow.addingTimeInterval(-30))
-        #expect(!channel.isCancelStampFresh(now: fixedNow))
-
-        // Re-checking later must not resurrect the same stale stamp against
-        // whatever Recording Run is active by then — it was cleared, not just
-        // rejected once.
-        #expect(!channel.isCancelStampFresh(now: fixedNow.addingTimeInterval(60)))
-    }
-
-    @Test("notifications are emitted for command and state writes")
+    @Test("a command and a changed snapshot each post; a renewed snapshot does not")
     func notificationNames() {
         let defaults = makeDefaults()
-        var notifications: [String] = []
-        let channel = KeyboardChannel(defaults: defaults) { notifications.append($0) }
+        let posts = PostLog()
+        let channel = KeyboardChannel(defaults: defaults, notify: { posts.append($0) })
+        let snapshot = KeyboardWireSnapshot(
+            appSession: UUID(), seq: 1, run: nil, handledCommands: [], writtenAt: Date()
+        )
 
-        channel.send(.stopRecording)
-        channel.publish(.transcribing)
+        channel.discardRecording(RunID())
+        channel.publish(snapshot)
+        channel.refresh(snapshot)
 
-        #expect(notifications == [
+        #expect(posts.names == [
             "glebglazov.vcdr-ios.command",
             "glebglazov.vcdr-ios.stateChanged"
         ])
+    }
+
+    private func isDeepLink(_ action: KeyboardChannel.Action) -> Bool {
+        if case .openURL = action { return true }
+        return false
     }
 
     private func makeDefaults() -> UserDefaults {
@@ -203,5 +148,16 @@ struct KeyboardChannelTests {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
+    }
+}
+
+private final class PostLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [String] = []
+
+    var names: [String] { lock.withLock { recorded } }
+
+    func append(_ name: String) {
+        lock.withLock { recorded.append(name) }
     }
 }

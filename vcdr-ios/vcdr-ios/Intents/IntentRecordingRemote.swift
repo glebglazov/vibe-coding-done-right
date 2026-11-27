@@ -17,7 +17,7 @@ final class IntentRecordingRemote: RecordingRunRemote {
 
     func startFromShortcut() async throws(RecordingRemoteRefusal) {
         boot.launch()
-        guard coordinator.activeRunPhase == nil else {
+        guard coordinator.activeRun == nil else {
             Logger.recording.info("Start Recording ignored — a run is already in progress")
             return
         }
@@ -34,7 +34,7 @@ final class IntentRecordingRemote: RecordingRunRemote {
         guard !(await card.isShowingCard()) else { return }
         // The card check suspends; the run it was made for may have ended, and
         // another may have started, by the time it answers.
-        guard let active = coordinator.activeRun, active.run === run, case .capturing = active.phase else { return }
+        guard let active = coordinator.activeRun, active.run === run, case .capturing = active.run.phase else { return }
         Logger.recording.error("Start Recording discarded: ActivityKit refused the card")
         await coordinator.cancelRecording()
         throw .cardUnavailable

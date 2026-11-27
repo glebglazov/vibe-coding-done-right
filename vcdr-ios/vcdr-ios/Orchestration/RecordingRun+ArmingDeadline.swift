@@ -41,12 +41,11 @@ extension RecordingRun {
             "Arming Deadline elapsed with no first audio buffer — terminating as Processing Failure"
         )
         cancelSetup()
-        await streaming.cancel()
-        _ = await finish(.processingFailure(
+        // Ends the run, and revokes its capture claim, before any await: a
+        // hung `startCapture` then returns no lease and leaves the mic closed.
+        await finish(.processingFailure(
             RecordingRunFailure(message: Self.armingDeadlineFailureMessage)
         ))
-        // Stop capture after claiming the terminal state so a hung
-        // `startCapture` cannot race ahead of `finish` and report success.
-        audioRecorder.stopCapture()
+        await streaming.cancel()
     }
 }

@@ -38,7 +38,7 @@ nonisolated enum MicPresenceCardPolicy {
             return reachable
                 ? .live(.concluded(outcome))
                 : .concluding(.concluded(outcome), dismissAt: until)
-        case .active(_, .cancelling), .concluded, nil:
+        case .concluded, nil:
             return reachable ? .live(.ready) : .hidden
         }
     }
@@ -47,7 +47,7 @@ nonisolated enum MicPresenceCardPolicy {
         switch phase {
         case .arming: .arming(cardStops: origin.stopsFromCard)
         case .capturing(let since): .capturing(since: since, cardStops: origin.stopsFromCard)
-        case .cancelling, .finalizing: nil
+        case .finalizing: nil
         }
     }
 }

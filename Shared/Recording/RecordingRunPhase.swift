@@ -2,10 +2,6 @@ import Foundation
 
 nonisolated enum RecordingRunPhase: Equatable, Sendable {
     case arming
-    /// Torn down with no result: a stop or Discard during Arming, or a
-    /// Shortcut start whose card the system refused. Nothing may act on the
-    /// run while it ends.
-    case cancelling
     case capturing(since: Date)
     case finalizing
 
@@ -14,7 +10,7 @@ nonisolated enum RecordingRunPhase: Equatable, Sendable {
     var locksOutputChoices: Bool {
         switch self {
         case .arming, .capturing: true
-        case .cancelling, .finalizing: false
+        case .finalizing: false
         }
     }
 }
@@ -30,7 +26,7 @@ nonisolated enum RecordingToggle {
         switch phase {
         case nil: .start
         case .arming?, .capturing?: .stop
-        case .cancelling?, .finalizing?: .ignore
+        case .finalizing?: .ignore
         }
     }
 

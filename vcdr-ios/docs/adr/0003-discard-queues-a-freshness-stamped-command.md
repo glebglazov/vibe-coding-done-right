@@ -24,6 +24,14 @@ But a queued command is not free. `Command` is a single read-and-clear key in th
 - **Queue with no stamp.** Simplest. Rejected: a cancel sitting in the app group across a suspend can be read after a new recording has started and kill it — silent data loss on a run the user wanted.
 - **Queue with a freshness stamp** (chosen). No app bounce, and the only cost is that a Discard sent to a long-suspended app may not apply — acceptable, because a suspended app is not recording.
 
+## Amendment (2026-11-27): Keyboard Channel v2
+
+The single read-and-clear command slot and its separate stamp key are gone. The keyboard now appends each command, with its own ID and its `sentAt` time, to a list that only it writes. A Discard also names the run the keyboard showed.
+
+- The freshness rule is unchanged: the app drops a Discard whose `sentAt` is older than the window (10 s, `KeyboardChannel.discardFreshnessWindow`).
+- The app also drops a Discard whose run is not the current run. So a queued Discard cannot reach a later run even inside the window.
+- The queue keeps every command in order. A Discard followed by a stop are both taken; the stop then finds its run ended and does nothing, so the discarded text is not delivered.
+
 ## Consequences
 
 - **A Discard can be a no-op without telling the user.** The keyboard shows the cancelled flash optimistically. If the app was suspended past the freshness window, the run it would have cancelled is already over by other means; if it somehow is not, the recording continues. Accepted deliberately — the alternative is blocking the keyboard on an acknowledgement it usually cannot get.

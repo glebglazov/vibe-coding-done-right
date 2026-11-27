@@ -347,32 +347,6 @@ struct HotMicSessionTests {
         await waitUntil { env.engine.endHotSessionCalls == 1 }
     }
 
-    @Test("reset tears down session signals without refreshing the timeout")
-    func resetTearsDownWithoutRefreshingTimeout() async {
-        let env = makeEnv(policy: .fiveMinutes)
-
-        await env.session.start()
-        await settle()
-
-        #expect(env.engine.isHot)
-        #expect(env.channel.isAppLikelyAlive())
-        #expect(env.presence.isShown)
-        #expect(env.clock.sleepCount == 1)
-
-        env.session.reset()
-        await waitUntil { env.presence.stopCalls == 1 }
-
-        #expect(env.engine.endHotSessionCalls == 1)
-        #expect(!env.engine.isHot)
-        #expect(!env.channel.isAppLikelyAlive())
-        #expect(!env.presence.isShown)
-        #expect(env.clock.sleepCount == 1)
-
-        env.clock.advance()
-        await settle()
-        #expect(env.engine.endHotSessionCalls == 1)
-    }
-
     @Test("arming cancellation without a prior warm window releases mic presence immediately")
     func armingCancellationWithoutPriorWindowReleasesImmediately() async {
         let env = makeEnv(policy: .fiveMinutes)
@@ -557,6 +531,36 @@ struct HotMicSessionTests {
         #expect(env.presence.stopCalls == 0)
     }
 
+    @Test("the idle deadline withdraws readiness even when the engine already died")
+    func idleDeadlineAfterEngineDiedWithdrawsReadiness() async {
+        let env = makeEnv(policy: .fiveMinutes)
+        await env.session.start()
+        await settle()
+        #expect(env.presence.isShown)
+        #expect(env.clock.sleepCount == 1) // idle timer is armed and parked
+
+        env.engine.isHot = false // iOS stopped the engine; nothing tore down
+        env.clock.advance()
+        await waitUntil { !env.presence.isShown }
+
+        #expect(!env.presence.isShown)
+        #expect(!env.channel.isAppLikelyAlive())
+    }
+
+    @Test("an engine loss withdraws readiness at once, before any idle deadline")
+    func engineLossWithdrawsReadiness() async {
+        let env = makeEnv(policy: .always)
+        await env.session.start()
+        #expect(env.presence.isShown)
+
+        env.engine.loseEngine()
+        await waitUntil { !env.presence.isShown }
+
+        #expect(!env.presence.isShown)
+        #expect(!env.channel.isAppLikelyAlive())
+        #expect(!env.session.isAlive)
+    }
+
     // MARK: - Environment
 
     @MainActor
@@ -646,6 +650,7 @@ final class FakeWarmEngine: WarmEngine {
     /// `isHot`) but throws — modeling a partial audio-release failure so tests
     /// can assert the session fails closed.
     var endHotSessionError: (any Error)?
+    private let engineLossFeed = EngineLossFeed()
 
     func requestMicrophonePermission() async -> Bool {
         permissionRequests += 1
@@ -667,6 +672,17 @@ final class FakeWarmEngine: WarmEngine {
         isHot = false
         isRecording = false
         if let endHotSessionError { throw endHotSessionError }
+    }
+
+    func engineLosses() -> AsyncStream<EngineLoss> {
+        engineLossFeed.stream()
+    }
+
+    /// An interruption at idle: iOS stops the engine and the recorder
+    /// reports the loss.
+    func loseEngine() {
+        isHot = false
+        engineLossFeed.send(EngineLoss(lease: nil, reason: "Audio was interrupted"))
     }
 }
 

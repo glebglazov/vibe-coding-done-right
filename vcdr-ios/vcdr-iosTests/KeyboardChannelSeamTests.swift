@@ -9,14 +9,14 @@ struct KeyboardChannelSeamTests {
         let fake = FakeKeyboardChannel()
         let channel: any KeyboardChannelProtocol = fake
         let now = Date(timeIntervalSince1970: 1_000)
+        let snapshot = KeyboardWireSnapshot(
+            appSession: UUID(), seq: 1, run: nil, handledCommands: [], writtenAt: now
+        )
+        let command = KeyboardCommand(id: CommandID(), kind: .start, sentAt: now)
 
-        channel.publish(.recording)
-        channel.publishBundledResult("done ")
-
-        fake.enqueue(.startRecording)
-        #expect(channel.readAndClearCommand() == .startRecording)
-        #expect(channel.readAndClearCommand() == nil)
-        channel.clearCommand()
+        channel.publish(snapshot)
+        fake.enqueue(command)
+        #expect(channel.readCommands() == [command])
 
         #expect(!channel.isAppLikelyAlive(now: now))
         channel.writeHeartbeat(alive: true, now: now.addingTimeInterval(-5))
@@ -25,11 +25,8 @@ struct KeyboardChannelSeamTests {
         #expect(!channel.isAppLikelyAlive(now: now))
 
         #expect(fake.interactions == [
-            .publish(.recording),
-            .publishBundledResult("done "),
-            .readAndClearCommand,
-            .readAndClearCommand,
-            .clearCommand,
+            .publish(snapshot),
+            .readCommands,
             .isAppLikelyAlive(now: now),
             .writeHeartbeat(alive: true, now: now.addingTimeInterval(-5)),
             .isAppLikelyAlive(now: now),
@@ -44,33 +41,10 @@ struct KeyboardChannelSeamTests {
         let fake = FakeKeyboardChannel()
         let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard(), keyboardChannel: fake)
 
-        coordinator.writeState(.recording)
-        coordinator.cleanupStaleResults()
+        coordinator.keyboardWire.publishLaunch()
 
-        #expect(fake.interactions == [
-            .publish(.recording),
-            .clearCommand,
-            .publish(.idle)
-        ])
-    }
-
-    @MainActor
-    @Test("a keyboard stop with no Recording Run publishes the failure, never idle")
-    func stopWithoutRunPublishesFailure() async {
-        let fake = FakeKeyboardChannel()
-        let coordinator = RecordingFlowCoordinator(presence: SpyMicPresenceCard(), keyboardChannel: fake)
-
-        // Interrupted before audio started: no run exists, so no completion
-        // adapter will report for it. The keyboard is mid-poll waiting for a
-        // terminal state — it must get the failure, not an idle it would have
-        // to interpret (ADR-0004).
-        await coordinator.stopFromKeyboard()
-
-        let publishedFailures = fake.interactions.compactMap { interaction -> String? in
-            guard case .publishFailure(let reason) = interaction else { return nil }
-            return reason
-        }
-        #expect(publishedFailures == ["Recording was interrupted before audio started"])
-        #expect(!fake.interactions.contains(.publish(.idle)))
+        #expect(fake.published.count == 1)
+        #expect(fake.published.first?.run == nil)
+        #expect(fake.published.first?.handledCommands == [])
     }
 }

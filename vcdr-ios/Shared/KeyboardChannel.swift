@@ -1,14 +1,15 @@
 import Foundation
 
+/// The app's side of the Keyboard Channel.
 nonisolated protocol KeyboardChannelProtocol: Sendable {
-    func publish(_ state: KeyboardChannel.RecordingState)
-    func publishBundledResult(_ text: String)
-    func publishFailure(reason: String)
-    func readAndClearCommand() -> KeyboardChannel.Command?
-    func clearCommand()
+    /// Writes the snapshot and tells the keyboard it changed.
+    func publish(_ snapshot: KeyboardWireSnapshot)
+    /// Writes the snapshot without telling the keyboard: only `writtenAt`
+    /// moved, and waking the keyboard for that would cost it for nothing.
+    func refresh(_ snapshot: KeyboardWireSnapshot)
+    func readCommands() -> [KeyboardCommand]
     func writeHeartbeat(alive: Bool, now: Date)
     func isAppLikelyAlive(now: Date) -> Bool
-    func isCancelStampFresh(now: Date) -> Bool
 }
 
 nonisolated extension KeyboardChannelProtocol {
@@ -19,68 +20,30 @@ nonisolated extension KeyboardChannelProtocol {
     func isAppLikelyAlive() -> Bool {
         isAppLikelyAlive(now: Date())
     }
-
-    func isCancelStampFresh() -> Bool {
-        isCancelStampFresh(now: Date())
-    }
 }
 
+/// The Keyboard Channel over the App Group's defaults. Each key has one
+/// writer: the snapshot and the Heartbeat are the app's, the command list
+/// and the settled run are the keyboard's. So no write can lose another
+/// process's write.
 nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable {
-    enum Command: String, Equatable {
-        case startRecording
-        case stopRecording
-        /// Ends the run without producing text (Discard, ADR-0003). Written
-        /// together with a wall-clock stamp in `Keys.commandCancelStamp` —
-        /// unlike the other two commands, applying it is conditional on that
-        /// stamp still being fresh.
-        case cancelRecording
-    }
-
-    /// The wire vocabulary: one token per value the app can write to the state
-    /// key. Every Recording Run terminal state has its own token, so the
-    /// keyboard never has to infer which one happened (ADR-0004).
-    ///
-    /// Two tokens carry a payload appended after `|` — `idle` carries the
-    /// Bundled Result and `failed` carries the failure reason. Publish those
-    /// through `publishBundledResult` / `publishFailure(reason:)` rather than
-    /// `publish`, so the payload always travels with its token.
-    enum RecordingState: String, Equatable {
-        case idle
-        case recording
-        case transcribing
-        case emptyResult
-        case cancelled
-        case failed
-    }
-
-    /// A decoded wire value: a token plus its payload, if it had one.
-    enum State: Equatable {
-        case idle
-        case recording
-        case transcribing
-        case emptyResult
-        case cancelled
-        /// Processing Failure, carrying the same reason string the app shows.
-        case failed(String)
-        case bundledResult(String)
-    }
-
     enum Action: Equatable {
-        case commandSent
-        case openURL(URL)
+        case commandSent(CommandID)
+        case openURL(KeyboardDeepLink)
     }
 
     private enum Keys {
-        static let command = "command"
-        static let commandCancelStamp = "command_cancel_stamp"
-        static let state = "recordingState"
+        static let snapshot = "keyboard_wire_snapshot"
+        static let commands = "keyboard_wire_commands"
+        static let settledRun = "keyboard_settled_run"
         static let heartbeat = "app_heartbeat_at"
     }
 
     private let defaults: UserDefaults
     private let notify: @Sendable (String) -> Void
     private let heartbeatFreshnessWindow: TimeInterval
-    private let cancelFreshnessWindow: TimeInterval
+
+    // MARK: - Constants
 
     /// How long a Heartbeat stays credible — the window over which the app is
     /// treated as reachable in place. The keyboard reads it to choose between a
@@ -91,10 +54,15 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     /// beat, narrow enough that a dead app is noticed quickly.
     static let heartbeatFreshnessWindow: TimeInterval = 18
 
+    /// How long a Discard stays applicable (ADR-0003). An older one is
+    /// dropped, never applied to whatever run is current when the app reads it.
+    static let discardFreshnessWindow: TimeInterval = 10
+
+    /// How long a command stays on the list. Longer than the Discard
+    /// freshness window, so the app can still read a Discard and drop it.
+    static let commandRetention: TimeInterval = 60
+
     static let appGroupID = "group.glebglazov.vcdr-ios"
-    static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
-    static let stopDeepLinkURL = URL(string: "vcdr-ios://stop")!
-    static let failureDeepLinkURL = URL(string: "vcdr-ios://failure")!
     static let commandNotificationName = "glebglazov.vcdr-ios.command"
     static let stateNotificationName = "glebglazov.vcdr-ios.stateChanged"
 
@@ -108,148 +76,84 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
     init(
         defaults: UserDefaults,
         notify: @escaping @Sendable (String) -> Void = { _ in },
-        heartbeatFreshnessWindow: TimeInterval = KeyboardChannel.heartbeatFreshnessWindow,
-        cancelFreshnessWindow: TimeInterval = 10
+        heartbeatFreshnessWindow: TimeInterval = KeyboardChannel.heartbeatFreshnessWindow
     ) {
         self.defaults = defaults
         self.notify = notify
         self.heartbeatFreshnessWindow = heartbeatFreshnessWindow
-        self.cancelFreshnessWindow = cancelFreshnessWindow
     }
 
-    // MARK: - Keyboard-side commands
+    // MARK: - Keyboard side
 
-    @discardableResult
+    /// Sends start as a Darwin command while the Heartbeat is fresh, or
+    /// returns the record deep link that carries the same command.
     func startRecording(now: Date = Date()) -> Action {
-        if isAppLikelyAlive(now: now) {
-            send(.startRecording)
-            return .commandSent
+        let id = CommandID()
+        guard isAppLikelyAlive(now: now) else { return .openURL(.record(id)) }
+        append(KeyboardCommand(id: id, kind: .start, sentAt: now))
+        return .commandSent(id)
+    }
+
+    /// Stops `run`, the run the keyboard shows, the same way.
+    func stopRecording(_ run: RunID, now: Date = Date()) -> Action {
+        let id = CommandID()
+        guard isAppLikelyAlive(now: now) else { return .openURL(.stop(id, run: run)) }
+        append(KeyboardCommand(id: id, kind: .stop(run), sentAt: now))
+        return .commandSent(id)
+    }
+
+    /// Discards `run` (ADR-0003). It never falls back to a deep link:
+    /// foregrounding the app to throw something away defeats the point. The
+    /// app drops a Discard that is no longer fresh when it reads it.
+    func discardRecording(_ run: RunID, now: Date = Date()) {
+        append(KeyboardCommand(id: CommandID(), kind: .discard(run), sentAt: now))
+    }
+
+    /// The app's latest snapshot. Nil before the app first published, or for
+    /// a value this build cannot read.
+    func readSnapshot() -> KeyboardWireSnapshot? {
+        guard let data = defaults.data(forKey: Keys.snapshot) else { return nil }
+        return try? JSONDecoder().decode(KeyboardWireSnapshot.self, from: data)
+    }
+
+    /// The run whose outcome the keyboard already showed or inserted.
+    func settledRun() -> RunID? {
+        guard let data = defaults.data(forKey: Keys.settledRun) else { return nil }
+        return try? JSONDecoder().decode(RunID.self, from: data)
+    }
+
+    func markSettled(_ run: RunID) {
+        defaults.set(try? JSONEncoder().encode(run), forKey: Keys.settledRun)
+    }
+
+    /// The keyboard is the list's only writer, so this read-and-write loses
+    /// no command. A command older than `commandRetention` drops off.
+    private func append(_ command: KeyboardCommand) {
+        let kept = readCommands().filter {
+            command.sentAt.timeIntervalSince($0.sentAt) < Self.commandRetention
         }
-        return .openURL(Self.recordDeepLinkURL)
-    }
-
-    @discardableResult
-    func stopRecording(now: Date = Date()) -> Action {
-        if isAppLikelyAlive(now: now) {
-            send(.stopRecording)
-            return .commandSent
-        }
-        return .openURL(Self.stopDeepLinkURL)
-    }
-
-    /// Ends the active Recording Run without producing text (Discard,
-    /// ADR-0003). Unlike `startRecording`/`stopRecording` this never falls
-    /// back to a deep link — foregrounding the app to throw something away
-    /// defeats the point — so it does not return an `Action` for the caller
-    /// to branch on. The wall-clock stamp lets the app drop a cancel that sat
-    /// queued across a suspend instead of applying it to whatever run is
-    /// active when the app next wakes.
-    func cancelRecording(now: Date = Date()) {
-        defaults.set(now.timeIntervalSince1970, forKey: Keys.commandCancelStamp)
-        send(.cancelRecording)
-    }
-
-    func send(_ command: Command) {
-        defaults.set(command.rawValue, forKey: Keys.command)
+        defaults.set(try? JSONEncoder().encode(kept + [command]), forKey: Keys.commands)
         defaults.synchronize()
         notify(Self.commandNotificationName)
     }
 
-    func readAndClearCommand() -> Command? {
-        guard
-            let raw = defaults.string(forKey: Keys.command),
-            let command = Command(rawValue: raw)
-        else { return nil }
-        defaults.removeObject(forKey: Keys.command)
-        return command
-    }
+    // MARK: - App side
 
-    func clearCommand() {
-        defaults.removeObject(forKey: Keys.command)
-    }
-
-    // MARK: - State
-
-    func readState() -> State {
-        guard let raw = defaults.string(forKey: Keys.state) else { return .idle }
-        return Self.decodeState(raw)
-    }
-
-    func publish(_ state: RecordingState) {
-        publishRaw(state.rawValue)
-    }
-
-    func publishBundledResult(_ text: String) {
-        publishRaw(Self.encodeBundledResult(text))
-    }
-
-    /// Publishes a Processing Failure together with the reason the app shows
-    /// the user, so the keyboard's FAILED pill and the app's error text come
-    /// from one fact rather than two.
-    func publishFailure(reason: String) {
-        publishRaw(Self.encodeFailure(reason: reason))
-    }
-
-    func publishEmptyResult() {
-        publish(.emptyResult)
-    }
-
-    func clearResult() {
-        publish(.idle)
-    }
-
-    /// Returns the channel to idle without a Darwin post — for the keyboard
-    /// clearing a terminal state it has just rendered. The keyboard is the only
-    /// reader of this key, so the post would come straight back to it and cut
-    /// the flash it is in the middle of showing; the app never observes state.
-    func consumeState() {
-        defaults.set(RecordingState.idle.rawValue, forKey: Keys.state)
-        defaults.synchronize()
-    }
-
-    private func publishRaw(_ value: String) {
-        defaults.set(value, forKey: Keys.state)
-        defaults.synchronize()
+    func publish(_ snapshot: KeyboardWireSnapshot) {
+        refresh(snapshot)
         notify(Self.stateNotificationName)
     }
 
-    static func decodeState(_ raw: String) -> State {
-        if let text = payload(of: .idle, in: raw) {
-            return text.isEmpty ? .idle : .bundledResult(text)
-        }
-        if let reason = payload(of: .failed, in: raw) {
-            return .failed(reason)
-        }
-        guard let state = RecordingState(rawValue: raw) else { return .idle }
-        switch state {
-        case .idle: return .idle
-        case .recording: return .recording
-        case .transcribing: return .transcribing
-        case .emptyResult: return .emptyResult
-        case .cancelled: return .cancelled
-        case .failed: return .failed("")
-        }
+    func refresh(_ snapshot: KeyboardWireSnapshot) {
+        defaults.set(try? JSONEncoder().encode(snapshot), forKey: Keys.snapshot)
+        defaults.synchronize()
     }
 
-    static func encodeBundledResult(_ text: String) -> String {
-        encode(.idle, payload: text)
-    }
-
-    static func encodeFailure(reason: String) -> String {
-        encode(.failed, payload: reason)
-    }
-
-    private static func encode(_ state: RecordingState, payload: String) -> String {
-        "\(state.rawValue)|\(payload)"
-    }
-
-    /// The payload written after `<token>|`, or nil when `raw` is not that
-    /// token's payload form. Only the first separator is significant, so a
-    /// payload containing `|` survives the roundtrip.
-    private static func payload(of state: RecordingState, in raw: String) -> String? {
-        let prefix = "\(state.rawValue)|"
-        guard raw.hasPrefix(prefix) else { return nil }
-        return String(raw.dropFirst(prefix.count))
+    /// Every command on the list, oldest first.
+    func readCommands() -> [KeyboardCommand] {
+        defaults.synchronize()
+        guard let data = defaults.data(forKey: Keys.commands) else { return [] }
+        return (try? JSONDecoder().decode([KeyboardCommand].self, from: data)) ?? []
     }
 
     // MARK: - Heartbeat
@@ -263,18 +167,5 @@ nonisolated struct KeyboardChannel: KeyboardChannelProtocol, @unchecked Sendable
         let beat = defaults.double(forKey: Keys.heartbeat)
         guard beat > 0 else { return false }
         return now.timeIntervalSince1970 - beat < heartbeatFreshnessWindow
-    }
-
-    // MARK: - Cancel freshness
-
-    /// True when a queued `cancelRecording` command's stamp is still inside
-    /// the freshness window. Always clears the stamp, so a stale cancel that
-    /// sat in the app group across a suspend is dropped for good rather than
-    /// being re-evaluated against whatever Recording Run is active next.
-    func isCancelStampFresh(now: Date = Date()) -> Bool {
-        let stamp = defaults.double(forKey: Keys.commandCancelStamp)
-        defaults.removeObject(forKey: Keys.commandCancelStamp)
-        guard stamp > 0 else { return false }
-        return now.timeIntervalSince1970 - stamp < cancelFreshnessWindow
     }
 }

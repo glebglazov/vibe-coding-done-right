@@ -34,5 +34,11 @@ enum RecordingRunTerminalState: Equatable {
 
 @MainActor
 protocol RecordingRunCompletionAdapter: AnyObject {
+    /// The run reached a live phase. Most destinations wait for the end.
+    func progressed(to phase: RecordingRunPhase)
     func complete(_ terminalState: RecordingRunTerminalState) async
+}
+
+extension RecordingRunCompletionAdapter {
+    func progressed(to phase: RecordingRunPhase) {}
 }

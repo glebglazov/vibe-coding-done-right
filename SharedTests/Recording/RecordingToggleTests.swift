@@ -9,12 +9,11 @@ import Testing
 struct RecordingToggleTests {
     private static let capturing = RecordingRunPhase.capturing(since: Date(timeIntervalSince1970: 0))
 
-    @Test("a toggle starts with no run, stops Arming and Capturing, and ignores a cancel or Finalizing in flight")
+    @Test("a toggle starts with no run, stops Arming and Capturing, and ignores Finalizing")
     func toggleTable() {
         #expect(RecordingToggle.command(for: nil) == .start)
         #expect(RecordingToggle.command(for: .arming) == .stop)
         #expect(RecordingToggle.command(for: Self.capturing) == .stop)
-        #expect(RecordingToggle.command(for: .cancelling) == .ignore)
         #expect(RecordingToggle.command(for: .finalizing) == .ignore)
     }
 
@@ -23,7 +22,6 @@ struct RecordingToggleTests {
         #expect(RecordingToggle.stopCommand(for: nil) == .ignore)
         #expect(RecordingToggle.stopCommand(for: .arming) == .stop)
         #expect(RecordingToggle.stopCommand(for: Self.capturing) == .stop)
-        #expect(RecordingToggle.stopCommand(for: .cancelling) == .ignore)
         #expect(RecordingToggle.stopCommand(for: .finalizing) == .ignore)
     }
 }

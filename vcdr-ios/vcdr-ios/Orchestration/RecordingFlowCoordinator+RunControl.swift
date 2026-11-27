@@ -2,10 +2,10 @@ import Foundation
 import OSLog
 import UIKit
 
+/// The current Recording Run. Its phase is read from the run, never kept here.
 struct ActiveRecordingRun {
     let origin: RecordingRunOrigin
     let run: RecordingRun
-    var phase: RecordingRunPhase
 }
 
 enum RecordingStartResult: Equatable {
@@ -24,19 +24,24 @@ enum RecordingStopResult: Equatable {
 
 extension RecordingFlowCoordinator {
     private static let finalizingTaskName = "Finalizing"
-    private static let stopWithoutRunReason = "Recording was interrupted before audio started"
 
-    var activeRunPhase: RecordingRunPhase? { activeRun?.phase }
+    var activeRunPhase: RecordingRunPhase? { activeRun?.run.phase.live }
 
     var hasMicrophonePermission: Bool { recordingEngine.hasMicrophonePermission }
 
     @discardableResult
     func startRecording(origin: RecordingRunOrigin) async -> RecordingStartResult {
+        guard let run = beginRecording(origin: origin) else { return .ignored }
+        return await armUntilCapturing(run)
+    }
+
+    /// Makes a new run current, Arming, with no await: from the next line on,
+    /// a stop or a second start sees it. Nil while another run is current.
+    func beginRecording(origin: RecordingRunOrigin) -> RecordingRun? {
         guard !recordingEngine.isRecording, activeRun == nil else {
             Logger.app.info("[RecordTiming] startRecording bailed — session already active or starting")
-            return .ignored
+            return nil
         }
-        let recordStart = ContinuousClock.now
         Logger.app.info("[RecordTiming] startRecording entered origin=\(String(describing: origin))")
 
         isKeyboardRun = origin == .keyboard
@@ -45,7 +50,6 @@ extension RecordingFlowCoordinator {
         discardNotes.dismiss()
         state = .arming
         setIdleTimerDisabled(true)
-        Logger.app.info("[RecordTiming] state=arming set at +\(ContinuousClock.now - recordStart)")
 
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -53,42 +57,21 @@ extension RecordingFlowCoordinator {
             self.currentTextStyle = SettingOverrides.effectiveTextStyle()
         }
 
-        writeState(.recording)
-
         hotMicSession.recordIntentStarted()
 
         let run = makeRecordingRun(origin: origin)
-        setActiveRun(ActiveRecordingRun(origin: origin, run: run, phase: .arming))
-        Logger.app.info("[RecordTiming] recording run created at +\(ContinuousClock.now - recordStart)")
-
-        let started = await run.start()
-        Logger.app.info("[RecordTiming] audioRecorder.startCapture returned (Capturing) at +\(ContinuousClock.now - recordStart)")
-
-        guard let active = activeRun, active.run === run else { return Self.endedBeforeCapturing(run) }
-
-        guard started else {
-            hotMicSession.recordIntentCancelledBeforeCapture()
-            setActiveRun(nil)
-            return Self.endedBeforeCapturing(run)
-        }
-
-        guard active.phase == .arming else {
-            _ = await run.cancel()
-            if activeRun?.run === run { setActiveRun(nil) }
-            hotMicSession.recordIntentCancelledBeforeCapture()
-            return .cancelledArming
-        }
-
-        setActiveRun(ActiveRecordingRun(origin: origin, run: run, phase: .capturing(since: .now)))
-        state = .recording
-        hotMicSession.recordingStarted()
-        if isModelReady { recordHaptic.impactOccurred() }
-        return .capturing
+        activeRun = ActiveRecordingRun(origin: origin, run: run)
+        runPresence.runChanged(.active(origin: origin, phase: .arming))
+        return run
     }
 
-    /// A run that ended while Arming was either cancelled by the user or
-    /// failed to process; only the failure has a message the caller can show.
-    private static func endedBeforeCapturing(_ run: RecordingRun) -> RecordingStartResult {
+    /// Arming, until audio flows or the run ends. Only a failure has a
+    /// message the caller can show.
+    func armUntilCapturing(_ run: RecordingRun) async -> RecordingStartResult {
+        let armingStart = ContinuousClock.now
+        let started = await run.start()
+        Logger.app.info("[RecordTiming] Arming ended (capturing=\(started)) after \(ContinuousClock.now - armingStart)")
+        if started { return .capturing }
         if case .processingFailure(let failure)? = run.terminalState { return .failed(failure.message) }
         return .cancelledArming
     }
@@ -96,59 +79,103 @@ extension RecordingFlowCoordinator {
     @discardableResult
     func stopActiveRun() async -> RecordingStopResult {
         guard let active = activeRun else { return .noRun }
-        switch active.phase {
-        case .cancelling, .finalizing:
-            Logger.app.info("[RecordTiming] stop ignored — run is \(String(describing: active.phase))")
-            return .ignored
+        return await stop(active)
+    }
+
+    /// A keyboard stop names the run the keyboard showed. A run that already
+    /// ended, or any other run, is left alone: the wire already shows how
+    /// the named run ended.
+    @discardableResult
+    func stopKeyboardRun(_ target: RunID) async -> RecordingStopResult {
+        guard let active = activeRun, active.run.id == target else {
+            Logger.app.info("[RecordTiming] keyboard stop ignored — its run is not current")
+            return .noRun
+        }
+        return await stop(active)
+    }
+
+    /// An interruption or a failed route restart cut the capture. A Capturing
+    /// run ends as if the user stopped it, so the words captured so far are
+    /// transcribed. A run still Arming holds no lease yet: its `startCapture`
+    /// returns none, and the run ends in a Processing Failure on its own.
+    func captureLost(_ loss: EngineLoss) async {
+        guard let lease = loss.lease, let active = activeRun, active.run.id == lease.run,
+              case .capturing = active.run.phase else { return }
+        Logger.recording.warning("Capture lost (\(loss.reason)) — stopping the run")
+        _ = await stop(active)
+    }
+
+    func completionAdapters(for origin: RecordingRunOrigin, run: RunID) -> [any RecordingRunCompletionAdapter] {
+        [KeyboardChannelRecordingRunCompletionAdapter(wire: keyboardWire, run: run, origin: origin), historyCompletionAdapter]
+    }
+
+    private func stop(_ active: ActiveRecordingRun) async -> RecordingStopResult {
+        switch active.run.phase {
         case .arming:
             Logger.app.info("[RecordTiming] stop during Arming — cancelling")
-            abortArming()
+            _ = await active.run.cancel()
             return .cancelledArming
         case .capturing:
-            return .finalized(await finalize(active))
+            if isModelReady { recordHaptic.impactOccurred() }
+            await active.run.endCapture()
+            return .finalized(await backgroundTasks.run(named: Self.finalizingTaskName) {
+                let terminalState = await active.run.stop()
+                await runPresence.settled()
+                return terminalState
+            })
+        case .finalizing, .ended:
+            Logger.app.info("[RecordTiming] stop ignored — run is \(String(describing: active.run.phase))")
+            return .ignored
         }
     }
 
-    func stopFromKeyboard() async {
-        guard await stopActiveRun() == .noRun else { return }
-        Logger.recording.error("Publishing failure: stop found no Recording Run — \(Self.stopWithoutRunReason)")
-        state = .error(Self.stopWithoutRunReason)
-        writeFailure(reason: Self.stopWithoutRunReason)
+    /// The one place the coordinator hears a run move. A run that is not the
+    /// current one changes nothing here.
+    func recordingRun(_ run: RecordingRun, movedFrom previous: RecordingRun.Phase) {
+        guard let active = activeRun, active.run === run else { return }
+        switch run.phase {
+        case .arming:
+            return
+        case .capturing(let since):
+            runPresence.runChanged(.active(origin: active.origin, phase: .capturing(since: since)))
+            state = .recording
+            hotMicSession.recordingStarted()
+            if isModelReady { recordHaptic.impactOccurred() }
+        case .finalizing:
+            // The Hot Mic Session hears of the stop once the engine is idle,
+            // before Finalizing begins.
+            hotMicSession.recordingStopped()
+            setIdleTimerDisabled(false)
+            runPresence.runChanged(.active(origin: active.origin, phase: .finalizing))
+            state = .transcribing
+        case .ended(let terminal):
+            activeRun = nil
+            let until = Date.now.addingTimeInterval(MicPresenceCardPolicy.concludedDwell)
+            runPresence.runChanged(RunCardOutcome(terminal, origin: active.origin).map { .concluded($0, until: until) })
+            switch previous {
+            case .arming: hotMicSession.recordIntentCancelledBeforeCapture()
+            case .capturing: hotMicSession.recordingStopped()
+            case .finalizing, .ended: break
+            }
+            setIdleTimerDisabled(false)
+            showOutcome(terminal, endedWhileArming: previous == .arming)
+        }
     }
 
-    func completionAdapters(for origin: RecordingRunOrigin) -> [any RecordingRunCompletionAdapter] {
-        [KeyboardChannelRecordingRunCompletionAdapter(keyboardChannel: keyboardChannel, origin: origin), historyCompletionAdapter]
-    }
-
-    private func finalize(_ active: ActiveRecordingRun) async -> RecordingRunTerminalState {
-        if isModelReady { recordHaptic.impactOccurred() }
-        endCapture(of: active)
-        return await transcribe(active)
-    }
-
-    /// Capture ends once per run, whether a stop or a Discard ends it: the Hot
-    /// Mic Session is told when the engine is really idle.
-    func endCapture(of active: ActiveRecordingRun) {
-        active.run.endCapture()
-        hotMicSession.recordingStopped()
-        setIdleTimerDisabled(false)
-    }
-
-    /// Finalizing, from a run whose capture has already ended.
-    func transcribe(_ active: ActiveRecordingRun) async -> RecordingRunTerminalState {
-        var finalizing = active
-        finalizing.phase = .finalizing
-        setActiveRun(finalizing)
-        state = .transcribing
-        writeState(.transcribing)
-
-        return await backgroundTasks.run(named: Self.finalizingTaskName) {
-            let terminalState = await active.run.stop()
-            guard activeRun?.run === active.run else { return terminalState }
-            applyTerminalStateToUI(terminalState)
-            endActiveRun(announcing: RunCardOutcome(terminalState, origin: active.origin))
-            await runPresence.settled()
-            return terminalState
+    /// A run cancelled before audio flowed goes back to the readiness it
+    /// covered, so a model download in progress shows again.
+    private func showOutcome(_ terminal: RecordingRunTerminalState, endedWhileArming: Bool) {
+        switch terminal {
+        case .success(let success):
+            state = .complete(success.finalText)
+        case .emptyResult:
+            // Same constant the status row recognises, so the empty-result
+            // wording can't drift between the two.
+            state = .error(TransientStatus.noSpeechDetectedText)
+        case .cancellation:
+            state = endedWhileArming ? readinessState : .ready
+        case .processingFailure(let failure):
+            state = .error(failure.message)
         }
     }
 }

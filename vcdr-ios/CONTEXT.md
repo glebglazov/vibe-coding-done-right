@@ -7,7 +7,7 @@ VCDR iOS is a voice dictation product made of a main app, custom keyboard extens
 ### Keyboard And App Reachability
 
 **Keyboard Channel**:
-The app-group channel between the iOS app and its custom keyboard extension. It carries recording commands, recording state, bundled transcription results, captures, heartbeat, and shared session settings.
+The app-group channel between the iOS app and its custom keyboard extension. It carries recording commands, recording state, bundled transcription results, captures, heartbeat, and shared session settings. Each key has one writer: the app writes its snapshot (the newest Recording Run, its phase, and the commands it took) and the Heartbeat; the keyboard writes its commands, each with its own ID.
 _Avoid_: keyboard transport, IPC layer, shared defaults protocol
 
 **Heartbeat**:
@@ -23,7 +23,7 @@ The keyboard's recovery path when the heartbeat is stale or a command is not ack
 _Avoid_: URL workaround, app bounce, launch fallback
 
 **Command Acknowledgement**:
-The app's confirmation that a Keyboard Channel command was received and accepted. Acknowledgement proves command reachability; it does not by itself mean audio is already Capturing.
+The app's confirmation, by the command's ID, that it took a Keyboard Channel command. Acknowledgement proves command reachability; it does not by itself mean audio is already Capturing, and it holds even when the run the command started has already ended.
 _Avoid_: recording state, start state, command sent
 
 ### Recording And Delivery
@@ -53,7 +53,7 @@ The user's wall-clock policy for how long the Hot Mic Session stays warm after r
 _Avoid_: idle timer, warm timeout, background duration
 
 **Bundled Result**:
-A final transcription result delivered to the keyboard through the Keyboard Channel together with the idle recording state. The keyboard consumes it once and then clears it.
+A final transcription result delivered to the keyboard through the Keyboard Channel as the outcome of its Recording Run. The keyboard inserts it once and then remembers that run as settled; it never clears the app's state.
 _Avoid_: idle pipe text, state string payload
 
 **Recording Run**:

@@ -49,13 +49,6 @@ struct MicPresenceCardPolicyTests {
         #expect(decide(reachable: true, foreground: true, .active(origin: .app, phase: .arming)) == .hidden)
     }
 
-    @Test("a cancel in flight shows the same card as no run")
-    func cancelling() {
-        #expect(decide(reachable: true, .active(origin: .shortcut, phase: .cancelling)) == .live(.ready))
-        #expect(decide(reachable: false, .active(origin: .shortcut, phase: .cancelling)) == .hidden)
-        #expect(decide(foreground: true, .active(origin: .shortcut, phase: .cancelling)) == .hidden)
-    }
-
     @Test("an outcome stays live while a warm session renews it, and is frozen until its dwell ends otherwise")
     func concluded() {
         let run = MicPresenceRun.concluded(.transcribed, until: Self.until)

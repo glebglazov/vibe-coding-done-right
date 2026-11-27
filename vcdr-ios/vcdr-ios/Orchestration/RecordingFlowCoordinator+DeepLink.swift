@@ -5,65 +5,59 @@ import OSLog
 /// extension drives when the Darwin command channel is unavailable or stale.
 extension RecordingFlowCoordinator {
 
-    /// Sets state to `.arming` synchronously so the very first frame after a
-    /// deep link shows the tap was registered ("STARTING…") — not a fake
-    /// "LISTENING" with no audio behind it. On a cold launch the engine may be
-    /// seconds from ready; the async flow warms it and flips to `.recording`
-    /// (Capturing) only once audio actually flows.
-    /// Called from `onOpenURL` before the async recording flow begins.
+    /// A cold launch from the record link shows Arming on its first frame,
+    /// before the scene can deliver the link and begin the run. Display only:
+    /// no run exists yet.
     func prepareForDeepLinkRecording() {
-        guard activeRun == nil, state != .arming, state != .recording, state != .transcribing else { return }
+        guard activeRun == nil else { return }
         state = .arming
         isKeyboardRun = true
         stoppedViaDeepLink = false
     }
 
-    /// Called when a deep link arrives. Starts recording immediately (user stays in VCDR app).
-    /// Audio capture begins right away; model initialization is awaited in the background.
-    func handleRecordDeepLink() async {
-        switch state {
-        case .recording where isRecording:
-            // Already recording, ignore duplicate deep link
-            break
-        case .transcribing:
-            break
-        default:
-            await startRecording(origin: .keyboard)
+    /// Begins a keyboard run at once, so the first frame and the Host Return
+    /// attempt both see it Arming. A command the app already took, by its
+    /// Darwin command or an earlier link, starts nothing, and neither does a
+    /// link while a run is current. True while a keyboard run is Arming or
+    /// Capturing after the link, whichever path started it: the keyboard
+    /// opened VCDR, so Host Return still owes the user the trip back.
+    @discardableResult
+    func handleRecordDeepLink(_ command: CommandID) -> Bool {
+        if keyboardWire.claim(command) {
+            if let run = beginRecording(origin: .keyboard) {
+                Task { await armUntilCapturing(run) }
+            }
+        } else {
+            Logger.app.info("Record deep link: its command was already taken")
         }
+        guard activeRun?.origin == .keyboard else { return false }
+        return RecordingToggle.stopCommand(for: activeRunPhase) == .stop
     }
 
-    /// The run as a Host Return attempt sees it. Before `startRecording`
-    /// creates the run, `prepareForDeepLinkRecording` has already set Arming,
-    /// so no run with any other state means the run ended or never started.
+    /// The run as a Host Return attempt sees it.
     var hostReturnRunProgress: HostReturnRunProgress {
         switch activeRunPhase {
         case .arming: .arming
         case .capturing: .capturing
-        case .cancelling, .finalizing: .ended
-        case nil: state == .arming ? .arming : .ended
+        case .finalizing, nil: .ended
         }
     }
 
-    func handleStopDeepLink() async {
-        if RecordingToggle.stopCommand(for: activeRunPhase) == .stop {
-            isKeyboardRun = true
-            stoppedViaDeepLink = true
-            await stopActiveRun()
+    /// Stops the run the keyboard showed. A command already taken, a run
+    /// that already ended, or a Finalizing run is left alone: each already
+    /// publishes its own outcome, and no idle may replace it.
+    func handleStopDeepLink(_ command: CommandID, run target: RunID) async {
+        guard keyboardWire.claim(command) else {
+            Logger.app.info("Stop deep link ignored — its command was already taken")
             return
         }
-        // Truly orphaned cold-launch / stale stop: nothing was recording and
-        // nothing is arming, so there is no Recording Run outcome to report —
-        // this is the genuine idle the keyboard now renders as plain idle.
-        // Skip when a stop is already mid-flight or just finished; that pipeline
-        // publishes its own terminal state.
-        switch state {
-        case .transcribing, .complete:
-            break
-        default:
-            Logger.recording.info(
-                "Publishing idle: stop deep link found no run to stop (state=\(String(describing: state)))"
-            )
-            writeState(.idle)
+        guard let active = activeRun, active.run.id == target,
+              RecordingToggle.stopCommand(for: active.run.phase.live) == .stop else {
+            Logger.app.info("Stop deep link ignored — its run is not current or not listening")
+            return
         }
+        isKeyboardRun = true
+        stoppedViaDeepLink = true
+        await stopKeyboardRun(target)
     }
 }

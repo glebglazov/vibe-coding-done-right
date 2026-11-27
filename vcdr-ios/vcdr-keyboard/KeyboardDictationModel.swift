@@ -1,5 +1,38 @@
 import Combine
 
+/// Keyboard-side dictation state, derived from the main app's recording state.
+/// Every terminal case is published by the app on the Keyboard Channel — the
+/// keyboard never infers one (ADR-0004).
+enum DictationState {
+    case idle
+    case recording
+    case transcribing
+    /// Transcription text available — waiting for user tap to insert
+    case ready
+    /// Recording produced no speech — shown briefly before reverting to idle
+    case emptyResult
+    /// The app published `cancelled`: a Discard, or a stop during Arming. The
+    /// DISCARDED pill shows briefly, then START comes back.
+    case cancelled
+    /// The run failed to produce a transcript. The reason stays in the app; the
+    /// pill only reports that a failure happened.
+    case failed
+}
+
+extension DictationState {
+    init(_ shown: KeyboardShown) {
+        switch shown {
+        case .idle: self = .idle
+        case .recording: self = .recording
+        case .transcribing: self = .transcribing
+        case .ready: self = .ready
+        case .flash(_, .emptyResult): self = .emptyResult
+        case .flash(_, .cancelled): self = .cancelled
+        case .flash(_, .failed): self = .failed
+        }
+    }
+}
+
 /// What the keyboard's SwiftUI views render: the run's state and the output
 /// choices the pills show.
 ///

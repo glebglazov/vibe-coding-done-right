@@ -4,34 +4,18 @@ import OSLog
 import SwiftUI
 import UIKit
 
-/// Keyboard-side dictation state, derived from the main app's recording state.
-/// Every terminal case is published by the app on the Keyboard Channel — the
-/// keyboard never infers one (ADR-0004).
-enum DictationState {
-    case idle
-    case recording
-    case transcribing
-    /// Transcription text available — waiting for user tap to insert
-    case ready
-    /// Recording produced no speech — shown briefly before reverting to idle
-    case emptyResult
-    /// The app published `cancelled`: a Discard, or a stop during Arming. The
-    /// DISCARDED pill shows briefly, then START comes back.
-    case cancelled
-    /// The run failed to produce a transcript. The reason stays in the app; the
-    /// pill only reports that a failure happened.
-    case failed
-}
-
 class KeyboardViewController: KeyboardInputViewController {
 
     /// What the keyboard's views render. The views observe this and never the
     /// controller itself (see `KeyboardDictationModel`).
     let model = KeyboardDictationModel()
 
-    /// Text waiting to be inserted via tap-to-paste.
-    private var pendingText: String?
     private let keyboardChannel = KeyboardChannel.live
+    /// What the keyboard shows for the app's snapshot. The keyboard never
+    /// writes that snapshot; it only reads it.
+    private lazy var wire = KeyboardWireReader(channel: keyboardChannel)
+    /// The last reading rendered, so a pill gets its timer once.
+    private var rendered: KeyboardShown = .idle
 
     /// Whether a tap on the record control records in place. Kept outside
     /// `dictationState` — a run's state and the tap's destination are two
@@ -63,8 +47,7 @@ class KeyboardViewController: KeyboardInputViewController {
         // non-nil at construction time — and at `viewDidLoad` it isn't yet.
         KeyboardHaptics.refreshEnabled()
 
-        // Listen for recording state changes from the main app.
-        // Text is delivered via state bundling ("idle|text") on this same channel.
+        // Listen for the app's snapshot, which also carries the Bundled Result.
         DarwinNotificationCenter.observe(
             KeyboardChannel.stateNotificationName,
             localName: .darwinStateChanged
@@ -109,11 +92,9 @@ class KeyboardViewController: KeyboardInputViewController {
         KeyboardHaptics.refreshEnabled()
         KeyboardHaptics.attach(to: view)
         // viewWillAppear provides a fresh textDocumentProxy connection —
-        // auto-insert if text is pending (handles the case where the keyboard
+        // auto-insert a Bundled Result (handles the case where the keyboard
         // wasn't visible when the transcription arrived).
-        if pendingText != nil {
-            insertPendingText()
-        }
+        insertPendingText()
 
         // The system can drop view constraints between appearances (rotation,
         // dock changes) — re-pin the Compact height if we're collapsed.
@@ -131,7 +112,7 @@ class KeyboardViewController: KeyboardInputViewController {
         reachability.stop()
     }
 
-    // MARK: - State Parsing
+    // MARK: - Wire
 
     @objc private func handleStateChanged() {
         refreshState()
@@ -145,69 +126,38 @@ class KeyboardViewController: KeyboardInputViewController {
         KeyboardHaptics.refreshEnabled()
     }
 
-    /// Reads the shared state key and updates `dictationState`.
-    /// Parses state bundling format: `"idle|transcription text"`.
     private func refreshState() {
-        // Keep a wire-published cancellation visible for its full flash.
-        guard model.dictationState != .cancelled else { return }
-
-        switch keyboardChannel.readState() {
-        case .bundledResult(let text):
-            if !text.isEmpty {
-                pendingText = text
-                model.dictationState = .ready
-            } else {
-                pendingText = nil
-                model.dictationState = .idle
-            }
-        case .emptyResult:
-            flash(.emptyResult, for: Self.emptyResultFlashDuration)
-        case .cancelled:
-            flash(.cancelled, for: Self.cancelledFlashDuration)
-        case .failed:
-            // The reason travels on the wire for the app to show; the pill
-            // reports only that a failure happened (ADR-0004).
-            flash(.failed, for: Self.failedFlashDuration)
-        case .recording:
-            pendingText = nil
-            model.dictationState = .recording
-        case .transcribing:
-            pendingText = nil
-            model.dictationState = .transcribing
-        case .idle:
-            pendingText = nil
-            model.dictationState = .idle
-        }
+        show(wire.refresh())
     }
 
-    /// Renders a terminal state the app published: consumes it from the wire so
-    /// a later appearance can't replay a finished run, then reverts to idle once
-    /// the user has had time to see it. Consuming is a silent write — a Darwin
-    /// post would come back to this same process and end the flash immediately.
-    private func flash(_ terminal: DictationState, for duration: TimeInterval) {
-        pendingText = nil
-        model.dictationState = terminal
-        keyboardChannel.consumeState()
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            guard self?.model.dictationState == terminal else { return }
-            self?.model.dictationState = .idle
+    /// Renders what the reader decided. A pill that just started gets its
+    /// timer here; the reader keeps it up until then.
+    private func show(_ shown: KeyboardShown) {
+        let started = shown != rendered
+        rendered = shown
+        model.dictationState = DictationState(shown)
+        guard started, case .flash(let run, let flash) = shown else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.flashDuration(flash)) { [weak self] in
+            guard let self else { return }
+            self.show(self.wire.endFlash(of: run))
         }
     }
 
     // MARK: - Text Insertion
 
-    /// Inserts pending transcription text into the active text field.
+    /// Inserts the Bundled Result into the active text field.
     /// Must be called from a UIKit event context (button tap handler) for
     /// `textDocumentProxy.insertText()` to work — this is the WisprFlow pattern.
     func insertPendingText() {
-        guard let text = pendingText, !text.isEmpty else { return }
+        guard case .ready(let run, let text) = wire.shown else { return }
+        insert(text, of: run)
+    }
+
+    /// Space is already added by TextPostProcessor.applyTerminator in the pipeline.
+    private func insert(_ text: String, of run: RunID) {
         textDocumentProxy.insertText(text)
         KeyboardHaptics.success()
-        // Space is already added by TextPostProcessor.applyTerminator in the pipeline
-        pendingText = nil
-        model.dictationState = .idle
-        // Clear the bundled text so it isn't re-inserted on next keyboard appearance
-        keyboardChannel.clearResult()
+        show(wire.didInsert(for: run))
     }
 
     // MARK: - Constants
@@ -225,15 +175,21 @@ class KeyboardViewController: KeyboardInputViewController {
     private static let failedFlashDuration: TimeInterval = 5
     /// Duration to show the DISCARDED pill before START comes back.
     private static let cancelledFlashDuration: TimeInterval = DiscardTiming.keyboardFlash
-    /// Window to wait for the app to confirm a `startRecording` command by
-    /// writing `state = .recording`. If nothing by then, fall back to URL.
-    /// Tuned for Darwin roundtrip + a MainActor hop under CoreML load.
+    /// Window to wait for the app to acknowledge a start command by its ID.
+    /// If nothing by then, fall back to URL. Tuned for Darwin roundtrip + a
+    /// MainActor hop under CoreML load.
     private static let startCommandAckTimeout: TimeInterval = 0.4
-    /// Same purpose as `startCommandAckTimeout` but for stop. Counted from
-    /// when the Darwin command is posted; if the app hasn't moved state out
-    /// of `.recording` by then, we assume the command was lost (suspended
-    /// app between heartbeat read and Darwin post) and foreground via URL.
+    /// Same purpose as `startCommandAckTimeout` but for stop, counted from
+    /// when the command is sent.
     private static let stopCommandAckTimeout: TimeInterval = 0.4
+
+    private static func flashDuration(_ flash: KeyboardFlash) -> TimeInterval {
+        switch flash {
+        case .emptyResult: emptyResultFlashDuration
+        case .cancelled: cancelledFlashDuration
+        case .failed: failedFlashDuration
+        }
+    }
 
     // MARK: - Commands
 
@@ -242,92 +198,55 @@ class KeyboardViewController: KeyboardInputViewController {
     /// the input connection stays alive so `insertText()` works — single-tap insert.
     /// `RunLoop.main.run(until:)` keeps UI events processing (animations stay alive).
     ///
-    /// Mirrors the start path's heartbeat-aware fallback: if the app's heartbeat
-    /// is stale we skip Darwin entirely and foreground via URL. If the heartbeat
-    /// is fresh but the app doesn't ack within `stopCommandAckTimeout` (the
-    /// heartbeat lied because the app suspended between our read and our post),
-    /// we fall back to URL mid-poll. In both URL paths the keyboard returns
-    /// without a result; the app's stop pipeline publishes bundled text and the
-    /// next `viewWillAppear` auto-pastes it.
+    /// If the Heartbeat is stale the keyboard skips Darwin and foregrounds via
+    /// URL. If the app does not acknowledge the command within
+    /// `stopCommandAckTimeout` (it suspended between the Heartbeat read and the
+    /// post), it falls back to URL mid-poll. The URL carries the same command,
+    /// so the app takes it once. In both URL paths the keyboard returns without
+    /// a result; the next `viewWillAppear` inserts the Bundled Result.
     func stopAndWaitForResult() {
-        switch keyboardChannel.stopRecording() {
-        case .commandSent:
+        guard case .recording(let run) = wire.shown else { return }
+        model.dictationState = .transcribing
+
+        let command: CommandID
+        switch keyboardChannel.stopRecording(run) {
+        case .commandSent(let id):
             Logger.keyboard.info("Heartbeat verdict: command=stop fresh=true")
-        case .openURL(let url):
+            command = id
+        case .openURL(let link):
             Logger.keyboard.info("Heartbeat verdict: command=stop fresh=false")
-            model.dictationState = .transcribing
-            openDeepLinkFallback(url, command: "stop", reason: "Heartbeat was stale")
+            openDeepLinkFallback(link, reason: "Heartbeat was stale")
             return
         }
-
-        model.dictationState = .transcribing
 
         let postedAt = Date()
         let ackDeadline = postedAt.addingTimeInterval(Self.stopCommandAckTimeout)
         let deadline = postedAt.addingTimeInterval(Self.insertionTimeout)
-        var previousPolledState: String?
-        var didLogAcknowledgement = false
+        var previousStep: KeyboardStopStep?
 
         while Date() < deadline {
             RunLoop.main.run(until: Date().addingTimeInterval(Self.pollInterval))
 
-            let state = keyboardChannel.readState()
-            let stateName = Self.wireStateName(state)
-            if previousPolledState != stateName {
-                Logger.keyboard.info(
-                    "Stop poll state transition: \(previousPolledState ?? "initial") -> \(stateName)"
-                )
-                previousPolledState = stateName
+            let step = wire.stopStep(for: command, of: run, ackTimedOut: Date() >= ackDeadline)
+            if step != previousStep {
+                Logger.keyboard.info("Stop poll step: \(String(describing: step))")
+                previousStep = step
             }
-            if state != .recording, !didLogAcknowledgement {
-                Logger.keyboard.info("Stop Command Acknowledgement received: state=\(stateName)")
-                didLogAcknowledgement = true
-            }
-
-            switch state {
-            case .emptyResult:
-                flash(.emptyResult, for: Self.emptyResultFlashDuration)
-                return
-            case .cancelled:
-                flash(.cancelled, for: Self.cancelledFlashDuration)
-                return
-            case .failed:
-                flash(.failed, for: Self.failedFlashDuration)
-                return
-            case .idle:
-                // Idle is idle. Guessing Empty Result here is what made yellow
-                // mean six different things (ADR-0004) — the app publishes the
-                // terminal state it reached, and a run that reached one is
-                // handled by the cases above.
-                pendingText = nil
-                model.dictationState = .idle
-                return
-            case .recording:
-                // Ack window passed and state hasn't moved off `.recording` —
-                // the Darwin post landed in a suspended app. Foreground via URL
-                // and exit; the app's stop pipeline takes it from here.
-                if Date() >= ackDeadline {
-                    Logger.keyboard.warning(
-                        "Stop Command Acknowledgement timed out after \(Self.stopCommandAckTimeout)s"
-                    )
-                    openDeepLinkFallback(
-                        KeyboardChannel.stopDeepLinkURL,
-                        command: "stop",
-                        reason: "Command Acknowledgement timed out"
-                    )
-                    return
-                }
-            case .transcribing:
+            switch step {
+            case .wait:
                 continue
-            case .bundledResult(let text):
-                guard !text.isEmpty else { continue }
+            case .insert(let text):
                 // Result arrived — insert while the tap's event context is still active
-                textDocumentProxy.insertText(text)
-                KeyboardHaptics.success()
-                // Space is already added by TextPostProcessor.applyTerminator in the pipeline
-                keyboardChannel.clearResult()
-                pendingText = nil
-                model.dictationState = .idle
+                insert(text, of: run)
+                return
+            case .render:
+                refreshState()
+                return
+            case .openDeepLink:
+                Logger.keyboard.warning(
+                    "Stop Command Acknowledgement timed out after \(Self.stopCommandAckTimeout)s"
+                )
+                openDeepLinkFallback(.stop(command, run: run), reason: "Command Acknowledgement timed out")
                 return
             }
         }
@@ -342,16 +261,17 @@ class KeyboardViewController: KeyboardInputViewController {
     /// Discard: no deep-link fallback, no acknowledgement wait (ADR-0003). The
     /// app answers with `cancelled`.
     func discardRecordingFromKeyboard() {
-        keyboardChannel.cancelRecording()
+        guard case .recording(let run) = wire.shown else { return }
+        keyboardChannel.discardRecording(run)
     }
 
     /// Foregrounds the app on the surface that already owns the failure
     /// reason. The URL is a route only: the reason remains app-owned and is
     /// neither duplicated into the URL nor sent through another channel.
     func showFailureReason() {
-        guard model.dictationState == .failed else { return }
+        guard model.dictationState == .failed, let url = KeyboardDeepLink.failure.url else { return }
         Logger.keyboard.info("Opening the app to show the Processing Failure reason")
-        openURL(KeyboardChannel.failureDeepLinkURL)
+        openURL(url)
     }
 
     // MARK: - Display Mode (Compact / Full)
@@ -391,54 +311,40 @@ class KeyboardViewController: KeyboardInputViewController {
 
     /// Starts recording, picking the best transport based on the app's heartbeat.
     ///
-    /// If the main app's heartbeat in shared defaults is recent, the app is
-    /// alive and reachable via Darwin command — we send one and wait briefly
-    /// for it to confirm by writing `state = .recording`. On confirmation the
-    /// existing `darwinStateChanged` observer flips `dictationState` and the
-    /// user never leaves the keyboard. If the heartbeat is stale or the
-    /// command isn't acknowledged in time, we fall back to the URL scheme,
-    /// which foregrounds the app and starts recording via the deep-link path.
+    /// If the Heartbeat is fresh, the keyboard sends a Darwin command and checks
+    /// after a short window that the app acknowledged that command by its ID.
+    /// The run it started may already have ended by then: the acknowledgement
+    /// still holds, so no deep link opens and no second run starts. If the
+    /// Heartbeat is stale or the command is not acknowledged in time, the
+    /// keyboard opens the record deep link, which carries the same command.
     ///
-    /// Critically there is NO optimistic UI flip — `dictationState` stays at
-    /// `.idle` until the app publishes `.recording`. An earlier attempt
-    /// optimistically flipped to `.recording` up front, which misled users
-    /// into tapping Stop before anything had actually started.
+    /// There is no optimistic UI flip: the keyboard shows recording only when
+    /// the app publishes it. An earlier attempt flipped up front, which misled
+    /// users into tapping Stop before anything had actually started.
     func startRecordingFromKeyboard() {
-        // A tap on the DISCARDED pill starts a run as START does. The flash
-        // must end first: while it shows, `refreshState` ignores the wire, and
-        // the app's `recording` would be lost.
-        if model.dictationState == .cancelled { model.dictationState = .idle }
-
         switch keyboardChannel.startRecording() {
-        case .commandSent:
+        case .commandSent(let command):
             Logger.keyboard.info("Heartbeat verdict: command=start fresh=true")
-            scheduleStartAckFallback()
-        case .openURL(let url):
+            scheduleStartAckFallback(command)
+        case .openURL(let link):
             Logger.keyboard.info("Heartbeat verdict: command=start fresh=false")
-            openDeepLinkFallback(url, command: "start", reason: "Heartbeat was stale")
+            openDeepLinkFallback(link, reason: "Heartbeat was stale")
         }
     }
 
-    /// Schedules a fallback to `openURL` if the app doesn't publish
-    /// `.recording` within the ack window.
-    private func scheduleStartAckFallback() {
+    private func scheduleStartAckFallback(_ command: CommandID) {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.startCommandAckTimeout) { [weak self] in
             guard let self else { return }
-            let state = self.keyboardChannel.readState()
-            if state == .recording {
+            if self.wire.isAcknowledged(command) {
                 Logger.keyboard.info("Start Command Acknowledgement received before timeout")
                 return
             }
             Logger.keyboard.warning(
-                "Start Command Acknowledgement timed out after \(Self.startCommandAckTimeout)s; state=\(Self.wireStateName(state))"
+                "Start Command Acknowledgement timed out after \(Self.startCommandAckTimeout)s"
             )
-            // App didn't ack — heartbeat lied (suspended between our read and the
-            // command firing) or Darwin was dropped.
-            self.openDeepLinkFallback(
-                KeyboardChannel.recordDeepLinkURL,
-                command: "start",
-                reason: "Command Acknowledgement timed out"
-            )
+            // The Heartbeat lied (the app suspended between our read and the
+            // command) or Darwin dropped the post.
+            self.openDeepLinkFallback(.record(command), reason: "Command Acknowledgement timed out")
         }
     }
 
@@ -454,21 +360,10 @@ class KeyboardViewController: KeyboardInputViewController {
         }
     }
 
-    private func openDeepLinkFallback(_ url: URL, command: String, reason: String) {
-        Logger.keyboard.notice("Deep-Link Fallback: command=\(command) reason=\(reason)")
+    private func openDeepLinkFallback(_ link: KeyboardDeepLink, reason: String) {
+        Logger.keyboard.notice("Deep-Link Fallback: link=\(String(describing: link)) reason=\(reason)")
+        guard let url = link.url else { return }
         openURL(url)
-    }
-
-    private static func wireStateName(_ state: KeyboardChannel.State) -> String {
-        switch state {
-        case .idle: "idle"
-        case .recording: "recording"
-        case .transcribing: "transcribing"
-        case .emptyResult: "emptyResult"
-        case .cancelled: "cancelled"
-        case .failed: "failed"
-        case .bundledResult: "bundledResult"
-        }
     }
 
     // MARK: - Keyboard View Setup
