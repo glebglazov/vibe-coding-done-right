@@ -29,7 +29,8 @@ final class StubURLProtocol: URLProtocol {
     private static let interceptedHosts: Set<String> = [
         "api.anthropic.com",
         "api.openai.com",
-        "generativelanguage.googleapis.com"
+        "generativelanguage.googleapis.com",
+        "openrouter.ai"
     ]
 
     override class func canInit(with request: URLRequest) -> Bool {

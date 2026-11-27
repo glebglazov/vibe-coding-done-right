@@ -39,7 +39,7 @@ enum AIProviderFactory {
 
     private static func maxAttempts(for provider: AIProvider) -> Int {
         switch provider {
-        case .anthropic, .openai, .gemini:
+        case .anthropic, .openai, .gemini, .openrouter:
             cloudMaxAttempts
         }
     }

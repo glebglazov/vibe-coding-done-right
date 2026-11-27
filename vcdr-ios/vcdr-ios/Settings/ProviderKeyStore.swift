@@ -63,6 +63,7 @@ final class ProviderKeyStore {
         case .anthropic: "ai_processing_anthropic_api_key"
         case .openai: "ai_processing_openai_api_key"
         case .gemini: "ai_processing_gemini_api_key"
+        case .openrouter: "ai_processing_openrouter_api_key"
         }
     }
 

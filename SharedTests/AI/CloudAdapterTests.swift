@@ -228,3 +228,66 @@ final class GeminiAdapterTests {
         }
     }
 }
+
+// MARK: - OpenRouter
+
+@Suite("OpenRouterAdapter request + decode", .serialized)
+final class OpenRouterAdapterTests {
+    init() { URLProtocol.registerClass(StubURLProtocol.self) }
+    deinit { URLProtocol.unregisterClass(StubURLProtocol.self) }
+
+    @Test("sends the Chat Completions request to OpenRouter")
+    func requestShape() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.stub = .init(
+            statusCode: 200,
+            data: Data(#"{"choices":[{"message":{"content":"ok"}}]}"#.utf8)
+        )
+
+        _ = try await OpenRouterAdapter(apiKey: "secret-key")
+            .process(text: "hello", systemPrompt: "be brief")
+
+        let request = try #require(StubURLProtocol.lastRequest)
+        #expect(request.url?.absoluteString == "https://openrouter.ai/api/v1/chat/completions")
+        #expect(request.httpMethod == "POST")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer secret-key")
+
+        let body = jsonBody(StubURLProtocol.lastBody)
+        #expect(body["model"] as? String == "openai/gpt-4o-mini")
+        #expect(body["max_tokens"] as? Int == 1024)
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        #expect(messages.first?["role"] as? String == "system")
+        #expect(messages.first?["content"] as? String == "be brief")
+        #expect(messages.last?["role"] as? String == "user")
+        #expect(messages.last?["content"] as? String == "hello")
+    }
+
+    @Test("decodes a representative success response")
+    func successDecode() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.stub = .init(
+            statusCode: 200,
+            data: Data(#"{"id":"gen-1","choices":[{"message":{"role":"assistant","content":"processed text"}}]}"#.utf8)
+        )
+
+        let result = try await OpenRouterAdapter(apiKey: "k").process(text: "x", systemPrompt: "y")
+        #expect(result == "processed text")
+    }
+
+    @Test("reports an error response under OpenRouter, not OpenAI")
+    func errorDecode() async {
+        StubURLProtocol.reset()
+        StubURLProtocol.stub = .init(
+            statusCode: 402,
+            data: Data(#"{"error":{"code":402,"message":"Insufficient credits"}}"#.utf8)
+        )
+
+        await #expect {
+            _ = try await OpenRouterAdapter(apiKey: "k").process(text: "x", systemPrompt: "y")
+        } throws: { error in
+            guard case let .apiError(provider, statusCode, message) = error as? CloudAIClientError else { return false }
+            return provider == .openrouter && statusCode == 402 && message == "Insufficient credits"
+        }
+    }
+}
