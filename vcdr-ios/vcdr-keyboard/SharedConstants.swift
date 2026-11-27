@@ -3,18 +3,6 @@ import Foundation
 enum SharedConstants {
     static let appGroupID = "group.glebglazov.vcdr-ios"
 
-    // Commands (keyboard → app)
-    static let commandKey = "command"
-    static let commandNotificationName = "glebglazov.vcdr-ios.command"
-
-    // Recording state (app → keyboard) — also carries transcription text via state bundling ("idle|text")
-    static let stateKey = "recordingState"
-    static let stateNotificationName = "glebglazov.vcdr-ios.stateChanged"
-
-    // Deep link URLs
-    static let recordDeepLinkURL = URL(string: "vcdr-ios://record")!
-    static let stopDeepLinkURL = URL(string: "vcdr-ios://stop")!
-
     // Settings — two disjoint tiers. See the iOS SharedConstants for the full
     // contract: default_* is written by the Settings UI via DefaultSettings,
     // session_* holds Setting Overrides written via SettingOverrides, and consumers
@@ -30,13 +18,6 @@ enum SharedConstants {
     static let settingsNotificationName = "glebglazov.vcdr-ios.settingsChanged"
     static let aiConfiguredKey = "shared_ai_configured"
 
-    /// App → keyboard heartbeat (Double, `timeIntervalSince1970`). Refreshed
-    /// periodically while the hot session is alive and on state changes. The
-    /// keyboard reads this before deciding whether to try a Darwin command
-    /// (app alive → fast in-keyboard path) or fall back to the URL scheme
-    /// (app suspended/killed → foreground-and-record bounce).
-    static let appHeartbeatKey = "app_heartbeat_at"
-
     /// Keyboard display mode (Compact/Full) — keyboard-local UI state, never
     /// read by the app. Absent key → Compact, so fresh installs and installs
     /// that predate the key both land in Compact on the next keyboard open.
@@ -48,29 +29,6 @@ enum SharedConstants {
     static var sharedDefaults: UserDefaults {
         UserDefaults(suiteName: appGroupID) ?? .standard
     }
-}
-
-/// Commands the keyboard extension sends to the main app
-enum RecordingCommand: String {
-    case startRecording
-    case stopRecording
-}
-
-/// Recording states the main app publishes for the keyboard extension to read.
-/// One value per Recording Run terminal state, so the keyboard never infers a
-/// terminal state from idle (ADR-0004). `failed` carries the failure reason
-/// appended after `|`, the way `idle` carries the Bundled Result.
-///
-/// **This enum is duplicated in the app target's `SharedConstants.swift`. Both
-/// copies must carry the same cases**: a mismatch fails silently, because each
-/// side falls back to `UserDefaults.standard` when the App Group is unavailable.
-enum RecordingState: String {
-    case idle
-    case recording
-    case transcribing
-    case emptyResult
-    case cancelled
-    case failed
 }
 
 /// Text style — keyboard-safe mirror of TextStyle.

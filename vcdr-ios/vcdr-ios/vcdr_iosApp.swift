@@ -49,22 +49,22 @@ struct VCDRiOSApp: App {
                     }
                 }
                 .onOpenURL { url in
-                    guard url.scheme == "vcdr-ios" else { return }
-                    switch url.host {
-                    case "record":
+                    switch KeyboardDeepLink(url: url) {
+                    case .record(let command):
                         // Begins the run synchronously so the first rendered frame
                         // shows Arming — no flash of the previous state.
-                        coordinator.handleRecordDeepLink()
-                        appDelegate.dependencies.hostReturn.recordDeepLinkArrived()
-                    case "stop":
-                        Task { await coordinator.handleStopDeepLink() }
-                    case "failure":
+                        if coordinator.handleRecordDeepLink(command) {
+                            appDelegate.dependencies.hostReturn.recordDeepLinkArrived()
+                        }
+                    case .stop(let command, let run):
+                        Task { await coordinator.handleStopDeepLink(command, run: run) }
+                    case .failure:
                         // Opening the URL foregrounds this scene. Preserve the
                         // coordinator's app-owned `.error(reason)` state so
                         // RecordingView continues to show that exact reason.
                         break
-                    default:
-                        break
+                    case nil:
+                        Logger.app.warning("Ignored an incomplete deep link")
                     }
                 }
         }

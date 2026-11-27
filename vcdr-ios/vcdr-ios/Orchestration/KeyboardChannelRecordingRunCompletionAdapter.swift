@@ -2,60 +2,59 @@ import Foundation
 import OSLog
 
 /// Every wire value a Recording Run publishes comes from here: its progress
-/// and its terminal state.
+/// and its terminal state, each under the run's own ID.
 @MainActor
 final class KeyboardChannelRecordingRunCompletionAdapter: RecordingRunCompletionAdapter {
-    private let keyboardChannel: any KeyboardChannelProtocol
+    private let wire: KeyboardWirePublisher
+    private let run: RunID
     private let origin: RecordingRunOrigin
 
-    init(keyboardChannel: any KeyboardChannelProtocol, origin: RecordingRunOrigin) {
-        self.keyboardChannel = keyboardChannel
+    init(wire: KeyboardWirePublisher, run: RunID, origin: RecordingRunOrigin) {
+        self.wire = wire
+        self.run = run
         self.origin = origin
     }
 
     /// Every origin publishes its progress: the keyboard shows any run that
     /// holds the microphone. Capturing adds nothing to `recording`.
     func progressed(to phase: RecordingRunPhase) {
-        let wireState: KeyboardChannel.RecordingState
         switch phase {
-        case .arming: wireState = .recording
+        case .arming: wire.show(.recording, of: run)
         case .capturing: return
-        case .finalizing: wireState = .transcribing
+        case .finalizing: wire.show(.transcribing, of: run)
         }
-        Logger.recording.info("Wire state written: \(wireState.rawValue)")
-        keyboardChannel.publish(wireState)
     }
 
     /// Each terminal state gets its own wire value, so the keyboard renders what
-    /// the run decided instead of guessing from `.idle` (ADR-0004).
-    ///
+    /// the run decided instead of guessing (ADR-0004). A run from another
+    /// origin shows its outcome there, so the keyboard only goes back to idle.
     func complete(_ terminalState: RecordingRunTerminalState) async {
-        guard origin.deliversToKeyboard else {
-            log(terminalState, publishes: KeyboardChannel.RecordingState.idle.rawValue)
-            keyboardChannel.publish(.idle)
-            return
-        }
+        let phase: KeyboardWirePhase = origin.deliversToKeyboard ? .ended(KeyboardWireOutcome(terminalState)) : .idle
+        Logger.recording.info(
+            "Keyboard completion: \(terminalState.logName) → \(phase.logName) (origin=\(String(describing: self.origin)))"
+        )
+        wire.show(phase, of: run)
+    }
+}
 
+private extension KeyboardWireOutcome {
+    init(_ terminalState: RecordingRunTerminalState) {
         switch terminalState {
-        case .success(let success):
-            log(terminalState, publishes: "bundledResult (\(success.finalText.count) chars)")
-            keyboardChannel.publishBundledResult(success.finalText)
-        case .emptyResult:
-            log(terminalState, publishes: KeyboardChannel.RecordingState.emptyResult.rawValue)
-            keyboardChannel.publish(.emptyResult)
-        case .cancellation:
-            log(terminalState, publishes: KeyboardChannel.RecordingState.cancelled.rawValue)
-            keyboardChannel.publish(.cancelled)
-        case .processingFailure(let failure):
-            log(terminalState, publishes: "\(KeyboardChannel.RecordingState.failed.rawValue) — \(failure.message)")
-            keyboardChannel.publishFailure(reason: failure.message)
+        case .success(let success): self = .text(success.finalText)
+        case .emptyResult: self = .emptyResult
+        case .cancellation: self = .cancelled
+        case .processingFailure(let failure): self = .failed(reason: failure.message)
         }
     }
+}
 
-    private func log(_ terminalState: RecordingRunTerminalState, publishes wireState: String) {
-        Logger.recording.info(
-            "Keyboard completion: \(terminalState.logName) → \(wireState)"
-                + " (origin=\(String(describing: origin)))"
-        )
+private extension KeyboardWirePhase {
+    /// The Bundled Result by length: the run already logged the text.
+    var logName: String {
+        switch self {
+        case .ended(.text(let text)): "bundledResult (\(text.count) chars)"
+        case .ended(.failed(let reason)): "failed — \(reason)"
+        default: String(describing: self)
+        }
     }
 }

@@ -2,8 +2,8 @@ import Foundation
 import OSLog
 
 /// Keyboard Channel command + settings listeners: registers the Darwin
-/// notification observers, dispatches start/stop commands the keyboard
-/// extension posts, and re-reads cross-process settings changes.
+/// notification observers, runs the commands the keyboard extension sends,
+/// and re-reads cross-process settings changes.
 extension RecordingFlowCoordinator {
 
     /// Listens for commands from the keyboard extension via Darwin notifications.
@@ -26,7 +26,7 @@ extension RecordingFlowCoordinator {
         ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
-                await self.handleCommand()
+                await self.handleCommands()
             }
         }
 
@@ -61,25 +61,33 @@ extension RecordingFlowCoordinator {
         handleSettingsChanged()
     }
 
-    private func handleCommand() async {
-        guard let command = keyboardChannel.readAndClearCommand() else { return }
+    /// Runs every command not yet taken, in the order the keyboard sent them.
+    private func handleCommands() async {
+        for command in keyboardWire.claim(keyboardChannel.readCommands()) {
+            await handle(command)
+        }
+    }
 
-        switch command {
-        case .startRecording:
+    private func handle(_ command: KeyboardCommand) async {
+        switch command.kind {
+        case .start:
             Logger.app.info("Received start command from keyboard")
             await startRecording(origin: .keyboard)
-        case .stopRecording:
+        case .stop(let run):
             Logger.app.info("Received stop command from keyboard")
-            await stopFromKeyboard()
-        case .cancelRecording:
-            // Fail-closed on staleness (ADR-0003): a cancel that sat queued
-            // across a suspend must never be applied to a later Recording Run,
-            // so the freshness check runs before touching any run state.
-            guard keyboardChannel.isCancelStampFresh() else {
-                Logger.app.info("Dropped stale cancel command from keyboard")
+            await stopKeyboardRun(run)
+        case .discard(let run):
+            // Fail-closed on staleness (ADR-0003): a Discard that sat queued
+            // across a suspend is dropped, whatever run is current now.
+            guard Date().timeIntervalSince(command.sentAt) < KeyboardChannel.discardFreshnessWindow else {
+                Logger.app.info("Dropped stale Discard from keyboard")
                 return
             }
-            Logger.app.info("Received cancel command from keyboard")
+            guard activeRun?.run.id == run else {
+                Logger.app.info("Dropped Discard from keyboard — its run is not current")
+                return
+            }
+            Logger.app.info("Received Discard from keyboard")
             await discardRecording()
         }
     }

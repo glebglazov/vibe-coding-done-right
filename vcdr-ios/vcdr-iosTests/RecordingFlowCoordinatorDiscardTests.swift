@@ -25,7 +25,7 @@ struct RecordingFlowCoordinatorDiscardTests {
 
         await env.coordinator.discardRecording()
         #expect(env.coordinator.state == .idle)
-        #expect(env.channel.readState() == .cancelled)
+        #expect(env.channel.readPhase() == .ended(.cancelled))
         #expect(env.coordinator.discardNotes.note == .nothingSaved)
         await startTask.value
 
@@ -39,8 +39,8 @@ struct RecordingFlowCoordinatorDiscardTests {
     func discardDuringArmingLeavesCancelledOnTheWire() async throws {
         let env = Env(finishText: "never heard")
         env.engine.startCaptureDelay = .milliseconds(200)
-        var wireAtCaptureStart: KeyboardChannel.State?
-        env.engine.onStartCapture = { wireAtCaptureStart = env.channel.readState() }
+        var wireAtCaptureStart: KeyboardWirePhase?
+        env.engine.onStartCapture = { wireAtCaptureStart = env.channel.readPhase() }
 
         var startTask: Task<RecordingStartResult, Never>?
         await whileTheCooperativePoolIsBusy {
@@ -52,14 +52,14 @@ struct RecordingFlowCoordinatorDiscardTests {
         try await Task.sleep(for: .milliseconds(50))
 
         #expect(wireAtCaptureStart == .recording)
-        #expect(env.channel.readState() == .cancelled)
+        #expect(env.channel.readPhase() == .ended(.cancelled))
     }
 
     @Test("a Discard right after Capturing starts leaves cancelled on the wire")
     func discardRightAfterCapturingLeavesCancelledOnTheWire() async throws {
         let env = Env(finishText: "hello world")
-        var wireAtCaptureStart: KeyboardChannel.State?
-        env.engine.onStartCapture = { wireAtCaptureStart = env.channel.readState() }
+        var wireAtCaptureStart: KeyboardWirePhase?
+        env.engine.onStartCapture = { wireAtCaptureStart = env.channel.readPhase() }
 
         await whileTheCooperativePoolIsBusy {
             #expect(await env.coordinator.startRecording(origin: .keyboard) == .capturing)
@@ -68,7 +68,7 @@ struct RecordingFlowCoordinatorDiscardTests {
         try await Task.sleep(for: .milliseconds(50))
 
         #expect(wireAtCaptureStart == .recording)
-        #expect(env.channel.readState() == .cancelled)
+        #expect(env.channel.readPhase() == .ended(.cancelled))
     }
 
     @Test("discard during Arming while the model downloads shows the download again, not Ready")
@@ -107,12 +107,12 @@ struct RecordingFlowCoordinatorDiscardTests {
         #expect(env.coordinator.state == .ready)
         #expect(env.coordinator.activeRunPhase == nil)
         #expect(!env.engine.isRecording)
-        #expect(env.channel.readState() == .cancelled)
+        #expect(env.channel.readPhase() == .ended(.cancelled))
         #expect(env.history.conversations.isEmpty)
 
         #expect(await env.coordinator.startRecording(origin: .keyboard) == .capturing)
         #expect(env.coordinator.state == .recording)
-        #expect(env.channel.readState() == .recording)
+        #expect(env.channel.readPhase() == .recording)
 
         await gate.release()
         await waitUntil { !env.history.conversations.isEmpty }
@@ -121,7 +121,7 @@ struct RecordingFlowCoordinatorDiscardTests {
         // The new run owns the screen and the wire: no note, no late token.
         #expect(env.coordinator.discardNotes.note == nil)
         #expect(env.coordinator.state == .recording)
-        #expect(env.channel.readState() == .recording)
+        #expect(env.channel.readPhase() == .recording)
     }
 
     @Test("the saved Conversation is discarded, with the verbatim text and the recorded choice")
@@ -151,7 +151,7 @@ struct RecordingFlowCoordinatorDiscardTests {
         #expect(env.coordinator.discardNotes.note == .saved(conversationID: conversation.id))
         #expect(env.coordinator.state == .ready)
         // Nothing is inserted: the keyboard gets `cancelled` and no Bundled Result.
-        #expect(env.channel.readState() == .cancelled)
+        #expect(env.channel.readPhase() == .ended(.cancelled))
         // A keyboard run's app is in the background: the save must not depend
         // on the app staying awake.
         #expect(!env.backgroundTasks.names.isEmpty)

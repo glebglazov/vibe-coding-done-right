@@ -47,36 +47,29 @@ struct RecordingRunTests {
     func keyboardAdapterMapsTerminalStates() async {
         let defaults = makeDefaults()
         let channel = KeyboardChannel(defaults: defaults)
-        let adapter = KeyboardChannelRecordingRunCompletionAdapter(
-            keyboardChannel: channel,
-            origin: .keyboard
-        )
+        let wire = KeyboardWirePublisher(channel: channel)
+        func complete(_ terminal: RecordingRunTerminalState) async -> KeyboardWirePhase? {
+            let adapter = KeyboardChannelRecordingRunCompletionAdapter(wire: wire, run: RunID(), origin: .keyboard)
+            await adapter.complete(terminal)
+            return channel.readPhase()
+        }
 
-        await adapter.complete(.success(success(finalText: "hello ")))
-        #expect(channel.readState() == .bundledResult("hello "))
-
-        await adapter.complete(.emptyResult)
-        #expect(channel.readState() == .emptyResult)
-
-        await adapter.complete(.cancellation)
-        #expect(channel.readState() == .cancelled)
-
+        #expect(await complete(.success(success(finalText: "hello "))) == .ended(.text("hello ")))
+        #expect(await complete(.emptyResult) == .ended(.emptyResult))
+        #expect(await complete(.cancellation) == .ended(.cancelled))
         // The reason the app shows the user is the reason on the wire — the
         // keyboard's FAILED pill and the app's error text are one fact.
-        await adapter.complete(.processingFailure(
-            RecordingRunFailure(message: "Transcription unavailable: model load failed")
-        ))
-        #expect(channel.readState() == .failed("Transcription unavailable: model load failed"))
+        #expect(
+            await complete(.processingFailure(RecordingRunFailure(message: "Transcription unavailable: model load failed")))
+                == .ended(.failed(reason: "Transcription unavailable: model load failed"))
+        )
     }
 
     @Test("a run that does not deliver to the keyboard is the only publisher of idle")
     func keyboardAdapterPublishesIdleOnlyWhenNotDelivering() async {
         let defaults = makeDefaults()
         let channel = KeyboardChannel(defaults: defaults)
-        let adapter = KeyboardChannelRecordingRunCompletionAdapter(
-            keyboardChannel: channel,
-            origin: .app
-        )
+        let wire = KeyboardWirePublisher(channel: channel)
 
         // Driven from the app surface, which already shows the outcome: the
         // keyboard has nothing to render, so the channel comes back to idle
@@ -87,9 +80,11 @@ struct RecordingRunTests {
             .cancellation,
             .processingFailure(RecordingRunFailure(message: "failed"))
         ] {
-            channel.publish(.transcribing)
+            let adapter = KeyboardChannelRecordingRunCompletionAdapter(wire: wire, run: RunID(), origin: .app)
+            adapter.progressed(to: .finalizing)
+            #expect(channel.readPhase() == .transcribing)
             await adapter.complete(terminal)
-            #expect(channel.readState() == .idle)
+            #expect(channel.readPhase() == .idle)
         }
     }
 
@@ -268,11 +263,14 @@ struct RecordingRunTests {
         let capture = ControllableRecordingAudioCapture(startResult: true)
         let defaults = makeDefaults()
         let channel = KeyboardChannel(defaults: defaults)
+        let id = RunID()
         let keyboardAdapter = KeyboardChannelRecordingRunCompletionAdapter(
-            keyboardChannel: channel,
+            wire: KeyboardWirePublisher(channel: channel),
+            run: id,
             origin: .keyboard
         )
         let run = makeRun(
+            id: id,
             audioRecorder: capture,
             clock: clock,
             completionAdapters: [keyboardAdapter]
@@ -291,16 +289,18 @@ struct RecordingRunTests {
                     RecordingRunFailure(message: RecordingRun.armingDeadlineFailureMessage)
                 )
         )
-        #expect(channel.readState() == .failed(RecordingRun.armingDeadlineFailureMessage))
+        #expect(channel.readPhase() == .ended(.failed(reason: RecordingRun.armingDeadlineFailureMessage)))
     }
 
     private func makeRun(
+        id: RunID = RunID(),
         audioRecorder: any RecordingAudioCapturing,
         clock: HotMicClock,
         completionAdapters: [any RecordingRunCompletionAdapter],
         onPhaseChange: @escaping @MainActor (RecordingRun, RecordingRun.Phase) -> Void = { _, _ in }
     ) -> RecordingRun {
         RecordingRun(
+            id: id,
             audioRecorder: audioRecorder,
             streaming: FakeRecordingStreamingSession(),
             transcriptProcessor: TranscriptProcessor(

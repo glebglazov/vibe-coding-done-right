@@ -24,7 +24,6 @@ enum RecordingStopResult: Equatable {
 
 extension RecordingFlowCoordinator {
     private static let finalizingTaskName = "Finalizing"
-    private static let stopWithoutRunReason = "Recording was interrupted before audio started"
 
     var activeRunPhase: RecordingRunPhase? { activeRun?.run.phase.live }
 
@@ -83,11 +82,16 @@ extension RecordingFlowCoordinator {
         return await stop(active)
     }
 
-    func stopFromKeyboard() async {
-        guard await stopActiveRun() == .noRun else { return }
-        Logger.recording.error("Publishing failure: stop found no Recording Run — \(Self.stopWithoutRunReason)")
-        state = .error(Self.stopWithoutRunReason)
-        writeFailure(reason: Self.stopWithoutRunReason)
+    /// A keyboard stop names the run the keyboard showed. A run that already
+    /// ended, or any other run, is left alone: the wire already shows how
+    /// the named run ended.
+    @discardableResult
+    func stopKeyboardRun(_ target: RunID) async -> RecordingStopResult {
+        guard let active = activeRun, active.run.id == target else {
+            Logger.app.info("[RecordTiming] keyboard stop ignored — its run is not current")
+            return .noRun
+        }
+        return await stop(active)
     }
 
     /// An interruption or a failed route restart cut the capture. A Capturing
@@ -101,8 +105,8 @@ extension RecordingFlowCoordinator {
         _ = await stop(active)
     }
 
-    func completionAdapters(for origin: RecordingRunOrigin) -> [any RecordingRunCompletionAdapter] {
-        [KeyboardChannelRecordingRunCompletionAdapter(keyboardChannel: keyboardChannel, origin: origin), historyCompletionAdapter]
+    func completionAdapters(for origin: RecordingRunOrigin, run: RunID) -> [any RecordingRunCompletionAdapter] {
+        [KeyboardChannelRecordingRunCompletionAdapter(wire: keyboardWire, run: run, origin: origin), historyCompletionAdapter]
     }
 
     private func stop(_ active: ActiveRecordingRun) async -> RecordingStopResult {

@@ -27,9 +27,17 @@ Discard had the mirror-image problem from the other direction. Because the wire 
 - **Persist failures durably to history.** Rejected for now: a failed run has no transcript, so the entry would be an empty row whose only content is an error string. The in-memory `state = .error(message)` survives backgrounding until the next run overwrites it, which covers the "go back and look" case. Revisit if reasons are routinely lost to a retry.
 - **Distinct wire states plus wire-only rendering** (chosen).
 
+## Amendment (2026-11-27): Keyboard Channel v2
+
+The decision stands; the encoding changed. The state key with its `"idle|<text>"` and `"failed|<reason>"` tokens is replaced by one JSON snapshot that only the app writes: the newest run's ID, its phase (`recording`, `transcribing`, `idle`, or `ended` with the outcome), and the IDs of the commands the app took.
+
+- The keyboard no longer consumes a terminal state by writing idle over it. It keeps a record of the run whose outcome it already showed or inserted, so a second read cannot cut a pill and a later appearance does not show it again.
+- A pill stays for its flash unless the snapshot shows another run. A new run replaces it at once.
+- The keyboard still infers nothing: every terminal state it shows is the one the app published for that run.
+
 ## Consequences
 
-- **`SharedConstants.swift` is duplicated across the app and keyboard targets and has already drifted.** A wire enum change must be applied to both copies; getting this wrong fails silently, because both sides fall back to `UserDefaults.standard` when the app group is unavailable.
+- **`SharedConstants.swift` is duplicated across the app and keyboard targets and has already drifted.** The wire types no longer live there: since Keyboard Channel v2 they are one copy in `vcdr-ios/Shared`, compiled into both targets.
 - **A failure the user does not tap is a failure they see only as a colour.** Accepted: the alternative is a keyboard that tries to be an error console.
 - **The keyboard becomes a pure renderer of app-owned state.** Any future keyboard-side inference about what a run did is a regression of this decision, not a shortcut.
 - **Yellow becomes diagnostically meaningful.** A future report of a yellow flash is now a report of exactly one condition, which is what makes the Empty Result instrumentation worth reading.

@@ -32,7 +32,6 @@ private final class PrewarmBarrierContinuation: @unchecked Sendable {
 /// - `RecordingFlowCoordinator+KeyboardCommands` — Keyboard Channel command +
 ///   settings listeners.
 /// - `RecordingFlowCoordinator+AIProcessing` — AI processing + retry.
-/// - `RecordingFlowCoordinator+StatePublishing` — recording-state publishing.
 /// - `RecordingFlowCoordinator+RunControl` — starting and stopping the
 ///   active Recording Run.
 /// - `RecordingFlowCoordinator+Discard` — Discard, and cancelling a run for
@@ -153,6 +152,8 @@ final class RecordingFlowCoordinator {
     /// Gates the haptic so a cold first-use connect never blocks recording.
     private(set) var isModelReady = false
     let keyboardChannel: any KeyboardChannelProtocol
+    /// The only writer of the app's snapshot on the Keyboard Channel.
+    let keyboardWire: KeyboardWirePublisher
     /// Populated asynchronously by `bootstrapHistory()` — the scene construction
     /// path can't block on it, because `FileManager.url(forUbiquityContainerIdentifier:)`
     /// can take seconds on first launch after install. `nil` until the
@@ -222,6 +223,7 @@ final class RecordingFlowCoordinator {
             provider: { providers.provider(for: $0) }
         )
         self.keyboardChannel = keyboardChannel
+        self.keyboardWire = KeyboardWirePublisher(channel: keyboardChannel)
         self.hotMicSession = hotMicSession ?? HotMicSession(engine: engine, presence: presence, keyboard: keyboardChannel)
         self.runPresence = presence
         let backgroundTasks = backgroundTasks ?? UIKitBackgroundTaskRunner()
@@ -571,14 +573,16 @@ final class RecordingFlowCoordinator {
         // reaches the processing that follows, not the model already decoding.
         resyncSettingsFromSharedDefaults()
         let transcription = TranscriptionSettings.effectiveTranscription(for: selectedPromptMode)
+        let id = RunID()
         return RecordingRun(
+            id: id,
             audioRecorder: recordingEngine,
             streaming: makeStreamingSession?() ?? providers.provider(for: transcription.model).makeLiveSession(
                 settings: transcription.settings,
                 spellingHints: SpellingHints(substitutionStore.substitutions)
             ),
             transcriptProcessor: makeTranscriptProcessor(),
-            completionAdapters: completionAdapters(for: origin),
+            completionAdapters: completionAdapters(for: origin, run: id),
             decodeInFlight: discardedRunFinalizer.decodeInFlight,
             currentSettings: { [weak self] in
                 guard let self else {

@@ -9,7 +9,7 @@ import OSLog
 final class RecordingRun {
     typealias Settings = TranscriptProcessor.Settings
 
-    let id = RunID()
+    let id: RunID
     let conversationID = UUID()
     let audioRecorder: any RecordingAudioCapturing
     let streaming: any RecordingStreamingSession
@@ -36,6 +36,7 @@ final class RecordingRun {
     @ObservationIgnored var hasReceivedFirstAudioBuffer = false
 
     init(
+        id: RunID = RunID(),
         audioRecorder: any RecordingAudioCapturing,
         streaming: any RecordingStreamingSession,
         transcriptProcessor: TranscriptProcessor,
@@ -49,6 +50,7 @@ final class RecordingRun {
         onTranscribingMessage: @escaping @MainActor (String) -> Void,
         onPhaseChange: @escaping @MainActor (_ run: RecordingRun, _ previous: Phase) -> Void = { _, _ in }
     ) {
+        self.id = id
         self.audioRecorder = audioRecorder
         self.streaming = streaming
         self.transcriptProcessor = transcriptProcessor

@@ -26,7 +26,7 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(success.transcript == cleanedTranscript)
         #expect(success.processed == nil)
         #expect(success.finalText == TranscriptProcessor.finalize(cleanedTranscript, settings: settings))
-        #expect(keyboard.interactions == Self.progress + [.publishBundledResult(success.finalText)])
+        #expect(keyboard.phases == Self.progress + [.ended(.text(success.finalText))])
     }
 
     @Test("substitution rewrites the transcript before output and keyboard delivery")
@@ -55,7 +55,7 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(!success.transcript.lowercased().contains("btw"))
         // Keyboard path: the extension receives the already-substituted text
         // via the Bundled Result — it never reads the Substitution store.
-        #expect(keyboard.interactions == Self.progress + [.publishBundledResult(success.finalText)])
+        #expect(keyboard.phases == Self.progress + [.ended(.text(success.finalText))])
         #expect(success.finalText.lowercased().contains("by the way hello"))
     }
 
@@ -69,7 +69,7 @@ struct RecordingRunTerminalOutcomeTests {
         _ = await run.stop()
 
         #expect(await run.waitForIdle(timeout: .seconds(1)) == .emptyResult)
-        #expect(keyboard.interactions == Self.progress + [.publish(.emptyResult)])
+        #expect(keyboard.phases == Self.progress + [.ended(.emptyResult)])
     }
 
     @Test("cancellation accessor polls until rest and publishes cancellation to keyboard")
@@ -84,7 +84,7 @@ struct RecordingRunTerminalOutcomeTests {
         }
 
         #expect(await run.waitForIdle(timeout: .seconds(1)) == .cancellation)
-        #expect(keyboard.interactions == [.publish(.cancelled)])
+        #expect(keyboard.phases == [.ended(.cancelled)])
     }
 
     @Test("processing failure records message payload and publishes it with its reason")
@@ -102,7 +102,7 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(await run.waitForIdle(timeout: .seconds(1)) == expected)
         // The reason the app shows reaches the keyboard as the failure payload —
         // it is not discarded at the process boundary (ADR-0004).
-        #expect(keyboard.interactions == Self.progress + [.publishFailure("Transcription failed: forced failure")])
+        #expect(keyboard.phases == Self.progress + [.ended(.failed(reason: "Transcription failed: forced failure"))])
     }
 
     @Test("accessor returns nil when the run has not reached rest")
@@ -122,7 +122,9 @@ struct RecordingRunTerminalOutcomeTests {
     ) -> (RecordingRun, FakeKeyboardChannel) {
         let settings = settings ?? Self.makeSettings()
         let keyboard = FakeKeyboardChannel()
+        let id = RunID()
         let run = RecordingRun(
+            id: id,
             audioRecorder: FakeRecordingAudioCapture(),
             streaming: streaming,
             transcriptProcessor: TranscriptProcessor(
@@ -139,7 +141,8 @@ struct RecordingRunTerminalOutcomeTests {
             ),
             completionAdapters: [
                 KeyboardChannelRecordingRunCompletionAdapter(
-                    keyboardChannel: keyboard,
+                    wire: KeyboardWirePublisher(channel: keyboard),
+                    run: id,
                     origin: .keyboard
                 )
             ],
@@ -153,7 +156,7 @@ struct RecordingRunTerminalOutcomeTests {
     }
 
     /// What the keyboard reads before the outcome of a run that captured.
-    private static let progress: [FakeKeyboardChannel.Interaction] = [.publish(.recording), .publish(.transcribing)]
+    private static let progress: [KeyboardWirePhase?] = [.recording, .transcribing]
 
     private static func makeSettings(promptMode: AIPromptMode = .verbatim) -> RecordingRun.Settings {
         RecordingRun.Settings(

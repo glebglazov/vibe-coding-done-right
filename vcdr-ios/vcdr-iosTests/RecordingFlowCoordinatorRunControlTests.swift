@@ -81,7 +81,7 @@ struct RecordingFlowCoordinatorRunControlTests {
             Issue.record("Expected a successful run, got \(result)")
             return
         }
-        #expect(channel.interactions.last == .publish(.idle))
+        #expect(channel.phases.last == .idle)
         #expect(coordinator.activeRunPhase == nil)
     }
 
@@ -97,8 +97,8 @@ struct RecordingFlowCoordinatorRunControlTests {
         await coordinator.startRecording(origin: .keyboard)
         await coordinator.stopActiveRun()
 
-        let bundled = channel.interactions.contains {
-            if case .publishBundledResult(let text) = $0 { return text.localizedCaseInsensitiveContains("hello world") }
+        let bundled = channel.phases.contains {
+            if case .ended(.text(let text))? = $0 { return text.localizedCaseInsensitiveContains("hello world") }
             return false
         }
         #expect(bundled)
@@ -194,15 +194,15 @@ struct RecordingFlowCoordinatorRunControlTests {
 
         #expect(await coordinator.stopActiveRun() == .cancelledArming)
         #expect(coordinator.activeRunPhase == nil)
-        #expect(wireStates(channel).last == .publish(.cancelled))
+        #expect(channel.phases.last == .ended(.cancelled))
         // The card shows the same face as no run.
         #expect(card.runs.last == .some(nil))
         #expect(await coordinator.stopActiveRun() == .noRun)
         #expect(await start.value == .cancelledArming)
 
         #expect(!engine.isRecording)
-        #expect(channel.interactions.filter { $0 == .publish(.cancelled) }.count == 1)
-        #expect(wireStates(channel).last == .publish(.cancelled))
+        #expect(channel.phases.filter { $0 == .ended(.cancelled) }.count == 1)
+        #expect(channel.phases.last == .ended(.cancelled))
     }
 
     /// Race R7: the stop revokes the run's capture claim, so a new start does
@@ -230,13 +230,13 @@ struct RecordingFlowCoordinatorRunControlTests {
         }
         #expect(coordinator.activeRun?.run !== firstRun)
         #expect(engine.isRecording)
-        #expect(wireStates(channel).last == .publish(.recording))
+        #expect(channel.phases.last == .recording)
     }
 
     /// Race S4: the Arming Deadline (5 s, real clock) elapses while the
     /// engine start that a keyboard stop cancelled is still in flight.
     @Test("a stop during Arming publishes cancelled, and the Arming Deadline publishes nothing after it")
-    func stopDuringArmingThenDeadline() async {
+    func stopDuringArmingThenDeadline() async throws {
         let engine = SpyWarmRecordingEngine()
         engine.startCaptureDelay = .seconds(6)
         let channel = FakeKeyboardChannel()
@@ -254,12 +254,12 @@ struct RecordingFlowCoordinatorRunControlTests {
 
         let start = Task { await coordinator.startRecording(origin: .keyboard) }
         await waitUntil { coordinator.activeRunPhase == .arming }
-        await coordinator.stopFromKeyboard()
+        await coordinator.stopKeyboardRun(try #require(coordinator.activeRun?.run.id))
         #expect(await start.value == .cancelledArming)
 
-        let wire = wireStates(channel)
-        #expect(wire.last == .publish(.cancelled), "wire sequence: \(wire)")
-        #expect(wire.filter { $0 == .publish(.cancelled) }.count == 1)
+        let wire = channel.phases
+        #expect(wire.last == .ended(.cancelled), "wire sequence: \(wire)")
+        #expect(wire.filter { $0 == .ended(.cancelled) }.count == 1)
     }
 
     /// The Arming Deadline (5 s, real clock) fails the run while a cold
@@ -306,8 +306,8 @@ struct RecordingFlowCoordinatorRunControlTests {
         await waitUntil { coordinator.activeRunPhase == nil }
 
         #expect(coordinator.activeRunPhase == nil)
-        let bundled = channel.interactions.contains {
-            if case .publishBundledResult(let text) = $0 { return text.localizedCaseInsensitiveContains("hello world") }
+        let bundled = channel.phases.contains {
+            if case .ended(.text(let text))? = $0 { return text.localizedCaseInsensitiveContains("hello world") }
             return false
         }
         #expect(bundled)
@@ -343,17 +343,6 @@ private func waitUntil(
     while start.duration(to: .now) < timeout {
         if condition() { return }
         try? await Task.sleep(for: .milliseconds(5))
-    }
-}
-
-/// What the keyboard reads, without the Heartbeat.
-@MainActor
-private func wireStates(_ channel: FakeKeyboardChannel) -> [FakeKeyboardChannel.Interaction] {
-    channel.interactions.filter {
-        switch $0 {
-        case .publish, .publishFailure, .publishBundledResult: true
-        default: false
-        }
     }
 }
 

@@ -28,7 +28,7 @@ extension AppBoot.Steps {
             prefix: {
                 LegacySettingsMigrator.migrateIfNeeded()
                 coordinator.refreshSettingsFromStorage()
-                coordinator.cleanupStaleResults()
+                coordinator.keyboardWire.publishLaunch()
                 coordinator.setupCommandListener()
                 Logger.app.info("[LaunchProbe] boot prefix done")
             },
