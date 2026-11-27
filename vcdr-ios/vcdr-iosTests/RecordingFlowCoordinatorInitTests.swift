@@ -94,7 +94,7 @@ struct RecordingFlowCoordinatorInitTests {
         #expect(engine.startHotSessionCalls == 1)
         #expect(engine.isRecording)
 
-        coordinator.reset()
+        await coordinator.cancelRecording()
         await initTask.value
         ParakeetProviderTestSupport.reset()
     }

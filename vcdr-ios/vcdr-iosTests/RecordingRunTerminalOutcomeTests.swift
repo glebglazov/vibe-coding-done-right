@@ -26,7 +26,7 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(success.transcript == cleanedTranscript)
         #expect(success.processed == nil)
         #expect(success.finalText == TranscriptProcessor.finalize(cleanedTranscript, settings: settings))
-        #expect(keyboard.interactions == [.publishBundledResult(success.finalText)])
+        #expect(keyboard.interactions == Self.progress + [.publishBundledResult(success.finalText)])
     }
 
     @Test("substitution rewrites the transcript before output and keyboard delivery")
@@ -55,7 +55,7 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(!success.transcript.lowercased().contains("btw"))
         // Keyboard path: the extension receives the already-substituted text
         // via the Bundled Result — it never reads the Substitution store.
-        #expect(keyboard.interactions == [.publishBundledResult(success.finalText)])
+        #expect(keyboard.interactions == Self.progress + [.publishBundledResult(success.finalText)])
         #expect(success.finalText.lowercased().contains("by the way hello"))
     }
 
@@ -69,7 +69,7 @@ struct RecordingRunTerminalOutcomeTests {
         _ = await run.stop()
 
         #expect(await run.waitForIdle(timeout: .seconds(1)) == .emptyResult)
-        #expect(keyboard.interactions == [.publish(.emptyResult)])
+        #expect(keyboard.interactions == Self.progress + [.publish(.emptyResult)])
     }
 
     @Test("cancellation accessor polls until rest and publishes cancellation to keyboard")
@@ -102,7 +102,7 @@ struct RecordingRunTerminalOutcomeTests {
         #expect(await run.waitForIdle(timeout: .seconds(1)) == expected)
         // The reason the app shows reaches the keyboard as the failure payload —
         // it is not discarded at the process boundary (ADR-0004).
-        #expect(keyboard.interactions == [.publishFailure("Transcription failed: forced failure")])
+        #expect(keyboard.interactions == Self.progress + [.publishFailure("Transcription failed: forced failure")])
     }
 
     @Test("accessor returns nil when the run has not reached rest")
@@ -151,6 +151,9 @@ struct RecordingRunTerminalOutcomeTests {
         )
         return (run, keyboard)
     }
+
+    /// What the keyboard reads before the outcome of a run that captured.
+    private static let progress: [FakeKeyboardChannel.Interaction] = [.publish(.recording), .publish(.transcribing)]
 
     private static func makeSettings(promptMode: AIPromptMode = .verbatim) -> RecordingRun.Settings {
         RecordingRun.Settings(

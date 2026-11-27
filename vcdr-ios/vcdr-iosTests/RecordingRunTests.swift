@@ -240,6 +240,28 @@ struct RecordingRunTests {
         _ = await run.cancel()
     }
 
+    @Test("a run ends once: a later ending, stop or start changes nothing and tells no one")
+    func endedIsAbsorbing() async {
+        let adapter = SpyCompletionAdapter()
+        var endings = 0
+        let run = makeRun(
+            audioRecorder: ControllableRecordingAudioCapture(startResult: true),
+            clock: TestClock(),
+            completionAdapters: [adapter],
+            onPhaseChange: { run, _ in if run.isTerminal { endings += 1 } }
+        )
+
+        #expect(await run.cancel() == .cancellation)
+        #expect(await run.finish(.processingFailure(RecordingRunFailure(message: "late"))) == .cancellation)
+        #expect(await run.stop() == .cancellation)
+        #expect(await run.cancel() == .cancellation)
+        #expect(await run.start() == false)
+
+        #expect(run.phase == .ended(.cancellation))
+        #expect(adapter.states == [.cancellation])
+        #expect(endings == 1)
+    }
+
     @Test("Arming Deadline publishes Processing Failure on the keyboard wire")
     func armingDeadlineReachesKeyboardWire() async {
         let clock = TestClock()
@@ -275,7 +297,8 @@ struct RecordingRunTests {
     private func makeRun(
         audioRecorder: any RecordingAudioCapturing,
         clock: HotMicClock,
-        completionAdapters: [any RecordingRunCompletionAdapter]
+        completionAdapters: [any RecordingRunCompletionAdapter],
+        onPhaseChange: @escaping @MainActor (RecordingRun, RecordingRun.Phase) -> Void = { _, _ in }
     ) -> RecordingRun {
         RecordingRun(
             audioRecorder: audioRecorder,
@@ -303,7 +326,8 @@ struct RecordingRunTests {
             },
             onLiveTranscript: { _ in },
             onInterimResult: { _ in },
-            onTranscribingMessage: { _ in }
+            onTranscribingMessage: { _ in },
+            onPhaseChange: onPhaseChange
         )
     }
 

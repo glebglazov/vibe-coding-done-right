@@ -241,14 +241,6 @@ final class HotMicSession {
         armIdleTimer(policy(), allowWhileRecording: true)
     }
 
-    /// User-visible stop-everything action. Unlike post-capture stop, reset
-    /// does not earn or refresh a warm window; it force-withdraws readiness.
-    func reset() {
-        armingProtectedPriorSession = false
-        recordIntentPending = false
-        teardown()
-    }
-
     /// The timeout setting changed — re-evaluate the live timer immediately
     /// instead of waiting for the next stop.
     func policyChanged() async {

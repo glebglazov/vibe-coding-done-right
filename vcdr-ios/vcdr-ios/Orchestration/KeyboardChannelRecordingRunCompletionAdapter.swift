@@ -1,6 +1,8 @@
 import Foundation
 import OSLog
 
+/// Every wire value a Recording Run publishes comes from here: its progress
+/// and its terminal state.
 @MainActor
 final class KeyboardChannelRecordingRunCompletionAdapter: RecordingRunCompletionAdapter {
     private let keyboardChannel: any KeyboardChannelProtocol
@@ -9,6 +11,19 @@ final class KeyboardChannelRecordingRunCompletionAdapter: RecordingRunCompletion
     init(keyboardChannel: any KeyboardChannelProtocol, origin: RecordingRunOrigin) {
         self.keyboardChannel = keyboardChannel
         self.origin = origin
+    }
+
+    /// Every origin publishes its progress: the keyboard shows any run that
+    /// holds the microphone. Capturing adds nothing to `recording`.
+    func progressed(to phase: RecordingRunPhase) {
+        let wireState: KeyboardChannel.RecordingState
+        switch phase {
+        case .arming: wireState = .recording
+        case .capturing: return
+        case .finalizing: wireState = .transcribing
+        }
+        Logger.recording.info("Wire state written: \(wireState.rawValue)")
+        keyboardChannel.publish(wireState)
     }
 
     /// Each terminal state gets its own wire value, so the keyboard renders what

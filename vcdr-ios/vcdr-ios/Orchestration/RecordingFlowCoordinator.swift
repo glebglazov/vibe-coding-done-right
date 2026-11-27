@@ -178,7 +178,9 @@ final class RecordingFlowCoordinator {
     let substitutionStore = SubstitutionStoreProxy()
     private var isSubstitutionBootstrapRunning = false
     let historyCompletionAdapter = HistoryRecordingRunCompletionAdapter()
-    private(set) var activeRun: ActiveRecordingRun?
+    /// Which run is current. Its phase is the run's own; only
+    /// `RecordingFlowCoordinator+RunControl` changes this.
+    var activeRun: ActiveRecordingRun?
     let runPresence: any RecordingRunPresence
     let backgroundTasks: any BackgroundTaskRunner
     /// Takes the history writes that can come before `history` is ready: a
@@ -404,7 +406,7 @@ final class RecordingFlowCoordinator {
     ) async {
         Logger.app.info("[LaunchProbe] initializeModel entry main=\(Thread.isMainThread) state=\(String(describing: self.state))")
         // If recording already started, model init is handled by the active session setup task.
-        guard state != .recording else { return }
+        if case .capturing? = activeRunPhase { return }
 
         let initStart = ContinuousClock.now
         Logger.app.info("[InitTiming] initializeModel entered")
@@ -563,62 +565,6 @@ final class RecordingFlowCoordinator {
 
     // MARK: - Recording State Machine
 
-    /// Publishes cancellation — never Empty Result, never idle — because that
-    /// is what the run will terminate in once the in-flight start tears it
-    /// down. Publishing here rather than waiting for that teardown is what
-    /// keeps a keyboard stop poll from timing out into a deep-link bounce
-    /// while the engine finishes coming up.
-    func abortArming() {
-        Logger.recording.info(
-            "Publishing cancelled: stop or Discard landed during Arming — no audio was captured"
-        )
-        if var active = activeRun {
-            active.phase = .cancelling
-            setActiveRun(active)
-        }
-        state = .idle
-        writeState(.cancelled)
-        setIdleTimerDisabled(false)
-    }
-
-    func applyTerminalStateToUI(_ terminalState: RecordingRunTerminalState) {
-        switch terminalState {
-        case .success(let success):
-            state = .complete(success.finalText)
-        case .emptyResult:
-            // Same constant the status row recognises, so the empty-result
-            // wording can't drift between the two.
-            state = .error(TransientStatus.noSpeechDetectedText)
-        case .cancellation:
-            state = .ready
-        case .processingFailure(let failure):
-            state = .error(failure.message)
-        }
-    }
-
-    /// Surfaces a Processing Failure that lands while the run is still Arming
-    /// or Capturing — including the Arming Deadline firing while
-    /// `startCapture` is hung and `startRecording` has not returned yet.
-    private func handleRecordingRunTerminal(_ terminal: RecordingRunTerminalState) {
-        guard case .processingFailure(let failure) = terminal, let active = activeRun else { return }
-        let wasStillArming: Bool
-        switch active.phase {
-        case .arming: wasStillArming = true
-        case .capturing: wasStillArming = false
-        case .cancelling, .finalizing: return
-        }
-
-        state = .error(failure.message)
-        endActiveRun(announcing: RunCardOutcome(terminal, origin: active.origin))
-        setIdleTimerDisabled(false)
-        if wasStillArming {
-            hotMicSession.recordIntentCancelledBeforeCapture()
-        } else {
-            active.run.endCapture()
-            hotMicSession.recordingStopped()
-        }
-    }
-
     func makeRecordingRun(origin: RecordingRunOrigin) -> RecordingRun {
         // The Prompt Mode as it stands now, because the model that transcribes
         // has to be chosen before a word is spoken — a mode flipped mid-recording
@@ -661,8 +607,8 @@ final class RecordingFlowCoordinator {
             onTranscribingMessage: { [weak self] message in
                 self?.transcribingMessage = message
             },
-            onTerminal: { [weak self] terminal in
-                self?.handleRecordingRunTerminal(terminal)
+            onPhaseChange: { [weak self] run, previous in
+                self?.recordingRun(run, movedFrom: previous)
             }
         )
     }
@@ -679,35 +625,6 @@ final class RecordingFlowCoordinator {
         SharedConstants.sharedDefaults.synchronize()
         selectedPromptMode = SettingOverrides.effectiveAIMode()
         currentTextStyle = SettingOverrides.effectiveTextStyle()
-    }
-
-    func reset() {
-        state = .ready
-        writeState(.idle)
-        setIdleTimerDisabled(false)
-        liveTranscript = ""
-        isKeyboardRun = false
-        stoppedViaDeepLink = false
-        aiProcessingStatus = .idle
-        selectedPromptMode = SettingOverrides.effectiveAIMode()
-        currentTextStyle = SettingOverrides.effectiveTextStyle()
-        let run = activeRun?.run
-        setActiveRun(nil)
-        Task { await run?.cancel() }
-        aiRetryTask?.cancel()
-        aiRetryTask = nil
-        hotMicSession.reset()
-    }
-
-    func setActiveRun(_ run: ActiveRecordingRun?) {
-        activeRun = run
-        runPresence.runChanged(run.map { .active(origin: $0.origin, phase: $0.phase) })
-    }
-
-    func endActiveRun(announcing outcome: RunCardOutcome?) {
-        activeRun = nil
-        let until = Date.now.addingTimeInterval(MicPresenceCardPolicy.concludedDwell)
-        runPresence.runChanged(outcome.map { .concluded($0, until: until) })
     }
 
     // MARK: - Idle Timer

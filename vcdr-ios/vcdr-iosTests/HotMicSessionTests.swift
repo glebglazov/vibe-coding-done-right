@@ -347,32 +347,6 @@ struct HotMicSessionTests {
         await waitUntil { env.engine.endHotSessionCalls == 1 }
     }
 
-    @Test("reset tears down session signals without refreshing the timeout")
-    func resetTearsDownWithoutRefreshingTimeout() async {
-        let env = makeEnv(policy: .fiveMinutes)
-
-        await env.session.start()
-        await settle()
-
-        #expect(env.engine.isHot)
-        #expect(env.channel.isAppLikelyAlive())
-        #expect(env.presence.isShown)
-        #expect(env.clock.sleepCount == 1)
-
-        env.session.reset()
-        await waitUntil { env.presence.stopCalls == 1 }
-
-        #expect(env.engine.endHotSessionCalls == 1)
-        #expect(!env.engine.isHot)
-        #expect(!env.channel.isAppLikelyAlive())
-        #expect(!env.presence.isShown)
-        #expect(env.clock.sleepCount == 1)
-
-        env.clock.advance()
-        await settle()
-        #expect(env.engine.endHotSessionCalls == 1)
-    }
-
     @Test("arming cancellation without a prior warm window releases mic presence immediately")
     func armingCancellationWithoutPriorWindowReleasesImmediately() async {
         let env = makeEnv(policy: .fiveMinutes)

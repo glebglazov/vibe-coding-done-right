@@ -1,37 +1,11 @@
 import AVFoundation
 import FluidAudio
 import Foundation
+import Observation
 import OSLog
 
 @MainActor
-protocol RecordingAudioCapturing: AnyObject {
-    /// Nil when the engine did not come up, or when `stopCapture(for: run)`
-    /// revoked the claim while it was starting; the capture never opened.
-    func startCapture(
-        for run: RunID,
-        onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void
-    ) async -> CaptureLease?
-    /// Ends `run`'s capture, or revokes its claim while it is still starting.
-    /// No-op for a run that holds neither.
-    func stopCapture(for run: RunID)
-}
-
-extension AudioRecorder: RecordingAudioCapturing {}
-
-nonisolated protocol RecordingStreamingSession: Sendable {
-    /// Prepares the model this session runs and begins consuming the buffers
-    /// captured so far. The session already knows its provider — it was made by
-    /// one (`docs/adr/0022`).
-    func start() async throws
-    /// Synchronous + ordered: callers feed buffers FIFO from the audio thread.
-    /// Implementations must not block.
-    func streamAudio(_ buffer: AVAudioPCMBuffer)
-    func cancel() async
-    func finish() async throws -> String
-    func liveTranscriptUpdates() async -> AsyncStream<String>
-}
-
-@MainActor
+@Observable
 final class RecordingRun {
     typealias Settings = TranscriptProcessor.Settings
 
@@ -51,15 +25,15 @@ final class RecordingRun {
     private let onLiveTranscript: @MainActor (String) -> Void
     private let onInterimResult: @MainActor (String) -> Void
     private let onTranscribingMessage: @MainActor (String) -> Void
-    private let onTerminal: @MainActor (RecordingRunTerminalState) -> Void
+    private let onPhaseChange: @MainActor (_ run: RecordingRun, _ previous: Phase) -> Void
 
-    private var setupTask: Task<Void, Error>?
-    private var updateTask: Task<Void, Never>?
-    var armingDeadlineTask: Task<Void, Never>?
-    private(set) var terminalState: RecordingRunTerminalState?
-    private var captureEnded = false
-    private var latestLiveTranscript = ""
-    var hasReceivedFirstAudioBuffer = false
+    /// Written only by `enter(_:)`.
+    private(set) var phase: Phase = .arming
+    @ObservationIgnored private(set) var setupTask: Task<Void, Error>?
+    @ObservationIgnored private var updateTask: Task<Void, Never>?
+    @ObservationIgnored var armingDeadlineTask: Task<Void, Never>?
+    @ObservationIgnored private var latestLiveTranscript = ""
+    @ObservationIgnored var hasReceivedFirstAudioBuffer = false
 
     init(
         audioRecorder: any RecordingAudioCapturing,
@@ -73,7 +47,7 @@ final class RecordingRun {
         onLiveTranscript: @escaping @MainActor (String) -> Void,
         onInterimResult: @escaping @MainActor (String) -> Void,
         onTranscribingMessage: @escaping @MainActor (String) -> Void,
-        onTerminal: @escaping @MainActor (RecordingRunTerminalState) -> Void = { _ in }
+        onPhaseChange: @escaping @MainActor (_ run: RecordingRun, _ previous: Phase) -> Void = { _, _ in }
     ) {
         self.audioRecorder = audioRecorder
         self.streaming = streaming
@@ -88,12 +62,21 @@ final class RecordingRun {
         self.onLiveTranscript = onLiveTranscript
         self.onInterimResult = onInterimResult
         self.onTranscribingMessage = onTranscribingMessage
-        self.onTerminal = onTerminal
+        self.onPhaseChange = onPhaseChange
+    }
+
+    var terminalState: RecordingRunTerminalState? {
+        guard case .ended(let terminal) = phase else { return nil }
+        return terminal
     }
 
     var isTerminal: Bool { terminalState != nil }
 
+    /// Arming until the first capture opens. False when the run ended first:
+    /// stopped, cancelled, past its Arming Deadline, or refused by the engine.
     func start() async -> Bool {
+        guard case .arming = phase, setupTask == nil else { return false }
+        announce(.arming)
         setupTask = Task.detached { [streaming, decodeInFlight] in
             await decodeInFlight?.value
             try Task.checkCancellation()
@@ -114,38 +97,38 @@ final class RecordingRun {
             streaming.streamAudio(buffer)
         }
 
-        if isTerminal {
+        guard case .arming = phase else {
+            // Ended while the engine started; its claim is already revoked.
             audioRecorder.stopCapture(for: id)
             return false
         }
-
-        if lease == nil {
-            cancelArmingDeadline()
+        guard lease != nil else {
             cancelSetup()
-            _ = await finish(.processingFailure(
+            await finish(.processingFailure(
                 RecordingRunFailure(message: "Failed to start recording — check microphone permission")
             ))
             return false
         }
+        await enter(.capturing(since: .now))
         return true
     }
 
-    /// Ends Capturing on its own so the caller can tell the Hot Mic Session
-    /// of the stop once the engine is really idle, before Finalizing begins.
-    func endCapture() {
-        guard !captureEnded else { return }
-        captureEnded = true
-        cancelArmingDeadline()
-        updateTask?.cancel()
-        audioRecorder.stopCapture(for: id)
+    /// Ends Capturing and begins Finalizing, at once, so a second stop sees
+    /// Finalizing. `stop()` then transcribes.
+    func endCapture() async {
+        guard case .capturing = phase else { return }
+        await enter(.finalizing)
     }
 
+    /// From Arming, the run is cancelled: nothing was captured. From
+    /// Capturing or Finalizing, it transcribes what was captured.
     func stop() async -> RecordingRunTerminalState {
-        guard terminalState == nil else {
-            return terminalState ?? .cancellation
+        switch phase {
+        case .arming: return await cancel()
+        case .capturing: await endCapture()
+        case .finalizing: break
+        case .ended(let terminal): return terminal
         }
-
-        endCapture()
 
         let waitStart = ContinuousClock.now
         onTranscribingMessage("Loading model — your recording is safe")
@@ -183,35 +166,14 @@ final class RecordingRun {
         }
     }
 
+    /// Ends the run as cancelled before any await, so a late engine start or
+    /// Arming Deadline finds it ended, then tears the transcription down.
     func cancel() async -> RecordingRunTerminalState {
-        endCapture()
+        if let terminalState { return terminalState }
         cancelSetup()
+        let terminal = await finish(.cancellation)
         await streaming.cancel()
-        return await finish(.cancellation)
-    }
-
-    /// Ends a discarded run and returns its verbatim transcript: the raw text
-    /// of the streaming session, with no Substitutions, no filler removal and
-    /// no AI. Empty when nothing was said or the transcription failed.
-    ///
-    /// No completion adapter and no callback hears of this ending. The
-    /// keyboard already has `cancelled`, and by now a later run can own the
-    /// wire and the screen.
-    func finishDiscarded() async -> String {
-        guard terminalState == nil else { return "" }
-        endCapture()
-        defer {
-            terminalState = .cancellation
-            Logger.recording.info("Run terminal state: discarded")
-        }
-        do {
-            try await setupTask?.value
-            return try await streaming.finish().trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            await streaming.cancel()
-            Logger.recording.error("Discarded run was not transcribed: \(error)")
-            return ""
-        }
+        return terminal
     }
 
     private func finishStreaming() async throws -> RecordingRunTerminalState {
@@ -249,16 +211,51 @@ final class RecordingRun {
         return await finish(terminal)
     }
 
+    /// Ends the run. Idempotent: the first terminal state wins, and a later
+    /// call returns it without telling anyone again.
+    @discardableResult
     func finish(_ terminal: RecordingRunTerminalState) async -> RecordingRunTerminalState {
-        cancelArmingDeadline()
-        terminalState = terminal
-        logTerminal(terminal)
-        onTranscribingMessage("")
-        for adapter in completionAdapters {
-            await adapter.complete(terminal)
+        await enter(.ended(terminal))
+        return terminalState ?? terminal
+    }
+
+    /// The only writer of `phase`. The new phase is set before the first
+    /// await, so whatever runs next on the main actor already sees it. The
+    /// adapters hear of the change before the coordinator does: a run's
+    /// outcome is on the wire before it stops being the current run.
+    private func enter(_ next: Phase) async {
+        guard !isTerminal else { return }
+        let previous = phase
+        phase = next
+        switch next {
+        case .arming, .capturing:
+            break
+        case .finalizing:
+            releaseCapture()
+        case .ended(let terminal):
+            releaseCapture()
+            logTerminal(terminal)
+            onTranscribingMessage("")
+            for adapter in completionAdapters {
+                await adapter.complete(terminal)
+            }
         }
-        onTerminal(terminal)
-        return terminal
+        if let live = next.live { announce(live) }
+        onPhaseChange(self, previous)
+    }
+
+    private func announce(_ phase: RecordingRunPhase) {
+        for adapter in completionAdapters {
+            adapter.progressed(to: phase)
+        }
+    }
+
+    /// Stops the capture, or revokes the claim of one still starting, so no
+    /// buffer and no lease reaches a run that has left Capturing.
+    private func releaseCapture() {
+        cancelArmingDeadline()
+        updateTask?.cancel()
+        audioRecorder.stopCapture(for: id)
     }
 
     func cancelSetup() {

@@ -52,10 +52,9 @@ struct VCDRiOSApp: App {
                     guard url.scheme == "vcdr-ios" else { return }
                     switch url.host {
                     case "record":
-                        // Set recording state synchronously so the first rendered frame
-                        // shows "LISTENING" — eliminates the flash of the previous state.
-                        coordinator.prepareForDeepLinkRecording()
-                        Task { await coordinator.handleRecordDeepLink() }
+                        // Begins the run synchronously so the first rendered frame
+                        // shows Arming — no flash of the previous state.
+                        coordinator.handleRecordDeepLink()
                         appDelegate.dependencies.hostReturn.recordDeepLinkArrived()
                     case "stop":
                         Task { await coordinator.handleStopDeepLink() }
